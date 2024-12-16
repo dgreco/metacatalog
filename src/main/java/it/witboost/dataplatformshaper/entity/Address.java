@@ -1,4 +1,4 @@
-package it.witboost.glossaryplugin.entity;
+package it.witboost.dataplatformshaper.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;

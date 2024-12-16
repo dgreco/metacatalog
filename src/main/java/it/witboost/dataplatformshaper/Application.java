@@ -1,4 +1,4 @@
-package it.witboost.glossaryplugin;
+package it.witboost.dataplatformshaper;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -11,9 +11,9 @@
     </parent>
 
     <groupId>it.witboost</groupId>
-    <artifactId>glossary.plugin</artifactId>
+    <artifactId>data-platform-shaper</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>Witboost Glossary Plugin</name>
+    <name>Data Platform Shaper</name>
     <description></description>
 
     <properties>

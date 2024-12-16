@@ -1,4 +1,4 @@
-package it.witboost.glossaryplugin.service.impl;
+package it.witboost.dataplatformshaper.service.impl;
 
 import com.example.petstore.controller.PetsApiDelegate;
 import com.example.petstore.model.Pet;

@@ -1,4 +1,4 @@
-package it.witboost.glossaryplugin;
+package it.witboost.dataplatformshaper;
 
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
@@ -6,10 +6,10 @@ import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.unibz.inf.ontop.injection.OntopSQLOWLAPIConfiguration;
 import it.unibz.inf.ontop.rdf4j.repository.OntopRepository;
-import it.witboost.glossaryplugin.entity.Address;
-import it.witboost.glossaryplugin.entity.Customer;
-import it.witboost.glossaryplugin.repository.AddressRepository;
-import it.witboost.glossaryplugin.repository.CustomerRepository;
+import it.witboost.dataplatformshaper.entity.Address;
+import it.witboost.dataplatformshaper.entity.Customer;
+import it.witboost.dataplatformshaper.repository.AddressRepository;
+import it.witboost.dataplatformshaper.repository.CustomerRepository;
 import java.io.InputStreamReader;
 import java.util.Objects;
 import org.eclipse.rdf4j.query.BindingSet;
