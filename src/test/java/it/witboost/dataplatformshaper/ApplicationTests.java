@@ -1,5 +1,8 @@
 package it.witboost.dataplatformshaper;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
@@ -8,8 +11,10 @@ import it.unibz.inf.ontop.injection.OntopSQLOWLAPIConfiguration;
 import it.unibz.inf.ontop.rdf4j.repository.OntopRepository;
 import it.witboost.dataplatformshaper.entity.Address;
 import it.witboost.dataplatformshaper.entity.Customer;
+import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.repository.AddressRepository;
 import it.witboost.dataplatformshaper.repository.CustomerRepository;
+import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import java.io.InputStreamReader;
 import java.util.Objects;
 import org.eclipse.rdf4j.query.BindingSet;
@@ -49,7 +54,7 @@ class ApplicationTests {
 
     @AfterAll
     static void afterAll() throws InterruptedException {
-        // Thread.sleep(200000);
+        Thread.sleep(200000);
         postgres.stop();
     }
 
@@ -59,8 +64,11 @@ class ApplicationTests {
     @Autowired
     private AddressRepository addressRepository;
 
+    @Autowired
+    private EntityTypeRepository entityTypeRepository;
+
     @Test
-    void testDatabase() {
+    void testDatabase1() {
 
         var customer1 = new Customer();
         customer1.setFirstName("David");
@@ -137,5 +145,20 @@ class ApplicationTests {
                 }
             }
         }
+    }
+
+    @Test
+    void testDatabase2() throws JsonProcessingException {
+        String jsonString = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode jsonNode = mapper.readTree(jsonString);
+        var entityType1 = new EntityType();
+        entityType1.setName("MyEntityType");
+        entityType1.setSchema(jsonNode);
+        entityTypeRepository.save(entityType1);
+
+        var retrievedEntityType =
+                entityTypeRepository.findById(entityType1.getId()).get();
+        System.out.println(retrievedEntityType);
     }
 }

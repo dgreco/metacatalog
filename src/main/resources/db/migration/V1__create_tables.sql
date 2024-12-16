@@ -27,3 +27,13 @@ CREATE UNIQUE INDEX idx_customer_id_unq ON customer(id);
 
 ALTER TABLE address
     ADD CONSTRAINT FK_ADDRESS_ON_CUSTOMERID FOREIGN KEY (customer_id) REFERENCES customer (id);
+
+CREATE TABLE entity_type
+(
+    id     VARCHAR(255) NOT NULL,
+    name   VARCHAR(255) NOT NULL,
+    schema JSONB
+);
+
+CREATE UNIQUE INDEX idx_entity_type_id_unq ON entity_type(id);
+CREATE UNIQUE INDEX idx_entity_type_name_unq ON entity_type(name);
