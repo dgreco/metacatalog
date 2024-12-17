@@ -1,34 +1,27 @@
 package it.witboost.dataplatformshaper;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
-import it.unibz.inf.ontop.injection.OntopSQLOWLAPIConfiguration;
-import it.unibz.inf.ontop.rdf4j.repository.OntopRepository;
-import it.witboost.dataplatformshaper.entity.Address;
-import it.witboost.dataplatformshaper.entity.Customer;
-import it.witboost.dataplatformshaper.entity.EntityType;
-import it.witboost.dataplatformshaper.repository.AddressRepository;
-import it.witboost.dataplatformshaper.repository.CustomerRepository;
+import it.witboost.dataplatformshaper.entity.TypedEntity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
-import java.io.InputStreamReader;
-import java.util.Objects;
-import org.eclipse.rdf4j.query.BindingSet;
-import org.eclipse.rdf4j.query.QueryLanguage;
-import org.eclipse.rdf4j.query.TupleQueryResult;
+import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
+import it.witboost.dataplatformshaper.service.EntityService;
+import it.witboost.dataplatformshaper.service.EntityTypeService;
+import java.util.Optional;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest
+@EnableTransactionManagement
 class ApplicationTests {
 
     static final int POSTGRESQL_PORT = 5433;
@@ -54,111 +47,38 @@ class ApplicationTests {
 
     @AfterAll
     static void afterAll() throws InterruptedException {
-        Thread.sleep(200000);
+        // Thread.sleep(200000);
         postgres.stop();
     }
 
     @Autowired
-    private CustomerRepository customerRepository;
+    EntityTypeRepository entityTypeRepository;
 
     @Autowired
-    private AddressRepository addressRepository;
-
-    @Autowired
-    private EntityTypeRepository entityTypeRepository;
+    TypedEntityRepository typedEntityRepository;
 
     @Test
-    void testDatabase1() {
+    void testDatabase1() throws JsonProcessingException {
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
 
-        var customer1 = new Customer();
-        customer1.setFirstName("David");
-        customer1.setFamilyName("Greco");
-        customer1.setAge(64);
-        customerRepository.save(customer1);
+        final EntityService entityService = new EntityService(entityTypeRepository, typedEntityRepository);
 
-        var address1 = new Address();
-        address1.setAddressLine1("Via Tempio 43");
-        address1.setCity("Cagliari");
-        address1.setState("Cagliari");
-        address1.setCountry("Italy");
-        address1.setZipcode("09127");
-        address1.setCustomer(customer1);
-        addressRepository.save(address1);
+        String jsonString1 = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
 
-        var address2 = new Address();
-        address2.setAddressLine1("Via Delle Benedettine 47");
-        address2.setCity("Roma");
-        address2.setState("Roma");
-        address2.setCountry("Italy");
-        address2.setZipcode("00135");
-        address2.setCustomer(customer1);
-        addressRepository.save(address2);
+        String jsonString2 = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
 
-        var retrievedCustomer = customerRepository.findById(customer1.getId()).get();
-        System.out.println(retrievedCustomer);
+        entityTypeService.create("test1", jsonString1, Optional.empty());
 
-        OntopSQLOWLAPIConfiguration configuration = OntopSQLOWLAPIConfiguration.defaultBuilder()
-                .ontologyReader(new InputStreamReader(Objects.requireNonNull(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("ontop/ontology.owl"))))
-                .nativeOntopMappingReader(new InputStreamReader(Objects.requireNonNull(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("ontop/mapping.obda"))))
-                .jdbcUrl(postgres.getJdbcUrl())
-                .jdbcUser("test")
-                .jdbcPassword("test")
-                .enableTestMode()
-                .build();
+        entityTypeService.create("test2", jsonString1, Optional.of("test1"));
 
-        try (var repo = OntopRepository.defaultRepository(configuration)) {
-            repo.init();
+        entityTypeService.create("test3", jsonString1, Optional.of("test2"));
 
-            try (var conn = repo.getConnection();
-                    TupleQueryResult result = conn.prepareTupleQuery(
-                                    QueryLanguage.SPARQL,
-                                    """
-                                SELECT ?s ?p ?o WHERE {?s ?p ?o}
-                        """)
-                            .evaluate()) {
-                while (result.hasNext()) {
-                    BindingSet bindingSet = result.next();
-                    System.out.println(bindingSet);
-                }
-            }
+        var entityType3 = entityTypeService.read("test3");
 
-            try (var conn = repo.getConnection();
-                    TupleQueryResult result = conn.prepareTupleQuery(
-                                    QueryLanguage.SPARQL,
-                                    """
-                                PREFIX ns: <http://witboost/>
-                                PREFIX cust: <http://witboost/customer#>
-                                PREFIX addr: <http://witboost/address#>
+        TypedEntity typedEntity = entityService.create("test3", jsonString2);
 
-                                SELECT ?n ?c WHERE {
-                                  ?s ns:hasAddress ?o .
-                                  ?o addr:city ?c .
-                                  ?s cust:first_name ?n .
-                                }
-                        """)
-                            .evaluate()) {
-                while (result.hasNext()) {
-                    BindingSet bindingSet = result.next();
-                    System.out.println(bindingSet);
-                }
-            }
-        }
-    }
+        System.out.println(entityType3.get().getFather());
 
-    @Test
-    void testDatabase2() throws JsonProcessingException {
-        String jsonString = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode jsonNode = mapper.readTree(jsonString);
-        var entityType1 = new EntityType();
-        entityType1.setName("MyEntityType");
-        entityType1.setSchema(jsonNode);
-        entityTypeRepository.save(entityType1);
-
-        var retrievedEntityType =
-                entityTypeRepository.findById(entityType1.getId()).get();
-        System.out.println(retrievedEntityType);
+        System.out.println(typedEntity);
     }
 }

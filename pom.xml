@@ -458,7 +458,7 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <phase>compile</phase> <!-- choose the most relevant goal for your pipeline, e.g. 'compile', 'test' or 'deploy' -->
+                        <phase>package</phase> <!-- choose the most relevant goal for your pipeline, e.g. 'compile', 'test' or 'deploy' -->
                         <goals>
                             <goal>audit</goal>
                         </goals>
