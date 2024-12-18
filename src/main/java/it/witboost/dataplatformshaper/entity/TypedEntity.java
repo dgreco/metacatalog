@@ -16,6 +16,7 @@ import org.hibernate.annotations.Type;
         name = "entity",
         indexes = {
             @Index(name = "idx_entity_id_unq", columnList = "id", unique = true),
+            @Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")
         })
 public class TypedEntity {
     @Id
@@ -29,7 +30,8 @@ public class TypedEntity {
     @ToString.Include
     private JsonNode values;
 
-    @OneToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "entity_type_id", nullable = false)
     @ToString.Exclude
     private EntityType entityType;
 }

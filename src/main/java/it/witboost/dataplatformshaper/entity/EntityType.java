@@ -3,6 +3,8 @@ package it.witboost.dataplatformshaper.entity;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
 import lombok.Setter;
@@ -38,6 +40,10 @@ public class EntityType {
     @OneToOne(fetch = FetchType.EAGER)
     @ToString.Exclude
     private EntityType father;
+
+    @OneToMany(mappedBy = "entityType", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private List<TypedEntity> entities = new ArrayList<>();
 
     public Optional<EntityType> getFather() {
         return Optional.ofNullable(father);

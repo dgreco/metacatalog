@@ -21,7 +21,8 @@ CREATE TABLE entity
     CONSTRAINT pk_entity PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX idx_entity_id_unq ON entity_type(id);
+CREATE UNIQUE INDEX idx_entity_id_unq ON entity(id);
+CREATE        INDEX idx_entity_entity_type_id_unq ON entity(entity_type_id);
 
 ALTER TABLE entity
     ADD CONSTRAINT FK_ENTITY_ON_ENTITY_TYPE_ID FOREIGN KEY (entity_type_id) REFERENCES entity_type (id);
