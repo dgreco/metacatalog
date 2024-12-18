@@ -5,6 +5,8 @@ import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
 import it.witboost.dataplatformshaper.entity.TypedEntity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
@@ -18,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest
@@ -79,5 +80,89 @@ class ApplicationTests {
         TypedEntity typedEntity = entityService.create("test3", jsonString2);
 
         System.out.println(typedEntity);
+    }
+
+    @Test
+    void testDatabase2() throws JsonProcessingException {
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
+
+        final EntityService entityService = new EntityService(entityTypeRepository, typedEntityRepository);
+
+        var inheritedSchema =
+                """
+             {"$$id" : "derived_https://example.com/leaf.schema.json",
+             "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
+             "allOf" : [ {
+               "$$id" : "https://example.com/base.schema.json",
+               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
+               "type" : "object",
+               "properties" : {
+                 "street_address" : {
+                   "type" : "string"
+                 },
+                 "city" : {
+                   "type" : "string"
+                 },
+                 "state" : {
+                   "type" : "string"
+                 }
+               },
+               "required" : [ "street_address", "city", "state" ]
+             }, {
+               "$$id" : "https://example.com/middle.schema.json",
+               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
+               "type" : "object",
+               "properties" : {
+                 "type" : {
+                   "enum" : [ "residential", "business" ]
+                 }
+               },
+               "required" : [ "type" ]
+             }, {
+               "$$id" : "https://example.com/leaf.schema.json",
+               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
+               "type" : "object",
+               "properties" : {
+                 "another_property" : {
+                   "type" : "string"
+                 }
+               },
+               "required" : [ "another_property" ]
+             } ],
+             "properties" : {
+               "street_address" : true,
+               "city" : true,
+               "state" : true,
+               "type" : true,
+               "another_property" : true
+             },
+             "additionalProperties" : false
+           }
+           """;
+
+        var factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V4);
+
+        var baseSchema = factory.getSchema(
+                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
+                .getSchemaNode()
+                .toPrettyString();
+
+        var middleSchema = factory.getSchema(
+                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/middle_schema.json"))
+                .getSchemaNode()
+                .toPrettyString();
+
+        var leafSchema = factory.getSchema(
+                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
+                .getSchemaNode()
+                .toPrettyString();
+
+        entityTypeService.create("BaseType", baseSchema, Optional.empty());
+
+        entityTypeService.create("MiddleType", middleSchema, Optional.of("BaseType"));
+
+        var leafType = entityTypeService.create("LeafType", leafSchema, Optional.of("MiddleType"));
+
+        System.out.println(entityTypeService.generatedDerivedSchema(leafType).toPrettyString());
     }
 }

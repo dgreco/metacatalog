@@ -1,0 +1,9 @@
+{
+  "$id": "https://example.com/middle.schema.json",
+  "$schema": "https://json-schema.org/draft/2019-09/schema#",
+  "type": "object",
+  "properties": {
+    "type": { "enum": [ "residential", "business" ] }
+  },
+  "required": ["type"]
+}
