@@ -2,7 +2,8 @@ CREATE TABLE entity_type
 (
     id     VARCHAR(255) NOT NULL,
     name   VARCHAR(255) NOT NULL,
-    schema JSONB NOT NULL,
+    base_schema JSONB NOT NULL,
+    derived_schema JSONB NULL,
     father_id VARCHAR(255) NULL,
     CONSTRAINT pk_entity_type PRIMARY KEY (id)
 );

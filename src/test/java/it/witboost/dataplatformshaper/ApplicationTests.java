@@ -7,7 +7,6 @@ import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
-import it.witboost.dataplatformshaper.entity.TypedEntity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
 import it.witboost.dataplatformshaper.service.EntityService;
@@ -17,8 +16,10 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.json.JsonAssert;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -65,80 +66,57 @@ class ApplicationTests {
 
         final EntityService entityService = new EntityService(entityTypeRepository, typedEntityRepository);
 
-        String jsonString1 = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
-
-        String jsonString2 = "{\"k1\":\"v1\",\"k2\":\"v2\"}";
-
-        entityTypeService.create("test1", jsonString1, Optional.empty());
-
-        entityTypeService.create("test2", jsonString1, Optional.of("test1"));
-
-        entityTypeService.create("test3", jsonString1, Optional.of("test2"));
-
-        var entityType3 = entityTypeService.read("test3");
-
-        TypedEntity typedEntity = entityService.create("test3", jsonString2);
-
-        System.out.println(typedEntity);
-    }
-
-    @Test
-    void testDatabase2() throws JsonProcessingException {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
-
-        final EntityService entityService = new EntityService(entityTypeRepository, typedEntityRepository);
-
         var inheritedSchema =
                 """
-             {"$$id" : "derived_https://example.com/leaf.schema.json",
-             "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
-             "allOf" : [ {
-               "$$id" : "https://example.com/base.schema.json",
-               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
-               "type" : "object",
-               "properties" : {
-                 "street_address" : {
-                   "type" : "string"
-                 },
-                 "city" : {
-                   "type" : "string"
-                 },
-                 "state" : {
-                   "type" : "string"
-                 }
-               },
-               "required" : [ "street_address", "city", "state" ]
-             }, {
-               "$$id" : "https://example.com/middle.schema.json",
-               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
-               "type" : "object",
-               "properties" : {
-                 "type" : {
-                   "enum" : [ "residential", "business" ]
-                 }
-               },
-               "required" : [ "type" ]
-             }, {
-               "$$id" : "https://example.com/leaf.schema.json",
-               "$$schema" : "https://json-schema.org/draft/2019-09/schema#",
-               "type" : "object",
-               "properties" : {
-                 "another_property" : {
-                   "type" : "string"
-                 }
-               },
-               "required" : [ "another_property" ]
-             } ],
-             "properties" : {
-               "street_address" : true,
-               "city" : true,
-               "state" : true,
-               "type" : true,
-               "another_property" : true
-             },
-             "additionalProperties" : false
-           }
-           """;
+                          {"$id" : "derived_https://example.com/leaf.schema.json",
+                          "$schema" : "https://json-schema.org/draft/2019-09/schema#",
+                          "allOf" : [ {
+                            "$id" : "https://example.com/base.schema.json",
+                            "$schema" : "https://json-schema.org/draft/2019-09/schema#",
+                            "type" : "object",
+                            "properties" : {
+                              "street_address" : {
+                                "type" : "string"
+                              },
+                              "city" : {
+                                "type" : "string"
+                              },
+                              "state" : {
+                                "type" : "string"
+                              }
+                            },
+                            "required" : [ "street_address", "city", "state" ]
+                          }, {
+                            "$id" : "https://example.com/middle.schema.json",
+                            "$schema" : "https://json-schema.org/draft/2019-09/schema#",
+                            "type" : "object",
+                            "properties" : {
+                              "type" : {
+                                "enum" : [ "residential", "business" ]
+                              }
+                            },
+                            "required" : [ "type" ]
+                          }, {
+                            "$id" : "https://example.com/leaf.schema.json",
+                            "$schema" : "https://json-schema.org/draft/2019-09/schema#",
+                            "type" : "object",
+                            "properties" : {
+                              "another_property" : {
+                                "type" : "string"
+                              }
+                            },
+                            "required" : [ "another_property" ]
+                          } ],
+                          "properties" : {
+                            "street_address" : true,
+                            "city" : true,
+                            "state" : true,
+                            "type" : true,
+                            "another_property" : true
+                          },
+                          "additionalProperties" : false
+                        }
+                        """;
 
         var factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V4);
 
@@ -163,6 +141,7 @@ class ApplicationTests {
 
         var leafType = entityTypeService.create("LeafType", leafSchema, Optional.of("MiddleType"));
 
-        System.out.println(entityTypeService.generatedDerivedSchema(leafType).toPrettyString());
+        JsonAssert.comparator(JSONCompareMode.STRICT)
+                .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
     }
 }

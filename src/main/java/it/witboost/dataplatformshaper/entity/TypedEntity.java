@@ -32,6 +32,5 @@ public class TypedEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "entity_type_id", nullable = false)
-    @ToString.Exclude
     private EntityType entityType;
 }

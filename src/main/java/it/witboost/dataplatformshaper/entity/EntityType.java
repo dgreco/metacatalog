@@ -33,19 +33,30 @@ public class EntityType {
     private String name;
 
     @Type(JsonBinaryType.class)
-    @Column(name = "schema", columnDefinition = "jsonb", nullable = false)
+    @Column(name = "base_schema", columnDefinition = "jsonb", nullable = false)
     @ToString.Include
-    private JsonNode schema;
+    private JsonNode baseSchema;
+
+    @Type(JsonBinaryType.class)
+    @Column(name = "derived_schema", columnDefinition = "jsonb", nullable = true)
+    @ToString.Include
+    private JsonNode derivedSchema;
 
     @OneToOne(fetch = FetchType.EAGER)
-    @ToString.Exclude
     private EntityType father;
 
     @OneToMany(mappedBy = "entityType", fetch = FetchType.LAZY)
-    @ToString.Exclude
     private List<TypedEntity> entities = new ArrayList<>();
 
     public Optional<EntityType> getFather() {
         return Optional.ofNullable(father);
+    }
+
+    public JsonNode getSchema() {
+        if (this.derivedSchema == null) {
+            return this.baseSchema;
+        } else {
+            return this.derivedSchema;
+        }
     }
 }

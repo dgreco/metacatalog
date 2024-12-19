@@ -23,20 +23,18 @@ public class EntityTypeService {
         this.entityTypeRepository = entityTypeRepository;
     }
 
-    @Transactional
-    public EntityType create(EntityType entityType) {
-        return entityTypeRepository.save(entityType);
-    }
-
     @Transactional(rollbackFor = {JsonProcessingException.class})
     public EntityType create(String name, final String schema, Optional<String> fatherName)
             throws JsonProcessingException {
         JsonNode schemaNode = jsonFactory.readTree(schema);
         var entityType = new EntityType();
         entityType.setName(name);
-        entityType.setSchema(schemaNode);
+        entityType.setBaseSchema(schemaNode);
         var father = fatherName.flatMap(entityTypeRepository::findByName);
-        father.ifPresent(entityType::setFather);
+        father.ifPresent(f -> {
+            entityType.setFather(f);
+            entityType.setDerivedSchema(generatedDerivedSchema(entityType));
+        });
         return entityTypeRepository.save(entityType);
     }
 
@@ -45,10 +43,9 @@ public class EntityTypeService {
         return entityTypeRepository.findByName(name);
     }
 
-    @Transactional
-    protected List<JsonNode> loadSchemaInheritanceChain(EntityType entityType) {
+    private List<JsonNode> loadSchemaInheritanceChain(EntityType entityType) {
         ArrayList<JsonNode> schemaInheritanceChain = new ArrayList<>();
-        schemaInheritanceChain.add(entityType.getSchema());
+        schemaInheritanceChain.add(entityType.getBaseSchema());
         var maybeFather = entityType.getFather();
         if (maybeFather.isPresent()) {
             schemaInheritanceChain.addAll(loadSchemaInheritanceChain(maybeFather.get()));
@@ -58,9 +55,9 @@ public class EntityTypeService {
         }
     }
 
-    @Transactional
-    public JsonNode generatedDerivedSchema(EntityType entityType) {
+    private JsonNode generatedDerivedSchema(EntityType entityType) {
         var derivedSchemaJson = jsonFactory.createObjectNode();
+        derivedSchemaJson.put("$schema", "https://json-schema.org/draft/2019-09/schema#");
         var schemaInheritanceChain = loadSchemaInheritanceChain(entityType);
         Collections.reverse(schemaInheritanceChain);
         derivedSchemaJson.put(
