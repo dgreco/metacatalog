@@ -11,7 +11,7 @@ public class JsonUtils {
 
     public static ObjectMapper jsonFactory = new ObjectMapper();
 
-    public static JsonSchemaFactory jsonSchemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V201909);
+    public static JsonSchemaFactory jsonSchemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
     public static JsonSchema jsonSchemaSchema = jsonSchemaFactory.getSchema(
             SchemaLocation.of(SchemaId.V201909),

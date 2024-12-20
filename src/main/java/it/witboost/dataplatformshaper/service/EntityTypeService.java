@@ -57,7 +57,7 @@ public class EntityTypeService {
 
     private JsonNode generatedDerivedSchema(EntityType entityType) {
         var derivedSchemaJson = jsonFactory.createObjectNode();
-        derivedSchemaJson.put("$schema", "https://json-schema.org/draft/2019-09/schema#");
+        derivedSchemaJson.put("$schema", "https://json-schema.org/draft/2020-12/schema");
         var schemaInheritanceChain = loadSchemaInheritanceChain(entityType);
         Collections.reverse(schemaInheritanceChain);
         derivedSchemaJson.put(
