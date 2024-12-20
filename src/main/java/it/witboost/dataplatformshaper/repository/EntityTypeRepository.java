@@ -11,5 +11,7 @@ public interface EntityTypeRepository extends JpaRepository<EntityType, String> 
     Optional<EntityType> findByName(String name);
 
     @Override
-    Optional<EntityType> findById(String id);
+    void delete(EntityType entity);
+
+    boolean existsByName(String name);
 }

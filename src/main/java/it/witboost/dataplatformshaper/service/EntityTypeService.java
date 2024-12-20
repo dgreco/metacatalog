@@ -40,9 +40,22 @@ public class EntityTypeService {
         return entityTypeRepository.save(entityType);
     }
 
-    @Transactional(rollbackFor = Throwable.class)
+    @Transactional
     public Optional<EntityType> read(String name) {
         return entityTypeRepository.findByName(name);
+    }
+
+    @Transactional
+    public void delete(String name) throws ServiceError {
+        var entityType = entityTypeRepository
+                .findByName(name)
+                .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
+        entityTypeRepository.delete(entityType);
+    }
+
+    @Transactional
+    public boolean exists(String name) {
+        return entityTypeRepository.existsByName(name);
     }
 
     private List<JsonNode> loadSchemaInheritanceChain(EntityType entityType) {
