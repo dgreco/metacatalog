@@ -27,6 +27,9 @@ public class EntityTypeService {
     @Transactional(rollbackFor = {SchemaValidationError.class})
     public EntityType create(String name, final String schema, Optional<String> fatherName)
             throws JsonProcessingException, SchemaValidationError {
+        if(entityTypeRepository.existsByName(name)) {
+            throw new RuntimeException("EntityTtype " + name + " already exists");
+        }
         var eitherSchema = stringToJsonSchema(schema);
         if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
         var entityType = new EntityType();

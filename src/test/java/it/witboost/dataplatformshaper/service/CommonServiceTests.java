@@ -37,7 +37,7 @@ class CommonServiceTests {
 
     @AfterAll
     static void afterAll() throws InterruptedException {
-        // Thread.sleep(200000);
+        //Thread.sleep(200000);
         postgres.stop();
     }
 
