@@ -4,7 +4,6 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.ValidationMessage;
 import it.witboost.dataplatformshaper.entity.TypedEntity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
@@ -14,8 +13,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EntityService {
-
-    private static ObjectMapper mapper = new ObjectMapper();
 
     private final EntityTypeRepository entityTypeRepository;
 
@@ -49,5 +46,13 @@ public class EntityService {
         typedEntity.setEntityType(entityType);
         typedEntity.setValues(valuesJsonNode);
         return typedEntityRepository.save(typedEntity);
+    }
+
+    @Transactional
+    public long countEntitiesByEntityType(String name) {
+        return entityTypeRepository
+                .findByName(name)
+                .map(typedEntityRepository::countTypedEntityByEntityType)
+                .orElse(0L);
     }
 }

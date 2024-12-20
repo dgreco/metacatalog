@@ -42,5 +42,7 @@ class EntityServiceTests extends CommonServiceTests {
                 assertThrows(SchemaValidationError.class, () -> entityService.create("TestType", invalidValues));
 
         Assertions.assertEquals("$.price: must have an exclusive minimum value of 0", exception.errors.get(0));
+
+        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TestType"));
     }
 }
