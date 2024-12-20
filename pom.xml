@@ -53,8 +53,9 @@
         <!--   Logback -->
         <logback.version>1.5.14</logback.version>
 
-        <!--   Testing -->
+        <!--   Testing & Checking -->
         <testcomtainers.version>1.20.4</testcomtainers.version>
+        <spotbugs-annotations.version>4.8.6</spotbugs-annotations.version>
 
     </properties>
 
@@ -282,12 +283,19 @@
             <version>${logback.version}</version>
         </dependency>
 
-        <!-- Testing -->
+        <!-- Testing & Checking-->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
             <version>${testcomtainers.version}</version>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <version>${spotbugs-annotations.version}</version>
+            <optional>true</optional>
         </dependency>
 
     </dependencies>

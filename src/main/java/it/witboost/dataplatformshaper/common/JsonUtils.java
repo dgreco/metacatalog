@@ -9,11 +9,12 @@ import java.util.List;
 
 public class JsonUtils {
 
-    public static ObjectMapper jsonFactory = new ObjectMapper();
+    public static final ObjectMapper jsonFactory = new ObjectMapper();
 
-    public static JsonSchemaFactory jsonSchemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+    public static final JsonSchemaFactory jsonSchemaFactory =
+            JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
-    public static JsonSchema jsonSchemaSchema = jsonSchemaFactory.getSchema(
+    public static final JsonSchema jsonSchemaSchema = jsonSchemaFactory.getSchema(
             SchemaLocation.of(SchemaId.V201909),
             SchemaValidatorsConfig.builder().build());
 

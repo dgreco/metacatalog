@@ -5,6 +5,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.TypedEntity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
@@ -18,6 +19,7 @@ public class EntityService {
 
     private final TypedEntityRepository typedEntityRepository;
 
+    @SuppressFBWarnings
     public EntityService(EntityTypeRepository entityTypeRepository, TypedEntityRepository typedEntityRepository) {
         this.entityTypeRepository = entityTypeRepository;
         this.typedEntityRepository = typedEntityRepository;

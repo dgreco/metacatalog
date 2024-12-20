@@ -5,6 +5,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import java.util.ArrayList;
@@ -20,6 +21,7 @@ public class EntityTypeService {
 
     private final EntityTypeRepository entityTypeRepository;
 
+    @SuppressFBWarnings
     public EntityTypeService(EntityTypeRepository entityTypeRepository) {
         this.entityTypeRepository = entityTypeRepository;
     }

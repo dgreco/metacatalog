@@ -1,6 +1,7 @@
 package it.witboost.dataplatformshaper.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import java.util.ArrayList;
@@ -21,6 +22,7 @@ import org.hibernate.annotations.Type;
             @Index(name = "idx_entity_type_id_unq", columnList = "id", unique = true),
             @Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true),
         })
+@SuppressFBWarnings
 public class EntityType {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
