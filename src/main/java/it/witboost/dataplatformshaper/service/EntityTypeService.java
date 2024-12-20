@@ -1,6 +1,7 @@
 package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
+import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,13 +24,14 @@ public class EntityTypeService {
         this.entityTypeRepository = entityTypeRepository;
     }
 
-    @Transactional(rollbackFor = {JsonProcessingException.class})
+    @Transactional(rollbackFor = {SchemaValidationError.class})
     public EntityType create(String name, final String schema, Optional<String> fatherName)
-            throws JsonProcessingException {
-        JsonNode schemaNode = jsonFactory.readTree(schema);
+            throws JsonProcessingException, SchemaValidationError {
+        var eitherSchema = stringToJsonSchema(schema);
+        if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
         var entityType = new EntityType();
         entityType.setName(name);
-        entityType.setBaseSchema(schemaNode);
+        entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
         var father = fatherName.flatMap(entityTypeRepository::findByName);
         father.ifPresent(f -> {
             entityType.setFather(f);

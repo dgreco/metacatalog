@@ -1,8 +1,8 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
@@ -13,7 +13,7 @@ import org.springframework.test.json.JsonAssert;
 class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
-    void testInheritance() throws JsonProcessingException {
+    void testInheritance() throws JsonProcessingException, SchemaValidationError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
 
         var inheritedSchema =
@@ -68,20 +68,19 @@ class EntityTypeServiceTests extends CommonServiceTests {
                         }
                         """;
 
-        var factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V4);
-
-        var baseSchema = factory.getSchema(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
+        var baseSchema = jsonSchemaFactory
+                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
                 .getSchemaNode()
                 .toPrettyString();
 
-        var middleSchema = factory.getSchema(
+        var middleSchema = jsonSchemaFactory
+                .getSchema(
                         Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/middle_schema.json"))
                 .getSchemaNode()
                 .toPrettyString();
 
-        var leafSchema = factory.getSchema(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
+        var leafSchema = jsonSchemaFactory
+                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
                 .getSchemaNode()
                 .toPrettyString();
 
