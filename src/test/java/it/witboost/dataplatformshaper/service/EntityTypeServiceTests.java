@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
@@ -37,7 +38,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testInheritance() throws JsonProcessingException, SchemaValidationError {
+    void testInheritance() throws JsonProcessingException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
 
         var inheritedSchema =
@@ -116,5 +117,13 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         JsonAssert.comparator(JSONCompareMode.STRICT)
                 .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
+
+        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
+
+        entityTypeService.delete("LeafType");
+
+        entityTypeService.delete("MiddleType");
+
+        entityTypeService.delete("BaseType");
     }
 }

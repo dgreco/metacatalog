@@ -23,11 +23,6 @@ public class EntityService {
         this.typedEntityRepository = typedEntityRepository;
     }
 
-    @Transactional
-    public TypedEntity create(TypedEntity typedEntity) {
-        return typedEntityRepository.save(typedEntity);
-    }
-
     @Transactional(rollbackFor = {SchemaValidationError.class})
     public TypedEntity create(String typeName, String values) throws JsonProcessingException, SchemaValidationError {
         var maybeEntityType = entityTypeRepository.findByName(typeName);
@@ -46,6 +41,11 @@ public class EntityService {
         typedEntity.setEntityType(entityType);
         typedEntity.setValues(valuesJsonNode);
         return typedEntityRepository.save(typedEntity);
+    }
+
+    @Transactional
+    public void delete(TypedEntity entity) {
+        typedEntityRepository.delete(entity);
     }
 
     @Transactional
