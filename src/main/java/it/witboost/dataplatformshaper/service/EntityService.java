@@ -1,5 +1,8 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -8,9 +11,6 @@ import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 
 @Service
 public class EntityService {

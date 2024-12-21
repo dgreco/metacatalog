@@ -1,12 +1,11 @@
 package it.witboost.dataplatformshaper.common;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.test.json.JsonAssert;
-
-import java.util.List;
-
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 
 public class JsonUtilsTests {
 
@@ -35,7 +34,8 @@ public class JsonUtilsTests {
                       "type" : "string"
                     }
                   },
-                  "required" : [ "street_address", "city", "state", "type", "another_property" ]
+                  "required" : [ "street_address", "city", "state", "type", "another_property" ],
+                  "additionalProperties" : false
                 }""";
 
         var baseSchema = jsonSchemaFactory
@@ -51,7 +51,7 @@ public class JsonUtilsTests {
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
                 .getSchemaNode();
 
-        JsonAssert.comparator(JSONCompareMode.STRICT)
+        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
                 .assertIsMatch(
                         JsonUtils.mergeSchemas(List.of(baseSchema, middleSchema, leafSchema))
                                 .get()

@@ -1,20 +1,19 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
+import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-
-import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
-import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EntityTypeService {

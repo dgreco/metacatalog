@@ -1,17 +1,16 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static org.junit.Assert.assertThrows;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
-
-import java.util.Optional;
-
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
-import static org.junit.Assert.assertThrows;
 
 @SpringBootTest
 class EntityTypeServiceTests extends CommonServiceTests {
@@ -64,7 +63,8 @@ class EntityTypeServiceTests extends CommonServiceTests {
                       "type" : "string"
                     }
                   },
-                  "required" : [ "street_address", "city", "state", "type", "another_property" ]
+                  "required" : [ "street_address", "city", "state", "type", "another_property" ],
+                  additionalProperties : false
                 }""";
 
         var baseSchema = jsonSchemaFactory
@@ -89,7 +89,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         var leafType = entityTypeService.create("LeafType", leafSchema, Optional.of("MiddleType"));
 
-        JsonAssert.comparator(JSONCompareMode.LENIENT)
+        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
                 .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
 
         System.out.println(leafType.getSchema().toPrettyString());

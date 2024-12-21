@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.*;
 import io.vavr.Tuple2;
 import io.vavr.control.Either;
-
 import java.util.*;
 
 public class JsonUtils {
@@ -108,6 +107,7 @@ public class JsonUtils {
         mergedSchemaJson.put("type", "object");
         mergedSchemaJson.set("properties", properties);
         mergedSchemaJson.set("required", required);
+        mergedSchemaJson.put("additionalProperties", false);
         var res = jsonSchemaSchema.validate(
                 mergedSchemaJson.toPrettyString(),
                 InputFormat.JSON,
