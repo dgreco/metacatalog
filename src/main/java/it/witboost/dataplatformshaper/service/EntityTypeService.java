@@ -62,6 +62,14 @@ public class EntityTypeService {
         return entityTypeRepository.existsByName(name);
     }
 
+    @Transactional
+    public long countEntityTypeChildren(String name) {
+        return entityTypeRepository
+                .findByName(name)
+                .map(entityTypeRepository::countEntityTypeByFather)
+                .orElse(0L);
+    }
+
     private List<JsonNode> loadSchemaInheritanceChain(EntityType entityType) {
         ArrayList<JsonNode> schemaInheritanceChain = new ArrayList<>();
         schemaInheritanceChain.add(entityType.getBaseSchema());

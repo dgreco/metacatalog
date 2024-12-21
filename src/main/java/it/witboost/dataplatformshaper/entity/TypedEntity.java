@@ -15,10 +15,7 @@ import org.hibernate.annotations.Type;
 @Entity
 @Table(
         name = "entity",
-        indexes = {
-            @Index(name = "idx_entity_id_unq", columnList = "id", unique = true),
-            @Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")
-        })
+        indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
 @SuppressFBWarnings
 public class TypedEntity {
     @Id

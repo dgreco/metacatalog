@@ -14,4 +14,6 @@ public interface EntityTypeRepository extends JpaRepository<EntityType, String> 
     void delete(EntityType entityType);
 
     boolean existsByName(String name);
+
+    long countEntityTypeByFather(EntityType entityType);
 }

@@ -89,16 +89,22 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         var leafType = entityTypeService.create("LeafType", leafSchema, Optional.of("MiddleType"));
 
+        entityTypeService.create("LeafType1", leafSchema, Optional.of("MiddleType"));
+
+        Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
+
         JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
                 .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
-
-        System.out.println(leafType.getSchema().toPrettyString());
-
-        System.out.println(inheritedSchema);
 
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
 
         entityTypeService.delete("LeafType");
+
+        Assertions.assertEquals(1, entityTypeService.countEntityTypeChildren("MiddleType"));
+
+        entityTypeService.delete("LeafType1");
+
+        Assertions.assertEquals(0, entityTypeService.countEntityTypeChildren("MiddleType"));
 
         entityTypeService.delete("MiddleType");
 

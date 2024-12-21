@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
 import lombok.Setter;
@@ -17,12 +15,12 @@ import org.hibernate.annotations.Type;
 @ToString(onlyExplicitlyIncluded = true)
 @Entity
 @Table(
-        name = "entity_type",
+        name = "trait",
         indexes = {
-            @Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true),
+            @Index(name = "idx_trait_name_unq", columnList = "name", unique = true),
         })
 @SuppressFBWarnings
-public class EntityType {
+public class Trait {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
@@ -44,15 +42,9 @@ public class EntityType {
     private JsonNode derivedSchema;
 
     @OneToOne(fetch = FetchType.EAGER)
-    private EntityType father;
+    private Trait father;
 
-    @OneToMany(mappedBy = "entityType", fetch = FetchType.LAZY)
-    private List<TypedEntity> entities = new ArrayList<>();
-
-    @OneToMany(mappedBy = "father", fetch = FetchType.LAZY)
-    private List<EntityType> children = new ArrayList<>();
-
-    public Optional<EntityType> getFather() {
+    public Optional<Trait> getFather() {
         return Optional.ofNullable(father);
     }
 
