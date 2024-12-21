@@ -1,20 +1,20 @@
 package it.witboost.dataplatformshaper.service;
 
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
-import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
+import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
+import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
 @Service
 public class EntityTypeService {
@@ -38,10 +38,10 @@ public class EntityTypeService {
         entityType.setName(name);
         entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
         var father = fatherName.flatMap(entityTypeRepository::findByName);
-        father.ifPresent(f -> {
-            entityType.setFather(f);
-            entityType.setDerivedSchema(generatedDerivedSchema(entityType));
-        });
+        if (father.isPresent()) {
+            entityType.setFather(father.get());
+            entityType.setDerivedSchema(generateDerivedSchema(entityType));
+        }
         return entityTypeRepository.save(entityType);
     }
 
@@ -75,30 +75,11 @@ public class EntityTypeService {
         }
     }
 
-    private JsonNode generatedDerivedSchema(EntityType entityType) {
-        var derivedSchemaJson = jsonFactory.createObjectNode();
-        derivedSchemaJson.put("$schema", "https://json-schema.org/draft/2020-12/schema");
+    private JsonNode generateDerivedSchema(EntityType entityType) throws SchemaValidationError {
         var schemaInheritanceChain = loadSchemaInheritanceChain(entityType);
         Collections.reverse(schemaInheritanceChain);
-        derivedSchemaJson.put(
-                "$id",
-                "derived_"
-                        + schemaInheritanceChain
-                                .get(schemaInheritanceChain.size() - 1)
-                                .get("$id")
-                                .asText());
-        var allOf = jsonFactory.createArrayNode().addAll(schemaInheritanceChain);
-        derivedSchemaJson.set("allOf", allOf);
-        var propertiesNode = jsonFactory.createObjectNode();
-        schemaInheritanceChain.stream()
-                .flatMap(n -> {
-                    Iterable<String> iterable = () -> n.get("properties").fieldNames();
-                    return StreamSupport.stream(iterable.spliterator(), false).toList().stream();
-                })
-                .toList()
-                .forEach(prop -> propertiesNode.put(prop, true));
-        derivedSchemaJson.set("properties", propertiesNode);
-        derivedSchemaJson.put("additionalProperties", false);
-        return derivedSchemaJson;
+        var derivedSchemaJson = mergeSchemas(schemaInheritanceChain);
+        if (derivedSchemaJson.isLeft()) throw new SchemaValidationError(derivedSchemaJson.getLeft());
+        else return derivedSchemaJson.get();
     }
 }

@@ -1,15 +1,16 @@
 package it.witboost.dataplatformshaper.service;
 
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
-import static org.junit.Assert.assertThrows;
-
-import java.io.IOException;
-import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+
+import java.io.IOException;
+import java.util.Optional;
+
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static org.junit.Assert.assertThrows;
 
 @SpringBootTest
 class EntityServiceTests extends CommonServiceTests {
