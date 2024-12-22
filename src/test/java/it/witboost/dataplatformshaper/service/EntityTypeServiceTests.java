@@ -99,11 +99,11 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         var trait1 = traitService.create("Trait1", traitSchema1, Optional.empty());
 
-        entityTypeService.create("BaseType", List.of(), Optional.empty(), baseSchema);
+        entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
 
         entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
 
-        var leafType = entityTypeService.create("LeafType", List.of("Trait1"), Optional.of("MiddleType"), leafSchema);
+        var leafType = entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
 
         entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
