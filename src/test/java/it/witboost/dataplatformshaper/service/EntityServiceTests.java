@@ -17,7 +17,7 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     void testCreationAndValidation() throws IOException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         final EntityService entityService = new EntityService(entityTypeRepository, typedEntityRepository);
 
         var schema = jsonSchemaFactory

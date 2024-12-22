@@ -10,10 +10,10 @@ import java.util.List;
 
 public interface CommonTypeService<T extends Type> {
 
-    default List<JsonNode> loadSchemaInheritanceChain(T trait) {
+    default List<JsonNode> loadSchemaInheritanceChain(T type) {
         ArrayList<JsonNode> schemaInheritanceChain = new ArrayList<>();
-        schemaInheritanceChain.add(trait.getBaseSchema());
-        var maybeFather = trait.getFather();
+        schemaInheritanceChain.add(type.getBaseSchema());
+        var maybeFather = type.getFather();
         if (maybeFather.isPresent()) {
             schemaInheritanceChain.addAll(loadSchemaInheritanceChain((T) maybeFather.get()));
             return schemaInheritanceChain;
@@ -22,8 +22,8 @@ public interface CommonTypeService<T extends Type> {
         }
     }
 
-    default JsonNode generateDerivedSchema(T trait) throws SchemaValidationError {
-        var schemaInheritanceChain = loadSchemaInheritanceChain(trait);
+    default JsonNode generateDerivedSchema(T type) throws SchemaValidationError {
+        var schemaInheritanceChain = loadSchemaInheritanceChain(type);
         Collections.reverse(schemaInheritanceChain);
         var derivedSchemaJson = mergeSchemas(schemaInheritanceChain);
         if (derivedSchemaJson.isLeft()) throw new SchemaValidationError(derivedSchemaJson.getLeft());

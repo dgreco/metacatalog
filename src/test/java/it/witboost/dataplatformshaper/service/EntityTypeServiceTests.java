@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
@@ -16,9 +17,12 @@ import org.springframework.test.json.JsonAssert;
 @SpringBootTest
 class EntityTypeServiceTests extends CommonServiceTests {
 
+    @Autowired
+    private TraitService traitService;
+
     @Test
     void testCreateDeleteExists() throws JsonProcessingException, SchemaValidationError, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var baseSchema = jsonSchemaFactory
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
@@ -40,7 +44,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testInheritance() throws JsonProcessingException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var inheritedSchema =
                 """
@@ -83,11 +87,19 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .getSchemaNode()
                 .toPrettyString();
 
+        var traitSchema1 = jsonSchemaFactory
+                .getSchema(
+                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/trait_schema1.json"))
+                .getSchemaNode()
+                .toPrettyString();
+
+        var trait1 = traitService.create("Trait1", traitSchema1, Optional.empty());
+
         entityTypeService.create("BaseType", List.of(), Optional.empty(), baseSchema);
 
         entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
 
-        var leafType = entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
+        var leafType = entityTypeService.create("LeafType", List.of("Trait1"), Optional.of("MiddleType"), leafSchema);
 
         entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 

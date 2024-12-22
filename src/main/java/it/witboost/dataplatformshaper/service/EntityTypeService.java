@@ -1,13 +1,18 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
 import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
+import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
+import it.witboost.dataplatformshaper.repository.TraitRepository;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,10 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class EntityTypeService implements CommonTypeService<EntityType> {
 
     private final EntityTypeRepository entityTypeRepository;
+    private final TraitRepository traitRepository;
 
     @SuppressFBWarnings
-    public EntityTypeService(EntityTypeRepository entityTypeRepository) {
+    public EntityTypeService(EntityTypeRepository entityTypeRepository, TraitRepository traitRepository) {
         this.entityTypeRepository = entityTypeRepository;
+        this.traitRepository = traitRepository;
     }
 
     @Transactional(rollbackFor = {SchemaValidationError.class})
@@ -27,17 +34,29 @@ public class EntityTypeService implements CommonTypeService<EntityType> {
         if (entityTypeRepository.existsByName(name)) {
             throw new RuntimeException("EntityTtype " + name + " already exists");
         }
+        Set<String> traitNamesSet = new HashSet<>();
+        traits.forEach(trait -> {
+            if (traitNamesSet.contains(trait)) throw new RuntimeException("Trait " + trait + " already defined");
+            else traitNamesSet.add(trait);
+        });
+        List<Trait> traitsList = traits.stream()
+                .map(trait -> traitRepository
+                        .findByName(trait)
+                        .orElseThrow(() -> new RuntimeException("Trait " + trait + " does not exist")))
+                .toList();
         var eitherSchema = stringToJsonSchema(schema);
         if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
         var entityType = new EntityType();
+        entityType.setTraits(traitsList);
         entityType.setName(name);
         entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
         var father = fatherName.flatMap(entityTypeRepository::findByName);
         if (father.isPresent()) {
-            if (!entityTypeRepository.existsByName(father.get().getName()))
-                throw new RuntimeException("The inherited EntityType " + name + " does not exist");
             entityType.setFather(father.get());
-            entityType.setDerivedSchema(generateDerivedSchema(entityType));
+            var mergedSchema = mergeSchemas(
+                    List.of(father.get().getSchema(), eitherSchema.get().getSchemaNode()));
+            if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+            entityType.setDerivedSchema(mergedSchema.get());
         }
         return entityTypeRepository.save(entityType);
     }
