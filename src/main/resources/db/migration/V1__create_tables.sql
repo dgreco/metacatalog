@@ -52,3 +52,22 @@ ALTER TABLE type_traits
 
 ALTER TABLE type_traits
     ADD CONSTRAINT fk_typtra_on_trait FOREIGN KEY (trait_id) REFERENCES trait (id);
+
+CREATE TABLE trait_relationship
+(
+    id            VARCHAR(255) NOT NULL,
+    source_id     VARCHAR(255),
+    target_id     VARCHAR(255),
+    relation_type VARCHAR(255) NOT NULL,
+    CONSTRAINT pk_trait_relationship PRIMARY KEY (id)
+);
+
+ALTER TABLE trait_relationship
+    ADD CONSTRAINT FK_TRAIT_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES trait (id);
+
+CREATE UNIQUE INDEX idx_trait_relationship_source_id_unq ON trait_relationship (source_id);
+
+ALTER TABLE trait_relationship
+    ADD CONSTRAINT FK_TRAIT_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES trait (id);
+
+CREATE UNIQUE INDEX idx_trait_relationship_target_id_unq ON trait_relationship (target_id);

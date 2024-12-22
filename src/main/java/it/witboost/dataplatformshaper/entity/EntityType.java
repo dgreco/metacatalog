@@ -17,9 +17,7 @@ import lombok.ToString;
 @Entity
 @Table(
         name = "entity_type",
-        indexes = {
-            @Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true),
-        })
+        indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
 @SuppressFBWarnings
 public class EntityType implements Type {
     @Id

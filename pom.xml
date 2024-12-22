@@ -51,7 +51,7 @@
         <flyway.version>11.1.0</flyway.version>
 
         <!--   Logback -->
-        <logback.version>1.5.14</logback.version>
+        <logback.version>1.5.15</logback.version>
 
         <!--   Testing & Checking -->
         <testcomtainers.version>1.20.4</testcomtainers.version>

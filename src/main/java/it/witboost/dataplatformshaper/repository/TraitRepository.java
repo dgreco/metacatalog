@@ -10,9 +10,6 @@ public interface TraitRepository extends JpaRepository<Trait, String> {
 
     Optional<Trait> findByName(String name);
 
-    @Override
-    void delete(Trait trait);
-
     boolean existsByName(String name);
 
     long countTraitByFather(Trait trait);
