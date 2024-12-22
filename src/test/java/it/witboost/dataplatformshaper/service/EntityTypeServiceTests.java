@@ -51,6 +51,10 @@ class EntityTypeServiceTests extends CommonServiceTests {
                   {
                   "type" : "object",
                   "properties" : {
+                    "version" : {
+                       "type" : "number",
+                       "exclusiveMinimum" : 0
+                    },
                     "street_address" : {
                       "type" : "string"
                     },

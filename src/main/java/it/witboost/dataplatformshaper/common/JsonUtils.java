@@ -78,8 +78,13 @@ public class JsonUtils {
         List<String> propertiesNamesToMerge = new LinkedList<>();
         schemas.forEach(node -> {
             var requiredProperties = new HashSet<String>();
-            Optional.of("required").ifPresent(key -> {
-                var required = node.get("required");
+            var maybeRequired = Optional.<JsonNode>empty();
+            try {
+                maybeRequired = Optional.of(node.get("required"));
+            } catch (NullPointerException e) {
+
+            }
+            maybeRequired.ifPresent(required -> {
                 if (required.isArray()) {
                     required.elements().forEachRemaining(requiredElement -> {
                         requiredProperties.add(requiredElement.asText());
