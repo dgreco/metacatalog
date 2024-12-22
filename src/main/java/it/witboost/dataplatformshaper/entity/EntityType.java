@@ -45,6 +45,13 @@ public class EntityType implements Type {
     @OneToOne(fetch = FetchType.EAGER)
     private EntityType father;
 
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+            name = "type_traits",
+            joinColumns = @JoinColumn(name = "entity_type_id"),
+            inverseJoinColumns = @JoinColumn(name = "trait_id"))
+    List<Trait> traits = new ArrayList<>();
+
     @OneToMany(mappedBy = "entityType", fetch = FetchType.LAZY)
     private List<TypedEntity> entities = new ArrayList<>();
 

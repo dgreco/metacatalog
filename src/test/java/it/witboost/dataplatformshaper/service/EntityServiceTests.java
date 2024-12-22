@@ -5,6 +5,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -35,7 +36,7 @@ class EntityServiceTests extends CommonServiceTests {
                         .getResourceAsStream("jsons/invalid_simple_doc.json"))
                 .toPrettyString();
 
-        entityTypeService.create("TestType", schema, Optional.empty());
+        entityTypeService.create("TestType", List.of(), Optional.empty(), schema);
 
         var entity = entityService.create("TestType", values);
 

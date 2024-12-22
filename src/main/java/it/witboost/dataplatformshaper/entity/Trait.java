@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
 import lombok.Setter;
@@ -42,6 +44,9 @@ public class Trait implements Type<Trait> {
 
     @OneToOne(fetch = FetchType.EAGER)
     private Trait father;
+
+    @ManyToMany(mappedBy = "traits", fetch = FetchType.LAZY)
+    private List<EntityType> types = new ArrayList<>();
 
     public Optional<Trait> getFather() {
         return Optional.ofNullable(father);

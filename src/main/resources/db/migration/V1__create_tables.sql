@@ -40,3 +40,15 @@ CREATE UNIQUE INDEX idx_trait_name_unq ON trait (name);
 
 ALTER TABLE trait
     ADD CONSTRAINT FK_TRAIT_ON_FATHER FOREIGN KEY (father_id) REFERENCES trait (id);
+
+CREATE TABLE type_traits
+(
+    entity_type_id VARCHAR(255) NOT NULL,
+    trait_id       VARCHAR(255) NOT NULL
+);
+
+ALTER TABLE type_traits
+    ADD CONSTRAINT fk_typtra_on_entity_type FOREIGN KEY (entity_type_id) REFERENCES entity_type (id);
+
+ALTER TABLE type_traits
+    ADD CONSTRAINT fk_typtra_on_trait FOREIGN KEY (trait_id) REFERENCES trait (id);

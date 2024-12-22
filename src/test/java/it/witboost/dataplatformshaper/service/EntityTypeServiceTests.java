@@ -4,6 +4,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .getSchemaNode()
                 .toPrettyString();
 
-        entityTypeService.create("NewType", baseSchema, Optional.empty());
+        entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
 
         Assertions.assertTrue(entityTypeService.exists("NewType"));
 
@@ -82,13 +83,13 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .getSchemaNode()
                 .toPrettyString();
 
-        entityTypeService.create("BaseType", baseSchema, Optional.empty());
+        entityTypeService.create("BaseType", List.of(), Optional.empty(), baseSchema);
 
-        entityTypeService.create("MiddleType", middleSchema, Optional.of("BaseType"));
+        entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
 
-        var leafType = entityTypeService.create("LeafType", leafSchema, Optional.of("MiddleType"));
+        var leafType = entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
 
-        entityTypeService.create("LeafType1", leafSchema, Optional.of("MiddleType"));
+        entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
         Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
