@@ -10,7 +10,6 @@ import java.util.Optional;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import org.hibernate.annotations.Type;
 
 @Getter
 @Setter
@@ -22,7 +21,7 @@ import org.hibernate.annotations.Type;
             @Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true),
         })
 @SuppressFBWarnings
-public class EntityType {
+public class EntityType implements Type {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
@@ -33,12 +32,12 @@ public class EntityType {
     @ToString.Include
     private String name;
 
-    @Type(JsonBinaryType.class)
+    @org.hibernate.annotations.Type(JsonBinaryType.class)
     @Column(name = "base_schema", columnDefinition = "jsonb", nullable = false)
     @ToString.Include
     private JsonNode baseSchema;
 
-    @Type(JsonBinaryType.class)
+    @org.hibernate.annotations.Type(JsonBinaryType.class)
     @Column(name = "derived_schema", columnDefinition = "jsonb", nullable = true)
     @ToString.Include
     private JsonNode derivedSchema;

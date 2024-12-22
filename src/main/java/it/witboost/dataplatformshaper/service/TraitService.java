@@ -4,64 +4,64 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.EntityType;
-import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
+import it.witboost.dataplatformshaper.entity.Trait;
+import it.witboost.dataplatformshaper.repository.TraitRepository;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class EntityTypeService implements CommonTypeService<EntityType> {
+public class TraitService implements CommonTypeService<Trait> {
 
-    private final EntityTypeRepository entityTypeRepository;
+    private final TraitRepository traitRepository;
 
     @SuppressFBWarnings
-    public EntityTypeService(EntityTypeRepository entityTypeRepository) {
-        this.entityTypeRepository = entityTypeRepository;
+    public TraitService(TraitRepository traitRepository) {
+        this.traitRepository = traitRepository;
     }
 
     @Transactional(rollbackFor = {SchemaValidationError.class})
-    public EntityType create(String name, final String schema, Optional<String> fatherName)
+    public Trait create(String name, final String schema, Optional<String> fatherName)
             throws JsonProcessingException, SchemaValidationError {
-        if (entityTypeRepository.existsByName(name)) {
+        if (traitRepository.existsByName(name)) {
             throw new RuntimeException("EntityTtype " + name + " already exists");
         }
         var eitherSchema = stringToJsonSchema(schema);
         if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-        var entityType = new EntityType();
+        var entityType = new Trait();
         entityType.setName(name);
         entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
-        var father = fatherName.flatMap(entityTypeRepository::findByName);
+        var father = fatherName.flatMap(traitRepository::findByName);
         if (father.isPresent()) {
             entityType.setFather(father.get());
             entityType.setDerivedSchema(generateDerivedSchema(entityType));
         }
-        return entityTypeRepository.save(entityType);
+        return traitRepository.save(entityType);
     }
 
     @Transactional
-    public Optional<EntityType> read(String name) {
-        return entityTypeRepository.findByName(name);
+    public Optional<Trait> read(String name) {
+        return traitRepository.findByName(name);
     }
 
     @Transactional
     public void delete(String name) throws ServiceError {
-        var entityType = entityTypeRepository
+        var entityType = traitRepository
                 .findByName(name)
                 .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
-        entityTypeRepository.delete(entityType);
+        traitRepository.delete(entityType);
     }
 
     @Transactional
     public boolean exists(String name) {
-        return entityTypeRepository.existsByName(name);
+        return traitRepository.existsByName(name);
     }
 
     @Transactional
-    public long countEntityTypeChildren(String name) {
-        return entityTypeRepository
+    public long countTraitChildren(String name) {
+        return traitRepository
                 .findByName(name)
-                .map(entityTypeRepository::countEntityTypeByFather)
+                .map(traitRepository::countTraitByFather)
                 .orElse(0L);
     }
 }
