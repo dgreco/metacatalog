@@ -11,6 +11,7 @@ import java.util.*;
 public class JsonUtils {
 
     private static final Set<String> notAllowedKeywords = Set.of(
+            "$schema",
             "$anchor",
             "$ref",
             "$id",
@@ -103,7 +104,6 @@ public class JsonUtils {
             properties.set(propertyName, value);
             if (tuple._2()) required.add(propertyName);
         });
-        mergedSchemaJson.put("$schema", "https://json-schema.org/draft/2020-12/schema");
         mergedSchemaJson.put("type", "object");
         mergedSchemaJson.set("properties", properties);
         mergedSchemaJson.set("required", required);
