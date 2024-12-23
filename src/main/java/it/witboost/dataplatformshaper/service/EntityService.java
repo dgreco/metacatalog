@@ -28,9 +28,9 @@ public class EntityService {
     @Transactional(rollbackFor = {ServiceError.class})
     public TypedEntity create(String typeName, String values) throws ServiceError {
         try {
-            var maybeEntityType = entityTypeRepository.findByName(typeName);
-            var entityType =
-                    maybeEntityType.orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
+            var entityType = entityTypeRepository
+                    .findByName(typeName)
+                    .orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
             var valuesJsonNode = jsonFactory.readTree(values);
             var validationMessages =
                     jsonSchemaFactory.getSchema(entityType.getSchema()).validate(valuesJsonNode);

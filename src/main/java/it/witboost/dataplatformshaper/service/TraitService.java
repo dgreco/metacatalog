@@ -8,6 +8,7 @@ import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.entity.TraitRelationship;
 import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +28,7 @@ public class TraitService implements CommonTypeService<Trait> {
     @Transactional(rollbackFor = {ServiceError.class})
     public Trait create(String name, String schema, Optional<String> fatherName) throws ServiceError {
         if (traitRepository.existsByName(name)) {
-            throw new ServiceError("EntityTtype " + name + " already exists");
+            throw new ServiceError("Trait " + name + " already exists");
         }
         var eitherSchema = stringToJsonSchema(schema);
         if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
@@ -62,9 +63,8 @@ public class TraitService implements CommonTypeService<Trait> {
 
     @Transactional
     public void delete(String name) throws ServiceError {
-        var entityType = traitRepository
-                .findByName(name)
-                .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
+        var entityType =
+                traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
         traitRepository.delete(entityType);
     }
 
@@ -75,13 +75,13 @@ public class TraitService implements CommonTypeService<Trait> {
 
     @Transactional(rollbackFor = {ServiceError.class})
     public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
-        if (!traitRepository.existsByName(traitName1))
-            throw new ServiceError("EntityTtype " + traitName1 + " does not exist");
-        if (!traitRepository.existsByName(traitName1))
-            throw new ServiceError("EntityTtype " + traitName2 + " does not exist");
         var rel1 = new TraitRelationship();
-        var trait1 = traitRepository.findByName(traitName1).get();
-        var trait2 = traitRepository.findByName(traitName2).get();
+        var trait1 = traitRepository
+                .findByName(traitName1)
+                .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+        var trait2 = traitRepository
+                .findByName(traitName2)
+                .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
         rel1.setSource(trait1);
         rel1.setTarget(trait2);
         rel1.setRelationType(relType);
@@ -89,11 +89,28 @@ public class TraitService implements CommonTypeService<Trait> {
     }
 
     @Transactional(rollbackFor = {ServiceError.class})
-    public void unlink(String traitName, RelationType relType) throws ServiceError {
+    public void unlink(String traitName1, RelationType relType, String traitName2) throws ServiceError {
+        var trait1 = traitRepository
+                .findByName(traitName1)
+                .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+        var trait2 = traitRepository
+                .findByName(traitName2)
+                .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
         var rel = traitRelationshipRepository
-                .findBySourceNameAndRelationType(traitName, relType)
-                .orElseThrow(() -> new ServiceError("Trait " + traitName + " does not have a relationship " + relType));
+                .findBySourceAndRelationTypeAndTarget(trait1, relType, trait2)
+                .orElseThrow(() -> new ServiceError(
+                        "Trait " + traitName1 + " does not have a relationship " + relType + " with " + traitName2));
         traitRelationshipRepository.delete(rel);
+    }
+
+    @Transactional(rollbackFor = {ServiceError.class})
+    public List<Trait> linked(String traitName1, RelationType relType) throws ServiceError {
+        var trait1 = traitRepository
+                .findByName(traitName1)
+                .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+        return traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
+                .map(TraitRelationship::getTarget)
+                .toList();
     }
 
     @Transactional(rollbackFor = {ServiceError.class})

@@ -16,14 +16,26 @@ class TraitServiceTests extends CommonServiceTests {
     void testCreation() throws IOException, ServiceError {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
 
-        traitService.create("trait1", Optional.empty());
+        var trait1 = traitService.create("trait1", Optional.empty());
         traitService.create("trait2", Optional.empty());
+        traitService.create("trait3", Optional.empty());
 
         traitService.link("trait1", DEPENDS_ON, "trait2");
 
+        traitService.link("trait1", DEPENDS_ON, "trait3");
+
+        var list = traitService.linked("trait1", DEPENDS_ON);
+
+        Assertions.assertEquals(2, list.size());
+
+        Assertions.assertEquals("trait2", list.get(0).getName());
+
+        Assertions.assertEquals("trait3", list.get(1).getName());
+
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> traitService.delete("trait1"));
 
-        traitService.unlink("trait1", DEPENDS_ON);
+        traitService.unlink("trait1", DEPENDS_ON, "trait2");
+        traitService.unlink("trait1", DEPENDS_ON, "trait3");
 
         traitService.delete("trait1");
         traitService.delete("trait2");

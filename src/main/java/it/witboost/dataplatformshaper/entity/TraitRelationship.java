@@ -13,10 +13,11 @@ import lombok.ToString;
 @Table(
         name = "trait_relationship",
         indexes = {
+            @Index(name = "idx_trait_relationship_source_id_relation_type", columnList = "source_id, relation_type"),
             @Index(
-                    name = "idx_trait_relationship_source_id_relation_type_unq",
-                    columnList = "source_id, relation_type",
-                    unique = true)
+                    name = "idx_trait_relationship_source_id_relation_type_target_id",
+                    columnList = "source_id, relation_type, target_id",
+                    unique = true),
         })
 @SuppressFBWarnings
 public class TraitRelationship {
