@@ -14,7 +14,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
-@Entity
+@jakarta.persistence.Entity
 @Table(
         name = "entity_type",
         indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
@@ -51,7 +51,7 @@ public class EntityType implements Type {
     List<Trait> traits = new ArrayList<>();
 
     @OneToMany(mappedBy = "entityType", fetch = FetchType.LAZY)
-    private List<TypedEntity> entities = new ArrayList<>();
+    private List<Entity> entities = new ArrayList<>();
 
     @OneToMany(mappedBy = "father", fetch = FetchType.LAZY)
     private List<EntityType> children = new ArrayList<>();

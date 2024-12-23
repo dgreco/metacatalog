@@ -6,7 +6,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.TypedEntity;
+import it.witboost.dataplatformshaper.entity.Entity;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,7 @@ public class EntityService {
     }
 
     @Transactional(rollbackFor = {ServiceError.class})
-    public TypedEntity create(String typeName, String values) throws ServiceError {
+    public Entity create(String typeName, String values) throws ServiceError {
         try {
             var entityType = entityTypeRepository
                     .findByName(typeName)
@@ -40,7 +40,7 @@ public class EntityService {
                         .toList();
                 throw new SchemaValidationError(errorMessages);
             }
-            var typedEntity = new TypedEntity();
+            var typedEntity = new Entity();
             typedEntity.setEntityType(entityType);
             typedEntity.setValues(valuesJsonNode);
             return typedEntityRepository.save(typedEntity);
@@ -50,7 +50,7 @@ public class EntityService {
     }
 
     @Transactional
-    public void delete(TypedEntity entity) {
+    public void delete(Entity entity) {
         typedEntityRepository.delete(entity);
     }
 

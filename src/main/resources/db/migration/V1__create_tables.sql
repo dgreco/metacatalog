@@ -71,3 +71,22 @@ CREATE INDEX idx_trait_relationship_source_id_relation_type_unq ON trait_relatio
 
 ALTER TABLE trait_relationship
     ADD CONSTRAINT FK_TRAIT_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES trait (id);
+
+CREATE TABLE entity_relationship
+(
+    id            VARCHAR(255) NOT NULL,
+    source_id     VARCHAR(255),
+    target_id     VARCHAR(255),
+    relation_type VARCHAR(255) NOT NULL,
+    CONSTRAINT pk_entity_relationship PRIMARY KEY (id)
+);
+
+ALTER TABLE entity_relationship
+    ADD CONSTRAINT FK_ENTITY_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES entity (id);
+
+CREATE UNIQUE INDEX idx_entity_relationship_source_id_relation_type_target_id_unq ON trait_relationship (source_id, relation_type, target_id);
+
+CREATE INDEX idx_entity_relationship_source_id_relation_type_unq ON entity_relationship (source_id, relation_type);
+
+ALTER TABLE entity_relationship
+    ADD CONSTRAINT FK_ENTITY_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity (id);

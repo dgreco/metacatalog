@@ -12,12 +12,12 @@ import org.hibernate.annotations.Type;
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
-@Entity
+@jakarta.persistence.Entity
 @Table(
         name = "entity",
         indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
 @SuppressFBWarnings
-public class TypedEntity {
+public class Entity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)

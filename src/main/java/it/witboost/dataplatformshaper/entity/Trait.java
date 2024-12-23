@@ -14,7 +14,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
-@Entity
+@jakarta.persistence.Entity
 @Table(
         name = "trait",
         indexes = {@Index(name = "idx_trait_name_unq", columnList = "name", unique = true)})
