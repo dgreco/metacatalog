@@ -57,11 +57,12 @@ public class EntityTypeService implements CommonTypeService<EntityType> {
         entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
         var traitSchemas = traitsList.stream().map(Trait::getSchema).toList();
         var schemasToMerge = new java.util.ArrayList<>(traitSchemas);
-        var father = fatherName.flatMap(entityTypeRepository::findByName);
-        if (father.isPresent()) {
-            entityType.setFather(father.get());
-            schemasToMerge.addAll(
-                    List.of(father.get().getSchema(), eitherSchema.get().getSchemaNode()));
+        if (fatherName.isPresent()) {
+            var father = entityTypeRepository
+                    .findByName(fatherName.get())
+                    .orElseThrow(() -> new ServiceError("EntityType " + fatherName + " does not exist"));
+            entityType.setFather(father);
+            schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
             var mergedSchema = mergeSchemas(schemasToMerge);
             if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
             entityType.setDerivedSchema(mergedSchema.get());

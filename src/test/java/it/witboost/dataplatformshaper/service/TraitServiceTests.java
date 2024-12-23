@@ -4,8 +4,9 @@ import static it.witboost.dataplatformshaper.entity.RelationType.DEPENDS_ON;
 
 import it.witboost.dataplatformshaper.entity.Trait;
 import java.io.IOException;
-import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,7 +32,7 @@ class TraitServiceTests extends CommonServiceTests {
         Assertions.assertEquals(2, list.size());
 
         Assertions.assertEquals(
-                List.of("trait2", "trait3"), list.stream().map(Trait::getName).toList());
+                Set.of("trait2", "trait3"), list.stream().map(Trait::getName).collect(Collectors.toSet()));
 
         Assertions.assertEquals("trait3", list.get(1).getName());
 
