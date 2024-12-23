@@ -2,6 +2,7 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static it.witboost.dataplatformshaper.entity.RelationType.HAS_PART;
 import static org.junit.Assert.assertThrows;
 
 import java.io.IOException;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 class EntityServiceTests extends CommonServiceTests {
@@ -55,5 +57,46 @@ class EntityServiceTests extends CommonServiceTests {
         entityTypeService.delete("TestType");
 
         Assertions.assertEquals(0, entityService.countEntitiesByEntityType("TestType"));
+    }
+
+    @Test
+    @Transactional
+    void testLinkUnlinkLinkedEntities() throws ServiceError {
+        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
+
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+
+        final EntityService entityService =
+                new EntityService(entityTypeRepository, typedEntityRepository, entityRelationshipRepository);
+
+        var emptySchema =
+                """
+                {
+                  "type": "object",
+                  "properties": {}
+                }
+                """;
+
+        var emptyValues = """
+                {}
+                """;
+
+        traitService.create("SourceTrait", emptySchema, Optional.empty());
+
+        traitService.create("TargetTrait", emptySchema, Optional.empty());
+
+        traitService.create("InheritedSourceTrait", emptySchema, Optional.of("SourceTrait"));
+
+        traitService.create("InheritedTargetTrait", emptySchema, Optional.of("TargetTrait"));
+
+        entityTypeService.create("SourceEntityType", List.of("InheritedSourceTrait"), Optional.empty(), emptySchema);
+
+        entityTypeService.create("TargetEntityType", List.of("InheritedTargetTrait"), Optional.empty(), emptySchema);
+
+        var sourceEntity = entityService.create("SourceEntityType", emptyValues);
+
+        var targetEntity = entityService.create("TargetEntityType", emptyValues);
+
+        entityService.link(sourceEntity.getId(), HAS_PART, targetEntity.getId());
     }
 }

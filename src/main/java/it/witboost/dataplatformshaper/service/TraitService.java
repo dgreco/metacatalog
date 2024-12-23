@@ -1,7 +1,9 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
 import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.RelationType;
 import it.witboost.dataplatformshaper.entity.Trait;
@@ -35,10 +37,21 @@ public class TraitService implements CommonTypeService<Trait> {
         var entityType = new Trait();
         entityType.setName(name);
         entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
-        var father = fatherName.flatMap(traitRepository::findByName);
-        if (father.isPresent()) {
-            entityType.setFather(father.get());
-            entityType.setDerivedSchema(generateDerivedSchema(entityType));
+        List<JsonNode> schemasToMerge = new java.util.ArrayList<>();
+        if (fatherName.isPresent()) {
+            var father = traitRepository
+                    .findByName(fatherName.get())
+                    .orElseThrow(() -> new ServiceError("EntityType " + fatherName + " does not exist"));
+            entityType.setFather(father);
+            schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
+            var mergedSchema = mergeSchemas(schemasToMerge);
+            if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+            entityType.setDerivedSchema(mergedSchema.get());
+        } else {
+            schemasToMerge.add(eitherSchema.get().getSchemaNode());
+            var mergedSchema = mergeSchemas(schemasToMerge);
+            if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+            entityType.setDerivedSchema(mergedSchema.get());
         }
         return traitRepository.save(entityType);
     }

@@ -39,7 +39,7 @@ public class EntityTypeService implements CommonTypeService<EntityType> {
         } catch (RuntimeException e) {
             throw new ServiceError(e.getMessage());
         }
-        List<Trait> traitsList = null;
+        List<Trait> traitsList;
         try {
             traitsList = traits.stream()
                     .map(trait -> traitRepository

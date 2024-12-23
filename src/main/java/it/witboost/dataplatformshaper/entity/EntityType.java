@@ -19,7 +19,7 @@ import lombok.ToString;
         name = "entity_type",
         indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
 @SuppressFBWarnings
-public class EntityType implements Type {
+public class EntityType implements Type<EntityType> {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)

@@ -2,6 +2,7 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static it.witboost.dataplatformshaper.service.CommonTypeService.loadInheritanceChain;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
@@ -11,6 +12,7 @@ import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,6 +66,9 @@ public class EntityService {
 
     @Transactional(rollbackFor = {ServiceError.class})
     public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
+        // Check if the relationship is legit
+        checkRelIsLegit(sourceId, relType, targetId);
+
         var rel1 = new EntityRelationship();
         var source = entityRepository
                 .findById(sourceId)
@@ -108,5 +113,30 @@ public class EntityService {
                 .findByName(name)
                 .map(entityRepository::countTypedEntityByEntityType)
                 .orElse(0L);
+    }
+
+    private List<EntityType> checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
+            throws ServiceError {
+        var sourceEntity = entityRepository
+                .findById(sourceEntityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
+        var targetEntity = entityRepository
+                .findById(targetEntityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + targetEntityId + " not found"));
+        var sourceEntityType = sourceEntity.getEntityType();
+        var targetEntityType = targetEntity.getEntityType();
+
+        var allTheTraitsForTheSourceType = loadInheritanceChain(sourceEntityType).stream()
+                .flatMap(entityType ->
+                        entityType.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+                .toList();
+
+        var allTheTraitsNamesForTheTargetType = loadInheritanceChain(targetEntityType).stream()
+                .flatMap(entityType ->
+                        entityType.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+                .map(Trait::getName)
+                .collect(Collectors.toSet());
+
+        return List.of();
     }
 }
