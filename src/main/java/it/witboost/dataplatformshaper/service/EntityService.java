@@ -6,9 +6,11 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.Entity;
+import it.witboost.dataplatformshaper.entity.*;
+import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
+import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
-import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,12 +19,18 @@ public class EntityService {
 
     private final EntityTypeRepository entityTypeRepository;
 
-    private final TypedEntityRepository typedEntityRepository;
+    private final EntityRepository entityRepository;
+
+    private final EntityRelationshipRepository entityRelationshipRepository;
 
     @SuppressFBWarnings
-    public EntityService(EntityTypeRepository entityTypeRepository, TypedEntityRepository typedEntityRepository) {
+    public EntityService(
+            EntityTypeRepository entityTypeRepository,
+            EntityRepository typedEntityRepository,
+            EntityRelationshipRepository entityRelationshipRepository) {
         this.entityTypeRepository = entityTypeRepository;
-        this.typedEntityRepository = typedEntityRepository;
+        this.entityRepository = typedEntityRepository;
+        this.entityRelationshipRepository = entityRelationshipRepository;
     }
 
     @Transactional(rollbackFor = {ServiceError.class})
@@ -43,7 +51,7 @@ public class EntityService {
             var typedEntity = new Entity();
             typedEntity.setEntityType(entityType);
             typedEntity.setValues(valuesJsonNode);
-            return typedEntityRepository.save(typedEntity);
+            return entityRepository.save(typedEntity);
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
@@ -51,14 +59,54 @@ public class EntityService {
 
     @Transactional
     public void delete(Entity entity) {
-        typedEntityRepository.delete(entity);
+        entityRepository.delete(entity);
+    }
+
+    @Transactional(rollbackFor = {ServiceError.class})
+    public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
+        var rel1 = new EntityRelationship();
+        var source = entityRepository
+                .findById(sourceId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+        var target = entityRepository
+                .findById(targetId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
+        rel1.setSource(source);
+        rel1.setTarget(target);
+        rel1.setRelationType(relType);
+        entityRelationshipRepository.save(rel1);
+    }
+
+    @Transactional(rollbackFor = {ServiceError.class})
+    public void unlink(String sourceId, RelationType relType, String targetId) throws ServiceError {
+        var source = entityRepository
+                .findById(sourceId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+        var target = entityRepository
+                .findById(targetId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
+        var rel = entityRelationshipRepository
+                .findBySourceAndRelationTypeAndTarget(source, relType, target)
+                .orElseThrow(() -> new ServiceError("Entity with id " + source + " does not have a relationship "
+                        + relType + " with Entity with id" + target));
+        entityRelationshipRepository.delete(rel);
+    }
+
+    @Transactional(rollbackFor = {ServiceError.class})
+    public List<Entity> linked(String sourceId, RelationType relType) throws ServiceError {
+        var source = entityRepository
+                .findById(sourceId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+        return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
+                .map(EntityRelationship::getTarget)
+                .toList();
     }
 
     @Transactional
     public long countEntitiesByEntityType(String name) {
         return entityTypeRepository
                 .findByName(name)
-                .map(typedEntityRepository::countTypedEntityByEntityType)
+                .map(entityRepository::countTypedEntityByEntityType)
                 .orElse(0L);
     }
 }

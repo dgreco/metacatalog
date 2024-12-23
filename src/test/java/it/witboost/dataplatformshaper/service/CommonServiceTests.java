@@ -4,10 +4,7 @@ import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
-import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
-import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
-import it.witboost.dataplatformshaper.repository.TraitRepository;
-import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
+import it.witboost.dataplatformshaper.repository.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -47,11 +44,14 @@ class CommonServiceTests {
     EntityTypeRepository entityTypeRepository;
 
     @Autowired
-    TypedEntityRepository typedEntityRepository;
+    EntityRepository typedEntityRepository;
 
     @Autowired
     TraitRepository traitRepository;
 
     @Autowired
     TraitRelationshipRepository traitRelationshipRepository;
+
+    @Autowired
+    EntityRelationshipRepository entityRelationshipRepository;
 }

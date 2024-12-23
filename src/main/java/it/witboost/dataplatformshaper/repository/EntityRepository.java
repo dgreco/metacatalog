@@ -6,6 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface TypedEntityRepository extends JpaRepository<Entity, String> {
+public interface EntityRepository extends JpaRepository<Entity, String> {
     long countTypedEntityByEntityType(EntityType entityType);
 }
