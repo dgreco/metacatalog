@@ -5,6 +5,7 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
+import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
 import it.witboost.dataplatformshaper.repository.TypedEntityRepository;
 import org.flywaydb.core.Flyway;
@@ -50,4 +51,7 @@ class CommonServiceTests {
 
     @Autowired
     TraitRepository traitRepository;
+
+    @Autowired
+    TraitRelationshipRepository traitRelationshipRepository;
 }

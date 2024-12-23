@@ -65,7 +65,7 @@ CREATE TABLE trait_relationship
 ALTER TABLE trait_relationship
     ADD CONSTRAINT FK_TRAIT_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES trait (id);
 
-CREATE UNIQUE INDEX idx_trait_relationship_source_id_unq ON trait_relationship (source_id);
+CREATE UNIQUE INDEX idx_trait_relationship_source_id_relation_type_unq ON trait_relationship (source_id, relation_type);
 
 ALTER TABLE trait_relationship
     ADD CONSTRAINT FK_TRAIT_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES trait (id);

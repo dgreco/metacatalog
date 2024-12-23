@@ -13,8 +13,10 @@ import lombok.ToString;
 @Table(
         name = "trait_relationship",
         indexes = {
-            @Index(name = "idx_trait_relationship_source_id_unq", columnList = "source_id", unique = true),
-            @Index(name = "idx_trait_relationship_target_id_unq", columnList = "target_id", unique = true)
+            @Index(
+                    name = "idx_trait_relationship_source_id_relation_type_unq",
+                    columnList = "source_id, relation_type",
+                    unique = true)
         })
 @SuppressFBWarnings
 public class TraitRelationship {
@@ -35,6 +37,7 @@ public class TraitRelationship {
     private Trait target;
 
     @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
     @ToString.Include
-    private String relationType;
+    private RelationType relationType;
 }

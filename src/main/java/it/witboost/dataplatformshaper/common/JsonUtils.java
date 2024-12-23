@@ -57,19 +57,23 @@ public class JsonUtils {
             SchemaLocation.of(SchemaId.V201909),
             SchemaValidatorsConfig.builder().build());
 
-    public static Either<List<String>, JsonSchema> stringToJsonSchema(String json) throws JsonProcessingException {
-        var schemaNode = jsonFactory.readTree(json);
-        var res = jsonSchemaSchema.validate(
-                schemaNode.toPrettyString(),
-                InputFormat.JSON,
-                executionContext -> executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
-        if (checkNotAllowedKeywords(schemaNode))
-            return Either.left(List.of("The schema contains not allowed keywords"));
-        if (res.isEmpty()) return Either.right(jsonSchemaFactory.getSchema(schemaNode));
-        else {
-            List<String> errors = new ArrayList<>(
-                    res.stream().map(ValidationMessage::toString).toList());
-            return Either.left(errors);
+    public static Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
+        try {
+            var schemaNode = jsonFactory.readTree(json);
+            var res = jsonSchemaSchema.validate(
+                    schemaNode.toPrettyString(),
+                    InputFormat.JSON,
+                    executionContext -> executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
+            if (checkNotAllowedKeywords(schemaNode))
+                return Either.left(List.of("The schema contains not allowed keywords"));
+            if (res.isEmpty()) return Either.right(jsonSchemaFactory.getSchema(schemaNode));
+            else {
+                List<String> errors = new ArrayList<>(
+                        res.stream().map(ValidationMessage::toString).toList());
+                return Either.left(errors);
+            }
+        } catch (JsonProcessingException e) {
+            return Either.left(List.of(e.getMessage()));
         }
     }
 

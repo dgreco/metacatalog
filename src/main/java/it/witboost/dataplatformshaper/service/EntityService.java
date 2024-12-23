@@ -25,24 +25,28 @@ public class EntityService {
         this.typedEntityRepository = typedEntityRepository;
     }
 
-    @Transactional(rollbackFor = {SchemaValidationError.class})
-    public TypedEntity create(String typeName, String values) throws JsonProcessingException, SchemaValidationError {
-        var maybeEntityType = entityTypeRepository.findByName(typeName);
-        var entityType =
-                maybeEntityType.orElseThrow(() -> new RuntimeException("Entity type " + typeName + " not found"));
-        var valuesJsonNode = jsonFactory.readTree(values);
-        var validationMessages =
-                jsonSchemaFactory.getSchema(entityType.getSchema()).validate(valuesJsonNode);
-        if (!validationMessages.isEmpty()) {
-            var errorMessages = validationMessages.stream()
-                    .map(ValidationMessage::getMessage)
-                    .toList();
-            throw new SchemaValidationError(errorMessages);
+    @Transactional(rollbackFor = {ServiceError.class})
+    public TypedEntity create(String typeName, String values) throws ServiceError {
+        try {
+            var maybeEntityType = entityTypeRepository.findByName(typeName);
+            var entityType =
+                    maybeEntityType.orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
+            var valuesJsonNode = jsonFactory.readTree(values);
+            var validationMessages =
+                    jsonSchemaFactory.getSchema(entityType.getSchema()).validate(valuesJsonNode);
+            if (!validationMessages.isEmpty()) {
+                var errorMessages = validationMessages.stream()
+                        .map(ValidationMessage::getMessage)
+                        .toList();
+                throw new SchemaValidationError(errorMessages);
+            }
+            var typedEntity = new TypedEntity();
+            typedEntity.setEntityType(entityType);
+            typedEntity.setValues(valuesJsonNode);
+            return typedEntityRepository.save(typedEntity);
+        } catch (JsonProcessingException e) {
+            throw new ServiceError(e.getMessage());
         }
-        var typedEntity = new TypedEntity();
-        typedEntity.setEntityType(entityType);
-        typedEntity.setValues(valuesJsonNode);
-        return typedEntityRepository.save(typedEntity);
     }
 
     @Transactional

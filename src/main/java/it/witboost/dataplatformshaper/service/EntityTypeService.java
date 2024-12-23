@@ -3,16 +3,12 @@ package it.witboost.dataplatformshaper.service;
 import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
 import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,22 +24,31 @@ public class EntityTypeService implements CommonTypeService<EntityType> {
         this.traitRepository = traitRepository;
     }
 
-    @Transactional(rollbackFor = {SchemaValidationError.class})
+    @Transactional(rollbackFor = {ServiceError.class})
     public EntityType create(String name, List<String> traits, Optional<String> fatherName, String schema)
-            throws JsonProcessingException, SchemaValidationError {
+            throws ServiceError {
         if (entityTypeRepository.existsByName(name)) {
-            throw new RuntimeException("EntityTtype " + name + " already exists");
+            throw new ServiceError("EntityTtype " + name + " already exists");
         }
         Set<String> traitNamesSet = new HashSet<>();
-        traits.forEach(trait -> {
-            if (traitNamesSet.contains(trait)) throw new RuntimeException("Trait " + trait + " already defined");
-            else traitNamesSet.add(trait);
-        });
-        List<Trait> traitsList = traits.stream()
-                .map(trait -> traitRepository
-                        .findByName(trait)
-                        .orElseThrow(() -> new RuntimeException("Trait " + trait + " does not exist")))
-                .toList();
+        try {
+            traits.forEach(trait -> {
+                if (traitNamesSet.contains(trait)) throw new RuntimeException("Trait " + trait + " already defined");
+                else traitNamesSet.add(trait);
+            });
+        } catch (RuntimeException e) {
+            throw new ServiceError(e.getMessage());
+        }
+        List<Trait> traitsList = null;
+        try {
+            traitsList = traits.stream()
+                    .map(trait -> traitRepository
+                            .findByName(trait)
+                            .orElseThrow(() -> new RuntimeException("Trait " + trait + " does not exist")))
+                    .toList();
+        } catch (RuntimeException e) {
+            throw new ServiceError(e.getMessage());
+        }
         var eitherSchema = stringToJsonSchema(schema);
         if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
         var entityType = new EntityType();
