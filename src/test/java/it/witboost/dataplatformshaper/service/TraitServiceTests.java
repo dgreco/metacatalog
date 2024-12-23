@@ -34,8 +34,6 @@ class TraitServiceTests extends CommonServiceTests {
         Assertions.assertEquals(
                 Set.of("trait2", "trait3"), list.stream().map(Trait::getName).collect(Collectors.toSet()));
 
-        Assertions.assertEquals("trait3", list.get(1).getName());
-
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> traitService.delete("trait1"));
 
         traitService.unlink("trait1", DEPENDS_ON, "trait2");

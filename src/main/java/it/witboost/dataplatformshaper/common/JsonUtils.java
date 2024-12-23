@@ -83,11 +83,7 @@ public class JsonUtils {
         schemas.forEach(node -> {
             var requiredProperties = new HashSet<String>();
             var maybeRequired = Optional.<JsonNode>empty();
-            try {
-                maybeRequired = Optional.of(node.get("required"));
-            } catch (NullPointerException e) {
-
-            }
+            if (node.has("required")) maybeRequired = Optional.of(node.get("required"));
             maybeRequired.ifPresent(required -> {
                 if (required.isArray()) {
                     required.elements().forEachRemaining(requiredElement -> {
