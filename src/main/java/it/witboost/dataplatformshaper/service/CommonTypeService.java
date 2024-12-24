@@ -13,7 +13,7 @@ public interface CommonTypeService<T extends Type> {
         inheritanceChain.add(type);
         var maybeFather = Optional.ofNullable(type.getFather());
         if (maybeFather.isPresent()) {
-            inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
+            final var b = inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
             return inheritanceChain;
         } else {
             return inheritanceChain;

@@ -114,9 +114,8 @@ public class JsonUtils {
             if (node.has("required")) maybeRequired = Optional.of(node.get("required"));
             maybeRequired.ifPresent(required -> {
                 if (required.isArray()) {
-                    required.elements().forEachRemaining(requiredElement -> {
-                        requiredProperties.add(requiredElement.asText());
-                    });
+                    required.elements()
+                            .forEachRemaining(requiredElement -> requiredProperties.add(requiredElement.asText()));
                 }
             });
             node.get("properties").fields().forEachRemaining(entry -> {
