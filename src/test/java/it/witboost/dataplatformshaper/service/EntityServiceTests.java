@@ -2,6 +2,7 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static it.witboost.dataplatformshaper.entity.RelationType.DEPENDS_ON;
 import static it.witboost.dataplatformshaper.entity.RelationType.HAS_PART;
 import static org.junit.Assert.assertThrows;
 
@@ -20,8 +21,8 @@ class EntityServiceTests extends CommonServiceTests {
     @Test
     void testCreationAndValidation() throws IOException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        final EntityService entityService =
-                new EntityService(entityTypeRepository, typedEntityRepository, entityRelationshipRepository);
+        final EntityService entityService = new EntityService(
+                entityTypeRepository, typedEntityRepository, traitRelationshipRepository, entityRelationshipRepository);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -60,14 +61,14 @@ class EntityServiceTests extends CommonServiceTests {
     }
 
     @Test
-    @Transactional
+    @Transactional // TODO: fix this
     void testLinkUnlinkLinkedEntities() throws ServiceError {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
 
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
-        final EntityService entityService =
-                new EntityService(entityTypeRepository, typedEntityRepository, entityRelationshipRepository);
+        final EntityService entityService = new EntityService(
+                entityTypeRepository, typedEntityRepository, traitRelationshipRepository, entityRelationshipRepository);
 
         var emptySchema =
                 """
@@ -97,6 +98,16 @@ class EntityServiceTests extends CommonServiceTests {
 
         var targetEntity = entityService.create("TargetEntityType", emptyValues);
 
-        entityService.link(sourceEntity.getId(), HAS_PART, targetEntity.getId());
+        Assertions.assertThrows(
+                ServiceError.class, () -> entityService.link(sourceEntity.getId(), HAS_PART, targetEntity.getId()));
+
+        traitService.link("SourceTrait", DEPENDS_ON, "TargetTrait");
+
+        entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId());
+
+        Assertions.assertThrows(
+                ServiceError.class, () -> entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId()));
+
+        entityService.linked(sourceEntity.getId(), DEPENDS_ON).forEach(entity -> System.out.println(entity.getId()));
     }
 }

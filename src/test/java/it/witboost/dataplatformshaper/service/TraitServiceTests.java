@@ -3,7 +3,6 @@ package it.witboost.dataplatformshaper.service;
 import static it.witboost.dataplatformshaper.entity.RelationType.DEPENDS_ON;
 
 import it.witboost.dataplatformshaper.entity.Trait;
-import java.io.IOException;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -16,7 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 class TraitServiceTests extends CommonServiceTests {
 
     @Test
-    void testCreation() throws IOException, ServiceError {
+    void testCreation() throws ServiceError {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
 
         var trait1 = traitService.create("trait1", Optional.empty());
@@ -26,6 +25,9 @@ class TraitServiceTests extends CommonServiceTests {
         traitService.link("trait1", DEPENDS_ON, "trait2");
 
         traitService.link("trait1", DEPENDS_ON, "trait3");
+
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> traitService.link("trait1", DEPENDS_ON, "trait3"));
 
         var list = traitService.linked("trait1", DEPENDS_ON);
 

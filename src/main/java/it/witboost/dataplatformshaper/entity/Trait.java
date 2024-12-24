@@ -6,7 +6,6 @@ import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -45,10 +44,6 @@ public class Trait implements Type<Trait> {
 
     @ManyToMany(mappedBy = "traits", fetch = FetchType.LAZY)
     private List<EntityType> types = new ArrayList<>();
-
-    public Optional<Trait> getFather() {
-        return Optional.ofNullable(father);
-    }
 
     public JsonNode getSchema() {
         if (this.derivedSchema == null) {

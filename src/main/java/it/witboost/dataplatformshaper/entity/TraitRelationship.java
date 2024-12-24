@@ -27,12 +27,12 @@ public class TraitRelationship {
     @ToString.Include
     private String id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "source_id")
     @ToString.Include
     private Trait source;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "target_id")
     @ToString.Include
     private Trait target;

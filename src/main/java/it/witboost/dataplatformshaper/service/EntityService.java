@@ -2,7 +2,6 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
-import static it.witboost.dataplatformshaper.service.CommonTypeService.loadInheritanceChain;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
@@ -11,9 +10,11 @@ import it.witboost.dataplatformshaper.entity.*;
 import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
+import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -25,17 +26,23 @@ public class EntityService {
 
     private final EntityRelationshipRepository entityRelationshipRepository;
 
+    private final TraitRelationshipRepository traitRelationshipRepository;
+
     @SuppressFBWarnings
     public EntityService(
             EntityTypeRepository entityTypeRepository,
             EntityRepository typedEntityRepository,
+            TraitRelationshipRepository traitRelationshipRepository,
             EntityRelationshipRepository entityRelationshipRepository) {
         this.entityTypeRepository = entityTypeRepository;
         this.entityRepository = typedEntityRepository;
         this.entityRelationshipRepository = entityRelationshipRepository;
+        this.traitRelationshipRepository = traitRelationshipRepository;
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public Entity create(String typeName, String values) throws ServiceError {
         try {
             var entityType = entityTypeRepository
@@ -67,7 +74,7 @@ public class EntityService {
     @Transactional(rollbackFor = {ServiceError.class})
     public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
         // Check if the relationship is legit
-        checkRelIsLegit(sourceId, relType, targetId);
+        if (!checkRelIsLegit(sourceId, relType, targetId)) throw new ServiceError("Relationship is not legit");
 
         var rel1 = new EntityRelationship();
         var source = entityRepository
@@ -76,6 +83,13 @@ public class EntityService {
         var target = entityRepository
                 .findById(targetId)
                 .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
+
+        if (entityRelationshipRepository
+                .findBySourceAndRelationTypeAndTarget(source, relType, target)
+                .isPresent())
+            throw new ServiceError("Entity with id " + sourceId + " is already linked with entity with id " + targetId
+                    + "with relation type " + relType);
+
         rel1.setSource(source);
         rel1.setTarget(target);
         rel1.setRelationType(relType);
@@ -115,8 +129,14 @@ public class EntityService {
                 .orElse(0L);
     }
 
-    private List<EntityType> checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
+    @Transactional
+    protected boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
             throws ServiceError {
+
+        var commonTypeService = new CommonTypeService<EntityType>() {};
+
+        var commonTraitService = new CommonTypeService<Trait>() {};
+
         var sourceEntity = entityRepository
                 .findById(sourceEntityId)
                 .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
@@ -126,17 +146,26 @@ public class EntityService {
         var sourceEntityType = sourceEntity.getEntityType();
         var targetEntityType = targetEntity.getEntityType();
 
-        var allTheTraitsForTheSourceType = loadInheritanceChain(sourceEntityType).stream()
-                .flatMap(entityType ->
-                        entityType.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+        var allTheTraitsForTheSourceType = commonTypeService.loadInheritanceChain(sourceEntityType).stream()
+                .flatMap(entityType -> entityType.getTraits().stream()
+                        .flatMap(trait -> commonTraitService.loadInheritanceChain(trait).stream()))
                 .toList();
 
-        var allTheTraitsNamesForTheTargetType = loadInheritanceChain(targetEntityType).stream()
-                .flatMap(entityType ->
-                        entityType.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+        var allTheTraitsNamesForTheTargetType = commonTypeService.loadInheritanceChain(targetEntityType).stream()
+                .flatMap(entityType -> entityType.getTraits().stream()
+                        .flatMap(trait -> commonTraitService.loadInheritanceChain(trait).stream()))
                 .map(Trait::getName)
                 .collect(Collectors.toSet());
 
-        return List.of();
+        var sourceRelationships = allTheTraitsForTheSourceType.stream()
+                .flatMap(sourceTrait ->
+                        traitRelationshipRepository.findBySourceAndRelationType(sourceTrait, relType).stream())
+                .toList();
+
+        for (var sourceRelationship : sourceRelationships) {
+            var targetTrait = sourceRelationship.getTarget();
+            if (allTheTraitsNamesForTheTargetType.contains(targetTrait.getName())) return true;
+        }
+        return false;
     }
 }
