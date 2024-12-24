@@ -26,6 +26,17 @@ public class JsonUtilsTests {
                     "state" : {
                       "type" : "string"
                     },
+                    "struct": {
+                      "type": "object",
+                      "properties": {
+                         "aNumber": {
+                            "type": "number"
+                         },
+                         "anInteger": {
+                            "type": "integer"
+                         }
+                       }
+                    },
                     "type" : {
                       "enum" : [ "residential", "business" ]
                     },
@@ -56,5 +67,50 @@ public class JsonUtilsTests {
                                 .get()
                                 .toPrettyString(),
                         mergedSchema);
+    }
+
+    @Test
+    void testConvertMappingSchema() {
+
+        var convertedSchema =
+                """
+            {
+              "type" : "object",
+              "properties" : {
+                "street_address" : {
+                  "type" : "string"
+                },
+                "city" : {
+                  "type" : "string"
+                },
+                "state" : {
+                  "type" : "string"
+                },
+                "struct" : {
+                  "type" : "object",
+                  "properties" : {
+                    "aNumber" : {
+                      "type" : "string"
+                    },
+                    "anInteger" : {
+                      "type" : "string"
+                    }
+                  }
+                }
+              },
+              "required" : [ "street_address", "city", "state" ]
+            }
+            """;
+
+        var baseSchema = jsonSchemaFactory.getSchema(
+                Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"));
+
+        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
+                .assertIsMatch(
+                        convertedSchema,
+                        JsonUtils.convertToMappingSchema(baseSchema)
+                                .get()
+                                .getSchemaNode()
+                                .toPrettyString());
     }
 }

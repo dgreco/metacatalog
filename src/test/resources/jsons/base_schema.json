@@ -3,7 +3,18 @@
   "properties": {
        "street_address": { "type": "string" },
        "city": { "type": "string" },
-       "state": { "type": "string" }
-     },
+       "state": { "type": "string" },
+       "struct": {
+         "type": "object",
+         "properties": {
+           "aNumber": {
+             "type": "number"
+           },
+           "anInteger": {
+             "type": "integer"
+           }
+         }
+       }
+  },
   "required": ["street_address", "city", "state"]
 }

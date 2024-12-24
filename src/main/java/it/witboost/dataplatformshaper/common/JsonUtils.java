@@ -3,6 +3,7 @@ package it.witboost.dataplatformshaper.common;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.networknt.schema.*;
 import io.vavr.Tuple2;
 import io.vavr.control.Either;
@@ -29,7 +30,7 @@ public class JsonUtils {
     private static boolean checkNotAllowedKeywords(JsonNode node) {
         if (node.isObject()) {
             var entries = node.fields();
-            for (; entries.hasNext(); ) {
+            while (entries.hasNext()) {
                 var key = entries.next().getKey();
                 var value = node.get(key);
                 if (notAllowedKeywords.contains(key)) {
@@ -38,7 +39,7 @@ public class JsonUtils {
                     if (checkNotAllowedKeywords(value)) return true;
                 } else if (value.isArray()) {
                     var array = value.elements();
-                    for (; array.hasNext(); ) {
+                    while (array.hasNext()) {
                         if (checkNotAllowedKeywords(array.next())) return true;
                     }
                 }
@@ -46,7 +47,34 @@ public class JsonUtils {
         }
         return false;
     }
-    ;
+
+    private static void convertFieldTypeToString(JsonNode node) {
+        if (node.isObject()) {
+            var entries = node.fields();
+            while (entries.hasNext()) {
+                var entry = entries.next();
+                var key = entry.getKey();
+                var value = node.get(key);
+                if (value.isObject()) {
+                    convertFieldTypeToString(value);
+                } else if (value.isArray()) {
+                    var array = value.elements();
+                    while (array.hasNext()) {
+                        convertFieldTypeToString(array.next());
+                    }
+                } else {
+                    if (!value.asText().equals("string") && !value.asText().equals("object")) {
+                        entry.setValue(JsonNodeFactory.instance.textNode("string"));
+                    }
+                }
+            }
+        }
+    }
+
+    public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
+        convertFieldTypeToString(jsonSchema.getSchemaNode().get("properties"));
+        return Either.right(jsonSchema);
+    }
 
     public static final ObjectMapper jsonFactory = new ObjectMapper();
 

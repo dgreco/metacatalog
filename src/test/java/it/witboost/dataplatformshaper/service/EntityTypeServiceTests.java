@@ -64,6 +64,17 @@ class EntityTypeServiceTests extends CommonServiceTests {
                     "state" : {
                       "type" : "string"
                     },
+                    "struct": {
+                      "type": "object",
+                      "properties": {
+                         "aNumber": {
+                            "type": "number"
+                         },
+                         "anInteger": {
+                            "type": "integer"
+                         }
+                       }
+                    },
                     "type" : {
                       "enum" : [ "residential", "business" ]
                     },
