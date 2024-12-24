@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 class EntityServiceTests extends CommonServiceTests {
@@ -61,7 +60,6 @@ class EntityServiceTests extends CommonServiceTests {
     }
 
     @Test
-    @Transactional // TODO: fix this
     void testLinkUnlinkLinkedEntities() throws ServiceError {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
 
@@ -94,14 +92,14 @@ class EntityServiceTests extends CommonServiceTests {
 
         entityTypeService.create("TargetEntityType", List.of("InheritedTargetTrait"), Optional.empty(), emptySchema);
 
+        traitService.link("SourceTrait", DEPENDS_ON, "TargetTrait");
+
         var sourceEntity = entityService.create("SourceEntityType", emptyValues);
 
         var targetEntity = entityService.create("TargetEntityType", emptyValues);
 
         Assertions.assertThrows(
                 ServiceError.class, () -> entityService.link(sourceEntity.getId(), HAS_PART, targetEntity.getId()));
-
-        traitService.link("SourceTrait", DEPENDS_ON, "TargetTrait");
 
         entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId());
 

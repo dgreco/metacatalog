@@ -84,7 +84,7 @@ public class EntityService {
                 .findById(targetId)
                 .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
 
-        if (entityRelationshipRepository
+        if (entityRelationshipRepository // TODO the index is not working
                 .findBySourceAndRelationTypeAndTarget(source, relType, target)
                 .isPresent())
             throw new ServiceError("Entity with id " + sourceId + " is already linked with entity with id " + targetId

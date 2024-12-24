@@ -29,7 +29,7 @@ public class Entity {
     @ToString.Include
     private JsonNode values;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "entity_type_id", nullable = false)
     private EntityType entityType;
 }
