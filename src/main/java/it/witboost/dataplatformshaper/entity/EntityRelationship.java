@@ -20,25 +20,4 @@ import lombok.ToString;
                     unique = true),
         })
 @SuppressFBWarnings
-public class EntityRelationship {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    @ToString.Include
-    private String id;
-
-    @ManyToOne
-    @JoinColumn(name = "source_id")
-    @ToString.Include
-    private Entity source;
-
-    @ManyToOne
-    @JoinColumn(name = "target_id")
-    @ToString.Include
-    private Entity target;
-
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    @ToString.Include
-    private RelationType relationType;
-}
+public class EntityRelationship extends CommonRelationship<Entity> {}

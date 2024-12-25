@@ -20,25 +20,4 @@ import lombok.ToString;
                     unique = true),
         })
 @SuppressFBWarnings
-public class TraitRelationship {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    @ToString.Include
-    private String id;
-
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "source_id")
-    @ToString.Include
-    private Trait source;
-
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "target_id")
-    @ToString.Include
-    private Trait target;
-
-    @Column(nullable = false)
-    @Enumerated(EnumType.STRING)
-    @ToString.Include
-    private RelationType relationType;
-}
+public class TraitRelationship extends CommonRelationship<Trait> {}
