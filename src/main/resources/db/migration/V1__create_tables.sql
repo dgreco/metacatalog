@@ -90,3 +90,29 @@ CREATE INDEX idx_entity_relationship_source_id_relation_type_unq ON entity_relat
 
 ALTER TABLE entity_relationship
     ADD CONSTRAINT FK_ENTITY_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity (id);
+
+create type source_reference as (
+    alias          VARCHAR,
+    reference_path VARCHAR
+);
+
+CREATE TABLE mapping_type_relationship
+(
+    id                VARCHAR(255) NOT NULL,
+    source_id         VARCHAR(255),
+    target_id         VARCHAR(255),
+    relation_type     VARCHAR(255) NOT NULL,
+    mapping_values    JSONB        NOT NULL,
+    source_references _source_reference NOT NULL,
+    CONSTRAINT pk_mapping_type_relationship PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_mapping_type_relationship_source_id_relation_type ON mapping_type_relationship (source_id, relation_type);
+
+CREATE UNIQUE INDEX idx_mapping_type_relationship_source_id_relation_type_target_id ON mapping_type_relationship (source_id, relation_type, target_id);
+
+ALTER TABLE mapping_type_relationship
+    ADD CONSTRAINT FK_MAPPING_TYPE_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES entity_type (id);
+
+ALTER TABLE mapping_type_relationship
+    ADD CONSTRAINT FK_MAPPING_TYPE_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity_type (id);

@@ -15,20 +15,20 @@ public class CommonRelationship<T> implements Serializable {
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)
     @ToString.Include
-    protected String id;
+    private String id;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "source_id")
     @ToString.Include
-    protected T source;
+    private T source;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "target_id")
     @ToString.Include
-    protected T target;
+    private T target;
 
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     @ToString.Include
-    protected RelationType relationType;
+    private RelationType relationType;
 }
