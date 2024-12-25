@@ -26,11 +26,10 @@ import org.hibernate.annotations.Struct;
                     columnList = "source_id, relation_type"),
             @Index(
                     name = "idx_mapping_type_relationship_source_id_relation_type_target_id",
-                    columnList = "source_id, relation_type, target_id",
-                    unique = true),
+                    columnList = "source_id, relation_type, target_id")
         })
 @SuppressFBWarnings
-public class MappingTypeRelationship extends CommonRelationship<EntityType> {
+public class MappingEntityTypeRelationship extends CommonRelationship<EntityType> {
     @org.hibernate.annotations.Type(JsonBinaryType.class)
     @Column(name = "mapping_values", columnDefinition = "jsonb", nullable = false)
     @ToString.Include

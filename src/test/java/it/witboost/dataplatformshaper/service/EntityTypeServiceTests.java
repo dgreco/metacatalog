@@ -21,7 +21,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
     private TraitService traitService;
 
     @Test
-    void testCreateDeleteExists() throws JsonProcessingException, SchemaValidationError, ServiceError {
+    void testCreateDeleteExists() throws ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var baseSchema = jsonSchemaFactory

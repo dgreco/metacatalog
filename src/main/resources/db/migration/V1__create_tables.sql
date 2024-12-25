@@ -109,7 +109,7 @@ CREATE TABLE mapping_type_relationship
 
 CREATE INDEX idx_mapping_type_relationship_source_id_relation_type ON mapping_type_relationship (source_id, relation_type);
 
-CREATE UNIQUE INDEX idx_mapping_type_relationship_source_id_relation_type_target_id ON mapping_type_relationship (source_id, relation_type, target_id);
+CREATE INDEX idx_mapping_type_relationship_source_id_relation_type_target_id ON mapping_type_relationship (source_id, relation_type, target_id);
 
 ALTER TABLE mapping_type_relationship
     ADD CONSTRAINT FK_MAPPING_TYPE_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES entity_type (id);

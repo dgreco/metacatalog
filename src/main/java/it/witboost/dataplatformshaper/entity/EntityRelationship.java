@@ -17,7 +17,7 @@ import lombok.ToString;
             @Index(
                     name = "idx_entity_relationship_source_id_relation_type_target_id",
                     columnList = "source_id, relation_type, target_id",
-                    unique = true),
+                    unique = true)
         })
 @SuppressFBWarnings
 public class EntityRelationship extends CommonRelationship<Entity> {}

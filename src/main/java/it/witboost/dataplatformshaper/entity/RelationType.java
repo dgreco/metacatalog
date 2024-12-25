@@ -2,5 +2,6 @@ package it.witboost.dataplatformshaper.entity;
 
 public enum RelationType {
     DEPENDS_ON,
-    HAS_PART
+    HAS_PART,
+    MAPPED_TO
 }

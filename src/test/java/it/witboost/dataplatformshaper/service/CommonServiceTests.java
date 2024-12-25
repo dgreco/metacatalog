@@ -54,4 +54,7 @@ class CommonServiceTests {
 
     @Autowired
     EntityRelationshipRepository entityRelationshipRepository;
+
+    @Autowired
+    MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 }
