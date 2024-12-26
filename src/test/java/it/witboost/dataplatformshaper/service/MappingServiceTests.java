@@ -44,15 +44,15 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testCheckLoops() throws ServiceError {
+    void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
 
-        entityTypeService.create(
+        var typeA = entityTypeService.create(
                 "A", List.of(), Optional.empty(), """
                 { "type": "object", "properties": {} }""");
 
-        entityTypeService.create(
+        var typeB = entityTypeService.create(
                 "B", List.of(), Optional.empty(), """
                 { "type": "object", "properties": {} }""");
 
@@ -66,9 +66,19 @@ class MappingServiceTests extends CommonServiceTests {
 
         mappingService.create("A", "B", "{}", List.of());
 
+        Assertions.assertTrue(mappingService.isSourceEntityType(typeA));
+
+        Assertions.assertFalse(mappingService.isSourceEntityType(typeB));
+
+        Assertions.assertTrue(mappingService.isTargetEntityType(typeB));
+
         Assertions.assertThrows(ServiceError.class, () -> mappingService.create("B", "A", "{}", List.of()));
 
         mappingService.create("B", "C", "{}", List.of());
+
+        Assertions.assertTrue(mappingService.isSourceEntityType(typeB));
+
+        Assertions.assertTrue(mappingService.isTargetEntityType(typeB));
 
         Assertions.assertThrows(ServiceError.class, () -> mappingService.create("C", "A", "{}", List.of()));
 

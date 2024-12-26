@@ -5,6 +5,7 @@ import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
+import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.MappingEntityTypeRelationshipRepository;
@@ -37,6 +38,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             }
         }
         return entityTypeNamesVisited.contains(targetEntityTypeName);
+    }
+
+    public boolean isSourceEntityType(EntityType entityType) {
+        return !mappingEntityTypeRelationshipRepository
+                .findMappingEntityTypeRelationshipBySource(entityType)
+                .isEmpty();
+    }
+
+    public boolean isTargetEntityType(EntityType entityType) {
+        return !mappingEntityTypeRelationshipRepository
+                .findMappingEntityTypeRelationshipByTarget(entityType)
+                .isEmpty();
     }
 
     public MappingService(

@@ -6,5 +6,5 @@ public interface Type<T extends Type> {
 
     T getFather();
 
-    JsonNode getBaseSchema();
+    JsonNode getSchema();
 }
