@@ -52,7 +52,7 @@ class EntityServiceTests extends CommonServiceTests {
 
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TestType"));
 
-        entityService.delete(entity);
+        entityService.delete(entity.getId());
 
         entityTypeService.delete("TestType");
 

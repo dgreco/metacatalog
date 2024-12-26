@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class TraitService implements CommonTypeService<Trait> {
+public class TraitService implements CommonTypeService<Trait, String> {
 
     private final TraitRepository traitRepository;
     private final TraitRelationshipRepository traitRelationshipRepository;
@@ -70,8 +70,8 @@ public class TraitService implements CommonTypeService<Trait> {
     }
 
     @Transactional
-    public Optional<Trait> read(String name) {
-        return traitRepository.findByName(name);
+    public Trait read(String name) throws ServiceError {
+        return traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
     }
 
     @Transactional

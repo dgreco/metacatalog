@@ -2,11 +2,16 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
 import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
+import static it.witboost.dataplatformshaper.service.CommonTypeService.commonTraitService;
+import static it.witboost.dataplatformshaper.service.CommonTypeService.commonTypeService;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.*;
+import it.witboost.dataplatformshaper.entity.Entity;
+import it.witboost.dataplatformshaper.entity.EntityRelationship;
+import it.witboost.dataplatformshaper.entity.RelationType;
+import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
@@ -18,7 +23,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class EntityService {
+public class EntityService implements CommonService<Entity, String> {
 
     private final EntityTypeRepository entityTypeRepository;
 
@@ -67,8 +72,18 @@ public class EntityService {
     }
 
     @Transactional
-    public void delete(Entity entity) {
-        entityRepository.delete(entity);
+    public Entity read(String key) throws ServiceError {
+        return null;
+    }
+
+    @Transactional
+    public void delete(String entityId) {
+        entityRepository.deleteById(entityId);
+    }
+
+    @Transactional
+    public boolean exists(String entityId) {
+        return entityRepository.existsById(entityId);
     }
 
     @Transactional(rollbackFor = {ServiceError.class})
@@ -132,10 +147,6 @@ public class EntityService {
     @Transactional
     protected boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
             throws ServiceError {
-
-        var commonTypeService = new CommonTypeService<EntityType>() {};
-
-        var commonTraitService = new CommonTypeService<Trait>() {};
 
         var sourceEntity = entityRepository
                 .findById(sourceEntityId)

@@ -1,9 +1,10 @@
 package it.witboost.dataplatformshaper.service;
 
-import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
+import static it.witboost.dataplatformshaper.common.JsonUtils.*;
 import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.networknt.schema.ValidationMessage;
 import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.MappingEntityTypeRelationshipRepository;
@@ -29,20 +30,39 @@ public class MappingService {
             String targetEntityTypeName,
             String mappingValues,
             List<MappingEntityTypeRelationship.SourceReference> sourceReferences)
-            throws JsonProcessingException {
-        var mapping = new MappingEntityTypeRelationship();
+            throws ServiceError {
+        try {
 
-        var sourceEntityType =
-                entityTypeRepository.findByName(sourceEntityTypeName).get();
+            var mapping = new MappingEntityTypeRelationship();
 
-        var targetEntityType =
-                entityTypeRepository.findByName(targetEntityTypeName).get();
+            var sourceEntityType = entityTypeRepository
+                    .findByName(sourceEntityTypeName)
+                    .orElseThrow(() -> new ServiceError("EntityType " + sourceEntityTypeName + " does not exist"));
 
-        mapping.setSource(sourceEntityType);
-        mapping.setRelationType(MAPPED_TO);
-        mapping.setTarget(targetEntityType);
-        mapping.setMappingValues(jsonFactory.readTree(mappingValues));
-        mapping.setSourceReferences(sourceReferences);
-        return mappingEntityTypeRelationshipRepository.save(mapping);
+            var targetEntityType = entityTypeRepository
+                    .findByName(targetEntityTypeName)
+                    .orElseThrow(() -> new ServiceError("EntityType " + targetEntityTypeName + " does not exist"));
+
+            mapping.setSource(sourceEntityType);
+            mapping.setRelationType(MAPPED_TO);
+            mapping.setTarget(targetEntityType);
+            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+            var validatingSchemaEither =
+                    convertToMappingSchema(jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+            if (validatingSchemaEither.isLeft()) throw new SchemaValidationError(validatingSchemaEither.getLeft());
+            var mappingValuesNode = jsonFactory.readTree(mappingValues);
+            var validationErrors = validatingSchemaEither.get().validate(mappingValuesNode);
+            if (!validationErrors.isEmpty()) {
+                var errorMessages = validationErrors.stream()
+                        .map(ValidationMessage::getMessage)
+                        .toList();
+                throw new SchemaValidationError(errorMessages);
+            }
+            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+            mapping.setSourceReferences(sourceReferences);
+            return mappingEntityTypeRelationshipRepository.save(mapping);
+        } catch (JsonProcessingException e) {
+            throw new ServiceError(e.getMessage());
+        }
     }
 }

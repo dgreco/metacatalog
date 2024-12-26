@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class EntityTypeService implements CommonTypeService<EntityType> {
+public class EntityTypeService implements CommonTypeService<EntityType, String> {
 
     private final EntityTypeRepository entityTypeRepository;
     private final TraitRepository traitRepository;
@@ -79,8 +79,10 @@ public class EntityTypeService implements CommonTypeService<EntityType> {
     }
 
     @Transactional
-    public Optional<EntityType> read(String name) {
-        return entityTypeRepository.findByName(name);
+    public EntityType read(String name) throws ServiceError {
+        return entityTypeRepository
+                .findByName(name)
+                .orElseThrow(() -> new ServiceError("EntityType " + name + " does not exist"));
     }
 
     @Transactional
