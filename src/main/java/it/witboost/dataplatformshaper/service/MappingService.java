@@ -8,7 +8,9 @@ import com.networknt.schema.ValidationMessage;
 import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.MappingEntityTypeRelationshipRepository;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,6 +19,25 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public final EntityTypeRepository entityTypeRepository;
 
     public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+
+    public boolean checkLoops(
+            String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName) {
+        var sourceEntityType =
+                entityTypeRepository.findByName(sourceEntityTypeName).get();
+        var mappings =
+                mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(sourceEntityType);
+
+        var targetTypes =
+                mappings.stream().map(MappingEntityTypeRelationship::getTarget).toList();
+        for (var targetType : targetTypes) {
+            if (entityTypeNamesVisited.contains(targetEntityTypeName)) return true;
+            else {
+                entityTypeNamesVisited.add(targetType.getName());
+                return checkLoops(targetType.getName(), entityTypeNamesVisited, targetEntityTypeName);
+            }
+        }
+        return entityTypeNamesVisited.contains(targetEntityTypeName);
+    }
 
     public MappingService(
             EntityTypeRepository entityTypeRepository,
@@ -32,6 +53,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             List<MappingEntityTypeRelationship.SourceReference> sourceReferences)
             throws ServiceError {
         try {
+            if (checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
+                throw new ServiceError("Loops are not allowed");
 
             var mapping = new MappingEntityTypeRelationship();
 

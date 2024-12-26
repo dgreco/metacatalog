@@ -64,12 +64,18 @@ class MappingServiceTests extends CommonServiceTests {
                 "D", List.of(), Optional.empty(), """
                 { "type": "object", "properties": {} }""");
 
-        var mapping1 = mappingService.create("A", "B", "{}", List.of());
+        mappingService.create("A", "B", "{}", List.of());
 
-        var mapping2 = mappingService.create("B", "C", "{}", List.of());
+        Assertions.assertThrows(ServiceError.class, () -> mappingService.create("B", "A", "{}", List.of()));
 
-        var mapping3 = mappingService.create("C", "D", "{}", List.of());
+        mappingService.create("B", "C", "{}", List.of());
 
-        var mapping4 = mappingService.create("D", "A", "{}", List.of());
+        Assertions.assertThrows(ServiceError.class, () -> mappingService.create("C", "A", "{}", List.of()));
+
+        mappingService.create("C", "D", "{}", List.of());
+
+        mappingService.create("C", "D", "{}", List.of());
+
+        Assertions.assertThrows(ServiceError.class, () -> mappingService.create("D", "A", "{}", List.of()));
     }
 }
