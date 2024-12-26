@@ -1,20 +1,17 @@
 package it.witboost.dataplatformshaper.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTests {
 
-    @Autowired
-    private TraitService traitService;
-
     @Test
-    void testCreateDeleteExists() throws JsonProcessingException, SchemaValidationError, ServiceError {
+    void testCreateDelete() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
 
@@ -36,7 +33,43 @@ class MappingServiceTests extends CommonServiceTests {
 
         var mapping2 = mappingService.create("SourceType", "TargetType", "{}", List.of());
 
-        System.out.println(mapping1);
-        System.out.println(mapping2);
+        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("SourceType"));
+        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TargetType"));
+
+        mappingService.delete(mapping1.getId());
+        mappingService.delete(mapping2.getId());
+
+        entityTypeService.delete("SourceType");
+        entityTypeService.delete("TargetType");
+    }
+
+    @Test
+    void testCheckLoops() throws ServiceError {
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
+
+        entityTypeService.create(
+                "A", List.of(), Optional.empty(), """
+                { "type": "object", "properties": {} }""");
+
+        entityTypeService.create(
+                "B", List.of(), Optional.empty(), """
+                { "type": "object", "properties": {} }""");
+
+        entityTypeService.create(
+                "C", List.of(), Optional.empty(), """
+                { "type": "object", "properties": {} }""");
+
+        entityTypeService.create(
+                "D", List.of(), Optional.empty(), """
+                { "type": "object", "properties": {} }""");
+
+        var mapping1 = mappingService.create("A", "B", "{}", List.of());
+
+        var mapping2 = mappingService.create("B", "C", "{}", List.of());
+
+        var mapping3 = mappingService.create("C", "D", "{}", List.of());
+
+        var mapping4 = mappingService.create("D", "A", "{}", List.of());
     }
 }

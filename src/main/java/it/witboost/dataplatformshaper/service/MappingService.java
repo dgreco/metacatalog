@@ -12,7 +12,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 @Service
-public class MappingService {
+public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
     public final EntityTypeRepository entityTypeRepository;
 
@@ -64,5 +64,19 @@ public class MappingService {
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
+    }
+
+    public void delete(String mappingId) throws ServiceError {
+        mappingEntityTypeRelationshipRepository.deleteById(mappingId);
+    }
+
+    public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
+        return mappingEntityTypeRelationshipRepository
+                .findById(mappingId)
+                .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
+    }
+
+    public boolean exists(String mappingId) throws ServiceError {
+        return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 }
