@@ -21,7 +21,7 @@ class EntityServiceTests extends CommonServiceTests {
     void testCreationAndValidation() throws IOException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         final EntityService entityService = new EntityService(
-                entityTypeRepository, typedEntityRepository, traitRelationshipRepository, entityRelationshipRepository);
+                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -66,7 +66,7 @@ class EntityServiceTests extends CommonServiceTests {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         final EntityService entityService = new EntityService(
-                entityTypeRepository, typedEntityRepository, traitRelationshipRepository, entityRelationshipRepository);
+                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
 
         var emptySchema =
                 """
@@ -103,9 +103,12 @@ class EntityServiceTests extends CommonServiceTests {
 
         entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId());
 
+        // No loops
+        Assertions.assertThrows(
+                ServiceError.class, () -> entityService.link(targetEntity.getId(), DEPENDS_ON, sourceEntity.getId()));
+
+        // No multiple link between source and target
         Assertions.assertThrows(
                 ServiceError.class, () -> entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId()));
-
-        entityService.linked(sourceEntity.getId(), DEPENDS_ON).forEach(entity -> System.out.println(entity.getId()));
     }
 }

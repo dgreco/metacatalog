@@ -108,7 +108,7 @@ public class JsonUtils {
     public static Either<List<String>, JsonNode> mergeSchemas(List<JsonNode> schemas) {
         Map<String, Tuple2<JsonNode, Boolean>> propertiesToMerge = new HashMap<>();
         List<String> propertiesNamesToMerge = new LinkedList<>();
-        schemas.forEach(node -> {
+        for (JsonNode node : schemas) {
             var requiredProperties = new HashSet<String>();
             var maybeRequired = Optional.<JsonNode>empty();
             if (node.has("required")) maybeRequired = Optional.of(node.get("required"));
@@ -118,6 +118,8 @@ public class JsonUtils {
                             .forEachRemaining(requiredElement -> requiredProperties.add(requiredElement.asText()));
                 }
             });
+            if (!node.has("properties")) return Either.left(List.of("The schema must have a properties field"));
+
             node.get("properties").fields().forEachRemaining(entry -> {
                 var key = entry.getKey();
                 var value = entry.getValue();
@@ -125,7 +127,7 @@ public class JsonUtils {
                 if (!propertiesToMerge.containsKey(key)) propertiesNamesToMerge.add(key);
                 propertiesToMerge.put(key, new Tuple2<>(value, isRequired));
             });
-        });
+        }
         var mergedSchemaJson = jsonFactory.createObjectNode();
         var properties = jsonFactory.createObjectNode();
         var required = jsonFactory.createArrayNode();

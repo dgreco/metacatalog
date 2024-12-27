@@ -50,7 +50,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
         } else {
             schemasToMerge.add(eitherSchema.get().getSchemaNode());
             var mergedSchema = mergeSchemas(schemasToMerge);
-            if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+            if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
             entityType.setDerivedSchema(mergedSchema.get());
         }
         return traitRepository.save(entityType);

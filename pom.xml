@@ -26,8 +26,9 @@
         <!-- Hypersistence -->
         <hypersistence.version>3.9.0</hypersistence.version>
 
-        <!-- Json Schema Validator -->
+        <!-- Json Schema & Json Path -->
         <json-schema-validator.version>1.5.4</json-schema-validator.version>
+        <json-path.version>2.9.0</json-path.version>
 
         <!--   Misc -->
         <vavr.version>0.10.5</vavr.version>
@@ -123,7 +124,7 @@
             <version>${springdoc.version}</version>
         </dependency>
 
-        <!-- SpringBoot JPA, Json, JsonSchema -->
+        <!-- SpringBoot JPA, Json, JsonSchema, Json Path -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -137,6 +138,11 @@
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
             <version>${json-schema-validator.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
+            <version>${json-path.version}</version>
         </dependency>
 
         <!-- Ontop -->

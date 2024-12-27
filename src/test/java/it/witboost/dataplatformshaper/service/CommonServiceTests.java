@@ -44,7 +44,7 @@ class CommonServiceTests {
     EntityTypeRepository entityTypeRepository;
 
     @Autowired
-    EntityRepository typedEntityRepository;
+    EntityRepository entityRepository;
 
     @Autowired
     TraitRepository traitRepository;

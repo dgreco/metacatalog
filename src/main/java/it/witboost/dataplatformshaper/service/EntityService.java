@@ -8,15 +8,14 @@ import static it.witboost.dataplatformshaper.service.CommonTypeService.commonTyp
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.Entity;
-import it.witboost.dataplatformshaper.entity.EntityRelationship;
-import it.witboost.dataplatformshaper.entity.RelationType;
-import it.witboost.dataplatformshaper.entity.Trait;
+import it.witboost.dataplatformshaper.entity.*;
 import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -32,6 +31,25 @@ public class EntityService implements CommonService<Entity, String> {
     private final EntityRelationshipRepository entityRelationshipRepository;
 
     private final TraitRelationshipRepository traitRelationshipRepository;
+
+    public boolean checkLoops(
+            String sourceEntityId, Set<String> entityIdsVisited, String targetEntityId, RelationType relationType) {
+        var sourceEntity = entityRepository.findById(sourceEntityId).get();
+        var mappings = entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
+
+        var targetIds = mappings.stream()
+                .map(EntityRelationship::getTarget)
+                .map(Entity::getId)
+                .toList();
+        for (var targetId : targetIds) {
+            if (entityIdsVisited.contains(targetEntityId)) return true;
+            else {
+                entityIdsVisited.add(targetId);
+                return checkLoops(targetId, entityIdsVisited, targetEntityId, relationType);
+            }
+        }
+        return entityIdsVisited.contains(targetEntityId);
+    }
 
     @SuppressFBWarnings
     public EntityService(
@@ -88,6 +106,9 @@ public class EntityService implements CommonService<Entity, String> {
 
     @Transactional(rollbackFor = {ServiceError.class})
     public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
+        // Check loops
+        if (checkLoops(targetId, new HashSet<>(), sourceId, relType)) throw new ServiceError("Loops are not allowed");
+
         // Check if the relationship is legit
         if (!checkRelIsLegit(sourceId, relType, targetId)) throw new ServiceError("Relationship is not legit");
 
