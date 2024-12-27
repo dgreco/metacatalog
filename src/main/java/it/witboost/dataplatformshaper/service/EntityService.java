@@ -8,7 +8,10 @@ import static it.witboost.dataplatformshaper.service.CommonTypeService.commonTyp
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import it.witboost.dataplatformshaper.entity.*;
+import it.witboost.dataplatformshaper.entity.Entity;
+import it.witboost.dataplatformshaper.entity.EntityRelationship;
+import it.witboost.dataplatformshaper.entity.RelationType;
+import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;

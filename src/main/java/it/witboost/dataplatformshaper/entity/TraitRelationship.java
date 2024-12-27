@@ -1,7 +1,8 @@
 package it.witboost.dataplatformshaper.entity;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import jakarta.persistence.*;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;

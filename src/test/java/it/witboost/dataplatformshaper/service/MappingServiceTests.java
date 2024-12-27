@@ -184,7 +184,34 @@ class MappingServiceTests extends CommonServiceTests {
 
         entityService.link(c1.getId(), DEPENDS_ON, d.getId());
 
-        mappingService.retrieveEntityByPath(
-                d.getId(), "DEPENDS_ON{$.c == 'c1'}/DEPENDS_ON{$.b == 0.1}/DEPENDS_ON{$.a == 1}");
+        {
+            var retrievedEntity = mappingService.retrieveEntityByPath(
+                    d.getId(), "DEPENDS_ON{$.[?(@.c == 'c1')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$}");
+
+            Assertions.assertTrue(
+                    retrievedEntity.isPresent() && retrievedEntity.get().getId().equals(a.getId()));
+        }
+
+        {
+            var retrievedEntity = mappingService.retrieveEntityByPath(
+                    b1.getId(),
+                    "DEPENDS_ON{$.[?(@.c == 'c3')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}");
+            Assertions.assertTrue(retrievedEntity.isEmpty());
+        }
+
+        {
+            var retrievedEntity = mappingService.retrieveEntityByPath(
+                    d.getId(),
+                    "DEPENDS_ON{$.[?(@.c == 'c3')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}");
+
+            Assertions.assertTrue(retrievedEntity.isEmpty());
+        }
+
+        {
+            Assertions.assertThrows(
+                    ServiceError.class,
+                    () -> mappingService.retrieveEntityByPath(
+                            d.getId(), "DEPENDS_ON{$}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}"));
+        }
     }
 }

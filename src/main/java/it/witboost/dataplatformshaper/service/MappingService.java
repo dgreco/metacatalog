@@ -4,6 +4,9 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.*;
 import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
 import com.networknt.schema.ValidationMessage;
 import it.witboost.dataplatformshaper.entity.*;
 import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
@@ -27,9 +30,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     private final EntityRelationshipRepository entityRelationshipRepository;
 
     public boolean checkLoops(
-            String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName) {
-        var sourceEntityType =
-                entityTypeRepository.findByName(sourceEntityTypeName).get();
+            String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName)
+            throws ServiceError {
+        var sourceEntityType = entityTypeRepository
+                .findByName(sourceEntityTypeName)
+                .orElseThrow(() -> new ServiceError("Entity type " + targetEntityTypeName + " not found"));
         var mappings =
                 mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(sourceEntityType);
 
@@ -58,9 +63,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     }
 
     public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
+        var jsonPathConfiguration =
+                Configuration.builder().jsonProvider(new JacksonJsonProvider()).build();
+
         var pathSegments = pathString.split("/");
 
-        var pathExpressionPattern = Pattern.compile("(?<=\\{)([^\\}]+)(?=\\})");
+        var pathExpressionPattern = Pattern.compile("(?<=\\{)([^}]+)(?=})");
 
         var relTypePattern = Pattern.compile("^\\w*");
 
@@ -89,6 +97,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             if (!enumSet.contains(relTypeStr)) throw new ServiceError("Invalid path segment: " + segment);
 
             var relType = RelationType.valueOf(relTypeStr);
+            var pathExpression = pathExpressions.get(0).trim();
 
             var relationSources =
                     entityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType).stream()
@@ -97,7 +106,24 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
             if (relationSources.isEmpty()) return Optional.empty();
 
-            currentEntity = relationSources.get(0);
+            if (!pathExpression.equalsIgnoreCase("$")) {
+                var found = false;
+                for (var relationSource : relationSources) {
+                    var json = relationSource.getValues().toPrettyString();
+                    var dc = JsonPath.using(jsonPathConfiguration).parse(json);
+                    var res = (LinkedList) dc.read(pathExpression);
+                    if (res.size() > 1) throw new ServiceError("Ambiguous path expression: " + segment);
+                    if (res.size() == 1) {
+                        currentEntity = relationSource;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return Optional.empty();
+            } else {
+                if (relationSources.size() > 1) throw new ServiceError("Ambiguous path: " + segment);
+                currentEntity = relationSources.get(0);
+            }
         }
 
         if (currentEntity.getId().equals(startEntityId)) return Optional.empty();
