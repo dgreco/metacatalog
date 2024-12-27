@@ -169,7 +169,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     convertToMappingSchema(jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
             if (validatingSchemaEither.isLeft()) throw new SchemaValidationError(validatingSchemaEither.getLeft());
             var mappingValuesNode = jsonFactory.readTree(mappingValues);
-            var validationErrors = validatingSchemaEither.get().validate(mappingValuesNode);
+            var validatingSchema = validatingSchemaEither.get();
+            var validationErrors = validatingSchema.validate(mappingValuesNode);
             if (!validationErrors.isEmpty()) {
                 var errorMessages = validationErrors.stream()
                         .map(ValidationMessage::getMessage)
@@ -197,4 +198,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public boolean exists(String mappingId) throws ServiceError {
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
+
+    public void createMappedEntities(String sourceEntityId) throws ServiceError {}
 }

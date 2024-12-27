@@ -72,8 +72,9 @@ public class JsonUtils {
     }
 
     public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
-        convertFieldTypeToString(jsonSchema.getSchemaNode().get("properties"));
-        return Either.right(jsonSchema);
+        var node = jsonSchema.getSchemaNode();
+        convertFieldTypeToString(node.get("properties"));
+        return Either.right(jsonSchemaFactory.getSchema(node));
     }
 
     public static final ObjectMapper jsonFactory = new ObjectMapper();

@@ -6,11 +6,15 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTests {
+
+    @Autowired
+    private EntityTypeService entityTypeService;
 
     @Test
     void testCreateDelete() throws ServiceError {
@@ -22,31 +26,33 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRelationshipRepository);
 
         entityTypeService.create(
-                "SourceType",
+                "SimpleSourceType",
                 List.of(),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": {} }""");
 
         entityTypeService.create(
-                "TargetType",
+                "SimpleTargetType",
                 List.of(),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": {} }""");
 
-        var mapping1 = mappingService.create("SourceType", "TargetType", "{}", List.of());
+        var mapping1 = mappingService.create("SimpleSourceType", "SimpleTargetType", "{}", List.of());
 
-        var mapping2 = mappingService.create("SourceType", "TargetType", "{}", List.of());
+        var mapping2 = mappingService.create("SimpleSourceType", "SimpleTargetType", "{}", List.of());
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("SourceType"));
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TargetType"));
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> entityTypeService.delete("SimpleSourceType"));
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> entityTypeService.delete("SimpleTargetType"));
 
         mappingService.delete(mapping1.getId());
         mappingService.delete(mapping2.getId());
 
-        entityTypeService.delete("SourceType");
-        entityTypeService.delete("TargetType");
+        entityTypeService.delete("SimpleSourceType");
+        entityTypeService.delete("SimpleTargetType");
     }
 
     @Test
@@ -213,5 +219,60 @@ class MappingServiceTests extends CommonServiceTests {
                     () -> mappingService.retrieveEntityByPath(
                             d.getId(), "DEPENDS_ON{$}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}"));
         }
+    }
+
+    @Test
+    void testCreateAndUpdateMappingEntities() throws ServiceError {
+        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityService = new EntityService(
+                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
+        var mappingService = new MappingService(
+                entityRepository,
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                entityRelationshipRepository);
+
+        traitService.create("DependingRelSourceTrait", Optional.empty());
+
+        traitService.create("DependingRelTargetTrait", Optional.empty());
+
+        traitService.link("DependingRelSourceTrait", DEPENDS_ON, "DependingRelTargetTrait");
+
+        entityTypeService.create(
+                "AnotherType",
+                List.of("DependingRelSourceTrait"),
+                Optional.empty(),
+                """
+                { "type": "object", "properties": { "c": { "type": "integer" } } }""");
+
+        entityTypeService.create(
+                "SourceType",
+                List.of("DependingRelTargetTrait"),
+                Optional.empty(),
+                """
+                { "type": "object", "properties": { "a": { "type": "integer" } } }""");
+
+        entityTypeService.create(
+                "TargetType",
+                List.of(),
+                Optional.empty(),
+                """
+                { "type": "object", "properties": { "b": { "type": "integer" } } }""");
+
+        mappingService.create("SourceType", "TargetType", """
+                        {"b": ""}""", List.of());
+
+        var anotherInstance = entityService.create("AnotherType", """
+                {"c": 1}
+                """);
+
+        var sourceInstance = entityService.create("SourceType", """
+                {"a": 1}
+                """);
+
+        entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
+
+        mappingService.createMappedEntities(sourceInstance.getId());
     }
 }
