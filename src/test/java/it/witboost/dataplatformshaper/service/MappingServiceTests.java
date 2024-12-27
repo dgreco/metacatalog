@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTests {
@@ -16,7 +15,11 @@ class MappingServiceTests extends CommonServiceTests {
     @Test
     void testCreateDelete() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
+        var mappingService = new MappingService(
+                entityRepository,
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                entityRelationshipRepository);
 
         entityTypeService.create(
                 "SourceType",
@@ -49,7 +52,11 @@ class MappingServiceTests extends CommonServiceTests {
     @Test
     void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
+        var mappingService = new MappingService(
+                entityRepository,
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                entityRelationshipRepository);
 
         var typeA = entityTypeService.create(
                 "A", List.of(), Optional.empty(), """
@@ -93,73 +100,76 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    @Transactional
     void testGraphPath() throws ServiceError {
 
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
-        var mappingService = new MappingService(entityTypeRepository, mappingEntityTypeRelationshipRepository);
+        var mappingService = new MappingService(
+                entityRepository,
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                entityRelationshipRepository);
 
-        traitService.create("Trait_A", Optional.empty());
+        traitService.create("Trait_NA", Optional.empty());
 
-        traitService.create("Trait_B", Optional.empty());
+        traitService.create("Trait_NB", Optional.empty());
 
-        traitService.create("Trait_C", Optional.empty());
+        traitService.create("Trait_NC", Optional.empty());
 
-        traitService.create("Trait_D", Optional.empty());
+        traitService.create("Trait_ND", Optional.empty());
 
-        traitService.link("Trait_A", DEPENDS_ON, "Trait_B");
+        traitService.link("Trait_NA", DEPENDS_ON, "Trait_NB");
 
-        traitService.link("Trait_B", DEPENDS_ON, "Trait_C");
+        traitService.link("Trait_NB", DEPENDS_ON, "Trait_NC");
 
-        traitService.link("Trait_C", DEPENDS_ON, "Trait_D");
+        traitService.link("Trait_NC", DEPENDS_ON, "Trait_ND");
 
         entityTypeService.create(
-                "A",
-                List.of("Trait_A"),
+                "NA",
+                List.of("Trait_NA"),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": { "a": { "type": "integer" } } }""");
 
         entityTypeService.create(
-                "B",
-                List.of("Trait_B"),
+                "NB",
+                List.of("Trait_NB"),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": { "b": { "type": "number" }} }""");
 
         entityTypeService.create(
-                "C",
-                List.of("Trait_C"),
+                "NC",
+                List.of("Trait_NC"),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": { "c": { "type": "string" }} }""");
 
         entityTypeService.create(
-                "D",
-                List.of("Trait_D"),
+                "ND",
+                List.of("Trait_ND"),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": { "d": { "type": "string" }} }""");
 
-        var a = entityService.create("A", """
+        var a = entityService.create("NA", """
                { "a": 1 }""");
 
-        var b1 = entityService.create("B", """
+        var b1 = entityService.create("NB", """
                { "b": 0.1 }""");
 
-        var b2 = entityService.create("B", """
+        var b2 = entityService.create("NB", """
                { "b": 0.2 }""");
 
-        var c1 = entityService.create("C", """
+        var c1 = entityService.create("NC", """
                { "c": "c1" }""");
 
-        var c2 = entityService.create("C", """
+        var c2 = entityService.create("NC", """
                { "c": "c2" }""");
 
-        var d = entityService.create("D", """
+        var d = entityService.create("ND", """
                { "d": "d" }""");
 
         entityService.link(a.getId(), DEPENDS_ON, b1.getId());
@@ -170,6 +180,11 @@ class MappingServiceTests extends CommonServiceTests {
 
         entityService.link(b1.getId(), DEPENDS_ON, c2.getId());
 
+        entityService.link(c2.getId(), DEPENDS_ON, d.getId());
+
         entityService.link(c1.getId(), DEPENDS_ON, d.getId());
+
+        mappingService.retrieveEntityByPath(
+                d.getId(), "DEPENDS_ON{$.c == 'c1'}/DEPENDS_ON{$.b == 0.1}/DEPENDS_ON{$.a == 1}");
     }
 }

@@ -13,6 +13,8 @@ public interface EntityRelationshipRepository extends JpaRepository<EntityRelati
 
     List<EntityRelationship> findBySourceAndRelationType(Entity source, RelationType relType);
 
+    List<EntityRelationship> findByTargetAndRelationType(Entity target, RelationType relType);
+
     Optional<EntityRelationship> findBySourceAndRelationTypeAndTarget(
             Entity source, RelationType relType, Entity target);
 }

@@ -88,6 +88,8 @@ CREATE UNIQUE INDEX idx_entity_relationship_source_id_relation_type_target_id_un
 
 CREATE INDEX idx_entity_relationship_source_id_relation_type_unq ON entity_relationship (source_id, relation_type);
 
+CREATE INDEX idx_entity_relationship_target_id_relation_type ON entity_relationship (target_id, relation_type);
+
 ALTER TABLE entity_relationship
     ADD CONSTRAINT FK_ENTITY_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity (id);
 

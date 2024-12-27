@@ -5,21 +5,26 @@ import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
-import it.witboost.dataplatformshaper.entity.EntityType;
-import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
+import it.witboost.dataplatformshaper.entity.*;
+import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
+import it.witboost.dataplatformshaper.repository.EntityRepository;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.MappingEntityTypeRelationshipRepository;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
 @Service
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
+    public final EntityRepository entityRepository;
+
     public final EntityTypeRepository entityTypeRepository;
 
     public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+    private final EntityRelationshipRepository entityRelationshipRepository;
 
     public boolean checkLoops(
             String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName) {
@@ -52,11 +57,62 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .isEmpty();
     }
 
+    public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
+        var pathSegments = pathString.split("/");
+
+        var pathExpressionPattern = Pattern.compile("(?<=\\{)([^\\}]+)(?=\\})");
+
+        var relTypePattern = Pattern.compile("^\\w*");
+
+        Entity currentEntity = entityRepository
+                .findById(startEntityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + startEntityId + " not found"));
+        for (var segment : pathSegments) {
+            var pathExpressions = pathExpressionPattern
+                    .matcher(segment)
+                    .results()
+                    .map(MatchResult::group)
+                    .toList();
+            var relTypes = relTypePattern
+                    .matcher(segment)
+                    .results()
+                    .map(MatchResult::group)
+                    .toList();
+
+            if (pathExpressions.size() != 1) throw new ServiceError("Invalid path segment: " + segment);
+
+            if (relTypes.size() != 1) throw new ServiceError("Invalid path segment: " + segment);
+
+            var relTypeStr = relTypes.get(0);
+
+            var enumSet = Arrays.stream(RelationType.values()).map(Enum::name).collect(Collectors.toSet());
+            if (!enumSet.contains(relTypeStr)) throw new ServiceError("Invalid path segment: " + segment);
+
+            var relType = RelationType.valueOf(relTypeStr);
+
+            var relationSources =
+                    entityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType).stream()
+                            .map(EntityRelationship::getSource)
+                            .toList();
+
+            if (relationSources.isEmpty()) return Optional.empty();
+
+            currentEntity = relationSources.get(0);
+        }
+
+        if (currentEntity.getId().equals(startEntityId)) return Optional.empty();
+        else return Optional.of(currentEntity);
+    }
+
     public MappingService(
+            EntityRepository entityRepository,
             EntityTypeRepository entityTypeRepository,
-            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository) {
+            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+            EntityRelationshipRepository entityRelationshipRepository) {
+        this.entityRepository = entityRepository;
         this.entityTypeRepository = entityTypeRepository;
         this.mappingEntityTypeRelationshipRepository = mappingEntityTypeRelationshipRepository;
+        this.entityRelationshipRepository = entityRelationshipRepository;
     }
 
     public MappingEntityTypeRelationship create(
