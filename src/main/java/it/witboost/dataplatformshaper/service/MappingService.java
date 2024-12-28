@@ -4,6 +4,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.*;
 import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
@@ -18,6 +19,7 @@ import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
@@ -145,7 +147,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             String sourceEntityTypeName,
             String targetEntityTypeName,
             String mappingValues,
-            List<MappingEntityTypeRelationship.SourceReference> sourceReferences)
+            List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
             throws ServiceError {
         try {
             if (checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
@@ -178,26 +180,53 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 throw new SchemaValidationError(errorMessages);
             }
             mapping.setMappingValues(jsonFactory.readTree(mappingValues));
-            mapping.setSourceReferences(sourceReferences);
+            mapping.setEntityPathReferences(entityPathReferences);
             return mappingEntityTypeRelationshipRepository.save(mapping);
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
     }
 
+    @Transactional
     public void delete(String mappingId) throws ServiceError {
         mappingEntityTypeRelationshipRepository.deleteById(mappingId);
     }
 
+    @Transactional
     public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
         return mappingEntityTypeRelationshipRepository
                 .findById(mappingId)
                 .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
     }
 
+    @Transactional
     public boolean exists(String mappingId) throws ServiceError {
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 
-    public void createMappedEntities(String sourceEntityId) throws ServiceError {}
+    @Transactional
+    public void createMappedEntities(String sourceEntityId) throws ServiceError {
+        var sourceEntity = entityRepository
+                .findById(sourceEntityId)
+                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+        var sourceEntityType = sourceEntity.getEntityType();
+        if (isTargetEntityType(sourceEntityType)) {
+            throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
+        }
+        var mappingRelationships =
+                mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(sourceEntityType);
+        for (MappingEntityTypeRelationship mappingRelationship : mappingRelationships) {
+            var targetEntityType = mappingRelationship.getTarget();
+            var map = new HashMap<String, JsonNode>();
+            for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
+                    mappingRelationship.getEntityPathReferences()) {
+                var as = sourceReference.alias();
+                var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                        .orElseThrow(() -> new ServiceError(""))
+                        .getValues(); // TODO
+                map.put(as, jn);
+                System.out.println(map);
+            }
+        }
+    }
 }

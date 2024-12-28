@@ -2,6 +2,7 @@ package it.witboost.dataplatformshaper.service;
 
 import static it.witboost.dataplatformshaper.entity.RelationType.DEPENDS_ON;
 
+import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
@@ -260,8 +261,12 @@ class MappingServiceTests extends CommonServiceTests {
                 """
                 { "type": "object", "properties": { "b": { "type": "integer" } } }""");
 
-        mappingService.create("SourceType", "TargetType", """
-                        {"b": ""}""", List.of());
+        mappingService.create(
+                "SourceType",
+                "TargetType",
+                """
+                        {"b": ""}""",
+                List.of(new MappingEntityTypeRelationship.EntityPathReference("anotherInstance", "DEPENDS_ON{$}")));
 
         var anotherInstance = entityService.create("AnotherType", """
                 {"c": 1}

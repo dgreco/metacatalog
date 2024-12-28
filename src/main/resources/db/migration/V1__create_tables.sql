@@ -75,8 +75,8 @@ ALTER TABLE trait_relationship
 CREATE TABLE entity_relationship
 (
     id            VARCHAR(255) NOT NULL,
-    source_id     VARCHAR(255),
-    target_id     VARCHAR(255),
+    source_id     VARCHAR(255) NOT NULL,
+    target_id     VARCHAR(255) NOT NUll,
     relation_type VARCHAR(255) NOT NULL,
     CONSTRAINT pk_entity_relationship PRIMARY KEY (id)
 );
@@ -93,19 +93,14 @@ CREATE INDEX idx_entity_relationship_target_id_relation_type ON entity_relations
 ALTER TABLE entity_relationship
     ADD CONSTRAINT FK_ENTITY_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity (id);
 
-create type source_reference as (
-    alias          VARCHAR,
-    reference_path VARCHAR
-);
-
 CREATE TABLE mapping_type_relationship
 (
-    id                VARCHAR(255) NOT NULL,
-    source_id         VARCHAR(255),
-    target_id         VARCHAR(255),
-    relation_type     VARCHAR(255) NOT NULL,
-    mapping_values    JSONB        NOT NULL,
-    source_references _source_reference NOT NULL,
+    id                     VARCHAR(255) NOT NULL,
+    source_id              VARCHAR(255) NOT NULL,
+    target_id              VARCHAR(255) NOT NULL,
+    relation_type          VARCHAR(255) NOT NULL,
+    mapping_values         JSONB        NOT NULL,
+    entity_path_references JSONB        NOT NULL,
     CONSTRAINT pk_mapping_type_relationship PRIMARY KEY (id)
 );
 

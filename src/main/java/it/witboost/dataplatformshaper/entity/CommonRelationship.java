@@ -18,12 +18,12 @@ public class CommonRelationship<T> implements Serializable {
     private String id;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "source_id")
+    @JoinColumn(name = "source_id", nullable = false)
     @ToString.Include
     private T source;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "target_id")
+    @JoinColumn(name = "target_id", nullable = false)
     @ToString.Include
     private T target;
 
