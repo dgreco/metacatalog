@@ -12,14 +12,14 @@ import lombok.ToString;
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
-        name = "mapping_type_relationship",
+        name = "mapping_entity_relationship",
         indexes = {
             @Index(
-                    name = "idx_mapping_type_relationship_source_id_relation_type",
+                    name = "idx_mapping_entity_relationship_source_id_relation_type",
                     columnList = "source_id, relation_type"),
             @Index(
-                    name = "idx_mapping_type_relationship_source_id_relation_type_target_id",
+                    name = "idx_mapping_entity_relationship_source_id_relation_type_target_id",
                     columnList = "source_id, relation_type, target_id")
         })
 @SuppressFBWarnings
-public class MappingEntityTypeRelationship extends CommonMappingRelationship<EntityType> {}
+public class MappingEntityRelationship extends CommonMappingRelationship<Entity> {}

@@ -4,12 +4,27 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
 import com.networknt.schema.*;
 import io.vavr.Tuple2;
 import io.vavr.control.Either;
 import java.util.*;
 
 public class JsonUtils {
+
+    public static final ObjectMapper jsonFactory = new ObjectMapper();
+
+    public static final JsonSchemaFactory jsonSchemaFactory =
+            JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+
+    public static final JsonSchema jsonSchemaSchema = jsonSchemaFactory.getSchema(
+            SchemaLocation.of(SchemaId.V201909),
+            SchemaValidatorsConfig.builder().build());
+
+    public static final Configuration jsonPathConfiguration = Configuration.builder()
+            .jsonProvider(new JacksonJsonNodeJsonProvider())
+            .build();
 
     private static final Set<String> notAllowedKeywords = Set.of(
             "$schema",
@@ -76,15 +91,6 @@ public class JsonUtils {
         convertFieldTypeToString(node.get("properties"));
         return Either.right(jsonSchemaFactory.getSchema(node));
     }
-
-    public static final ObjectMapper jsonFactory = new ObjectMapper();
-
-    public static final JsonSchemaFactory jsonSchemaFactory =
-            JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-
-    public static final JsonSchema jsonSchemaSchema = jsonSchemaFactory.getSchema(
-            SchemaLocation.of(SchemaId.V201909),
-            SchemaValidatorsConfig.builder().build());
 
     public static Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
         try {

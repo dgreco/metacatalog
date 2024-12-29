@@ -17,8 +17,7 @@
     <description></description>
 
     <properties>
-        <maven.compiler.source>22</maven.compiler.source>
-        <maven.compiler.target>22</maven.compiler.target>
+        <maven.compiler.release>21</maven.compiler.release>
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
         <spring-boot.version>3.4.0</spring-boot.version>
@@ -340,8 +339,6 @@
                             <artifactId>lombok</artifactId>
                         </path>
                     </annotationProcessorPaths>
-                    <source>20</source>
-                    <target>20</target>
                 </configuration>
             </plugin>
             <!-- SpringBoot Plugin -->

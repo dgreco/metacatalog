@@ -1,7 +1,6 @@
 package it.witboost.dataplatformshaper.entity;
 
 import jakarta.persistence.*;
-import java.io.Serializable;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -10,7 +9,7 @@ import lombok.ToString;
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
 @MappedSuperclass
-public class CommonRelationship<T> implements Serializable {
+public class CommonRelationship<T> {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "id", nullable = false)

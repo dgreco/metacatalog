@@ -1,9 +1,16 @@
 package it.witboost.dataplatformshaper.service;
 
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonFactory;
+import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import static it.witboost.dataplatformshaper.entity.RelationType.DEPENDS_ON;
+import static it.witboost.dataplatformshaper.service.MappingService.generateMappedValues;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.node.IntNode;
+import it.witboost.dataplatformshaper.common.WrappedJsonNode;
 import it.witboost.dataplatformshaper.entity.MappingEntityTypeRelationship;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -24,6 +31,7 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
+                mappingEntityRelationshipRepository,
                 entityRelationshipRepository);
 
         entityTypeService.create(
@@ -63,6 +71,7 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
+                mappingEntityRelationshipRepository,
                 entityRelationshipRepository);
 
         var typeA = entityTypeService.create(
@@ -117,6 +126,7 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
+                mappingEntityRelationshipRepository,
                 entityRelationshipRepository);
 
         traitService.create("Trait_NA", Optional.empty());
@@ -223,6 +233,27 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
+    void testGenerateMappedValues() throws JsonProcessingException, ServiceError {
+        var sourceValues = jsonFactory.readTree("""
+                {"a": 1}
+                """);
+        var externalValues = Map.of("as", jsonFactory.readTree("""
+                {"c": 1}"""));
+        var mappingValues = jsonFactory.readTree(
+                """
+                        {"b": "#source.getValue('$.a').intValue() + #as.getValue('$.c').intValue()*10"}""");
+        var targetSchema = jsonSchemaFactory.getSchema(
+                """
+                { "type": "object", "properties": { "b": { "type": "integer" } } }
+                """);
+
+        var wnode =
+                new WrappedJsonNode(generateMappedValues(sourceValues, externalValues, mappingValues, targetSchema));
+
+        Assertions.assertEquals(11, ((IntNode) wnode.getValue("$.b")).intValue());
+    }
+
+    @Test
     void testCreateAndUpdateMappingEntities() throws ServiceError {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
@@ -232,6 +263,7 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
+                mappingEntityRelationshipRepository,
                 entityRelationshipRepository);
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
@@ -265,8 +297,8 @@ class MappingServiceTests extends CommonServiceTests {
                 "SourceType",
                 "TargetType",
                 """
-                        {"b": ""}""",
-                List.of(new MappingEntityTypeRelationship.EntityPathReference("anotherInstance", "DEPENDS_ON{$}")));
+                        {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
 
         var anotherInstance = entityService.create("AnotherType", """
                 {"c": 1}
@@ -279,5 +311,7 @@ class MappingServiceTests extends CommonServiceTests {
         entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
 
         mappingService.createMappedEntities(sourceInstance.getId());
+
+        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TargetType"));
     }
 }

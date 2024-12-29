@@ -5,19 +5,22 @@ import static it.witboost.dataplatformshaper.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.jayway.jsonpath.Configuration;
+import com.fasterxml.jackson.databind.node.*;
 import com.jayway.jsonpath.JsonPath;
-import com.jayway.jsonpath.spi.json.JacksonJsonProvider;
+import com.networknt.schema.InputFormat;
+import com.networknt.schema.JsonSchema;
 import com.networknt.schema.ValidationMessage;
+import it.witboost.dataplatformshaper.common.WrappedJsonNode;
 import it.witboost.dataplatformshaper.entity.*;
-import it.witboost.dataplatformshaper.repository.EntityRelationshipRepository;
-import it.witboost.dataplatformshaper.repository.EntityRepository;
-import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
-import it.witboost.dataplatformshaper.repository.MappingEntityTypeRelationshipRepository;
+import it.witboost.dataplatformshaper.repository.*;
 import java.util.*;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.springframework.expression.Expression;
+import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +32,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public final EntityTypeRepository entityTypeRepository;
 
     public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+
+    public final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+
     private final EntityRelationshipRepository entityRelationshipRepository;
 
     public boolean checkLoops(
@@ -65,8 +71,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     }
 
     public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
-        var jsonPathConfiguration =
-                Configuration.builder().jsonProvider(new JacksonJsonProvider()).build();
 
         var pathSegments = pathString.split("/");
 
@@ -101,10 +105,17 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             var relType = RelationType.valueOf(relTypeStr);
             var pathExpression = pathExpressions.get(0).trim();
 
-            var relationSources =
-                    entityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType).stream()
-                            .map(EntityRelationship::getSource)
-                            .toList();
+            List<Entity> relationSources;
+            if (relType == MAPPED_TO)
+                relationSources =
+                        mappingEntityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType).stream()
+                                .map(MappingEntityRelationship::getSource)
+                                .toList();
+            else
+                relationSources =
+                        entityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType).stream()
+                                .map(EntityRelationship::getSource)
+                                .toList();
 
             if (relationSources.isEmpty()) return Optional.empty();
 
@@ -113,7 +124,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 for (var relationSource : relationSources) {
                     var json = relationSource.getValues().toPrettyString();
                     var dc = JsonPath.using(jsonPathConfiguration).parse(json);
-                    var res = (LinkedList) dc.read(pathExpression);
+                    var res = (ArrayNode) dc.read(pathExpression);
                     if (res.size() > 1) throw new ServiceError("Ambiguous path expression: " + segment);
                     if (res.size() == 1) {
                         currentEntity = relationSource;
@@ -132,14 +143,91 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         else return Optional.of(currentEntity);
     }
 
+    public static JsonNode generateMappedValues(
+            JsonNode sourceValues,
+            Map<String, JsonNode> externalValues,
+            JsonNode mappingValues,
+            JsonSchema targetSchema)
+            throws ServiceError {
+
+        StandardEvaluationContext context = new StandardEvaluationContext();
+        context.setVariable("source", new WrappedJsonNode(sourceValues));
+        externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
+
+        class GenerateValues {
+            private static ExpressionParser parser = new SpelExpressionParser();
+
+            private static JsonNode getMappedValues(JsonNode mappingValues, StandardEvaluationContext context)
+                    throws ServiceError {
+                var mappedValues = mappingValues.deepCopy();
+                try {
+                    evaluateMappingValues(mappedValues, context);
+                    return mappedValues;
+                } catch (RuntimeException e) {
+                    throw new ServiceError("Error while evaluating mapping values: " + e.getMessage());
+                }
+            }
+
+            private static void evaluateMappingValues(JsonNode mappingValues, StandardEvaluationContext context) {
+                if (mappingValues.isObject()) {
+                    ObjectNode objectNode = (ObjectNode) mappingValues;
+                    objectNode.fields().forEachRemaining(entry -> {
+                        String fieldName = entry.getKey();
+                        JsonNode childNode = entry.getValue();
+                        if (childNode.isObject()) evaluateMappingValues(childNode, context);
+                        else if (mappingValues.isArray()) {
+                            ArrayNode arrayNode = (ArrayNode) mappingValues;
+                            for (int i = 0; i < arrayNode.size(); i++) {
+                                evaluateMappingValues(arrayNode.get(i), context);
+                            }
+                        } else {
+                            var val = mappingValues.get(fieldName);
+                            Expression exp = parser.parseExpression(val.asText());
+                            var result = exp.getValue(context);
+
+                            switch (result) {
+                                case null -> throw new RuntimeException(
+                                        "Error while evaluating expression: " + val.asText());
+                                case Boolean b -> ((ObjectNode) mappingValues).set(fieldName, BooleanNode.valueOf(b));
+                                case Integer i -> ((ObjectNode) mappingValues).set(fieldName, IntNode.valueOf(i));
+                                case Long l -> ((ObjectNode) mappingValues).set(fieldName, LongNode.valueOf(l));
+                                case String s -> ((ObjectNode) mappingValues).set(fieldName, TextNode.valueOf(s));
+                                case Float f -> ((ObjectNode) mappingValues).set(fieldName, FloatNode.valueOf(f));
+                                case Double d -> ((ObjectNode) mappingValues).set(fieldName, DoubleNode.valueOf(d));
+                                default -> {
+                                    throw new RuntimeException("Error while evaluating expression: " + val.asText());
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        var mappedValues = GenerateValues.getMappedValues(mappingValues, context);
+
+        var res = targetSchema.validate(
+                mappedValues.toPrettyString(),
+                InputFormat.JSON,
+                executionContext -> executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
+        if (res.isEmpty()) return mappedValues;
+        else {
+            List<String> errors = new ArrayList<>(
+                    res.stream().map(ValidationMessage::toString).toList());
+            throw new SchemaValidationError(errors);
+        }
+    }
+
     public MappingService(
             EntityRepository entityRepository,
             EntityTypeRepository entityTypeRepository,
             MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+            MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
             EntityRelationshipRepository entityRelationshipRepository) {
         this.entityRepository = entityRepository;
         this.entityTypeRepository = entityTypeRepository;
         this.mappingEntityTypeRelationshipRepository = mappingEntityTypeRelationshipRepository;
+        this.mappingEntityRelationshipRepository = mappingEntityRelationshipRepository;
         this.entityRelationshipRepository = entityRelationshipRepository;
     }
 
@@ -210,22 +298,37 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .findById(sourceEntityId)
                 .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
         var sourceEntityType = sourceEntity.getEntityType();
-        if (isTargetEntityType(sourceEntityType)) {
-            throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
-        }
+        // TODO check if sourceEntityType is a valid entity type
         var mappingRelationships =
                 mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(sourceEntityType);
         for (MappingEntityTypeRelationship mappingRelationship : mappingRelationships) {
             var targetEntityType = mappingRelationship.getTarget();
-            var map = new HashMap<String, JsonNode>();
+            var additionalEntitiesValues = new HashMap<String, JsonNode>();
             for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                     mappingRelationship.getEntityPathReferences()) {
                 var as = sourceReference.alias();
                 var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                        .orElseThrow(() -> new ServiceError(""))
-                        .getValues(); // TODO
-                map.put(as, jn);
-                System.out.println(map);
+                        .orElseThrow(() -> new ServiceError(
+                                "Wrong reference path " + sourceReference.referencePath() + " for entity"))
+                        .getValues();
+                additionalEntitiesValues.put(as, jn);
+                var mappedValues = generateMappedValues(
+                        sourceEntity.getValues(),
+                        additionalEntitiesValues,
+                        mappingRelationship.getMappingValues(),
+                        jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+                var mappedEntity = new Entity();
+                mappedEntity.setEntityType(targetEntityType);
+                mappedEntity.setValues(mappedValues);
+                entityRepository.save(mappedEntity);
+                var mappingEntityRelationship = new MappingEntityRelationship();
+                mappingEntityRelationship.setSource(sourceEntity);
+                mappingEntityRelationship.setTarget(mappedEntity);
+                mappingEntityRelationship.setMappingValues(mappingRelationship.getMappingValues());
+                mappingEntityRelationship.setEntityPathReferences(mappingRelationship.getEntityPathReferences());
+                mappingEntityRelationship.setRelationType(MAPPED_TO);
+                mappingEntityRelationshipRepository.save(mappingEntityRelationship);
+                createMappedEntities(mappedEntity.getId());
             }
         }
     }
