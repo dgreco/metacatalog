@@ -329,6 +329,5 @@ class MappingServiceTests extends CommonServiceTests {
         Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TargetType"));
 
         Assertions.assertEquals(1, entityService.countEntitiesByEntityType("AnotherTargetType"));
-
     }
 }
