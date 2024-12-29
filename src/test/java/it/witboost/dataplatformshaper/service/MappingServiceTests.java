@@ -293,12 +293,26 @@ class MappingServiceTests extends CommonServiceTests {
                 """
                 { "type": "object", "properties": { "b": { "type": "integer" } } }""");
 
+        entityTypeService.create(
+                "AnotherTargetType",
+                List.of(),
+                Optional.empty(),
+                """
+                { "type": "object", "properties": { "d": { "type": "integer" } } }""");
+
         mappingService.create(
                 "SourceType",
                 "TargetType",
                 """
                         {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
                 List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
+
+        mappingService.create(
+                "TargetType",
+                "AnotherTargetType",
+                """
+                        {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "MAPPED_TO{$}/DEPENDS_ON{$}")));
 
         var anotherInstance = entityService.create("AnotherType", """
                 {"c": 1}
@@ -313,5 +327,8 @@ class MappingServiceTests extends CommonServiceTests {
         mappingService.createMappedEntities(sourceInstance.getId());
 
         Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TargetType"));
+
+        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("AnotherTargetType"));
+
     }
 }
