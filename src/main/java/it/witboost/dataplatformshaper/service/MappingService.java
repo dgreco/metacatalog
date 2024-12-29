@@ -22,6 +22,7 @@ import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -37,6 +38,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final EntityRelationshipRepository entityRelationshipRepository;
 
+    @Transactional(
+            propagation = Propagation.MANDATORY,
+            rollbackFor = {ServiceError.class})
     public boolean checkLoops(
             String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName)
             throws ServiceError {
@@ -58,18 +62,27 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return entityTypeNamesVisited.contains(targetEntityTypeName);
     }
 
+    @Transactional(
+            propagation = Propagation.MANDATORY,
+            rollbackFor = {ServiceError.class})
     public boolean isSourceEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipBySource(entityType)
                 .isEmpty();
     }
 
+    @Transactional(
+            propagation = Propagation.MANDATORY,
+            rollbackFor = {ServiceError.class})
     public boolean isTargetEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipByTarget(entityType)
                 .isEmpty();
     }
 
+    @Transactional(
+            propagation = Propagation.MANDATORY,
+            rollbackFor = {ServiceError.class})
     public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
 
         var pathSegments = pathString.split("/");
@@ -231,6 +244,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         this.entityRelationshipRepository = entityRelationshipRepository;
     }
 
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public MappingEntityTypeRelationship create(
             String sourceEntityTypeName,
             String targetEntityTypeName,
@@ -275,28 +291,38 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void delete(String mappingId) throws ServiceError {
         mappingEntityTypeRelationshipRepository.deleteById(mappingId);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
         return mappingEntityTypeRelationshipRepository
                 .findById(mappingId)
                 .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public boolean exists(String mappingId) throws ServiceError {
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
         class CreateMappedEntities {
-            @Transactional
-            public void createMappedEntities(String sourceEntityId) throws ServiceError {
+            @Transactional(
+                    propagation = Propagation.MANDATORY,
+                    rollbackFor = {ServiceError.class})
+            private void createMappedEntities(String sourceEntityId) throws ServiceError {
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));

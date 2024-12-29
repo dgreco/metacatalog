@@ -92,7 +92,9 @@ public class EntityService implements CommonService<Entity, String> {
         }
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public Entity read(String key) throws ServiceError {
         return null;
     }
@@ -102,12 +104,16 @@ public class EntityService implements CommonService<Entity, String> {
         entityRepository.deleteById(entityId);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public boolean exists(String entityId) {
         return entityRepository.existsById(entityId);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
         // Check loops
         if (checkLoops(targetId, new HashSet<>(), sourceId, relType)) throw new ServiceError("Loops are not allowed");
@@ -135,7 +141,9 @@ public class EntityService implements CommonService<Entity, String> {
         entityRelationshipRepository.save(rel1);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void unlink(String sourceId, RelationType relType, String targetId) throws ServiceError {
         var source = entityRepository
                 .findById(sourceId)
@@ -150,7 +158,9 @@ public class EntityService implements CommonService<Entity, String> {
         entityRelationshipRepository.delete(rel);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public List<Entity> linked(String sourceId, RelationType relType) throws ServiceError {
         var source = entityRepository
                 .findById(sourceId)
@@ -160,7 +170,9 @@ public class EntityService implements CommonService<Entity, String> {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public long countEntitiesByEntityType(String name) {
         return entityTypeRepository
                 .findByName(name)
@@ -168,7 +180,9 @@ public class EntityService implements CommonService<Entity, String> {
                 .orElse(0L);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     protected boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
             throws ServiceError {
 

@@ -13,6 +13,7 @@ import it.witboost.dataplatformshaper.repository.TraitRepository;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -27,7 +28,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
         this.traitRelationshipRepository = traitRelationshipRepository;
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public Trait create(String name, String schema, Optional<String> fatherName) throws ServiceError {
         if (traitRepository.existsByName(name)) {
             throw new ServiceError("Trait " + name + " already exists");
@@ -56,7 +59,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
         return traitRepository.save(entityType);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public Trait create(String name, Optional<String> fatherName) throws ServiceError {
         return create(
                 name,
@@ -69,24 +74,32 @@ public class TraitService implements CommonTypeService<Trait, String> {
                 fatherName);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public Trait read(String name) throws ServiceError {
         return traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void delete(String name) throws ServiceError {
         var entityType =
                 traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
         traitRepository.delete(entityType);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public boolean exists(String name) {
         return traitRepository.existsByName(name);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
         var rel1 = new TraitRelationship();
         var trait1 = traitRepository
@@ -101,7 +114,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
         traitRelationshipRepository.save(rel1);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void unlink(String traitName1, RelationType relType, String traitName2) throws ServiceError {
         var trait1 = traitRepository
                 .findByName(traitName1)
@@ -116,7 +131,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
         traitRelationshipRepository.delete(rel);
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public List<Trait> linked(String traitName1, RelationType relType) throws ServiceError {
         var trait1 = traitRepository
                 .findByName(traitName1)
@@ -126,7 +143,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
                 .toList();
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public long countTraitChildren(String name) {
         return traitRepository
                 .findByName(name)

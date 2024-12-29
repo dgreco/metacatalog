@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -27,7 +28,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         this.traitRepository = traitRepository;
     }
 
-    @Transactional(rollbackFor = {ServiceError.class})
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public EntityType create(String name, List<String> traits, Optional<String> fatherName, String schema)
             throws ServiceError {
         if (entityTypeRepository.existsByName(name)) {
@@ -78,14 +81,18 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         return entityTypeRepository.save(entityType);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public EntityType read(String name) throws ServiceError {
         return entityTypeRepository
                 .findByName(name)
                 .orElseThrow(() -> new ServiceError("EntityType " + name + " does not exist"));
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public void delete(String name) throws ServiceError {
         var entityType = entityTypeRepository
                 .findByName(name)
@@ -93,12 +100,16 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         entityTypeRepository.delete(entityType);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public boolean exists(String name) {
         return entityTypeRepository.existsByName(name);
     }
 
-    @Transactional
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
     public long countEntityTypeChildren(String name) {
         return entityTypeRepository
                 .findByName(name)
