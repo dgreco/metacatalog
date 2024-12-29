@@ -286,14 +286,14 @@ class MappingServiceTests extends CommonServiceTests {
                 """
                 { "type": "object", "properties": { "a": { "type": "integer" } } }""");
 
-        entityTypeService.create(
+        var targeType = entityTypeService.create(
                 "TargetType",
                 List.of(),
                 Optional.empty(),
                 """
                 { "type": "object", "properties": { "b": { "type": "integer" } } }""");
 
-        entityTypeService.create(
+        var anotherTargetType = entityTypeService.create(
                 "AnotherTargetType",
                 List.of(),
                 Optional.empty(),
@@ -326,11 +326,17 @@ class MappingServiceTests extends CommonServiceTests {
 
         mappingService.createMappedEntities(sourceInstance.getId());
 
-        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TargetType"));
+        Assertions.assertEquals(1, entityRepository.countByEntityType(targeType));
 
-        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("AnotherTargetType"));
+        Assertions.assertEquals(1, entityRepository.countByEntityType(anotherTargetType));
 
         // Check that idempotency works
         mappingService.createMappedEntities(sourceInstance.getId());
+
+        // Check that checking the entity is only a source works
+        Assertions.assertThrows(
+                ServiceError.class,
+                () -> mappingService.createMappedEntities(
+                        entityRepository.findByEntityType(targeType).getFirst().getId()));
     }
 }

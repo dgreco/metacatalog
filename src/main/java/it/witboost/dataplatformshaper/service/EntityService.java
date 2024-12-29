@@ -173,16 +173,6 @@ public class EntityService implements CommonService<Entity, String> {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public long countEntitiesByEntityType(String name) {
-        return entityTypeRepository
-                .findByName(name)
-                .map(entityRepository::countTypedEntityByEntityType)
-                .orElse(0L);
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
     protected boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
             throws ServiceError {
 

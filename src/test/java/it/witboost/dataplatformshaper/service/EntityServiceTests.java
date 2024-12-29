@@ -39,7 +39,7 @@ class EntityServiceTests extends CommonServiceTests {
                         .getResourceAsStream("jsons/invalid_simple_doc.json"))
                 .toPrettyString();
 
-        entityTypeService.create("TestType", List.of(), Optional.empty(), schema);
+        var testType = entityTypeService.create("TestType", List.of(), Optional.empty(), schema);
 
         var entity = entityService.create("TestType", values);
 
@@ -48,7 +48,7 @@ class EntityServiceTests extends CommonServiceTests {
 
         Assertions.assertEquals("$.price: must have an exclusive minimum value of 0", exception.errors.get(0));
 
-        Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TestType"));
+        Assertions.assertEquals(1, entityRepository.countByEntityType(testType));
 
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TestType"));
 
@@ -56,7 +56,7 @@ class EntityServiceTests extends CommonServiceTests {
 
         entityTypeService.delete("TestType");
 
-        Assertions.assertEquals(0, entityService.countEntitiesByEntityType("TestType"));
+        Assertions.assertEquals(0, entityRepository.countByEntityType(testType));
     }
 
     @Test
