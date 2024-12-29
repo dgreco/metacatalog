@@ -116,18 +116,20 @@ ALTER TABLE mapping_type_relationship
 
 CREATE TABLE mapping_entity_relationship
 (
-    id                     VARCHAR(255) NOT NULL,
-    mapping_values         JSONB        NOT NULL,
-    entity_path_references JSONB        NOT NULL,
-    source_id              VARCHAR(255) NOT NULL,
-    target_id              VARCHAR(255) NOT NULL,
-    relation_type          VARCHAR(255) NOT NULL,
+    id                                  VARCHAR(255) NOT NULL,
+    source_id                           VARCHAR(255) NOT NULL,
+    target_id                           VARCHAR(255) NOT NULL,
+    relation_type                       VARCHAR(255) NOT NULL,
+    mapping_entity_type_relationship_id VARCHAR(255),
     CONSTRAINT pk_mapping_entity_relationship PRIMARY KEY (id)
 );
 
+CREATE UNIQUE INDEX idx_mapping_entity_relationship_source_id_mapping_entity_type_relationship_id ON mapping_entity_relationship (source_id, mapping_entity_type_relationship_id);
+
 CREATE INDEX idx_mapping_entity_relationship_source_id_relation_type ON mapping_entity_relationship (source_id, relation_type);
 
-CREATE INDEX idx_mapping_entity_relationship_source_id_relation_type_target_id ON mapping_entity_relationship (source_id, relation_type, target_id);
+ALTER TABLE mapping_entity_relationship
+    ADD CONSTRAINT FK_MAPPING_ENTITY_RELATIONSHIP_ON_MAPPINGENTITYTYPERELATIONSHIP FOREIGN KEY (mapping_entity_type_relationship_id) REFERENCES mapping_type_relationship (id);
 
 ALTER TABLE mapping_entity_relationship
     ADD CONSTRAINT FK_MAPPING_ENTITY_RELATIONSHIP_ON_SOURCE FOREIGN KEY (source_id) REFERENCES entity (id);

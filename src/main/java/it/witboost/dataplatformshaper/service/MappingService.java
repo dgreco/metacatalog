@@ -331,34 +331,40 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
                                 sourceEntityType);
                 for (MappingEntityTypeRelationship mappingRelationship : mappingRelationships) {
-                    var targetEntityType = mappingRelationship.getTarget();
-                    var additionalEntitiesValues = new HashMap<String, JsonNode>();
-                    for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
-                            mappingRelationship.getEntityPathReferences()) {
-                        var as = sourceReference.alias();
-                        var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                .orElseThrow(() -> new ServiceError(
-                                        "Wrong reference path " + sourceReference.referencePath() + " for entity"))
-                                .getValues();
-                        additionalEntitiesValues.put(as, jn);
-                        var mappedValues = generateMappedValues(
-                                sourceEntity.getValues(),
-                                additionalEntitiesValues,
-                                mappingRelationship.getMappingValues(),
-                                jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
-                        var mappedEntity = new Entity();
-                        mappedEntity.setEntityType(targetEntityType);
-                        mappedEntity.setValues(mappedValues);
-                        entityRepository.save(mappedEntity);
-                        var mappingEntityRelationship = new MappingEntityRelationship();
-                        mappingEntityRelationship.setSource(sourceEntity);
-                        mappingEntityRelationship.setTarget(mappedEntity);
-                        mappingEntityRelationship.setMappingValues(mappingRelationship.getMappingValues());
-                        mappingEntityRelationship.setEntityPathReferences(
-                                mappingRelationship.getEntityPathReferences());
-                        mappingEntityRelationship.setRelationType(MAPPED_TO);
-                        mappingEntityRelationshipRepository.save(mappingEntityRelationship);
-                        createMappedEntities(mappedEntity.getId());
+                    var existingMappingEntityRels =
+                            mappingEntityRelationshipRepository.findBySourceAndMappingEntityTypeRelationship(
+                                    sourceEntity, mappingRelationship);
+                    if (existingMappingEntityRels.isEmpty()) {
+                        var targetEntityType = mappingRelationship.getTarget();
+                        var additionalEntitiesValues = new HashMap<String, JsonNode>();
+                        for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
+                                mappingRelationship.getEntityPathReferences()) {
+                            var as = sourceReference.alias();
+                            var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                    .orElseThrow(() -> new ServiceError(
+                                            "Wrong reference path " + sourceReference.referencePath() + " for entity"))
+                                    .getValues();
+                            additionalEntitiesValues.put(as, jn);
+                            var mappedValues = generateMappedValues(
+                                    sourceEntity.getValues(),
+                                    additionalEntitiesValues,
+                                    mappingRelationship.getMappingValues(),
+                                    jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+                            var mappedEntity = new Entity();
+                            mappedEntity.setEntityType(targetEntityType);
+                            mappedEntity.setValues(mappedValues);
+                            entityRepository.save(mappedEntity);
+                            var mappingEntityRelationship = new MappingEntityRelationship();
+                            mappingEntityRelationship.setSource(sourceEntity);
+                            mappingEntityRelationship.setTarget(mappedEntity);
+                            mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
+                            mappingEntityRelationship.setRelationType(MAPPED_TO);
+                            mappingEntityRelationshipRepository.save(mappingEntityRelationship);
+                            createMappedEntities(mappedEntity.getId());
+                        }
+                    } else {
+                        createMappedEntities(
+                                existingMappingEntityRels.getFirst().getTarget().getId());
                     }
                 }
             }

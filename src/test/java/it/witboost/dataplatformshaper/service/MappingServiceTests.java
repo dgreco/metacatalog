@@ -329,5 +329,8 @@ class MappingServiceTests extends CommonServiceTests {
         Assertions.assertEquals(1, entityService.countEntitiesByEntityType("TargetType"));
 
         Assertions.assertEquals(1, entityService.countEntitiesByEntityType("AnotherTargetType"));
+
+        // Check that idempotency works
+        mappingService.createMappedEntities(sourceInstance.getId());
     }
 }
