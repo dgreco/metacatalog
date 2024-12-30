@@ -30,17 +30,17 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
 
     CommonTypeService<Trait, String> commonTraitService = new CommonTypeService<>() {
         @Override
-        public void delete(String key) throws ServiceError {
+        public void delete(String key) {
             throw new UnsupportedOperationException("Not supported yet.");
         }
 
         @Override
-        public Trait read(String key) throws ServiceError {
+        public Trait read(String key) {
             throw new UnsupportedOperationException("Not supported yet.");
         }
 
         @Override
-        public boolean exists(String key) throws ServiceError {
+        public boolean exists(String key) {
             throw new UnsupportedOperationException("Not supported yet.");
         }
     };
