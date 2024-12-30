@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,24 +37,7 @@ public class EntityService implements CommonService<Entity, String> {
 
     private final TraitRelationshipRepository traitRelationshipRepository;
 
-    public boolean checkLoops(
-            String sourceEntityId, Set<String> entityIdsVisited, String targetEntityId, RelationType relationType) {
-        var sourceEntity = entityRepository.findById(sourceEntityId).get();
-        var mappings = entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
-
-        var targetIds = mappings.stream()
-                .map(EntityRelationship::getTarget)
-                .map(Entity::getId)
-                .toList();
-        for (var targetId : targetIds) {
-            if (entityIdsVisited.contains(targetEntityId)) return true;
-            else {
-                entityIdsVisited.add(targetId);
-                return checkLoops(targetId, entityIdsVisited, targetEntityId, relationType);
-            }
-        }
-        return entityIdsVisited.contains(targetEntityId);
-    }
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -159,10 +143,26 @@ public class EntityService implements CommonService<Entity, String> {
                 .toList();
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    protected boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
+    private boolean checkLoops(
+            String sourceEntityId, Set<String> entityIdsVisited, String targetEntityId, RelationType relationType) {
+        var sourceEntity = entityRepository.findById(sourceEntityId).get();
+        var mappings = entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
+
+        var targetIds = mappings.stream()
+                .map(EntityRelationship::getTarget)
+                .map(Entity::getId)
+                .toList();
+        for (var targetId : targetIds) {
+            if (entityIdsVisited.contains(targetEntityId)) return true;
+            else {
+                entityIdsVisited.add(targetId);
+                return checkLoops(targetId, entityIdsVisited, targetEntityId, relationType);
+            }
+        }
+        return entityIdsVisited.contains(targetEntityId);
+    }
+
+    private boolean checkRelIsLegit(String sourceEntityId, RelationType relType, String targetEntityId)
             throws ServiceError {
 
         var sourceEntity = entityRepository

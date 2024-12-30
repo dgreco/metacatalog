@@ -19,9 +19,14 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     void testCreationAndValidation() throws IOException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final EntityTypeService entityTypeService =
+                new EntityTypeService(entityTypeRepository, traitRepository, transactionManager);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                transactionManager);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -61,10 +66,16 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     void testLinkUnlinkLinkedEntities() throws ServiceError {
-        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final TraitService traitService =
+                new TraitService(traitRepository, traitRelationshipRepository, transactionManager);
+        final EntityTypeService entityTypeService =
+                new EntityTypeService(entityTypeRepository, traitRepository, transactionManager);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                transactionManager);
 
         var emptySchema =
                 """

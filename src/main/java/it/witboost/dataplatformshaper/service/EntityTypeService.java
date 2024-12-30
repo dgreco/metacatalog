@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,8 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     private final EntityTypeRepository entityTypeRepository;
 
     private final TraitRepository traitRepository;
+
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
