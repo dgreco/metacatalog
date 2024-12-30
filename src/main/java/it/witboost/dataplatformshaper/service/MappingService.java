@@ -17,20 +17,21 @@ import java.util.*;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 @Service
+@Getter
+@Setter
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
@@ -47,9 +48,142 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     private final PlatformTransactionManager transactionManager;
 
     @Transactional(
-            propagation = Propagation.MANDATORY,
+            propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public boolean checkLoops(
+    public MappingEntityTypeRelationship create(
+            String sourceEntityTypeName,
+            String targetEntityTypeName,
+            String mappingValues,
+            List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
+            throws ServiceError {
+        try {
+            if (checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
+                throw new ServiceError("Loops are not allowed");
+
+            var mapping = new MappingEntityTypeRelationship();
+
+            var sourceEntityType = entityTypeRepository
+                    .findByName(sourceEntityTypeName)
+                    .orElseThrow(() -> new ServiceError("EntityType " + sourceEntityTypeName + " does not exist"));
+
+            var targetEntityType = entityTypeRepository
+                    .findByName(targetEntityTypeName)
+                    .orElseThrow(() -> new ServiceError("EntityType " + targetEntityTypeName + " does not exist"));
+
+            mapping.setSource(sourceEntityType);
+            mapping.setRelationType(MAPPED_TO);
+            mapping.setTarget(targetEntityType);
+            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+            var validatingSchemaEither =
+                    convertToMappingSchema(jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+            if (validatingSchemaEither.isLeft()) throw new SchemaValidationError(validatingSchemaEither.getLeft());
+            var mappingValuesNode = jsonFactory.readTree(mappingValues);
+            var validatingSchema = validatingSchemaEither.get();
+            var validationErrors = validatingSchema.validate(mappingValuesNode);
+            if (!validationErrors.isEmpty()) {
+                var errorMessages = validationErrors.stream()
+                        .map(ValidationMessage::getMessage)
+                        .toList();
+                throw new SchemaValidationError(errorMessages);
+            }
+            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+            mapping.setEntityPathReferences(entityPathReferences);
+            return mappingEntityTypeRelationshipRepository.save(mapping);
+        } catch (JsonProcessingException e) {
+            throw new ServiceError(e.getMessage());
+        }
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public void delete(String mappingId) {
+        mappingEntityTypeRelationshipRepository.deleteById(mappingId);
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
+        return mappingEntityTypeRelationshipRepository
+                .findById(mappingId)
+                .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public boolean exists(String mappingId) {
+        return mappingEntityTypeRelationshipRepository.existsById(mappingId);
+    }
+
+    public void createMappedEntities(String sourceEntityId) throws ServiceError {
+        class CreateMappedEntities {
+            private void createMappedEntities(String sourceEntityId) throws ServiceError {
+                var sourceEntity = entityRepository
+                        .findById(sourceEntityId)
+                        .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                var sourceEntityType = sourceEntity.getEntityType();
+                var mappingRelationships =
+                        mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
+                                sourceEntityType);
+                for (MappingEntityTypeRelationship mappingRelationship : mappingRelationships) {
+                    var existingMappingEntityRels =
+                            mappingEntityRelationshipRepository.findBySourceAndMappingEntityTypeRelationship(
+                                    sourceEntity, mappingRelationship);
+                    if (existingMappingEntityRels.isEmpty()) {
+                        var targetEntityType = mappingRelationship.getTarget();
+                        var additionalEntitiesValues = new HashMap<String, JsonNode>();
+                        for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
+                                mappingRelationship.getEntityPathReferences()) {
+                            var as = sourceReference.alias();
+                            var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                    .orElseThrow(() -> new ServiceError(
+                                            "Wrong reference path " + sourceReference.referencePath() + " for entity"))
+                                    .getValues();
+                            additionalEntitiesValues.put(as, jn);
+                            var mappedValues = generateMappedValues(
+                                    sourceEntity.getValues(),
+                                    additionalEntitiesValues,
+                                    mappingRelationship.getMappingValues(),
+                                    jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+                            var mappedEntity = new Entity();
+                            mappedEntity.setEntityType(targetEntityType);
+                            mappedEntity.setValues(mappedValues);
+                            entityRepository.save(mappedEntity);
+                            var mappingEntityRelationship = new MappingEntityRelationship();
+                            mappingEntityRelationship.setSource(sourceEntity);
+                            mappingEntityRelationship.setTarget(mappedEntity);
+                            mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
+                            mappingEntityRelationship.setRelationType(MAPPED_TO);
+                            mappingEntityRelationshipRepository.save(mappingEntityRelationship);
+                            createMappedEntities(mappedEntity.getId());
+                        }
+                    } else {
+                        createMappedEntities(
+                                existingMappingEntityRels.getFirst().getTarget().getId());
+                    }
+                }
+            }
+        }
+
+        final var status = getTransactionStatus("createMappedEntitiesTransaction");
+        try {
+            var sourceEntity = entityRepository
+                    .findById(sourceEntityId)
+                    .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+            var sourceEntityType = sourceEntity.getEntityType();
+            if (isTargetEntityType(sourceEntityType))
+                throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
+            new CreateMappedEntities().createMappedEntities(sourceEntityId);
+        } catch (ServiceError e) {
+            transactionManager.rollback(status);
+            throw e;
+        }
+        transactionManager.commit(status);
+    }
+
+    private boolean checkLoops(
             String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName)
             throws ServiceError {
         var sourceEntityType = entityTypeRepository
@@ -70,13 +204,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return entityTypeNamesVisited.contains(targetEntityTypeName);
     }
 
-    public boolean isSourceEntityType(EntityType entityType) {
+    boolean isSourceEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipBySource(entityType)
                 .isEmpty();
     }
 
-    public boolean isTargetEntityType(EntityType entityType) {
+    boolean isTargetEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipByTarget(entityType)
                 .isEmpty();
@@ -228,145 +362,5 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     res.stream().map(ValidationMessage::toString).toList());
             throw new SchemaValidationError(errors);
         }
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    public MappingEntityTypeRelationship create(
-            String sourceEntityTypeName,
-            String targetEntityTypeName,
-            String mappingValues,
-            List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
-            throws ServiceError {
-        try {
-            if (checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
-                throw new ServiceError("Loops are not allowed");
-
-            var mapping = new MappingEntityTypeRelationship();
-
-            var sourceEntityType = entityTypeRepository
-                    .findByName(sourceEntityTypeName)
-                    .orElseThrow(() -> new ServiceError("EntityType " + sourceEntityTypeName + " does not exist"));
-
-            var targetEntityType = entityTypeRepository
-                    .findByName(targetEntityTypeName)
-                    .orElseThrow(() -> new ServiceError("EntityType " + targetEntityTypeName + " does not exist"));
-
-            mapping.setSource(sourceEntityType);
-            mapping.setRelationType(MAPPED_TO);
-            mapping.setTarget(targetEntityType);
-            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
-            var validatingSchemaEither =
-                    convertToMappingSchema(jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
-            if (validatingSchemaEither.isLeft()) throw new SchemaValidationError(validatingSchemaEither.getLeft());
-            var mappingValuesNode = jsonFactory.readTree(mappingValues);
-            var validatingSchema = validatingSchemaEither.get();
-            var validationErrors = validatingSchema.validate(mappingValuesNode);
-            if (!validationErrors.isEmpty()) {
-                var errorMessages = validationErrors.stream()
-                        .map(ValidationMessage::getMessage)
-                        .toList();
-                throw new SchemaValidationError(errorMessages);
-            }
-            mapping.setMappingValues(jsonFactory.readTree(mappingValues));
-            mapping.setEntityPathReferences(entityPathReferences);
-            return mappingEntityTypeRelationshipRepository.save(mapping);
-        } catch (JsonProcessingException e) {
-            throw new ServiceError(e.getMessage());
-        }
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    public void delete(String mappingId) throws ServiceError {
-        mappingEntityTypeRelationshipRepository.deleteById(mappingId);
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
-        return mappingEntityTypeRelationshipRepository
-                .findById(mappingId)
-                .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    public boolean exists(String mappingId) throws ServiceError {
-        return mappingEntityTypeRelationshipRepository.existsById(mappingId);
-    }
-
-    public void createMappedEntities(String sourceEntityId) throws ServiceError {
-        class CreateMappedEntities {
-            private void createMappedEntities(String sourceEntityId) throws ServiceError {
-                var sourceEntity = entityRepository
-                        .findById(sourceEntityId)
-                        .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
-                var sourceEntityType = sourceEntity.getEntityType();
-                var mappingRelationships =
-                        mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
-                                sourceEntityType);
-                for (MappingEntityTypeRelationship mappingRelationship : mappingRelationships) {
-                    var existingMappingEntityRels =
-                            mappingEntityRelationshipRepository.findBySourceAndMappingEntityTypeRelationship(
-                                    sourceEntity, mappingRelationship);
-                    if (existingMappingEntityRels.isEmpty()) {
-                        var targetEntityType = mappingRelationship.getTarget();
-                        var additionalEntitiesValues = new HashMap<String, JsonNode>();
-                        for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
-                                mappingRelationship.getEntityPathReferences()) {
-                            var as = sourceReference.alias();
-                            var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                    .orElseThrow(() -> new ServiceError(
-                                            "Wrong reference path " + sourceReference.referencePath() + " for entity"))
-                                    .getValues();
-                            additionalEntitiesValues.put(as, jn);
-                            var mappedValues = generateMappedValues(
-                                    sourceEntity.getValues(),
-                                    additionalEntitiesValues,
-                                    mappingRelationship.getMappingValues(),
-                                    jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
-                            var mappedEntity = new Entity();
-                            mappedEntity.setEntityType(targetEntityType);
-                            mappedEntity.setValues(mappedValues);
-                            entityRepository.save(mappedEntity);
-                            var mappingEntityRelationship = new MappingEntityRelationship();
-                            mappingEntityRelationship.setSource(sourceEntity);
-                            mappingEntityRelationship.setTarget(mappedEntity);
-                            mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
-                            mappingEntityRelationship.setRelationType(MAPPED_TO);
-                            mappingEntityRelationshipRepository.save(mappingEntityRelationship);
-                            createMappedEntities(mappedEntity.getId());
-                        }
-                    } else {
-                        createMappedEntities(
-                                existingMappingEntityRels.getFirst().getTarget().getId());
-                    }
-                }
-            }
-        }
-
-        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
-        def.setName("createMappedEntitiesTransaction");
-        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-
-        TransactionStatus status = transactionManager.getTransaction(def);
-        try {
-            var sourceEntity = entityRepository
-                    .findById(sourceEntityId)
-                    .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
-            var sourceEntityType = sourceEntity.getEntityType();
-            if (isTargetEntityType(sourceEntityType))
-                throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
-            new CreateMappedEntities().createMappedEntities(sourceEntityId);
-        } catch (ServiceError e) {
-            transactionManager.rollback(status);
-            throw e;
-        }
-        transactionManager.commit(status);
     }
 }
