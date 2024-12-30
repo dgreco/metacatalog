@@ -82,9 +82,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .isEmpty();
     }
 
-    @Transactional(
-            propagation = Propagation.MANDATORY,
-            rollbackFor = {ServiceError.class})
     public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
 
         var pathSegments = pathString.split("/");
@@ -112,13 +109,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
             if (relTypes.size() != 1) throw new ServiceError("Invalid path segment: " + segment);
 
-            var relTypeStr = relTypes.get(0);
+            var relTypeStr = relTypes.getFirst();
 
             var enumSet = Arrays.stream(RelationType.values()).map(Enum::name).collect(Collectors.toSet());
             if (!enumSet.contains(relTypeStr)) throw new ServiceError("Invalid path segment: " + segment);
 
             var relType = RelationType.valueOf(relTypeStr);
-            var pathExpression = pathExpressions.get(0).trim();
+            var pathExpression = pathExpressions.getFirst().trim();
 
             List<Entity> relationSources;
             if (relType == MAPPED_TO)
@@ -150,7 +147,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 if (!found) return Optional.empty();
             } else {
                 if (relationSources.size() > 1) throw new ServiceError("Ambiguous path: " + segment);
-                currentEntity = relationSources.get(0);
+                currentEntity = relationSources.getFirst();
             }
         }
 
@@ -170,7 +167,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
 
         class GenerateValues {
-            private static ExpressionParser parser = new SpelExpressionParser();
+            private static final ExpressionParser parser = new SpelExpressionParser();
 
             private static JsonNode getMappedValues(JsonNode mappingValues, StandardEvaluationContext context)
                     throws ServiceError {
