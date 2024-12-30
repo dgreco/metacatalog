@@ -69,13 +69,45 @@ public class EntityService implements CommonService<Entity, String> {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public Entity read(String key) throws ServiceError {
-        return null;
+    public Entity read(String entityId) throws ServiceError {
+        return entityRepository
+                .findById(entityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
     }
 
-    @Transactional(propagation = Propagation.REQUIRED)
-    public void delete(String entityId) {
-        entityRepository.deleteById(entityId);
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public void update(String entityId, String values) throws ServiceError {
+        try {
+            var entity = entityRepository
+                    .findById(entityId)
+                    .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+            var valuesJsonNode = jsonFactory.readTree(values);
+            var validationMessages = jsonSchemaFactory
+                    .getSchema(entity.getEntityType().getSchema())
+                    .validate(valuesJsonNode);
+            if (!validationMessages.isEmpty()) {
+                var errorMessages = validationMessages.stream()
+                        .map(ValidationMessage::getMessage)
+                        .toList();
+                throw new SchemaValidationError(errorMessages);
+            }
+            entity.setValues(valuesJsonNode);
+            entityRepository.save(entity);
+        } catch (JsonProcessingException e) {
+            throw new ServiceError(e.getMessage());
+        }
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public void delete(String entityId) throws ServiceError {
+        var entity = entityRepository
+                .findById(entityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+        entityRepository.delete(entity);
     }
 
     @Transactional(propagation = Propagation.REQUIRED)

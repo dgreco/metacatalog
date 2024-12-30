@@ -11,14 +11,16 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
 class EntityServiceTests extends CommonServiceTests {
 
     @Test
-    void testCreationAndValidation() throws IOException, ServiceError {
+    void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
@@ -46,11 +48,26 @@ class EntityServiceTests extends CommonServiceTests {
         SchemaValidationError exception =
                 assertThrows(SchemaValidationError.class, () -> entityService.create("TestType", invalidValues));
 
-        Assertions.assertEquals("$.price: must have an exclusive minimum value of 0", exception.errors.get(0));
+        Assertions.assertEquals("$.price: must have an exclusive minimum value of 0", exception.errors.getFirst());
 
         Assertions.assertEquals(1, entityRepository.countByEntityType(testType));
 
         Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TestType"));
+
+        var updatedValues =
+                """
+                {
+                  "id": 1,
+                  "name": "Lampshade",
+                  "price": 2
+                }
+                """;
+
+        entityService.update(entity.getId(), updatedValues);
+
+        var newValues = entityService.read(entity.getId()).getValues().toPrettyString();
+
+        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE).assertIsMatch(newValues, updatedValues);
 
         entityService.delete(entity.getId());
 
