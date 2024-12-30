@@ -87,7 +87,7 @@ public class JsonUtils {
     }
 
     public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
-        var node = jsonSchema.getSchemaNode();
+        var node = jsonSchema.getSchemaNode().deepCopy();
         convertFieldTypeToString(node.get("properties"));
         return Either.right(jsonSchemaFactory.getSchema(node));
     }
