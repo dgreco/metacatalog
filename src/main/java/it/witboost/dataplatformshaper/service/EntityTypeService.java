@@ -3,7 +3,6 @@ package it.witboost.dataplatformshaper.service;
 import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
 import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
@@ -12,21 +11,18 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class EntityTypeService implements CommonTypeService<EntityType, String> {
 
     private final EntityTypeRepository entityTypeRepository;
-    private final TraitRepository traitRepository;
 
-    @SuppressFBWarnings
-    public EntityTypeService(EntityTypeRepository entityTypeRepository, TraitRepository traitRepository) {
-        this.entityTypeRepository = entityTypeRepository;
-        this.traitRepository = traitRepository;
-    }
+    private final TraitRepository traitRepository;
 
     @Transactional(
             propagation = Propagation.REQUIRED,

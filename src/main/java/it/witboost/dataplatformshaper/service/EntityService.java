@@ -7,7 +7,6 @@ import static it.witboost.dataplatformshaper.service.CommonTypeService.commonTyp
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.Entity;
 import it.witboost.dataplatformshaper.entity.EntityRelationship;
 import it.witboost.dataplatformshaper.entity.RelationType;
@@ -20,11 +19,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class EntityService implements CommonService<Entity, String> {
 
     private final EntityTypeRepository entityTypeRepository;
@@ -52,18 +53,6 @@ public class EntityService implements CommonService<Entity, String> {
             }
         }
         return entityIdsVisited.contains(targetEntityId);
-    }
-
-    @SuppressFBWarnings
-    public EntityService(
-            EntityTypeRepository entityTypeRepository,
-            EntityRepository typedEntityRepository,
-            TraitRelationshipRepository traitRelationshipRepository,
-            EntityRelationshipRepository entityRelationshipRepository) {
-        this.entityTypeRepository = entityTypeRepository;
-        this.entityRepository = typedEntityRepository;
-        this.entityRelationshipRepository = entityRelationshipRepository;
-        this.traitRelationshipRepository = traitRelationshipRepository;
     }
 
     @Transactional(

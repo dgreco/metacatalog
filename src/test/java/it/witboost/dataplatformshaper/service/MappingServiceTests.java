@@ -119,7 +119,7 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
+                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -257,7 +257,7 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
+                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,

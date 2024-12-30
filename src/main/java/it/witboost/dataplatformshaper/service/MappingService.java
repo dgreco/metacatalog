@@ -70,18 +70,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return entityTypeNamesVisited.contains(targetEntityTypeName);
     }
 
-    @Transactional(
-            propagation = Propagation.MANDATORY,
-            rollbackFor = {ServiceError.class})
     public boolean isSourceEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipBySource(entityType)
                 .isEmpty();
     }
 
-    @Transactional(
-            propagation = Propagation.MANDATORY,
-            rollbackFor = {ServiceError.class})
     public boolean isTargetEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipByTarget(entityType)
@@ -369,14 +363,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     .findById(sourceEntityId)
                     .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
             var sourceEntityType = sourceEntity.getEntityType();
-            if (isTargetEntityType(sourceEntityType)) {
+            if (isTargetEntityType(sourceEntityType))
                 throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
-            }
             new CreateMappedEntities().createMappedEntities(sourceEntityId);
-            transactionManager.commit(status);
         } catch (ServiceError e) {
             transactionManager.rollback(status);
             throw e;
         }
+        transactionManager.commit(status);
     }
 }

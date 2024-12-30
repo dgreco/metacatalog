@@ -4,7 +4,6 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.mergeSchemas;
 import static it.witboost.dataplatformshaper.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import it.witboost.dataplatformshaper.entity.RelationType;
 import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.entity.TraitRelationship;
@@ -12,21 +11,18 @@ import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
 import java.util.List;
 import java.util.Optional;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class TraitService implements CommonTypeService<Trait, String> {
 
     private final TraitRepository traitRepository;
-    private final TraitRelationshipRepository traitRelationshipRepository;
 
-    @SuppressFBWarnings
-    public TraitService(TraitRepository traitRepository, TraitRelationshipRepository traitRelationshipRepository) {
-        this.traitRepository = traitRepository;
-        this.traitRelationshipRepository = traitRelationshipRepository;
-    }
+    private final TraitRelationshipRepository traitRelationshipRepository;
 
     @Transactional(
             propagation = Propagation.REQUIRED,

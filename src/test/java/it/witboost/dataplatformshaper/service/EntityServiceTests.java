@@ -20,8 +20,8 @@ class EntityServiceTests extends CommonServiceTests {
     @Test
     void testCreationAndValidation() throws IOException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        final EntityService entityService = new EntityService(
-                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
+        var entityService = new EntityService(
+                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -62,11 +62,9 @@ class EntityServiceTests extends CommonServiceTests {
     @Test
     void testLinkUnlinkLinkedEntities() throws ServiceError {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
-
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-
-        final EntityService entityService = new EntityService(
-                entityTypeRepository, entityRepository, traitRelationshipRepository, entityRelationshipRepository);
+        var entityService = new EntityService(
+                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
 
         var emptySchema =
                 """
