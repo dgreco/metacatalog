@@ -7,7 +7,9 @@ import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 public interface CommonService<T, K> {
 
-    PlatformTransactionManager getTransactionManager();
+    default PlatformTransactionManager getTransactionManager() {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
 
     void delete(K key) throws ServiceError;
 

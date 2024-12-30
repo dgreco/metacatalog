@@ -15,7 +15,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,8 +27,6 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     private final EntityTypeRepository entityTypeRepository;
 
     private final TraitRepository traitRepository;
-
-    private final PlatformTransactionManager transactionManager;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -103,16 +100,12 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         entityTypeRepository.delete(entityType);
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+    @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String name) {
         return entityTypeRepository.existsByName(name);
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+    @Transactional(propagation = Propagation.REQUIRED)
     public long countEntityTypeChildren(String name) {
         return entityTypeRepository
                 .findByName(name)

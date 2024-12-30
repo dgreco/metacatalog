@@ -23,7 +23,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,8 +39,6 @@ public class EntityService implements CommonService<Entity, String> {
     private final EntityRelationshipRepository entityRelationshipRepository;
 
     private final TraitRelationshipRepository traitRelationshipRepository;
-
-    private final PlatformTransactionManager transactionManager;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -76,14 +73,12 @@ public class EntityService implements CommonService<Entity, String> {
         return null;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     public void delete(String entityId) {
         entityRepository.deleteById(entityId);
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+    @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String entityId) {
         return entityRepository.existsById(entityId);
     }

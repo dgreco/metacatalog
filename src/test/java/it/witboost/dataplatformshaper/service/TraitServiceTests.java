@@ -16,8 +16,7 @@ class TraitServiceTests extends CommonServiceTests {
 
     @Test
     void testCreation() throws ServiceError {
-        final TraitService traitService =
-                new TraitService(traitRepository, traitRelationshipRepository, transactionManager);
+        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
 
         var trait1 = traitService.create("trait1", Optional.empty());
         traitService.create("trait2", Optional.empty());

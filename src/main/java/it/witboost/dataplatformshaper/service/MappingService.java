@@ -94,9 +94,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+    @Transactional(propagation = Propagation.REQUIRED)
     public void delete(String mappingId) {
         mappingEntityTypeRelationshipRepository.deleteById(mappingId);
     }
@@ -110,9 +108,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+    @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String mappingId) {
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
@@ -176,11 +172,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             if (isTargetEntityType(sourceEntityType))
                 throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
             new CreateMappedEntities().createMappedEntities(sourceEntityId);
+            transactionManager.commit(status);
         } catch (ServiceError e) {
             transactionManager.rollback(status);
             throw e;
         }
-        transactionManager.commit(status);
     }
 
     private boolean checkLoops(

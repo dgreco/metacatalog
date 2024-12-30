@@ -22,8 +22,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateDeleteExists() throws ServiceError {
-        final EntityTypeService entityTypeService =
-                new EntityTypeService(entityTypeRepository, traitRepository, transactionManager);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var baseSchema = jsonSchemaFactory
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
@@ -45,8 +44,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testInheritance() throws JsonProcessingException, ServiceError {
-        final EntityTypeService entityTypeService =
-                new EntityTypeService(entityTypeRepository, traitRepository, transactionManager);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var inheritedSchema =
                 """
