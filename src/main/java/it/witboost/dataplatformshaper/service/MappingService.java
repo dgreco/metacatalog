@@ -17,15 +17,21 @@ import java.util.*;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 @Service
+@RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
     public final EntityRepository entityRepository;
@@ -37,6 +43,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
     private final EntityRelationshipRepository entityRelationshipRepository;
+
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(
             propagation = Propagation.MANDATORY,
@@ -231,19 +239,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
-    public MappingService(
-            EntityRepository entityRepository,
-            EntityTypeRepository entityTypeRepository,
-            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
-            MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
-            EntityRelationshipRepository entityRelationshipRepository) {
-        this.entityRepository = entityRepository;
-        this.entityTypeRepository = entityTypeRepository;
-        this.mappingEntityTypeRelationshipRepository = mappingEntityTypeRelationshipRepository;
-        this.mappingEntityRelationshipRepository = mappingEntityRelationshipRepository;
-        this.entityRelationshipRepository = entityRelationshipRepository;
-    }
-
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -314,14 +309,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
         class CreateMappedEntities {
-            @Transactional(
-                    propagation = Propagation.MANDATORY,
-                    rollbackFor = {ServiceError.class})
             private void createMappedEntities(String sourceEntityId) throws ServiceError {
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
@@ -369,13 +358,25 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 }
             }
         }
-        var sourceEntity = entityRepository
-                .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
-        var sourceEntityType = sourceEntity.getEntityType();
-        if (isTargetEntityType(sourceEntityType)) {
-            throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
+
+        DefaultTransactionDefinition def = new DefaultTransactionDefinition();
+        def.setName("createMappedEntitiesTransaction");
+        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+
+        TransactionStatus status = transactionManager.getTransaction(def);
+        try {
+            var sourceEntity = entityRepository
+                    .findById(sourceEntityId)
+                    .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+            var sourceEntityType = sourceEntity.getEntityType();
+            if (isTargetEntityType(sourceEntityType)) {
+                throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
+            }
+            new CreateMappedEntities().createMappedEntities(sourceEntityId);
+            transactionManager.commit(status);
+        } catch (ServiceError e) {
+            transactionManager.rollback(status);
+            throw e;
         }
-        new CreateMappedEntities().createMappedEntities(sourceEntityId);
     }
 }

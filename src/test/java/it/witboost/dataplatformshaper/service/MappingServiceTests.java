@@ -14,15 +14,11 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTests {
-
-    @Autowired
-    private EntityTypeService entityTypeService;
 
     @Test
     void testCreateDelete() throws ServiceError {
@@ -32,7 +28,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
-                entityRelationshipRepository);
+                entityRelationshipRepository,
+                transactionManager);
 
         entityTypeService.create(
                 "SimpleSourceType",
@@ -72,7 +69,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
-                entityRelationshipRepository);
+                entityRelationshipRepository,
+                transactionManager);
 
         var typeA = entityTypeService.create(
                 "A", List.of(), Optional.empty(), """
@@ -127,7 +125,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
-                entityRelationshipRepository);
+                entityRelationshipRepository,
+                transactionManager);
 
         traitService.create("Trait_NA", Optional.empty());
 
@@ -264,7 +263,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
-                entityRelationshipRepository);
+                entityRelationshipRepository,
+                transactionManager);
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
 

@@ -9,6 +9,7 @@ import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 class CommonServiceTests {
@@ -60,4 +61,7 @@ class CommonServiceTests {
 
     @Autowired
     MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+
+    @Autowired
+    PlatformTransactionManager transactionManager;
 }
