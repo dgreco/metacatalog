@@ -19,7 +19,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
@@ -28,10 +27,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-@Getter
-@Setter
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
@@ -47,6 +45,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final PlatformTransactionManager transactionManager;
 
+    @Getter(lazy = true)
+    private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -57,7 +58,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
             throws ServiceError {
         try {
-            if (checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
+            if (this.checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
                 throw new ServiceError("Loops are not allowed");
 
             var mapping = new MappingEntityTypeRelationship();
@@ -114,6 +115,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     }
 
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
+
         class CreateMappedEntities {
             private void createMappedEntities(String sourceEntityId) throws ServiceError {
                 var sourceEntity = entityRepository
@@ -163,19 +165,24 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             }
         }
 
-        final var status = getTransactionStatus("createMappedEntitiesTransaction");
         try {
-            var sourceEntity = entityRepository
-                    .findById(sourceEntityId)
-                    .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
-            var sourceEntityType = sourceEntity.getEntityType();
-            if (isTargetEntityType(sourceEntityType))
-                throw new ServiceError("Source entity type " + sourceEntityType.getName() + " is a target entity type");
-            new CreateMappedEntities().createMappedEntities(sourceEntityId);
-            transactionManager.commit(status);
-        } catch (ServiceError e) {
-            transactionManager.rollback(status);
-            throw e;
+            getTransactionTemplate().executeWithoutResult(status -> {
+                try {
+                    var sourceEntity = entityRepository
+                            .findById(sourceEntityId)
+                            .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                    var sourceEntityType = sourceEntity.getEntityType();
+                    if (isTargetEntityType(sourceEntityType))
+                        throw new ServiceError(
+                                "Source entity type " + sourceEntityType.getName() + " is a target entity type");
+                    new CreateMappedEntities().createMappedEntities(sourceEntityId);
+                } catch (ServiceError e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            else throw e;
         }
     }
 

@@ -7,16 +7,10 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.transaction.PlatformTransactionManager;
 
 public interface CommonTypeService<T extends Type, K> extends CommonService<T, K> {
 
     CommonTypeService<EntityType, String> commonTypeService = new CommonTypeService<>() {
-
-        @Override
-        public PlatformTransactionManager getTransactionManager() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
 
         @Override
         public void delete(String key) {
@@ -35,10 +29,6 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
     };
 
     CommonTypeService<Trait, String> commonTraitService = new CommonTypeService<>() {
-        @Override
-        public PlatformTransactionManager getTransactionManager() {
-            throw new UnsupportedOperationException("Not supported yet.");
-        }
 
         @Override
         public void delete(String key) {
