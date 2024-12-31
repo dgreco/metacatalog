@@ -186,6 +186,62 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
+    public void updateMappedEntities(String sourceEntityId) throws ServiceError {
+
+        class UpdateMappedEntities {
+            private void updateMappedEntities(String sourceEntityId) throws ServiceError {
+                var sourceEntity = entityRepository
+                        .findById(sourceEntityId)
+                        .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                var entityMappingRelationships = mappingEntityRelationshipRepository.findBySource(sourceEntity);
+                for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
+                    var targetEntityType = entityMappingRelationship.getTarget();
+                    var additionalEntitiesValues = new HashMap<String, JsonNode>();
+                    var mappingTypeRelationship = entityMappingRelationship.getMappingEntityTypeRelationship();
+                    for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
+                            mappingTypeRelationship.getEntityPathReferences()) {
+                        var as = sourceReference.alias();
+                        var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                .orElseThrow(() -> new ServiceError(
+                                        "Wrong reference path " + sourceReference.referencePath() + " for entity"))
+                                .getValues();
+                        additionalEntitiesValues.put(as, jn);
+                        var mappedValues = generateMappedValues(
+                                sourceEntity.getValues(),
+                                additionalEntitiesValues,
+                                mappingTypeRelationship.getMappingValues(),
+                                jsonSchemaFactory.getSchema(
+                                        mappingTypeRelationship.getTarget().getSchema()));
+                        var mappedEntity = entityMappingRelationship.getTarget();
+                        mappedEntity.setValues(mappedValues);
+                        entityRepository.save(mappedEntity);
+                        updateMappedEntities(mappedEntity.getId());
+                    }
+                }
+            }
+        }
+
+        try {
+            getTransactionTemplate().executeWithoutResult(status -> {
+                try {
+                    var sourceEntity = entityRepository
+                            .findById(sourceEntityId)
+                            .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                    var sourceEntityType = sourceEntity.getEntityType();
+                    if (isTargetEntityType(sourceEntityType))
+                        throw new ServiceError(
+                                "Source entity type " + sourceEntityType.getName() + " is a target entity type");
+                    new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
+                } catch (ServiceError e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            else throw e;
+        }
+    }
+
     private boolean checkLoops(
             String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName)
             throws ServiceError {

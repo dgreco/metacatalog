@@ -338,5 +338,30 @@ class MappingServiceTests extends CommonServiceTests {
                 ServiceError.class,
                 () -> mappingService.createMappedEntities(
                         entityRepository.findByEntityType(targeType).getFirst().getId()));
+
+        // Update the source
+        entityService.update(sourceInstance.getId(), """
+                {"a": 2}
+                """);
+
+        mappingService.updateMappedEntities(sourceInstance.getId());
+
+        var intNode1 = (IntNode) new WrappedJsonNode(
+                        entityRepository.findByEntityType(targeType).getFirst().getValues())
+                .getValue("$.b");
+        Assertions.assertEquals(12, intNode1.intValue());
+
+        var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
+                        .findByEntityType(anotherTargetType)
+                        .getFirst()
+                        .getValues())
+                .getValue("$.d");
+        Assertions.assertEquals(22, intNode2.intValue());
+
+        // Check that checking the entity is only a source works
+        Assertions.assertThrows(
+                ServiceError.class,
+                () -> mappingService.updateMappedEntities(
+                        entityRepository.findByEntityType(targeType).getFirst().getId()));
     }
 }

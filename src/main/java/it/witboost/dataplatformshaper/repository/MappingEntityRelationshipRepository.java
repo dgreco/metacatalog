@@ -13,4 +13,6 @@ public interface MappingEntityRelationshipRepository extends JpaRepository<Mappi
 
     List<MappingEntityRelationship> findBySourceAndMappingEntityTypeRelationship(
             Entity source, MappingEntityTypeRelationship mappingEntityTypeRelationship);
+
+    List<MappingEntityRelationship> findBySource(Entity source);
 }
