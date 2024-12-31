@@ -334,19 +334,19 @@ class MappingServiceTests extends CommonServiceTests {
         mappingService.createMappedEntities(sourceInstance.getId());
 
         {
-            var intNode1 = (IntNode) new WrappedJsonNode(entityRepository
+            var int1 = new WrappedJsonNode(entityRepository
                             .findByEntityType(targeType)
                             .getFirst()
                             .getValues())
-                    .getValue("$.b");
-            Assertions.assertEquals(11, intNode1.intValue());
+                    .getValue(Integer.class, "$.b");
+            Assertions.assertEquals(11, int1);
 
-            var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
+            var int2 = new WrappedJsonNode(entityRepository
                             .findByEntityType(anotherTargetType)
                             .getFirst()
                             .getValues())
-                    .getValue("$.d");
-            Assertions.assertEquals(21, intNode2.intValue());
+                    .getValue(Integer.class, "$.d");
+            Assertions.assertEquals(21, int2);
         }
 
         // Check that checking the entity is only a source works
@@ -363,19 +363,19 @@ class MappingServiceTests extends CommonServiceTests {
         mappingService.updateMappedEntities(sourceInstance.getId());
 
         {
-            var intNode1 = (IntNode) new WrappedJsonNode(entityRepository
+            var int1 = new WrappedJsonNode(entityRepository
                             .findByEntityType(targeType)
                             .getFirst()
                             .getValues())
-                    .getValue("$.b");
-            Assertions.assertEquals(12, intNode1.intValue());
+                    .getValue(Integer.class, "$.b");
+            Assertions.assertEquals(12, int1);
 
-            var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
+            var int2 = new WrappedJsonNode(entityRepository
                             .findByEntityType(anotherTargetType)
                             .getFirst()
                             .getValues())
-                    .getValue("$.d");
-            Assertions.assertEquals(22, intNode2.intValue());
+                    .getValue(Integer.class, "$.d");
+            Assertions.assertEquals(22, int2);
         }
 
         // Check that checking the entity is only a source works
