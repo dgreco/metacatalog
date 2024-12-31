@@ -19,7 +19,7 @@ import org.hibernate.annotations.CacheConcurrencyStrategy;
         name = "entity_type",
         indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
 @Cacheable
-@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
 @SuppressFBWarnings
 public class EntityType implements Type<EntityType> {
     @Id
