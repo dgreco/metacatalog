@@ -21,7 +21,7 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
 
@@ -78,8 +78,8 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     void testLinkUnlinkLinkedEntities() throws ServiceError {
-        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
 

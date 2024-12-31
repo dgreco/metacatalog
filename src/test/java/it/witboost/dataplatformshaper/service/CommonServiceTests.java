@@ -5,6 +5,7 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.witboost.dataplatformshaper.repository.*;
+import jakarta.persistence.EntityManagerFactory;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,4 +65,7 @@ class CommonServiceTests {
 
     @Autowired
     PlatformTransactionManager transactionManager;
+
+    @Autowired
+    EntityManagerFactory emf;
 }

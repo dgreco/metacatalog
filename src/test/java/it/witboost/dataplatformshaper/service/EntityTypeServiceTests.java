@@ -4,6 +4,7 @@ import static it.witboost.dataplatformshaper.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import it.witboost.dataplatformshaper.entity.EntityType;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
@@ -22,7 +23,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateDeleteExists() throws ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
 
         var baseSchema = jsonSchemaFactory
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
@@ -44,7 +45,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testInheritance() throws JsonProcessingException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
 
         var inheritedSchema =
                 """
@@ -108,15 +109,25 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .getSchemaNode()
                 .toPrettyString();
 
-        var trait1 = traitService.create("Trait1", traitSchema1, Optional.empty());
+        traitService.create("Trait1", traitSchema1, Optional.empty());
 
-        entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
+        var baseType = entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
 
-        entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
+        var middleType = entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
 
         var leafType = entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
 
-        entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
+        var leafType1 = entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
+
+        var cache = emf.getCache();
+
+        Assertions.assertTrue(cache.contains(EntityType.class, baseType.getId()));
+
+        Assertions.assertTrue(cache.contains(EntityType.class, middleType.getId()));
+
+        Assertions.assertTrue(cache.contains(EntityType.class, leafType.getId()));
+
+        Assertions.assertTrue(cache.contains(EntityType.class, leafType1.getId()));
 
         Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
@@ -136,5 +147,13 @@ class EntityTypeServiceTests extends CommonServiceTests {
         entityTypeService.delete("MiddleType");
 
         entityTypeService.delete("BaseType");
+
+        Assertions.assertFalse(cache.contains(EntityType.class, baseType.getId()));
+
+        Assertions.assertFalse(cache.contains(EntityType.class, middleType.getId()));
+
+        Assertions.assertFalse(cache.contains(EntityType.class, leafType.getId()));
+
+        Assertions.assertFalse(cache.contains(EntityType.class, leafType1.getId()));
     }
 }

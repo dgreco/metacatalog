@@ -22,7 +22,7 @@ class MappingServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateDelete() throws ServiceError {
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -63,7 +63,7 @@ class MappingServiceTests extends CommonServiceTests {
 
     @Test
     void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -116,8 +116,8 @@ class MappingServiceTests extends CommonServiceTests {
     @Test
     void testGraphPath() throws ServiceError {
 
-        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
         var mappingService = new MappingService(
@@ -254,8 +254,8 @@ class MappingServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateAndUpdateMappingEntities() throws ServiceError {
-        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
         var mappingService = new MappingService(

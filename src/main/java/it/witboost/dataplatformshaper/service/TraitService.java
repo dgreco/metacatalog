@@ -9,6 +9,7 @@ import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.entity.TraitRelationship;
 import it.witboost.dataplatformshaper.repository.TraitRelationshipRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
+import jakarta.persistence.EntityManagerFactory;
 import java.util.List;
 import java.util.Optional;
 import lombok.Getter;
@@ -27,6 +28,8 @@ public class TraitService implements CommonTypeService<Trait, String> {
     private final TraitRepository traitRepository;
 
     private final TraitRelationshipRepository traitRelationshipRepository;
+
+    private final EntityManagerFactory entityManagerFactory;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -88,6 +91,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
         var entityType =
                 traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
         traitRepository.delete(entityType);
+        entityManagerFactory.getCache().evict(Trait.class, entityType.getId());
     }
 
     @Transactional(

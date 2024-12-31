@@ -7,6 +7,7 @@ import it.witboost.dataplatformshaper.entity.EntityType;
 import it.witboost.dataplatformshaper.entity.Trait;
 import it.witboost.dataplatformshaper.repository.EntityTypeRepository;
 import it.witboost.dataplatformshaper.repository.TraitRepository;
+import jakarta.persistence.EntityManagerFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,8 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     private final EntityTypeRepository entityTypeRepository;
 
     private final TraitRepository traitRepository;
+
+    private final EntityManagerFactory entityManagerFactory;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -98,6 +101,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
                 .findByName(name)
                 .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
         entityTypeRepository.delete(entityType);
+        entityManagerFactory.getCache().evict(EntityType.class, entityType.getId());
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
