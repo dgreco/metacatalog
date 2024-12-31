@@ -140,23 +140,23 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                                             "Wrong reference path " + sourceReference.referencePath() + " for entity"))
                                     .getValues();
                             additionalEntitiesValues.put(as, jn);
-                            var mappedValues = generateMappedValues(
-                                    sourceEntity.getValues(),
-                                    additionalEntitiesValues,
-                                    mappingRelationship.getMappingValues(),
-                                    jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
-                            var mappedEntity = new Entity();
-                            mappedEntity.setEntityType(targetEntityType);
-                            mappedEntity.setValues(mappedValues);
-                            entityRepository.save(mappedEntity);
-                            var mappingEntityRelationship = new MappingEntityRelationship();
-                            mappingEntityRelationship.setSource(sourceEntity);
-                            mappingEntityRelationship.setTarget(mappedEntity);
-                            mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
-                            mappingEntityRelationship.setRelationType(MAPPED_TO);
-                            mappingEntityRelationshipRepository.save(mappingEntityRelationship);
-                            createMappedEntities(mappedEntity.getId());
                         }
+                        var mappedValues = generateMappedValues(
+                                sourceEntity.getValues(),
+                                additionalEntitiesValues,
+                                mappingRelationship.getMappingValues(),
+                                jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+                        var mappedEntity = new Entity();
+                        mappedEntity.setEntityType(targetEntityType);
+                        mappedEntity.setValues(mappedValues);
+                        entityRepository.save(mappedEntity);
+                        var mappingEntityRelationship = new MappingEntityRelationship();
+                        mappingEntityRelationship.setSource(sourceEntity);
+                        mappingEntityRelationship.setTarget(mappedEntity);
+                        mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
+                        mappingEntityRelationship.setRelationType(MAPPED_TO);
+                        mappingEntityRelationshipRepository.save(mappingEntityRelationship);
+                        createMappedEntities(mappedEntity.getId());
                     } else {
                         createMappedEntities(
                                 existingMappingEntityRels.getFirst().getTarget().getId());
@@ -195,9 +195,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
                 var entityMappingRelationships = mappingEntityRelationshipRepository.findBySource(sourceEntity);
                 for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
-                    var targetEntityType = entityMappingRelationship.getTarget();
-                    var additionalEntitiesValues = new HashMap<String, JsonNode>();
                     var mappingTypeRelationship = entityMappingRelationship.getMappingEntityTypeRelationship();
+                    var additionalEntitiesValues = new HashMap<String, JsonNode>();
                     for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                             mappingTypeRelationship.getEntityPathReferences()) {
                         var as = sourceReference.alias();
@@ -206,17 +205,17 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                                         "Wrong reference path " + sourceReference.referencePath() + " for entity"))
                                 .getValues();
                         additionalEntitiesValues.put(as, jn);
-                        var mappedValues = generateMappedValues(
-                                sourceEntity.getValues(),
-                                additionalEntitiesValues,
-                                mappingTypeRelationship.getMappingValues(),
-                                jsonSchemaFactory.getSchema(
-                                        mappingTypeRelationship.getTarget().getSchema()));
-                        var mappedEntity = entityMappingRelationship.getTarget();
-                        mappedEntity.setValues(mappedValues);
-                        entityRepository.save(mappedEntity);
-                        updateMappedEntities(mappedEntity.getId());
                     }
+                    var mappedValues = generateMappedValues(
+                            sourceEntity.getValues(),
+                            additionalEntitiesValues,
+                            mappingTypeRelationship.getMappingValues(),
+                            jsonSchemaFactory.getSchema(
+                                    mappingTypeRelationship.getTarget().getSchema()));
+                    var mappedEntity = entityMappingRelationship.getTarget();
+                    mappedEntity.setValues(mappedValues);
+                    entityRepository.save(mappedEntity);
+                    updateMappedEntities(mappedEntity.getId());
                 }
             }
         }
@@ -232,6 +231,55 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         throw new ServiceError(
                                 "Source entity type " + sourceEntityType.getName() + " is a target entity type");
                     new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
+                } catch (ServiceError e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            else throw e;
+        }
+    }
+
+    public void deleteMappedEntities(String sourceEntityId) throws ServiceError {
+
+        class DeleteMappedEntities {
+            private void retrieveMappedEntities(String sourceEntityId, Stack<String> retrievedEntitiesIds)
+                    throws ServiceError {
+                var sourceEntity = entityRepository
+                        .findById(sourceEntityId)
+                        .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                var entityMappingRelationships = mappingEntityRelationshipRepository.findBySource(sourceEntity);
+                for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
+                    var mappedEntity = entityMappingRelationship.getTarget();
+                    retrievedEntitiesIds.push(mappedEntity.getId());
+                    mappingEntityRelationshipRepository.delete(entityMappingRelationship);
+                    retrieveMappedEntities(mappedEntity.getId(), retrievedEntitiesIds);
+                }
+            }
+
+            private void deleteMappedEntities(String sourceEntityId) throws ServiceError {
+                var retrievedEntitiesIds = new Stack<String>();
+                retrieveMappedEntities(sourceEntityId, retrievedEntitiesIds);
+                while (!retrievedEntitiesIds.empty()) {
+                    var id = retrievedEntitiesIds.pop();
+                    var entity = entityRepository.findById(id);
+                    entity.ifPresent(entityRepository::delete);
+                }
+            }
+        }
+
+        try {
+            getTransactionTemplate().executeWithoutResult(status -> {
+                try {
+                    var sourceEntity = entityRepository
+                            .findById(sourceEntityId)
+                            .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                    var sourceEntityType = sourceEntity.getEntityType();
+                    if (isTargetEntityType(sourceEntityType))
+                        throw new ServiceError(
+                                "Source entity type " + sourceEntityType.getName() + " is a target entity type");
+                    new DeleteMappedEntities().deleteMappedEntities(sourceEntityId);
                 } catch (ServiceError e) {
                     throw new RuntimeException(e);
                 }

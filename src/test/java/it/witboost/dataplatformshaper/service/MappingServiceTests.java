@@ -253,7 +253,7 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testCreateAndUpdateMappingEntities() throws ServiceError {
+    void testCreateAndUpdateAndDeleteMappingEntities() throws ServiceError {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
@@ -333,6 +333,22 @@ class MappingServiceTests extends CommonServiceTests {
         // Check that idempotency works
         mappingService.createMappedEntities(sourceInstance.getId());
 
+        {
+            var intNode1 = (IntNode) new WrappedJsonNode(entityRepository
+                            .findByEntityType(targeType)
+                            .getFirst()
+                            .getValues())
+                    .getValue("$.b");
+            Assertions.assertEquals(11, intNode1.intValue());
+
+            var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
+                            .findByEntityType(anotherTargetType)
+                            .getFirst()
+                            .getValues())
+                    .getValue("$.d");
+            Assertions.assertEquals(21, intNode2.intValue());
+        }
+
         // Check that checking the entity is only a source works
         Assertions.assertThrows(
                 ServiceError.class,
@@ -346,22 +362,32 @@ class MappingServiceTests extends CommonServiceTests {
 
         mappingService.updateMappedEntities(sourceInstance.getId());
 
-        var intNode1 = (IntNode) new WrappedJsonNode(
-                        entityRepository.findByEntityType(targeType).getFirst().getValues())
-                .getValue("$.b");
-        Assertions.assertEquals(12, intNode1.intValue());
+        {
+            var intNode1 = (IntNode) new WrappedJsonNode(entityRepository
+                            .findByEntityType(targeType)
+                            .getFirst()
+                            .getValues())
+                    .getValue("$.b");
+            Assertions.assertEquals(12, intNode1.intValue());
 
-        var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
-                        .findByEntityType(anotherTargetType)
-                        .getFirst()
-                        .getValues())
-                .getValue("$.d");
-        Assertions.assertEquals(22, intNode2.intValue());
+            var intNode2 = (IntNode) new WrappedJsonNode(entityRepository
+                            .findByEntityType(anotherTargetType)
+                            .getFirst()
+                            .getValues())
+                    .getValue("$.d");
+            Assertions.assertEquals(22, intNode2.intValue());
+        }
 
         // Check that checking the entity is only a source works
         Assertions.assertThrows(
                 ServiceError.class,
                 () -> mappingService.updateMappedEntities(
                         entityRepository.findByEntityType(targeType).getFirst().getId()));
+
+        mappingService.deleteMappedEntities(sourceInstance.getId());
+
+        Assertions.assertEquals(0, entityRepository.countByEntityType(targeType));
+
+        Assertions.assertEquals(0, entityRepository.countByEntityType(anotherTargetType));
     }
 }
