@@ -56,7 +56,7 @@
         <logback.version>1.5.15</logback.version>
 
         <!--   Testing & Checking -->
-        <testcomtainers.version>1.20.4</testcomtainers.version>
+        <testcontainers.version>1.20.4</testcontainers.version>
         <spotbugs-annotations.version>4.8.6</spotbugs-annotations.version>
 
     </properties>
@@ -66,7 +66,7 @@
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
-                <version>${testcomtainers.version}</version>
+                <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -305,18 +305,53 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
-            <version>${testcomtainers.version}</version>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>com.github.spotbugs</groupId>
             <artifactId>spotbugs-annotations</artifactId>
             <version>${spotbugs-annotations.version}</version>
             <optional>true</optional>
         </dependency>
-
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-maven-plugin</artifactId>
+                            <executions>
+                                <execution>
+                                    <id>build-image</id>
+                                    <goals>
+                                        <goal>build-image-no-fork</goal>
+                                    </goals>
+                                </execution>
+                            </executions>
+                        </plugin>
+                        <plugin>
+                            <groupId>org.graalvm.buildtools</groupId>
+                            <artifactId>native-maven-plugin</artifactId>
+                            <executions>
+                                <execution>
+                                    <id>build-native</id>
+                                    <goals>
+                                        <goal>compile-no-fork</goal>
+                                    </goals>
+                                    <phase>package</phase>
+                                </execution>
+                            </executions>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
@@ -341,6 +376,7 @@
                     </execution>
                 </executions>
             </plugin>
+
             <!-- Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -354,6 +390,7 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+
             <!-- SpringBoot Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -367,6 +404,13 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <!-- Graalvm Plugin -->
+            <plugin>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+            </plugin>
+
             <!-- OpenApi Generator Plugin -->
             <plugin>
                 <groupId>org.openapitools</groupId>
