@@ -10,10 +10,10 @@
         <relativePath/>
     </parent>
 
-    <groupId>it.witboost</groupId>
-    <artifactId>data-platform-shaper</artifactId>
+    <groupId>it.davidgreco</groupId>
+    <artifactId>metacatalog</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>Data Platform Shaper</name>
+    <name>Meta Catalog</name>
     <description></description>
 
     <properties>
