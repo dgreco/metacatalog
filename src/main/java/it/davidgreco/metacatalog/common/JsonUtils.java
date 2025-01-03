@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
 import com.networknt.schema.*;
@@ -14,6 +15,8 @@ import java.util.*;
 public class JsonUtils {
 
     public static final ObjectMapper jsonFactory = new ObjectMapper();
+
+    public static final ObjectMapper yamlFactory = new ObjectMapper(new YAMLFactory());
 
     public static final JsonSchemaFactory jsonSchemaFactory =
             JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);

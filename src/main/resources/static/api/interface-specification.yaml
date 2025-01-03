@@ -1,0 +1,71 @@
+openapi: "3.1.0"
+info:
+  version: 1.0.0
+  title: Meta Catalog Manager API
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Meta Catalog Manager
+paths:
+  /metacatalog/v1/trait:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a user-defined trait
+      operationId: createTrait
+      requestBody:
+        description: A YAML file containing an Entity Type spec
+        required: true
+        content:
+          application/yaml:
+            schema:
+              type: string
+              format: binary
+      responses:
+        204:
+          description: Trait created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+components:
+  schemas:
+    Trait:
+      required:
+        - name
+        - schema
+      type: object
+      properties:
+        name:
+          type: string
+        schema:
+          type: string
+        inheritsFrom:
+          type: string
+    ValidationError:
+      required:
+        - errors
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: string
+    SystemError:
+      required:
+        - error
+      type: object
+      properties:
+        error:
+          type: string
