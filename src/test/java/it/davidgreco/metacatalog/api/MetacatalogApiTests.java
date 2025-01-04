@@ -49,8 +49,6 @@ public class MetacatalogApiTests {
 
     @AfterAll
     static void afterAll() throws InterruptedException {
-        context.stop();
-        context.close();
         postgres.stop();
     }
 
