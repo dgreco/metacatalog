@@ -1,14 +1,14 @@
 package it.davidgreco.metacatalog.openapi;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.yamlFactory;
-
-import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Trait;
+import it.davidgreco.metacatalog.openapi.model.ValidationError;
+import it.davidgreco.metacatalog.service.SchemaValidationError;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -42,19 +42,61 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
     }
 
     @Override
-    public ResponseEntity<Void> createTrait(Resource body) throws Exception {
+    public ResponseEntity createTrait(Trait trait) {
+        try {
+            if (trait.getSchema().isPresent())
+                traitService.create(trait.getName(), trait.getSchema().get(), trait.getInheritsFrom());
+            else traitService.create(trait.getName(), trait.getInheritsFrom());
+            return ResponseEntity.status(204).build();
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
 
-        var payloadNode = yamlFactory.readTree(body.getInputStream());
-        var name = Optional.ofNullable(payloadNode.get("name"))
-                .map(JsonNode::asText)
-                .orElseThrow(() -> new ServiceError("Missing 'name' field"));
-        var inheritsFrom = Optional.ofNullable(payloadNode.get("name")).map(JsonNode::asText);
-        var schema = Optional.ofNullable(payloadNode.get("schema"))
-                .orElseThrow(() -> new ServiceError("Missing 'schema' field"));
+    @Override
+    public ResponseEntity getTrait(String name) throws Exception {
+        try {
+            var trait = traitService.read(name);
+            Trait dtoTrait = new Trait();
+            dtoTrait.setName(trait.getName());
+            dtoTrait.setSchema(Optional.of(trait.getSchema().toPrettyString()));
+            dtoTrait.setInheritsFrom(
+                    Optional.ofNullable(trait.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
+            return ResponseEntity.status(200).body(dtoTrait);
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
 
-        traitService.create(name, schema.toPrettyString(), inheritsFrom);
+    @Override
+    public ResponseEntity deleteTrait(String name) throws Exception {
+        try {
+            traitService.delete(name);
+            return ResponseEntity.status(204).build();
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
+    }
 
-        System.out.println(payloadNode.toPrettyString());
-        return ResponseEntity.ok().build(); // MetacatalogApiDelegate.super.createTrait(body);
+    @Override
+    public ResponseEntity traitExists(String name) throws Exception {
+        try {
+            if (traitService.exists(name)) return ResponseEntity.status(204).build();
+            else return ResponseEntity.status(404).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(e.getMessage());
+        }
     }
 }

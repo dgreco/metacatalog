@@ -17,13 +17,12 @@ paths:
       summary: Create a user-defined trait
       operationId: createTrait
       requestBody:
-        description: A YAML file containing an Entity Type spec
-        required: true
+        description: A Trait spec
         content:
-          application/yaml:
+          application/json:
             schema:
-              type: string
-              format: binary
+              $ref: '#/components/schemas/Trait'
+        required: true
       responses:
         204:
           description: Trait created
@@ -39,12 +38,99 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/{name}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a trait by name
+      operationId: getTrait
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+      responses:
+        200:
+          description: If successful, return a Trait object
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/Trait'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a trait by name
+      operationId: deleteTrait
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+      responses:
+        204:
+          description: Trait deleted
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    head:
+      tags:
+        - Meta Catalog Manager
+      summary: Check if a trait exists by name
+      operationId: traitExists
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+      responses:
+        200:
+          description: Trait exists
+        404:
+          description: Trait does not exist
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
       required:
         - name
-        - schema
       type: object
       properties:
         name:

@@ -47,7 +47,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
         if (fatherName.isPresent()) {
             var father = traitRepository
                     .findByName(fatherName.get())
-                    .orElseThrow(() -> new ServiceError("EntityType " + fatherName + " does not exist"));
+                    .orElseThrow(() -> new ServiceError("Trait " + fatherName.get() + " does not exist"));
             entityType.setFather(father);
             schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
             var mergedSchema = mergeSchemas(schemasToMerge);
