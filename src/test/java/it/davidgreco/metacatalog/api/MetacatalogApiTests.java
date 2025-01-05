@@ -5,6 +5,7 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.Application;
+import it.davidgreco.metacatalog.openapi.client.LinkTraitRequest;
 import it.davidgreco.metacatalog.openapi.client.MetaCatalogManagerApi;
 import it.davidgreco.metacatalog.openapi.client.Trait;
 import it.davidgreco.metacatalog.openapi.client.ValidationError;
@@ -61,7 +62,7 @@ public class MetacatalogApiTests {
         var retrievedTrait = api.getTrait("TestTrait");
         Assertions.assertEquals("TestTrait", retrievedTrait.getName());
 
-        api.traitExists("TestTrait");
+        api.existsTrait("TestTrait");
 
         api.deleteTrait("TestTrait");
 
@@ -71,8 +72,38 @@ public class MetacatalogApiTests {
                 new ValidationError().errors(List.of("Trait TestTrait not found")),
                 ex1.getResponseBodyAs(ValidationError.class));
 
-        var ex2 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.traitExists("TestTrait"));
+        var ex2 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.existsTrait("TestTrait"));
 
         Assertions.assertEquals(404, ex2.getStatusCode().value());
+    }
+
+    @Test
+    void testLinkUnlinkTraitGetLink() {
+        var trait1 = new Trait();
+        trait1.setName("TestTrait1");
+        api.createTrait(trait1);
+
+        var trait2 = new Trait();
+        trait2.setName("TestTrait2");
+        api.createTrait(trait2);
+
+        var linkSpec = new LinkTraitRequest();
+        linkSpec.sourceTrait("TestTrait1");
+        linkSpec.targetTrait("TestTrait2");
+        linkSpec.relationshipTypeName("DEPENDS_ON");
+        api.linkTrait(linkSpec);
+
+        api.existsLinkTrait("TestTrait1", "DEPENDS_ON", "TestTrait2");
+
+        var traits1 = api.linkedTrait("TestTrait1", "DEPENDS_ON");
+        Assertions.assertEquals(1, traits1.size());
+
+        api.unlinkTrait("TestTrait1", "DEPENDS_ON", "TestTrait2");
+        var traits2 = api.linkedTrait("TestTrait1", "DEPENDS_ON");
+        Assertions.assertEquals(0, traits2.size());
+
+        var ex = Assertions.assertThrows(
+                HttpClientErrorException.class, () -> api.existsLinkTrait("TestTrait1", "DEPENDS_ON", "TestTrait2"));
+        Assertions.assertEquals(404, ex.getStatusCode().value());
     }
 }

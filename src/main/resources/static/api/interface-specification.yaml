@@ -101,7 +101,7 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Check if a trait exists by name
-      operationId: traitExists
+      operationId: existsTrait
       parameters:
         - in: path
           name: name
@@ -126,6 +126,164 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/link:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a link between two traits by a relation
+      operationId: linkTrait
+      requestBody:
+        description: A Link Trait spec
+        content:
+          application/json:
+            schema:
+              required:
+                - sourceTrait
+                - relationshipTypeName
+                - targetTrait
+              type: object
+              properties:
+                sourceTrait:
+                  type: string
+                relationshipTypeName:
+                  type: string
+                targetTrait:
+                  type: string
+        required: true
+      responses:
+        204:
+          description: Trait link created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/link/{sourceTrait}/{relationshipTypeName}/{targetTrait}:
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a link between two traits by a relation
+      operationId: unlinkTrait
+      parameters:
+        - in: path
+          name: sourceTrait
+          required: true
+          schema:
+            type: string
+            description: Source Trait name
+        - in: path
+          name: relationshipTypeName
+          required: true
+          schema:
+            type: string
+            description: A relationship type name
+        - in: path
+          name: targetTrait
+          required: true
+          schema:
+            type: string
+            description: Target Trait name
+      responses:
+        204:
+          description: Link deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+    head:
+      tags:
+        - Meta Catalog Manager
+      summary: Check if a link exists between two traits by a relation
+      operationId: existsLinkTrait
+      parameters:
+        - in: path
+          name: sourceTrait
+          required: true
+          schema:
+            type: string
+            description: Source Trait name
+        - in: path
+          name: relationshipTypeName
+          required: true
+          schema:
+            type: string
+            description: A relationship type name
+        - in: path
+          name: targetTrait
+          required: true
+          schema:
+            type: string
+            description: Target Trait name
+      responses:
+        200:
+          description: Link exists
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/link/{sourceTrait}/{relationshipTypeName}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get the traits linked to a trait by a relation
+      operationId: linkedTrait
+      parameters:
+        - in: path
+          name: sourceTrait
+          required: true
+          schema:
+            type: string
+            description: Source Trait name
+        - in: path
+          name: relationshipTypeName
+          required: true
+          schema:
+            type: string
+            description: Relationship Type Name
+      responses:
+        200:
+          description: If successful, return a list of linked traits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trait'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
