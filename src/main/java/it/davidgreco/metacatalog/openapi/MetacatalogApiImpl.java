@@ -5,9 +5,7 @@ import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.LinkTraitRequest;
 import it.davidgreco.metacatalog.openapi.model.Trait;
 import it.davidgreco.metacatalog.openapi.model.ValidationError;
-import it.davidgreco.metacatalog.service.SchemaValidationError;
-import it.davidgreco.metacatalog.service.ServiceError;
-import it.davidgreco.metacatalog.service.TraitService;
+import it.davidgreco.metacatalog.service.*;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -24,6 +22,12 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
     @Autowired
     private TraitService traitService;
+
+    @Autowired
+    private EntityTypeService entityTypeService;
+
+    @Autowired
+    private MappingService mappingService;
 
     /**
      * Native request.
