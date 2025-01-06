@@ -2,9 +2,7 @@ package it.davidgreco.metacatalog.openapi;
 
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
-import it.davidgreco.metacatalog.openapi.model.LinkTraitRequest;
-import it.davidgreco.metacatalog.openapi.model.Trait;
-import it.davidgreco.metacatalog.openapi.model.ValidationError;
+import it.davidgreco.metacatalog.openapi.model.*;
 import it.davidgreco.metacatalog.service.*;
 import java.util.List;
 import java.util.Optional;
@@ -60,7 +58,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -74,12 +72,10 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
             dtoTrait.setInheritsFrom(
                     Optional.ofNullable(trait.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
             return ResponseEntity.status(200).body(dtoTrait);
-        } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -88,12 +84,10 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             traitService.delete(name);
             return ResponseEntity.status(204).build();
-        } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -103,7 +97,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
             if (traitService.exists(name)) return ResponseEntity.status(204).build();
             else return ResponseEntity.status(404).build();
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -123,7 +117,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -150,7 +144,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -170,7 +164,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 
@@ -194,7 +188,65 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(e.getMessage());
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity createEntityType(EntityType entityType) {
+        try {
+            entityTypeService.create(
+                    entityType.getName(), entityType.getTraits(), entityType.getInheritsFrom(), entityType.getSchema());
+            return ResponseEntity.status(204).build();
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity deleteEntityType(String name) throws Exception {
+        try {
+            entityTypeService.delete(name);
+            return ResponseEntity.status(204).build();
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity existsEntityType(String name) {
+        try {
+            if (entityTypeService.exists(name))
+                return ResponseEntity.status(204).build();
+            else return ResponseEntity.status(404).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity getEntityType(String name) {
+        try {
+            var type = entityTypeService.read(name);
+            EntityType dtoType = new EntityType();
+            dtoType.setName(type.getName());
+            dtoType.setSchema(type.getSchema().toPrettyString());
+            dtoType.setTraits(type.getTraits().stream()
+                    .map(it.davidgreco.metacatalog.entity.Trait::getName)
+                    .toList());
+            dtoType.setInheritsFrom(
+                    Optional.ofNullable(type.getFather()).map(it.davidgreco.metacatalog.entity.EntityType::getName));
+            return ResponseEntity.status(200).body(dtoType);
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
 }

@@ -284,6 +284,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/type:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a user-defined type
+      operationId: createEntityType
+      requestBody:
+        description: An EntityType spec
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityType'
+        required: true
+      responses:
+        204:
+          description: EntityType created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/type/{name}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a user-defined type by name
+      operationId: getEntityType
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+      responses:
+        200:
+          description: If successful, return an EntityType object
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/EntityType'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a user-defined type by name
+      operationId: deleteEntityType
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+      responses:
+        204:
+          description: Type deleted
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    head:
+      tags:
+        - Meta Catalog Manager
+      summary: Check if a user-defined type exists by name
+      operationId: existsEntityType
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+      responses:
+        200:
+          description: EntityType exists
+        404:
+          description: EntityType does not exist
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
@@ -295,6 +411,22 @@ components:
           type: string
         schema:
           type: string
+        inheritsFrom:
+          type: string
+    EntityType:
+      required:
+        - name
+        - schema
+      type: object
+      properties:
+        name:
+          type: string
+        schema:
+          type: string
+        traits:
+          type: array
+          items:
+            type: string
         inheritsFrom:
           type: string
     ValidationError:

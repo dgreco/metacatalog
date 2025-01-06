@@ -15,6 +15,7 @@ import java.util.Optional;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,31 +36,33 @@ public class TraitService implements CommonTypeService<Trait, String> {
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
     public Trait create(String name, String schema, Optional<String> fatherName) throws ServiceError {
-        if (traitRepository.existsByName(name)) {
-            throw new ServiceError("Trait " + name + " already exists");
+        try {
+            var eitherSchema = stringToJsonSchema(schema);
+            if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+            var entityType = new Trait();
+            entityType.setName(name);
+            entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
+            List<JsonNode> schemasToMerge = new java.util.ArrayList<>();
+            if (fatherName.isPresent()) {
+                var father = traitRepository
+                        .findByName(fatherName.get())
+                        .orElseThrow(() -> new ServiceError("Trait " + fatherName.get() + " does not exist"));
+                entityType.setFather(father);
+                schemasToMerge.addAll(
+                        List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
+                var mergedSchema = mergeSchemas(schemasToMerge);
+                if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+                entityType.setDerivedSchema(mergedSchema.get());
+            } else {
+                schemasToMerge.add(eitherSchema.get().getSchemaNode());
+                var mergedSchema = mergeSchemas(schemasToMerge);
+                if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
+                entityType.setDerivedSchema(mergedSchema.get());
+            }
+            return traitRepository.save(entityType);
+        } catch (DataIntegrityViolationException e) {
+            throw new ServiceError(e.getMessage());
         }
-        var eitherSchema = stringToJsonSchema(schema);
-        if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-        var entityType = new Trait();
-        entityType.setName(name);
-        entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
-        List<JsonNode> schemasToMerge = new java.util.ArrayList<>();
-        if (fatherName.isPresent()) {
-            var father = traitRepository
-                    .findByName(fatherName.get())
-                    .orElseThrow(() -> new ServiceError("Trait " + fatherName.get() + " does not exist"));
-            entityType.setFather(father);
-            schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
-            var mergedSchema = mergeSchemas(schemasToMerge);
-            if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-            entityType.setDerivedSchema(mergedSchema.get());
-        } else {
-            schemasToMerge.add(eitherSchema.get().getSchemaNode());
-            var mergedSchema = mergeSchemas(schemasToMerge);
-            if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
-            entityType.setDerivedSchema(mergedSchema.get());
-        }
-        return traitRepository.save(entityType);
     }
 
     @Transactional(
@@ -88,10 +91,15 @@ public class TraitService implements CommonTypeService<Trait, String> {
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
     public void delete(String name) throws ServiceError {
-        var entityType =
-                traitRepository.findByName(name).orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
-        traitRepository.delete(entityType);
-        entityManagerFactory.getCache().evict(Trait.class, entityType.getId());
+        try {
+            var entityType = traitRepository
+                    .findByName(name)
+                    .orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
+            traitRepository.delete(entityType);
+            entityManagerFactory.getCache().evict(Trait.class, entityType.getId());
+        } catch (DataIntegrityViolationException e) {
+            throw new ServiceError(e.getMessage());
+        }
     }
 
     @Transactional(
@@ -104,18 +112,23 @@ public class TraitService implements CommonTypeService<Trait, String> {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
-        var rel1 = new TraitRelationship();
-        var trait1 = traitRepository
-                .findByName(traitName1)
-                .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
-        var trait2 = traitRepository
-                .findByName(traitName2)
-                .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
-        rel1.setSource(trait1);
-        rel1.setTarget(trait2);
-        rel1.setRelationType(relType);
-        traitRelationshipRepository.save(rel1);
+    public void link(String traitName1, RelationType relType, String traitName2)
+            throws ServiceError { // TODO: check for cycles?
+        try {
+            var rel1 = new TraitRelationship();
+            var trait1 = traitRepository
+                    .findByName(traitName1)
+                    .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+            var trait2 = traitRepository
+                    .findByName(traitName2)
+                    .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
+            rel1.setSource(trait1);
+            rel1.setTarget(trait2);
+            rel1.setRelationType(relType);
+            traitRelationshipRepository.save(rel1);
+        } catch (DataIntegrityViolationException e) {
+            throw new ServiceError(e.getMessage());
+        }
     }
 
     @Transactional(

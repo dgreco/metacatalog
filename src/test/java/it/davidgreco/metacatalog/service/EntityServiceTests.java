@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
@@ -52,7 +51,7 @@ class EntityServiceTests extends CommonServiceTests {
 
         Assertions.assertEquals(1, entityRepository.countByEntityType(testType));
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("TestType"));
+        Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("TestType"));
 
         var updatedValues =
                 """

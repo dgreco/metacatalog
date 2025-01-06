@@ -9,7 +9,6 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class TraitServiceTests extends CommonServiceTests {
@@ -26,8 +25,7 @@ class TraitServiceTests extends CommonServiceTests {
 
         traitService.link("trait1", DEPENDS_ON, "trait3");
 
-        Assertions.assertThrows(
-                DataIntegrityViolationException.class, () -> traitService.link("trait1", DEPENDS_ON, "trait3"));
+        Assertions.assertThrows(ServiceError.class, () -> traitService.link("trait1", DEPENDS_ON, "trait3"));
 
         var list = traitService.linked("trait1", DEPENDS_ON);
 
@@ -36,7 +34,7 @@ class TraitServiceTests extends CommonServiceTests {
         Assertions.assertEquals(
                 Set.of("trait2", "trait3"), list.stream().map(Trait::getName).collect(Collectors.toSet()));
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> traitService.delete("trait1"));
+        Assertions.assertThrows(ServiceError.class, () -> traitService.delete("trait1"));
 
         traitService.unlink("trait1", DEPENDS_ON, "trait2");
         traitService.unlink("trait1", DEPENDS_ON, "trait3");

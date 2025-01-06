@@ -12,7 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
@@ -134,7 +133,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
         JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
                 .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
+        Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("MiddleType"));
 
         entityTypeService.delete("LeafType");
 

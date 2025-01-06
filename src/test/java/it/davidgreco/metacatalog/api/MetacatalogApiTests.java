@@ -5,10 +5,7 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.Application;
-import it.davidgreco.metacatalog.openapi.client.LinkTraitRequest;
-import it.davidgreco.metacatalog.openapi.client.MetaCatalogManagerApi;
-import it.davidgreco.metacatalog.openapi.client.Trait;
-import it.davidgreco.metacatalog.openapi.client.ValidationError;
+import it.davidgreco.metacatalog.openapi.client.*;
 import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -49,7 +46,7 @@ public class MetacatalogApiTests {
     }
 
     @AfterAll
-    static void afterAll() throws InterruptedException {
+    static void afterAll() {
         postgres.stop();
     }
 
@@ -105,5 +102,33 @@ public class MetacatalogApiTests {
         var ex = Assertions.assertThrows(
                 HttpClientErrorException.class, () -> api.existsLinkTrait("TestTrait1", "DEPENDS_ON", "TestTrait2"));
         Assertions.assertEquals(404, ex.getStatusCode().value());
+    }
+
+    @Test
+    void testCreateReadExistsDeleteType() {
+        var entityType = new EntityType();
+        entityType.setName("TestType");
+        entityType.setSchema("""
+                { "type": "object", "properties": { } }""");
+        api.createEntityType(entityType);
+
+        var ex = Assertions.assertThrows(Exception.class, () -> api.createEntityType(entityType));
+
+        var retrievedType = api.getEntityType("TestType");
+        Assertions.assertEquals("TestType", retrievedType.getName());
+
+        api.existsEntityType("TestType");
+
+        api.deleteEntityType("TestType");
+
+        var ex1 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntityType("TestType"));
+
+        Assertions.assertEquals(
+                new ValidationError().errors(List.of("EntityType TestType not found")),
+                ex1.getResponseBodyAs(ValidationError.class));
+
+        var ex2 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.existsEntityType("TestType"));
+
+        Assertions.assertEquals(404, ex2.getStatusCode().value());
     }
 }
