@@ -284,7 +284,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
-  /metacatalog/v1/type:
+  /metacatalog/v1/entity-type:
     post:
       tags:
         - Meta Catalog Manager
@@ -312,7 +312,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
-  /metacatalog/v1/type/{name}:
+  /metacatalog/v1/entity-type/{name}:
     get:
       tags:
         - Meta Catalog Manager
@@ -400,6 +400,122 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create an entity
+      operationId: createEntity
+      requestBody:
+        description: An Entity spec
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entity'
+        required: true
+      responses:
+        204:
+          description: Entity Created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/{id}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get an entity by id
+      operationId: getEntity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Entity Id
+      responses:
+        200:
+          description: If successful, return an Entity object
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/Entity'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete an entity by id
+      operationId: deleteEntity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Entity Id
+      responses:
+        204:
+          description: Type deleted
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    head:
+      tags:
+        - Meta Catalog Manager
+      summary: Check if an entity exists by id
+      operationId: existsEntity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Entity id
+      responses:
+        200:
+          description: Entity exists
+        404:
+          description: Entity does not exist
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
@@ -429,6 +545,19 @@ components:
             type: string
         inheritsFrom:
           type: string
+    Entity:
+        required:
+            - id
+            - entityType
+            - values
+        type: object
+        properties:
+            id:
+              type: string
+            entityType:
+              type: string
+            values:
+              type: string
     ValidationError:
       required:
         - errors

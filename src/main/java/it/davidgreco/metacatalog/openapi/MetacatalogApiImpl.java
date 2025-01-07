@@ -25,6 +25,9 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
     private EntityTypeService entityTypeService;
 
     @Autowired
+    private EntityService entityService;
+
+    @Autowired
     private MappingService mappingService;
 
     /**
@@ -208,7 +211,7 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
     }
 
     @Override
-    public ResponseEntity deleteEntityType(String name) throws Exception {
+    public ResponseEntity deleteEntityType(String name) {
         try {
             entityTypeService.delete(name);
             return ResponseEntity.status(204).build();
@@ -243,6 +246,58 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
             dtoType.setInheritsFrom(
                     Optional.ofNullable(type.getFather()).map(it.davidgreco.metacatalog.entity.EntityType::getName));
             return ResponseEntity.status(200).body(dtoType);
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity createEntity(Entity entity) {
+        try {
+            entityService.create(entity.getEntityType(), entity.getValues());
+            return ResponseEntity.status(204).build();
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity deleteEntity(String id) {
+        try {
+            entityService.delete(id);
+            return ResponseEntity.status(204).build();
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity existsEntity(String id) {
+        try {
+            if (entityService.exists(id)) return ResponseEntity.status(204).build();
+            else return ResponseEntity.status(404).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
+    }
+
+    @Override
+    public ResponseEntity getEntity(String id) throws Exception {
+        try {
+            var entity = entityService.read(id);
+            Entity dtoEntity = new Entity();
+            dtoEntity.setId(entity.getId());
+            dtoEntity.setEntityType(entity.getEntityType().getName());
+            dtoEntity.setValues(entity.getValues().toPrettyString());
+            return ResponseEntity.status(200).body(dtoEntity);
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
