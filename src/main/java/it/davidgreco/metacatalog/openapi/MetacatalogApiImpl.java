@@ -256,8 +256,8 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
     @Override
     public ResponseEntity createEntity(Entity entity) {
         try {
-            entityService.create(entity.getEntityType(), entity.getValues());
-            return ResponseEntity.status(204).build();
+            var ent = entityService.create(entity.getEntityType(), entity.getValues());
+            return ResponseEntity.status(200).body(ent.getId());
         } catch (SchemaValidationError e) {
             return ResponseEntity.status(400).body(new ValidationError(e.errors));
         } catch (ServiceError e) {
@@ -290,11 +290,11 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
     }
 
     @Override
-    public ResponseEntity getEntity(String id) throws Exception {
+    public ResponseEntity getEntity(String id) {
         try {
             var entity = entityService.read(id);
             Entity dtoEntity = new Entity();
-            dtoEntity.setId(entity.getId());
+            dtoEntity.setId(Optional.of(entity.getId()));
             dtoEntity.setEntityType(entity.getEntityType().getName());
             dtoEntity.setValues(entity.getValues().toPrettyString());
             return ResponseEntity.status(200).body(dtoEntity);

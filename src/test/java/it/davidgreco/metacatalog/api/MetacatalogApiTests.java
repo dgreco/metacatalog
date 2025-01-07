@@ -131,4 +131,43 @@ public class MetacatalogApiTests {
 
         Assertions.assertEquals(404, ex2.getStatusCode().value());
     }
+
+    @Test
+    void testCreateReadExistsDeleteEntity() {
+        var entityType = new EntityType();
+        entityType.setName("TestType");
+        entityType.setSchema(
+                """
+                {
+                  "type": "object",
+                  "properties": {
+                    "a": { "type": "string" }
+                  }
+                }""");
+        api.createEntityType(entityType);
+
+        var entity = new Entity();
+        entity.setEntityType("TestType");
+        entity.setValues("""
+                {
+                   "a": "b"
+                }
+                """);
+
+        var id = api.createEntity(entity);
+
+        var retrievedEntity = api.getEntity(id);
+
+        Assertions.assertEquals("TestType", retrievedEntity.getEntityType());
+
+        api.existsEntity(id);
+
+        api.deleteEntity(id);
+
+        var ex1 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntity(id));
+        Assertions.assertTrue(ex1.getResponseBodyAs(ValidationError.class)
+                .getErrors()
+                .getFirst()
+                .contains("not found"));
+    }
 }

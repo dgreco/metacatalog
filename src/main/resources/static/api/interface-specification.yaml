@@ -414,8 +414,12 @@ paths:
               $ref: '#/components/schemas/Entity'
         required: true
       responses:
-        204:
-          description: Entity Created
+        200:
+          description: If successful, return an entity id
+          content:
+             application/json:
+                schema:
+                  type: string
         400:
           description: Invalid input; details of the error are provided
           content:
@@ -547,7 +551,6 @@ components:
           type: string
     Entity:
         required:
-            - id
             - entityType
             - values
         type: object
