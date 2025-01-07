@@ -168,11 +168,19 @@ class EntityServiceTests extends CommonServiceTests {
                   "b": 2
                 }
                 """);
-        var entities = entityService.list(
+
+        var entities1 = entityService.list(
+                """
+                           $ ? (@.a == "a" && @.b == 1)
+                         """);
+        Assertions.assertEquals(1, entities1.size());
+        Assertions.assertEquals(e1.getId(), entities1.getFirst().getId());
+
+        var entities2 = entityService.list(
                 """
                            $ ? (@.a == "b" && @.b > 1)
                          """);
-
-        Assertions.assertEquals(e2.getId(), entities.getFirst().getId());
+        Assertions.assertEquals(1, entities2.size());
+        Assertions.assertEquals(e2.getId(), entities2.getFirst().getId());
     }
 }
