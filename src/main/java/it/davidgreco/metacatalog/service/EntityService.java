@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
+import static it.davidgreco.metacatalog.common.JsonUtils.*;
 import static it.davidgreco.metacatalog.service.CommonTypeService.commonTraitService;
 import static it.davidgreco.metacatalog.service.CommonTypeService.commonTypeService;
 
@@ -113,6 +112,19 @@ public class EntityService implements CommonService<Entity, String> {
     @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String entityId) {
         return entityRepository.existsById(entityId);
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public List<Entity> list(String queryPath) throws ServiceError {
+        try {
+            var qp = queryPath.trim();
+            if (qp.isEmpty()) return entityRepository.findAll();
+            else return entityRepository.findByJsonPath(queryPath);
+        } catch (com.jayway.jsonpath.InvalidPathException e) {
+            throw new ServiceError(e.getMessage());
+        }
     }
 
     @Transactional(

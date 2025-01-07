@@ -56,7 +56,6 @@ class EntityServiceTests extends CommonServiceTests {
         var updatedValues =
                 """
                 {
-                  "id": 1,
                   "name": "Lampshade",
                   "price": 2
                 }
@@ -124,5 +123,56 @@ class EntityServiceTests extends CommonServiceTests {
         // No multiple link between source and target
         Assertions.assertThrows(
                 ServiceError.class, () -> entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId()));
+    }
+
+    @Test
+    public void testList() throws ServiceError {
+        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
+        var entityService = new EntityService(
+                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+
+        entityTypeService.create(
+                "TestType",
+                List.of(),
+                Optional.empty(),
+                """
+                    {
+                      "type": "object",
+                      "properties": {
+                        "a": {
+                          "type": "string"
+                        },
+                        "b": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": ["a", "b"]
+                    }
+                    """);
+
+        var e1 = entityService.create(
+                "TestType",
+                """
+                {
+                  "a": "a",
+                  "b": 1
+                }
+                """);
+
+        var e2 = entityService.create(
+                "TestType",
+                """
+                {
+                  "a": "b",
+                  "b": 2
+                }
+                """);
+        var entities = entityService.list(
+                """
+                           $ ? (@.a == "b" && @.b > 1)
+                         """);
+
+        Assertions.assertEquals(e2.getId(), entities.getFirst().getId());
     }
 }

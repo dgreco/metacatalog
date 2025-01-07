@@ -33,6 +33,7 @@
 
         <!--   Misc -->
         <vavr.version>0.10.5</vavr.version>
+        <jsqlparser.version>5.1</jsqlparser.version>
 
         <!--   OpenApi Related -->
         <swagger-annotations.version>2.2.27</swagger-annotations.version>
@@ -50,10 +51,10 @@
         <postgresql.version>42.7.4</postgresql.version>
 
         <!--   Flyway -->
-        <flyway.version>11.1.0</flyway.version>
+        <flyway.version>11.1.1</flyway.version>
 
         <!--   Logback -->
-        <logback.version>1.5.15</logback.version>
+        <logback.version>1.5.16</logback.version>
 
         <!--   Testing & Checking -->
         <testcontainers.version>1.20.4</testcontainers.version>
@@ -163,6 +164,12 @@
             <artifactId>ehcache</artifactId>
             <version>${ehcache.version}</version>
             <classifier>jakarta</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>${jsqlparser.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <!-- Ontop -->

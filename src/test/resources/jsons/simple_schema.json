@@ -3,10 +3,6 @@
     "description": "A product from the catalog",
     "type": "object",
     "properties": {
-        "id": {
-            "description": "The unique identifier for a product",
-            "type": "integer"
-        },
         "name": {
             "description": "Name of the product",
             "type": "string"
