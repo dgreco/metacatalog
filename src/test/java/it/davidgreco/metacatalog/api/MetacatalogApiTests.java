@@ -5,7 +5,9 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.Application;
+import it.davidgreco.metacatalog.common.FileHttpMessageConverter;
 import it.davidgreco.metacatalog.openapi.client.*;
+import java.io.File;
 import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -15,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 public class MetacatalogApiTests {
@@ -42,7 +45,17 @@ public class MetacatalogApiTests {
         flyway.migrate();
 
         context = SpringApplication.run(Application.class);
-        api = new MetaCatalogManagerApi();
+
+        var restTemplate = new RestTemplate();
+
+        var msgConverters = restTemplate.getMessageConverters();
+        msgConverters.add(new FileHttpMessageConverter());
+
+        restTemplate.setMessageConverters(msgConverters);
+
+        var apiClient = new ApiClient(restTemplate);
+
+        api = new MetaCatalogManagerApi(apiClient);
     }
 
     @AfterAll
@@ -169,5 +182,10 @@ public class MetacatalogApiTests {
                 .getErrors()
                 .getFirst()
                 .contains("not found"));
+    }
+
+    @Test
+    void bulkCreation() {
+        api.bulkCreation(new File("src/test/resources/bulk/bulk1.yaml"));
     }
 }

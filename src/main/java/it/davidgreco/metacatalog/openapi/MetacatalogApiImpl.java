@@ -1,5 +1,11 @@
 package it.davidgreco.metacatalog.openapi;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
+import static it.davidgreco.metacatalog.common.JsonUtils.yamlFactory;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
@@ -8,15 +14,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.NativeWebRequest;
 
 /**
  * Microservice implementation class.
  */
 @Service
-public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
+public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
     @Autowired
     private TraitService traitService;
@@ -74,6 +82,13 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
             dtoTrait.setSchema(Optional.of(trait.getSchema().toPrettyString()));
             dtoTrait.setInheritsFrom(
                     Optional.ofNullable(trait.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
+
+            var schema = trait.getSchema();
+            ObjectNode dtoJson = (ObjectNode) jsonFactory.readTree(jsonFactory.writeValueAsString(dtoTrait));
+            dtoJson.set("schema", schema);
+            var dtoYaml = yamlFactory.writeValueAsString(dtoJson);
+            System.out.println(dtoYaml);
+
             return ResponseEntity.status(200).body(dtoTrait);
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
@@ -303,5 +318,47 @@ public final class MetacatalogApiImpl implements MetacatalogApiDelegate {
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
+    }
+
+    @Override
+    @Transactional
+    public ResponseEntity<Void> bulkCreation(Resource body) throws Exception {
+        var is = body.getInputStream();
+
+        var yamlParser = yamlFactory.createParser(is);
+
+        List<ObjectNode> docs = yamlFactory
+                .readValues(yamlParser, new TypeReference<ObjectNode>() {})
+                .readAll();
+
+        docs.stream().filter(doc -> doc.has("Traits")).findFirst().ifPresent(jsonTraits -> {
+            var jsonTraitArray = (ArrayNode) jsonTraits.get("Traits");
+            jsonTraitArray.forEach(jsonTrait -> {
+                try {
+                    traitService.create(
+                            jsonTrait.get("name").asText(),
+                            jsonTrait.has("schema")
+                                    ? jsonTrait.get("schema").toPrettyString()
+                                    : """
+                                    {
+                                       "type": "object",
+                                       "properties": {
+                                       }
+                                    }
+                                    """,
+                            jsonTrait.has("inheritsFrom")
+                                    ? Optional.of(jsonTrait.get("inheritsFrom").asText())
+                                    : Optional.empty());
+                } catch (ServiceError e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        });
+
+        System.out.println(traitService.read("Trait1"));
+        System.out.println(traitService.read("Trait2"));
+        System.out.println(traitService.read("Trait3"));
+
+        return ResponseEntity.status(204).build();
     }
 }

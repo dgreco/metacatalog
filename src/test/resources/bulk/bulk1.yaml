@@ -1,0 +1,19 @@
+Traits:
+  - name: Trait1
+    schema:
+      type: object
+      properties:
+        field1:
+          type: string
+        field2:
+          type: integer
+  - name: Trait2
+    inheritsFrom: Trait1
+  - name: Trait3
+    inheritsFrom: Trait2
+
+---
+Relationships:
+
+---
+EntityTypes:

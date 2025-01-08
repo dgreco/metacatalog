@@ -10,6 +10,35 @@ servers:
 tags:
   - name: Meta Catalog Manager
 paths:
+  /metacatalog/v1/bulk-creation:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Bulk creation of traits, entity types and entities
+      operationId: bulkCreation
+      requestBody:
+        description: A YAML file containing one or more YAML documents
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        204:
+          description: Bulk creation successful
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/trait:
     post:
       tags:

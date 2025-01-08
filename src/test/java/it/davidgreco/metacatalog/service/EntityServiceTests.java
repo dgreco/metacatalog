@@ -127,7 +127,6 @@ class EntityServiceTests extends CommonServiceTests {
 
     @Test
     public void testList() throws ServiceError {
-        final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository, emf);
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
         var entityService = new EntityService(
                 entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
