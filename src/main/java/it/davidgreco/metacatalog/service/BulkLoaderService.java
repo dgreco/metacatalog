@@ -42,8 +42,9 @@ public class BulkLoaderService {
                     .readValues(yamlParser, new TypeReference<ObjectNode>() {})
                     .readAll();
 
+            // Traits creation
             docs.stream().filter(doc -> doc.has("Traits")).findFirst().ifPresent(jsonTraits -> {
-                var jsonTraitArray = (ArrayNode) jsonTraits.get("Traits");
+                if (!(jsonTraits.get("Traits") instanceof ArrayNode jsonTraitArray)) return;
                 jsonTraitArray.forEach(jsonTrait -> {
                     try {
                         traitService.create(
@@ -60,6 +61,32 @@ public class BulkLoaderService {
                                 jsonTrait.has("inheritsFrom")
                                         ? Optional.of(
                                                 jsonTrait.get("inheritsFrom").asText())
+                                        : Optional.empty());
+                    } catch (ServiceError e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            });
+
+            // EntityTypes creation
+            docs.stream().filter(doc -> doc.has("EntityTypes")).findFirst().ifPresent(jsonTypes -> {
+                if (!(jsonTypes.get("EntityTypes") instanceof ArrayNode jsonTypesArray)) return;
+                jsonTypesArray.forEach(jsonType -> {
+                    try {
+                        traitService.create(
+                                jsonType.get("name").asText(),
+                                jsonType.has("schema")
+                                        ? jsonType.get("schema").toPrettyString()
+                                        : """
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                          }
+                                        }
+                                        """,
+                                jsonType.has("inheritsFrom")
+                                        ? Optional.of(
+                                                jsonType.get("inheritsFrom").asText())
                                         : Optional.empty());
                     } catch (ServiceError e) {
                         throw new RuntimeException(e);

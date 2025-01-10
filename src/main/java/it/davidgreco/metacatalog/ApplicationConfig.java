@@ -1,10 +1,7 @@
 package it.davidgreco.metacatalog;
 
 import it.davidgreco.metacatalog.repository.*;
-import it.davidgreco.metacatalog.service.EntityService;
-import it.davidgreco.metacatalog.service.EntityTypeService;
-import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.TraitService;
+import it.davidgreco.metacatalog.service.*;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -82,5 +79,14 @@ public class ApplicationConfig {
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
                 transactionManager);
+    }
+
+    @Bean
+    public BulkLoaderService bulkLoaderService(
+            TraitService traitService,
+            EntityTypeService entityTypeService,
+            EntityService entityService,
+            PlatformTransactionManager transactionManager) {
+        return new BulkLoaderService(traitService, entityTypeService, entityService, transactionManager);
     }
 }
