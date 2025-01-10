@@ -4,22 +4,17 @@ rdfs:		http://www.w3.org/2000/01/rdf-schema#
 owl:		http://www.w3.org/2002/07/owl#
 xsd:		http://www.w3.org/2001/XMLSchema#
 obda:		https://w3id.org/obda/vocabulary#
+mt:         http://metacatalog/
 
 [MappingDeclaration] @collection [[
-mappingId	MAPPING-ID1
-target		<http://witboost/address/id={id}> a <http://witboost/address> ; <http://witboost/address#id> {id}^^xsd:integer ; <http://witboost/address#address_line1> {address_line1}^^xsd:string ; <http://witboost/address#address_line2> {address_line2}^^xsd:string ; <http://witboost/address#city> {city}^^xsd:string ; <http://witboost/address#state> {state}^^xsd:string ; <http://witboost/address#country> {country}^^xsd:string ; <http://witboost/address#zipcode> {zipcode}^^xsd:string ; <http://witboost/address#customer_id> {customer_id}^^xsd:integer . 
-source		SELECT * FROM "address"
 
-mappingId	MAPPING-ID2
-target		<http://witboost/address/id={address_id}> <http://witboost/address#isAddressOf> <http://witboost/customer/id={customer_id}> .
-source		SELECT "address"."id" AS "address_id", "customer"."id" AS "customer_id" FROM "address", "customer" WHERE "address"."customer_id" = "customer"."id"
+mappingId	MAPPING-ID-TRAIT
+target		<http://metacatalog/trait/id={id}> a mt:trait ; <http://metacatalog/trait#id> {id}^^xsd:string ; <http://metacatalog/name> {name}^^xsd:string ; <http://metacatalog/trait#base_schema> {base_schema}^^xsd:string ; <http://metacatalog/trait#derived_schema> {derived_schema}^^xsd:string .
+source		SELECT * FROM "trait"
 
-mappingId	MAPPING-ID3
-target		<http://witboost/customer/id={customer_id}> <http://witboost/hasAddress> <http://witboost/address/id={address_id}> .
-source		SELECT "customer"."id" AS "customer_id", "address"."id" AS "address_id" FROM "customer", "address" WHERE "customer"."id" = "address"."customer_id"
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-DEPENDS_ON
+target		mt:trait/id={source_trait_id} mt:dependsOn <http://metacatalog/trait/id={target_trait_id}> .
+source		SELECT "trait_relationship"."source_id" AS "source_trait_id", "trait_relationship"."target_id" AS "target_trait_id" FROM "trait_relationship" WHERE "trait_relationship"."relation_type" = 'DEPENDS_ON'
 
-mappingId	MAPPING-ID4
-target		<http://witboost/customer/id={id}> a <http://witboost/customer> ; <http://witboost/customer#id> {id}^^xsd:integer ; <http://witboost/customer#first_name> {first_name}^^xsd:string ; <http://witboost/customer#middle_name> {middle_name}^^xsd:string ; <http://witboost/customer#family_name> {family_name}^^xsd:string ; <http://witboost/customer#age> {age}^^xsd:integer . 
-source		SELECT * FROM "customer"
 ]]
 

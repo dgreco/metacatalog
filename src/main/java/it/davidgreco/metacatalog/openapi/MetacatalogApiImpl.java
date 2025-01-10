@@ -10,14 +10,21 @@ import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
 import it.davidgreco.metacatalog.service.*;
+
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.NativeWebRequest;
 
 /**
@@ -37,6 +44,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
     @Autowired
     private MappingService mappingService;
+
+    @Autowired
+    private BulkLoaderService bulkLoaderService;
 
     /**
      * Native request.
@@ -320,45 +330,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         }
     }
 
-    @Override
-    @Transactional
-    public ResponseEntity<Void> bulkCreation(Resource body) throws Exception {
-        var is = body.getInputStream();
-
-        var yamlParser = yamlFactory.createParser(is);
-
-        List<ObjectNode> docs = yamlFactory
-                .readValues(yamlParser, new TypeReference<ObjectNode>() {})
-                .readAll();
-
-        docs.stream().filter(doc -> doc.has("Traits")).findFirst().ifPresent(jsonTraits -> {
-            var jsonTraitArray = (ArrayNode) jsonTraits.get("Traits");
-            jsonTraitArray.forEach(jsonTrait -> {
-                try {
-                    traitService.create(
-                            jsonTrait.get("name").asText(),
-                            jsonTrait.has("schema")
-                                    ? jsonTrait.get("schema").toPrettyString()
-                                    : """
-                                    {
-                                       "type": "object",
-                                       "properties": {
-                                       }
-                                    }
-                                    """,
-                            jsonTrait.has("inheritsFrom")
-                                    ? Optional.of(jsonTrait.get("inheritsFrom").asText())
-                                    : Optional.empty());
-                } catch (ServiceError e) {
-                    throw new RuntimeException(e);
-                }
-            });
-        });
-
-        System.out.println(traitService.read("Trait1"));
-        System.out.println(traitService.read("Trait2"));
-        System.out.println(traitService.read("Trait3"));
-
-        return ResponseEntity.status(204).build();
+    public ResponseEntity bulkCreation(Resource body) throws Exception {
+        try {
+            bulkLoaderService.bulkCreation(body.getInputStream());
+            return ResponseEntity.status(204).build();
+        } catch (ServiceError e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getCause().getMessage())));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+        }
     }
+
 }
