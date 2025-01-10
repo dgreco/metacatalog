@@ -3,28 +3,18 @@ package it.davidgreco.metacatalog.openapi;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.yamlFactory;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
 import it.davidgreco.metacatalog.service.*;
-
-import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
-import lombok.Getter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.NativeWebRequest;
 
 /**
@@ -335,10 +325,10 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             bulkLoaderService.bulkCreation(body.getInputStream());
             return ResponseEntity.status(204).build();
         } catch (ServiceError e) {
-            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getCause().getMessage())));
+            return ResponseEntity.status(400)
+                    .body(new ValidationError(List.of(e.getCause().getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
     }
-
 }
