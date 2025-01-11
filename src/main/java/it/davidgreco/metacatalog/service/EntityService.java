@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.*;
+import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
+import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.service.CommonTypeService.commonTraitService;
 import static it.davidgreco.metacatalog.service.CommonTypeService.commonTypeService;
 
