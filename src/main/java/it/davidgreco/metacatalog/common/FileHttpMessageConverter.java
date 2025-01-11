@@ -32,7 +32,7 @@ public class FileHttpMessageConverter extends AbstractGenericHttpMessageConverte
 
     @Override
     protected File readInternal(Class<? extends File> clazz, HttpInputMessage inputMessage)
-            throws IOException, HttpMessageNotReadableException {
+            throws HttpMessageNotReadableException {
         throw new UnsupportedOperationException();
     }
 
