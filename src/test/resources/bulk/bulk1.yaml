@@ -11,9 +11,28 @@ Traits:
     inheritsFrom: Trait1
   - name: Trait3
     inheritsFrom: Trait2
+  - name: Trait4
+  - name: Trait5
 
 ---
 Relationships:
+  - sourceTrait: Trait1
+    relationshipType: DEPENDS_ON
+    targetTrait: Trait2
+  - sourceTrait: Trait4
+    relationshipType: DEPENDS_ON
+    targetTrait: Trait5
 
 ---
 EntityTypes:
+  - name: EntityType1
+    schema:
+      type: object
+      properties:
+        field2:
+          type: string
+        field3:
+          type: integer
+    traits:
+      - Trait1
+      - Trait2

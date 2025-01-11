@@ -83,10 +83,7 @@ public class ApplicationConfig {
 
     @Bean
     public BulkLoaderService bulkLoaderService(
-            TraitService traitService,
-            EntityTypeService entityTypeService,
-            EntityService entityService,
-            PlatformTransactionManager transactionManager) {
-        return new BulkLoaderService(traitService, entityTypeService, entityService, transactionManager);
+            TraitService traitService, EntityTypeService entityTypeService, EntityService entityService) {
+        return new BulkLoaderService(traitService, entityTypeService, entityService);
     }
 }

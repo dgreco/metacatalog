@@ -1,9 +1,5 @@
 package it.davidgreco.metacatalog.openapi;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.yamlFactory;
-
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
@@ -82,13 +78,6 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             dtoTrait.setSchema(Optional.of(trait.getSchema().toPrettyString()));
             dtoTrait.setInheritsFrom(
                     Optional.ofNullable(trait.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
-
-            var schema = trait.getSchema();
-            ObjectNode dtoJson = (ObjectNode) jsonFactory.readTree(jsonFactory.writeValueAsString(dtoTrait));
-            dtoJson.set("schema", schema);
-            var dtoYaml = yamlFactory.writeValueAsString(dtoJson);
-            System.out.println(dtoYaml);
-
             return ResponseEntity.status(200).body(dtoTrait);
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
@@ -325,8 +314,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             bulkLoaderService.bulkCreation(body.getInputStream());
             return ResponseEntity.status(204).build();
         } catch (ServiceError e) {
-            return ResponseEntity.status(400)
-                    .body(new ValidationError(List.of(e.getCause().getMessage())));
+            return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
         }
