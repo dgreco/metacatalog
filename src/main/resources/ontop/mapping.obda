@@ -9,12 +9,21 @@ mt:         http://metacatalog/
 [MappingDeclaration] @collection [[
 
 mappingId	MAPPING-ID-TRAIT
-target		<http://metacatalog/trait/id={id}> a mt:trait ; <http://metacatalog/trait#id> {id}^^xsd:string ; <http://metacatalog/name> {name}^^xsd:string ; <http://metacatalog/trait#base_schema> {base_schema}^^xsd:string ; <http://metacatalog/trait#derived_schema> {derived_schema}^^xsd:string .
-source		SELECT * FROM "trait"
+target		mt:Trait/id={id} a mt:Trait ; mt:id {id}^^xsd:string ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string .
+source		SELECT * FROM "trait" as Trait
+
+mappingId	MAPPING-ID-TYPES
+target		mt:EntityType/id={id} a mt:EntityType ; mt:id {id}^^xsd:string ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string .
+source		SELECT * FROM "entity_type" as EntityType
 
 mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-DEPENDS_ON
-target		mt:trait/id={source_trait_id} mt:dependsOn <http://metacatalog/trait/id={target_trait_id}> .
+target		mt:Trait/id={source_trait_id} mt:dependsOn mt:Trait/id={target_trait_id} .
 source		SELECT "trait_relationship"."source_id" AS "source_trait_id", "trait_relationship"."target_id" AS "target_trait_id" FROM "trait_relationship" WHERE "trait_relationship"."relation_type" = 'DEPENDS_ON'
+
+mappingId	MAPPING-ID-TYPE-RELATIONSHIP-HAS-TRAIT
+target		mt:EntityType/id={entity_type_id} mt:hasTrait mt:Trait/id={trait_id} .
+source		SELECT "type_traits"."entity_type_id" AS "entity_type_id", "type_traits"."trait_id" AS "trait_id" FROM "type_traits"
+
 
 ]]
 
