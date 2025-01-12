@@ -24,6 +24,13 @@ mappingId	MAPPING-ID-TYPE-RELATIONSHIP-HAS-TRAIT
 target		mt:EntityType/id={entity_type_id} mt:hasTrait mt:Trait/id={trait_id} .
 source		SELECT "type_traits"."entity_type_id" AS "entity_type_id", "type_traits"."trait_id" AS "trait_id" FROM "type_traits"
 
+mappingId	MAPPING-ID-TYPE-INHERITS-FROM
+target		mt:EntityType/id={entity_type_FK_id} mt:inheritsFrom mt:EntityType/id={entity_type_FKR_id} .
+source		SELECT "entity_type_FK"."id" AS "entity_type_FK_id", "entity_type_FKR"."id" AS "entity_type_FKR_id" FROM "entity_type" AS "entity_type_FK", "entity_type" AS "entity_type_FKR" WHERE "entity_type_FK"."father_id" = "entity_type_FKR"."id"
+
+mappingId	MAPPING-ID-TRAIT-INHERITS-FROM
+target		mt:Trait/id={trait_FK_id} mt:inheritsFrom mt:Trait/id={trait_FKR_id} .
+source		SELECT "trait_FK"."id" AS "trait_FK_id", "trait_FKR"."id" AS "trait_FKR_id" FROM "trait" AS "trait_FK", "trait" AS "trait_FKR" WHERE "trait_FK"."father_id" = "trait_FKR"."id"
 
 ]]
 
