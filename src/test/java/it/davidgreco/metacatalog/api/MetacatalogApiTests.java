@@ -9,6 +9,7 @@ import it.davidgreco.metacatalog.common.FileHttpMessageConverter;
 import it.davidgreco.metacatalog.openapi.client.*;
 import java.io.File;
 import java.util.List;
+import java.util.Objects;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -178,7 +179,7 @@ public class MetacatalogApiTests {
         api.deleteEntity(id);
 
         var ex1 = Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntity(id));
-        Assertions.assertTrue(ex1.getResponseBodyAs(ValidationError.class)
+        Assertions.assertTrue(Objects.requireNonNull(ex1.getResponseBodyAs(ValidationError.class))
                 .getErrors()
                 .getFirst()
                 .contains("not found"));

@@ -1,5 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
+import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
@@ -7,6 +10,10 @@ import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import jakarta.persistence.EntityManagerFactory;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -14,14 +21,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-
-import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 @Service
 @Getter

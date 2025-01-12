@@ -20,6 +20,10 @@ mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-DEPENDS_ON
 target		mt:Trait/id={source_trait_id} mt:dependsOn mt:Trait/id={target_trait_id} .
 source		SELECT "trait_relationship"."source_id" AS "source_trait_id", "trait_relationship"."target_id" AS "target_trait_id" FROM "trait_relationship" WHERE "trait_relationship"."relation_type" = 'DEPENDS_ON'
 
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-HAS_PART
+target		mt:Trait/id={source_trait_id} mt:hasPart mt:Trait/id={target_trait_id} .
+source		SELECT "trait_relationship"."source_id" AS "source_trait_id", "trait_relationship"."target_id" AS "target_trait_id" FROM "trait_relationship" WHERE "trait_relationship"."relation_type" = 'HAS_PART'
+
 mappingId	MAPPING-ID-TYPE-RELATIONSHIP-HAS-TRAIT
 target		mt:EntityType/id={entity_type_id} mt:hasTrait mt:Trait/id={trait_id} .
 source		SELECT "type_traits"."entity_type_id" AS "entity_type_id", "type_traits"."trait_id" AS "trait_id" FROM "type_traits"
