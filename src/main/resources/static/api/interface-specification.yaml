@@ -553,9 +553,13 @@ components:
   schemas:
     Trait:
       required:
+        - id
         - name
       type: object
       properties:
+        id:
+          type: string
+          readOnly: true
         name:
           type: string
         schema:
@@ -564,10 +568,14 @@ components:
           type: string
     EntityType:
       required:
+        - id
         - name
         - schema
       type: object
       properties:
+        id:
+          type: string
+          readOnly: true
         name:
           type: string
         schema:
@@ -579,17 +587,19 @@ components:
         inheritsFrom:
           type: string
     Entity:
-        required:
-            - entityType
-            - values
-        type: object
-        properties:
-            id:
-              type: string
-            entityType:
-              type: string
-            values:
-              type: string
+      required:
+        - id
+        - entityType
+        - values
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        entityType:
+          type: string
+        values:
+          type: string
     ValidationError:
       required:
         - errors

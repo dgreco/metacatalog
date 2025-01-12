@@ -298,7 +298,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             var entity = entityService.read(id);
             Entity dtoEntity = new Entity();
-            dtoEntity.setId(Optional.of(entity.getId()));
+            dtoEntity.setId(entity.getId());
             dtoEntity.setEntityType(entity.getEntityType().getName());
             dtoEntity.setValues(entity.getValues().toPrettyString());
             return ResponseEntity.status(200).body(dtoEntity);
