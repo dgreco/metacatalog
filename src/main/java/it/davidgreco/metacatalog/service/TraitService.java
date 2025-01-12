@@ -1,8 +1,5 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
@@ -10,8 +7,6 @@ import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import jakarta.persistence.EntityManagerFactory;
-import java.util.List;
-import java.util.Optional;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -19,6 +14,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
+import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 @Service
 @Getter
@@ -112,9 +115,11 @@ public class TraitService implements CommonTypeService<Trait, String> {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public void link(String traitName1, RelationType relType, String traitName2)
-            throws ServiceError { // TODO: check for cycles?
+    public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
         try {
+            if (checkLoops(traitName1, new HashSet<>(), traitName2, relType)) {
+                throw new ServiceError("Loops are not allowed");
+            }
             var rel1 = new TraitRelationship();
             var trait1 = traitRepository
                     .findByName(traitName1)
@@ -168,5 +173,25 @@ public class TraitService implements CommonTypeService<Trait, String> {
                 .findByName(name)
                 .map(traitRepository::countTraitByFather)
                 .orElse(0L);
+    }
+
+    private boolean checkLoops(
+            String sourceTraitName, Set<String> traitsNamesVisited, String targetTraitName, RelationType relType)
+            throws ServiceError {
+        var sourceTrait = traitRepository
+                .findByName(sourceTraitName)
+                .orElseThrow(() -> new ServiceError("Trait " + sourceTraitName + " not found"));
+        var relationships = traitRelationshipRepository.findBySourceAndRelationType(sourceTrait, relType);
+
+        var targetTraits =
+                relationships.stream().map(TraitRelationship::getTarget).toList();
+        for (var targetTrait : targetTraits) {
+            if (traitsNamesVisited.contains(targetTraitName)) return true;
+            else {
+                traitsNamesVisited.add(targetTrait.getName());
+                return checkLoops(targetTrait.getName(), traitsNamesVisited, targetTraitName, relType);
+            }
+        }
+        return traitsNamesVisited.contains(targetTraitName);
     }
 }
