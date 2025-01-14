@@ -60,7 +60,9 @@ public class EntityService implements CommonService<Entity, String> {
             var typedEntity = new Entity();
             typedEntity.setEntityType(entityType);
             typedEntity.setValues(valuesJsonNode);
-            return entityRepository.save(typedEntity);
+            var en = entityRepository.save(typedEntity);
+            MappingService.entityEvents.add(new MappingService.EntityEvent(en.getId(), typeName, "CREATED"));
+            return en;
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
@@ -99,6 +101,8 @@ public class EntityService implements CommonService<Entity, String> {
             }
             entity.setValues(valuesJsonNode);
             entityRepository.save(entity);
+            MappingService.entityEvents.add(new MappingService.EntityEvent(
+                    entityId, entity.getEntityType().getName(), "UPDATED"));
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
@@ -116,6 +120,8 @@ public class EntityService implements CommonService<Entity, String> {
             throw new ServiceError("Entity with id " + entityId + " is an instance of a target entity type");
 
         entityRepository.delete(entity);
+        MappingService.entityEvents.add(
+                new MappingService.EntityEvent(entityId, entity.getEntityType().getName(), "DELETED"));
     }
 
     @Transactional(propagation = Propagation.REQUIRED)

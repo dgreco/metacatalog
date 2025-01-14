@@ -14,6 +14,7 @@ import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -33,6 +34,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
+    public record EntityEvent(String entityId, String entityTypeName, String eventType) {}
+
+    public static final ConcurrentLinkedQueue<EntityEvent> entityEvents = new ConcurrentLinkedQueue<>();
+
     public final EntityRepository entityRepository;
 
     public final EntityTypeRepository entityTypeRepository;
@@ -44,6 +49,19 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     private final EntityRelationshipRepository entityRelationshipRepository;
 
     private final PlatformTransactionManager transactionManager;
+
+    static {
+        new Thread(() -> {
+                    while (true) {
+                        var event = entityEvents.poll();
+                        if (event != null) {
+                            System.out.println("Entity " + " " + event.entityTypeName + " " + event.entityId + " "
+                                    + event.eventType);
+                        }
+                    }
+                })
+                .start();
+    }
 
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
