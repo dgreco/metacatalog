@@ -14,6 +14,8 @@
         </encoder>
     </appender>
 
+    <logger name="org.hibernate.cache" level="DEBUG"/>
+
     <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>8192</queueSize>
         <neverBlock>true</neverBlock>

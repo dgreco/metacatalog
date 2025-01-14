@@ -9,7 +9,6 @@ import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 @Getter
 @Setter
@@ -18,8 +17,6 @@ import org.hibernate.annotations.CacheConcurrencyStrategy;
 @Table(
         name = "trait",
         indexes = {@Index(name = "idx_trait_name_unq", columnList = "name", unique = true)})
-@Cacheable
-@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
 @SuppressFBWarnings
 public class Trait implements Type<Trait> {
     @Id

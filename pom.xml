@@ -21,8 +21,6 @@
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
         <spring-boot.version>3.4.0</spring-boot.version>
-        <ehcache.version>3.10.8</ehcache.version>
-        <hibernate-jcache.version>7.0.0.Beta3</hibernate-jcache.version>
 
         <!--   Hypersistence -->
         <hypersistence.version>3.9.0</hypersistence.version>
@@ -157,17 +155,6 @@
             <groupId>com.jayway.jsonpath</groupId>
             <artifactId>json-path</artifactId>
             <version>${json-path.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-jcache</artifactId>
-            <version>${hibernate-jcache.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.ehcache</groupId>
-            <artifactId>ehcache</artifactId>
-            <version>${ehcache.version}</version>
-            <classifier>jakarta</classifier>
         </dependency>
         <dependency>
             <groupId>com.github.jsqlparser</groupId>

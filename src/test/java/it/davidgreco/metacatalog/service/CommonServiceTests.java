@@ -5,14 +5,16 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.repository.*;
-import jakarta.persistence.EntityManagerFactory;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+@EnableCaching
 class CommonServiceTests {
 
     static final int POSTGRESQL_PORT = 5433;
@@ -67,5 +69,5 @@ class CommonServiceTests {
     PlatformTransactionManager transactionManager;
 
     @Autowired
-    EntityManagerFactory emf;
+    CacheManager cacheManager;
 }

@@ -4,7 +4,6 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import it.davidgreco.metacatalog.entity.EntityType;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
@@ -22,7 +21,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateDeleteExists() throws ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var baseSchema = jsonSchemaFactory
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
@@ -30,6 +29,9 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .toPrettyString();
 
         entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
+
+        Assertions.assertThrows(
+                ServiceError.class, () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
 
         Assertions.assertTrue(entityTypeService.exists("NewType"));
 
@@ -44,7 +46,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testInheritance() throws JsonProcessingException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository, emf);
+        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
 
         var inheritedSchema =
                 """
@@ -118,15 +120,16 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         var leafType1 = entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
-        var cache = emf.getCache();
+        var cache = ((org.springframework.cache.concurrent.ConcurrentMapCache) cacheManager.getCache("EntityTypes"))
+                .getNativeCache();
 
-        Assertions.assertTrue(cache.contains(EntityType.class, baseType.getId()));
+        Assertions.assertTrue(cache.keySet().contains(baseType.getName()));
 
-        Assertions.assertTrue(cache.contains(EntityType.class, middleType.getId()));
+        Assertions.assertTrue(cache.keySet().contains(middleType.getName()));
 
-        Assertions.assertTrue(cache.contains(EntityType.class, leafType.getId()));
+        Assertions.assertTrue(cache.keySet().contains(leafType.getName()));
 
-        Assertions.assertTrue(cache.contains(EntityType.class, leafType1.getId()));
+        Assertions.assertTrue(cache.keySet().contains(leafType1.getName()));
 
         Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
@@ -147,12 +150,12 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
         entityTypeService.delete("BaseType");
 
-        Assertions.assertFalse(cache.contains(EntityType.class, baseType.getId()));
+        Assertions.assertFalse(cache.keySet().contains(baseType.getName()));
 
-        Assertions.assertFalse(cache.contains(EntityType.class, middleType.getId()));
+        Assertions.assertFalse(cache.keySet().contains(middleType.getName()));
 
-        Assertions.assertFalse(cache.contains(EntityType.class, leafType.getId()));
+        Assertions.assertFalse(cache.keySet().contains(leafType.getName()));
 
-        Assertions.assertFalse(cache.contains(EntityType.class, leafType1.getId()));
+        Assertions.assertFalse(cache.keySet().contains(leafType1.getName()));
     }
 }

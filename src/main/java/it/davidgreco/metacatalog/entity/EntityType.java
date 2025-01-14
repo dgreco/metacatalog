@@ -9,7 +9,6 @@ import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
-import org.hibernate.annotations.CacheConcurrencyStrategy;
 
 @Getter
 @Setter
@@ -18,8 +17,6 @@ import org.hibernate.annotations.CacheConcurrencyStrategy;
 @Table(
         name = "entity_type",
         indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
-@Cacheable
-@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_ONLY)
 @SuppressFBWarnings
 public class EntityType implements Type<EntityType> {
     @Id

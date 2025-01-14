@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -62,7 +63,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
             return ResponseEntity.status(400).body(new ValidationError(e.errors));
-        } catch (ServiceError e) {
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -91,7 +92,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             traitService.delete(name);
             return ResponseEntity.status(204).build();
-        } catch (ServiceError e) {
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -121,7 +124,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
             return ResponseEntity.status(400).body(new ValidationError(e.errors));
-        } catch (ServiceError e) {
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -168,7 +171,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
             return ResponseEntity.status(400).body(new ValidationError(e.errors));
-        } catch (ServiceError e) {
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -207,7 +210,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
             return ResponseEntity.status(400).body(new ValidationError(e.errors));
-        } catch (ServiceError e) {
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -219,7 +222,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             entityTypeService.delete(name);
             return ResponseEntity.status(204).build();
-        } catch (ServiceError e) {
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -276,7 +281,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             entityService.delete(id);
             return ResponseEntity.status(204).build();
-        } catch (ServiceError e) {
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
@@ -313,7 +320,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         try {
             bulkLoaderService.bulkCreation(body.getInputStream());
             return ResponseEntity.status(204).build();
-        } catch (ServiceError e) {
+        } catch (SchemaValidationError e) {
+            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+        } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(new SystemError(e.getMessage()));

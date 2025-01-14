@@ -9,7 +9,6 @@ import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
-import jakarta.persistence.EntityManagerFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -17,6 +16,7 @@ import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -26,13 +26,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Getter
 @Setter
 @RequiredArgsConstructor
+@EnableCaching
 public class TraitService implements CommonTypeService<Trait, String> {
 
     private final TraitRepository traitRepository;
 
     private final TraitRelationshipRepository traitRelationshipRepository;
-
-    private final EntityManagerFactory entityManagerFactory;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -98,7 +97,6 @@ public class TraitService implements CommonTypeService<Trait, String> {
                     .findByName(name)
                     .orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
             traitRepository.delete(entityType);
-            entityManagerFactory.getCache().evict(Trait.class, entityType.getId());
         } catch (DataIntegrityViolationException e) {
             throw new ServiceError(e.getMessage());
         }

@@ -16,11 +16,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+@SpringBootTest
 public class MetacatalogApiTests {
     static final int POSTGRESQL_PORT = 5433;
 
@@ -126,7 +128,8 @@ public class MetacatalogApiTests {
                 { "type": "object", "properties": { } }""");
         api.createEntityType(entityType);
 
-        var ex = Assertions.assertThrows(Exception.class, () -> api.createEntityType(entityType));
+        var ex = Assertions.assertThrows(
+                HttpClientErrorException.BadRequest.class, () -> api.createEntityType(entityType));
 
         var retrievedType = api.getEntityType("TestType");
         Assertions.assertEquals("TestType", retrievedType.getName());
@@ -149,7 +152,7 @@ public class MetacatalogApiTests {
     @Test
     void testCreateReadExistsDeleteEntity() {
         var entityType = new EntityType();
-        entityType.setName("TestType");
+        entityType.setName("AnotherTestType");
         entityType.setSchema(
                 """
                 {
@@ -161,7 +164,7 @@ public class MetacatalogApiTests {
         api.createEntityType(entityType);
 
         var entity = new Entity();
-        entity.setEntityType("TestType");
+        entity.setEntityType("AnotherTestType");
         entity.setValues("""
                 {
                    "a": "b"
@@ -172,7 +175,7 @@ public class MetacatalogApiTests {
 
         var retrievedEntity = api.getEntity(id);
 
-        Assertions.assertEquals("TestType", retrievedEntity.getEntityType());
+        Assertions.assertEquals("AnotherTestType", retrievedEntity.getEntityType());
 
         api.existsEntity(id);
 

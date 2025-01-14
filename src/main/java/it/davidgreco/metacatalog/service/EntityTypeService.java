@@ -7,7 +7,6 @@ import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
-import jakarta.persistence.EntityManagerFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +14,7 @@ import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -24,17 +24,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Getter
 @Setter
 @RequiredArgsConstructor
+@EnableCaching
 public class EntityTypeService implements CommonTypeService<EntityType, String> {
 
     private final EntityTypeRepository entityTypeRepository;
 
     private final TraitRepository traitRepository;
 
-    private final EntityManagerFactory entityManagerFactory;
-
     @Transactional(
             propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
+            rollbackFor = {ServiceError.class, DataIntegrityViolationException.class})
     public EntityType create(String name, List<String> traits, Optional<String> fatherName, String schema)
             throws ServiceError {
         try {
@@ -106,7 +105,6 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
                     .findByName(name)
                     .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
             entityTypeRepository.delete(entityType);
-            entityManagerFactory.getCache().evict(EntityType.class, entityType.getId());
         } catch (DataIntegrityViolationException e) {
             throw new ServiceError(e.getMessage());
         }

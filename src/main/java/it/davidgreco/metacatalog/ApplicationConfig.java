@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog;
 
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
-import jakarta.persistence.EntityManagerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,23 +34,16 @@ public class ApplicationConfig {
     @Autowired
     PlatformTransactionManager transactionManager;
 
-    @Autowired
-    EntityManagerFactory entityManagerFactory;
-
     @Bean
     public TraitService traitService(
-            TraitRepository traitRepository,
-            TraitRelationshipRepository traitRelationshipRepository,
-            EntityManagerFactory entityManagerFactory) {
-        return new TraitService(traitRepository, traitRelationshipRepository, entityManagerFactory);
+            TraitRepository traitRepository, TraitRelationshipRepository traitRelationshipRepository) {
+        return new TraitService(traitRepository, traitRelationshipRepository);
     }
 
     @Bean
     public EntityTypeService entityTypeService(
-            EntityTypeRepository entityTypeRepository,
-            TraitRepository traitRepository,
-            EntityManagerFactory entityManagerFactory) {
-        return new EntityTypeService(entityTypeRepository, traitRepository, entityManagerFactory);
+            EntityTypeRepository entityTypeRepository, TraitRepository traitRepository) {
+        return new EntityTypeService(entityTypeRepository, traitRepository);
     }
 
     @Bean
