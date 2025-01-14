@@ -255,12 +255,6 @@ public class EntityService implements CommonService<Entity, String> {
         return false;
     }
 
-    boolean isSourceEntityType(EntityType entityType) {
-        return !mappingEntityTypeRelationshipRepository
-                .findMappingEntityTypeRelationshipBySource(entityType)
-                .isEmpty();
-    }
-
     boolean isTargetEntityType(EntityType entityType) {
         return !mappingEntityTypeRelationshipRepository
                 .findMappingEntityTypeRelationshipByTarget(entityType)
