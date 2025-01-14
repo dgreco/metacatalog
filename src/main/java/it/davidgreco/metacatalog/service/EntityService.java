@@ -7,14 +7,8 @@ import static it.davidgreco.metacatalog.service.CommonTypeService.commonTypeServ
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
-import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.entity.EntityRelationship;
-import it.davidgreco.metacatalog.entity.RelationType;
-import it.davidgreco.metacatalog.entity.Trait;
-import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
-import it.davidgreco.metacatalog.repository.EntityRepository;
-import it.davidgreco.metacatalog.repository.EntityTypeRepository;
-import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
+import it.davidgreco.metacatalog.entity.*;
+import it.davidgreco.metacatalog.repository.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,6 +34,8 @@ public class EntityService implements CommonService<Entity, String> {
 
     private final TraitRelationshipRepository traitRelationshipRepository;
 
+    private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -48,6 +44,10 @@ public class EntityService implements CommonService<Entity, String> {
             var entityType = entityTypeRepository
                     .findByName(typeName)
                     .orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
+
+            if (isTargetEntityType(entityType))
+                throw new ServiceError("Creating an entity for a target entity type is not allowed");
+
             var valuesJsonNode = jsonFactory.readTree(values);
             var validationMessages =
                     jsonSchemaFactory.getSchema(entityType.getSchema()).validate(valuesJsonNode);
@@ -83,6 +83,10 @@ public class EntityService implements CommonService<Entity, String> {
             var entity = entityRepository
                     .findById(entityId)
                     .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+
+            if (isTargetEntityType(entity.getEntityType()))
+                throw new ServiceError("Entity with id " + entityId + " is an instance of a target entity type");
+
             var valuesJsonNode = jsonFactory.readTree(values);
             var validationMessages = jsonSchemaFactory
                     .getSchema(entity.getEntityType().getSchema())
@@ -107,6 +111,10 @@ public class EntityService implements CommonService<Entity, String> {
         var entity = entityRepository
                 .findById(entityId)
                 .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+
+        if (isTargetEntityType(entity.getEntityType()))
+            throw new ServiceError("Entity with id " + entityId + " is an instance of a target entity type");
+
         entityRepository.delete(entity);
     }
 
@@ -239,5 +247,17 @@ public class EntityService implements CommonService<Entity, String> {
             if (allTheTraitsNamesForTheTargetType.contains(targetTrait.getName())) return true;
         }
         return false;
+    }
+
+    boolean isSourceEntityType(EntityType entityType) {
+        return !mappingEntityTypeRelationshipRepository
+                .findMappingEntityTypeRelationshipBySource(entityType)
+                .isEmpty();
+    }
+
+    boolean isTargetEntityType(EntityType entityType) {
+        return !mappingEntityTypeRelationshipRepository
+                .findMappingEntityTypeRelationshipByTarget(entityType)
+                .isEmpty();
     }
 }

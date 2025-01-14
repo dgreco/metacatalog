@@ -51,9 +51,14 @@ public class ApplicationConfig {
             EntityTypeRepository entityTypeRepository,
             EntityRepository entityRepository,
             EntityRelationshipRepository entityRelationshipRepository,
-            TraitRelationshipRepository traitRelationshipRepository) {
+            TraitRelationshipRepository traitRelationshipRepository,
+            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository) {
         return new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
     }
 
     @Bean

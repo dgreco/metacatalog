@@ -116,7 +116,11 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -254,7 +258,11 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -274,50 +282,52 @@ class MappingServiceTests extends CommonServiceTests {
                 List.of("DependingRelSourceTrait"),
                 Optional.empty(),
                 """
-                { "type": "object", "properties": { "c": { "type": "integer" } } }""");
+                    { "type": "object", "properties": { "c": { "type": "integer" } } }""");
 
         entityTypeService.create(
                 "SourceType",
                 List.of("DependingRelTargetTrait"),
                 Optional.empty(),
                 """
-                { "type": "object", "properties": { "a": { "type": "integer" } } }""");
+                    { "type": "object", "properties": { "a": { "type": "integer" } } }""");
 
         var targeType = entityTypeService.create(
                 "TargetType",
                 List.of(),
                 Optional.empty(),
                 """
-                { "type": "object", "properties": { "b": { "type": "integer" } } }""");
+                    { "type": "object", "properties": { "b": { "type": "integer" } } }""");
 
         var anotherTargetType = entityTypeService.create(
                 "AnotherTargetType",
                 List.of(),
                 Optional.empty(),
                 """
-                { "type": "object", "properties": { "d": { "type": "integer" } } }""");
+                    { "type": "object", "properties": { "d": { "type": "integer" } } }""");
 
         mappingService.create(
                 "SourceType",
                 "TargetType",
                 """
-                        {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                            {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
                 List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
 
         mappingService.create(
                 "TargetType",
                 "AnotherTargetType",
                 """
-                        {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                            {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
                 List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "MAPPED_TO{$}/DEPENDS_ON{$}")));
 
-        var anotherInstance = entityService.create("AnotherType", """
-                {"c": 1}
-                """);
+        var anotherInstance =
+                entityService.create("AnotherType", """
+                    {"c": 1}
+                    """);
 
-        var sourceInstance = entityService.create("SourceType", """
-                {"a": 1}
-                """);
+        var sourceInstance =
+                entityService.create("SourceType", """
+                    {"a": 1}
+                    """);
 
         entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
 
@@ -354,8 +364,8 @@ class MappingServiceTests extends CommonServiceTests {
 
         // Update the source
         entityService.update(sourceInstance.getId(), """
-                {"a": 2}
-                """);
+                    {"a": 2}
+                    """);
 
         mappingService.updateMappedEntities(sourceInstance.getId());
 
@@ -373,6 +383,30 @@ class MappingServiceTests extends CommonServiceTests {
                             .getValues())
                     .getValue(Integer.class, "$.d");
             Assertions.assertEquals(22, int2);
+        }
+
+        // Creating a target entity is not allowed
+        {
+            var entity = entityRepository.findByEntityType(targeType).getFirst();
+            Assertions.assertThrows(
+                    ServiceError.class,
+                    () -> entityService.create("TargetType", """
+                        {"b: "40"}"""));
+        }
+
+        // Updating a target entity is not allowed
+        {
+            var entity = entityRepository.findByEntityType(targeType).getFirst();
+            Assertions.assertThrows(
+                    ServiceError.class,
+                    () -> entityService.update(entity.getId(), """
+                        {"b: "10"}"""));
+        }
+
+        // Deleting a target entity is not allowed
+        {
+            var entity = entityRepository.findByEntityType(targeType).getFirst();
+            Assertions.assertThrows(ServiceError.class, () -> entityService.delete(entity.getId()));
         }
 
         // Check that checking the entity is only a source works

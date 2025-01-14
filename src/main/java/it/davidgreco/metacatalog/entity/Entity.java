@@ -32,4 +32,19 @@ public class Entity {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "entity_type_id", nullable = false)
     private EntityType entityType;
+
+    @PostPersist
+    public void newEntity() {
+        System.out.println("Added entity with ID: " + id);
+    }
+
+    @PostUpdate
+    public void updateEntity() {
+        System.out.println("Updated entity with ID: " + id);
+    }
+
+    @PostRemove
+    public void removeEntity() {
+        System.out.println("Removed entity with ID: " + id);
+    }
 }

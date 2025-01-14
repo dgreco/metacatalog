@@ -22,7 +22,11 @@ class EntityServiceTests extends CommonServiceTests {
     void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -79,7 +83,11 @@ class EntityServiceTests extends CommonServiceTests {
         final TraitService traitService = new TraitService(traitRepository, traitRelationshipRepository);
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
 
         var emptySchema =
                 """
@@ -129,7 +137,11 @@ class EntityServiceTests extends CommonServiceTests {
     public void testList() throws ServiceError {
         final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
-                entityTypeRepository, entityRepository, entityRelationshipRepository, traitRelationshipRepository);
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository);
 
         entityTypeService.create(
                 "TestType",
