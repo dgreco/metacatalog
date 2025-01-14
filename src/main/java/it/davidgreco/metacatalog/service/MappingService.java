@@ -1,5 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.*;
+import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
@@ -12,6 +15,12 @@ import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.expression.Expression;
@@ -23,17 +32,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
-
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.MatchResult;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-
-import static it.davidgreco.metacatalog.common.JsonUtils.*;
-import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 
 @Service
 @RequiredArgsConstructor
@@ -55,19 +53,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final PlatformTransactionManager transactionManager;
 
-    public final Thread mappedEntitiesThread =
-            new Thread(() -> {
-                try {
-                    while (true) {
-                        var event = entityEvents.poll(10, TimeUnit.SECONDS);
-                        if (event != null) {
-                            System.out.println("Entity " + " " + event.entityTypeName + " " + event.entityId + " "
-                                    + event.eventType);
-                        }
-                    }
-                } catch (InterruptedException e) {
+    public final Thread mappedEntitiesThread = new Thread(() -> {
+        try {
+            while (true) {
+                var event = entityEvents.poll(10, TimeUnit.SECONDS);
+                if (event != null) {
+                    System.out.println(
+                            "Entity " + " " + event.entityTypeName + " " + event.entityId + " " + event.eventType);
                 }
-            });
+            }
+        } catch (InterruptedException e) {
+        }
+    });
 
     @PostConstruct
     void init() {
