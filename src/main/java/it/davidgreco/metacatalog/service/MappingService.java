@@ -1,8 +1,5 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.*;
-import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
@@ -13,11 +10,8 @@ import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.regex.MatchResult;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.expression.Expression;
@@ -30,13 +24,24 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import static it.davidgreco.metacatalog.common.JsonUtils.*;
+import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
+
 @Service
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
     public record EntityEvent(String entityId, String entityTypeName, String eventType) {}
 
-    public static final ConcurrentLinkedQueue<EntityEvent> entityEvents = new ConcurrentLinkedQueue<>();
+    public static final LinkedBlockingQueue<EntityEvent> entityEvents = new LinkedBlockingQueue<>();
 
     public final EntityRepository entityRepository;
 
@@ -50,17 +55,29 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final PlatformTransactionManager transactionManager;
 
-    static {
-        new Thread(() -> {
+    public final Thread mappedEntitiesThread =
+            new Thread(() -> {
+                try {
                     while (true) {
-                        var event = entityEvents.poll();
+                        var event = entityEvents.poll(10, TimeUnit.SECONDS);
                         if (event != null) {
                             System.out.println("Entity " + " " + event.entityTypeName + " " + event.entityId + " "
                                     + event.eventType);
                         }
                     }
-                })
-                .start();
+                } catch (InterruptedException e) {
+                }
+            });
+
+    @PostConstruct
+    void init() {
+        mappedEntitiesThread.start();
+    }
+
+    @PreDestroy
+    void destroy() throws InterruptedException {
+        mappedEntitiesThread.interrupt();
+        mappedEntitiesThread.join();
     }
 
     @Getter(lazy = true)
