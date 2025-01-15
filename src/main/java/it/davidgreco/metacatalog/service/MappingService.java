@@ -209,11 +209,20 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                                 mappingRelationship.getEntityPathReferences()) {
                             var as = sourceReference.alias();
-                            var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                    .orElseThrow(() -> new ServiceError(
-                                            "Wrong reference path " + sourceReference.referencePath() + " for entity"))
-                                    .getValues();
-                            additionalEntitiesValues.put(as, jn);
+                            Optional<JsonNode> jn; // TODO refactor this
+                            while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                            .map(Entity::getValues))
+                                    .isEmpty()) {
+                                try {
+                                    Thread.sleep(1000);
+                                } catch (InterruptedException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
+                            if (jn.isEmpty())
+                                throw new ServiceError(
+                                        "Wrong reference path " + sourceReference.referencePath() + " for entity");
+                            additionalEntitiesValues.put(as, jn.get());
                         }
                         var mappedValues = generateMappedValues(
                                 sourceEntity.getValues(),
@@ -284,11 +293,20 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                             mappingTypeRelationship.getEntityPathReferences()) {
                         var as = sourceReference.alias();
-                        var jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                .orElseThrow(() -> new ServiceError(
-                                        "Wrong reference path " + sourceReference.referencePath() + " for entity"))
-                                .getValues();
-                        additionalEntitiesValues.put(as, jn);
+                        Optional<JsonNode> jn; // TODO: refactor this
+                        while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                        .map(Entity::getValues))
+                                .isEmpty()) {
+                            try {
+                                Thread.sleep(1000);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                        if (jn.isEmpty())
+                            throw new ServiceError(
+                                    "Wrong reference path " + sourceReference.referencePath() + " for entity");
+                        additionalEntitiesValues.put(as, jn.get());
                     }
                     var mappedValues = generateMappedValues(
                             sourceEntity.getValues(),
