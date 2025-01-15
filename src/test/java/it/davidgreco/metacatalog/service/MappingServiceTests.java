@@ -23,6 +23,7 @@ class MappingServiceTests extends CommonServiceTests {
     void testCreateDelete() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var mappingService = new MappingService(
+                false,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -64,6 +65,7 @@ class MappingServiceTests extends CommonServiceTests {
     void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var mappingService = new MappingService(
+                false,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -127,6 +129,7 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 entityLifeCycleEventRepository);
         var mappingService = new MappingService(
+                false,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -261,7 +264,7 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError, InterruptedException {
+    void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
@@ -272,6 +275,7 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 entityLifeCycleEventRepository);
         var mappingService = new MappingService(
+                true,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -281,8 +285,136 @@ class MappingServiceTests extends CommonServiceTests {
                 transactionManager,
                 advisoryLockManager);
 
-        mappingService.mappedEntitiesThread.interrupt();
-        mappingService.mappedEntitiesThread.join();
+        traitService.create("DependingRelSourceTrait1", Optional.empty());
+
+        traitService.create("DependingRelTargetTrait1", Optional.empty());
+
+        traitService.link("DependingRelSourceTrait1", DEPENDS_ON, "DependingRelTargetTrait1");
+
+        entityTypeService.create(
+                "AnotherType1",
+                List.of("DependingRelSourceTrait1"),
+                Optional.empty(),
+                """
+                    { "type": "object", "properties": { "c": { "type": "integer" } } }""");
+
+        entityTypeService.create(
+                "SourceType1",
+                List.of("DependingRelTargetTrait1"),
+                Optional.empty(),
+                """
+                    { "type": "object", "properties": { "a": { "type": "integer" } } }""");
+
+        var targeType = entityTypeService.create(
+                "TargetType1",
+                List.of(),
+                Optional.empty(),
+                """
+                    { "type": "object", "properties": { "b": { "type": "integer" } } }""");
+
+        var anotherTargetType = entityTypeService.create(
+                "AnotherTargetType1",
+                List.of(),
+                Optional.empty(),
+                """
+                    { "type": "object", "properties": { "d": { "type": "integer" } } }""");
+
+        mappingService.create(
+                "SourceType1",
+                "TargetType1",
+                """
+                            {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
+
+        mappingService.create(
+                "TargetType1",
+                "AnotherTargetType1",
+                """
+                            {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+                List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "MAPPED_TO{$}/DEPENDS_ON{$}")));
+
+        var anotherInstance =
+                entityService.create("AnotherType1", """
+                    {"c": 1}
+                    """);
+
+        var sourceInstance =
+                entityService.create("SourceType1", """
+                    {"a": 1}
+                    """);
+
+        entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
+
+        try {
+            Thread.sleep(10000); // TODO
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        {
+            var int1 = new WrappedJsonNode(entityRepository
+                            .findByEntityType(targeType)
+                            .getFirst()
+                            .getValues())
+                    .getValue(Integer.class, "$.b");
+            Assertions.assertEquals(11, int1);
+
+            var int2 = new WrappedJsonNode(entityRepository
+                            .findByEntityType(anotherTargetType)
+                            .getFirst()
+                            .getValues())
+                    .getValue(Integer.class, "$.d");
+            Assertions.assertEquals(21, int2);
+        }
+
+        entityService.update(sourceInstance.getId(), """
+                    {"a": 2}
+                    """);
+
+        try {
+            Thread.sleep(10000); // TODO
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        {
+            var int1 = new WrappedJsonNode(entityRepository
+                            .findByEntityType(targeType)
+                            .getFirst()
+                            .getValues())
+                    .getValue(Integer.class, "$.b");
+            Assertions.assertEquals(12, int1);
+
+            var int2 = new WrappedJsonNode(entityRepository
+                            .findByEntityType(anotherTargetType)
+                            .getFirst()
+                            .getValues())
+                    .getValue(Integer.class, "$.d");
+            Assertions.assertEquals(22, int2);
+        }
+    }
+
+    @Test
+    void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
+        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityService = new EntityService(
+                entityTypeRepository,
+                entityRepository,
+                entityRelationshipRepository,
+                traitRelationshipRepository,
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
+        var mappingService = new MappingService(
+                false,
+                entityRepository,
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                mappingEntityRelationshipRepository,
+                entityRelationshipRepository,
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
 

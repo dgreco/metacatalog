@@ -18,7 +18,6 @@ import jakarta.annotation.PreDestroy;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -38,6 +37,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
+    public final boolean automaticEntitiesMapping;
+
     public final EntityRepository entityRepository;
 
     public final EntityTypeRepository entityTypeRepository;
@@ -54,6 +55,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final AdvisoryLockManager advisoryLockManager;
 
+    private Boolean getAutomaticEntitiesMapping() {
+        return automaticEntitiesMapping;
+    }
+
     private AdvisoryLockManager getAdvisoryLockManager() {
         return advisoryLockManager;
     }
@@ -62,14 +67,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return entityLifeCycleEventRepository;
     }
 
-    public AtomicBoolean automaticEntitiesMapping = new AtomicBoolean(false);
-
     public final Thread mappedEntitiesThread = new Thread(
             () -> { // TODO Substitute with a scheduled task
                 try {
-                    if (automaticEntitiesMapping.get()) getAdvisoryLockManager().acquireLock(1);
+                    if (getAutomaticEntitiesMapping()) getAdvisoryLockManager().acquireLock(1);
                     while (true) {
-                        if (automaticEntitiesMapping.get()) {
+                        if (getAutomaticEntitiesMapping()) {
                             var createdEvents = getEntityLifeCycleEventRepository()
                                     .findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
                             createdEvents.forEach(event -> {

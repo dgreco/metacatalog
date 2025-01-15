@@ -12,6 +12,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class ApplicationConfig {
 
     @Autowired
+    ApplicationConfigProperties applicationConfigurationProperties;
+
+    @Autowired
     EntityTypeRepository entityTypeRepository;
 
     @Autowired
@@ -81,6 +84,7 @@ public class ApplicationConfig {
             PlatformTransactionManager transactionManager,
             AdvisoryLockManager advisoryLockManager) {
         return new MappingService(
+                applicationConfigurationProperties.isAutomaticEntitiesMapping(),
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,

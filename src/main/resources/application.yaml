@@ -1,4 +1,8 @@
 spring:
+  profiles:
+    active: prod
+  config:
+    automaticEntitiesMapping: true
   datasource:
     url: jdbc:postgresql://localhost:5432/metacatalog
     username: metacatalog
