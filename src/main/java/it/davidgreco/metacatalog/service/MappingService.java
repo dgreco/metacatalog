@@ -18,6 +18,7 @@ import jakarta.annotation.PreDestroy;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -61,35 +62,38 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return entityLifeCycleEventRepository;
     }
 
-    public final Thread mappedEntitiesThread = new Thread(() -> {
-        try {
-            getAdvisoryLockManager().acquireLock(1);
-            while (true) {
-                var createdEvents =
-                        getEntityLifeCycleEventRepository().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
-                createdEvents.forEach(event -> {
-                    try {
-                        // createMappedEntities(event);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
+    public AtomicBoolean automaticEntitiesMapping = new AtomicBoolean(false);
 
-                var updatedEvents =
-                        getEntityLifeCycleEventRepository().findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
-                updatedEvents.forEach(event -> {
-                    try {
-                        // updateMappedEntities(event);
-                    } catch (Exception e) {
-                        e.printStackTrace();
+    public final Thread mappedEntitiesThread = new Thread(
+            () -> { // TODO Substitute with a scheduled task
+                try {
+                    if (automaticEntitiesMapping.get()) getAdvisoryLockManager().acquireLock(1);
+                    while (true) {
+                        if (automaticEntitiesMapping.get()) {
+                            var createdEvents = getEntityLifeCycleEventRepository()
+                                    .findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+                            createdEvents.forEach(event -> {
+                                try {
+                                    createMappedEntities(event);
+                                } catch (Exception e) {
+                                    e.printStackTrace(); // TODO
+                                }
+                            });
+                            var updatedEvents = getEntityLifeCycleEventRepository()
+                                    .findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+                            updatedEvents.forEach(event -> {
+                                try {
+                                    updateMappedEntities(event);
+                                } catch (Exception e) {
+                                    e.printStackTrace(); // TODO
+                                }
+                            });
+                        }
+                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
                     }
-                });
-
-                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-            }
-        } catch (InterruptedException e) {
-        }
-    });
+                } catch (InterruptedException ignored) {
+                }
+            });
 
     @PostConstruct
     void init() {
