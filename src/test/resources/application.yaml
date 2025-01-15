@@ -1,8 +1,8 @@
 spring:
   profiles:
-    active: prod
+    active: test
   config:
-    automaticEntitiesMapping: true
+    automaticEntitiesMapping: false
   datasource:
     url: jdbc:postgresql://localhost:5433/test
     username: test

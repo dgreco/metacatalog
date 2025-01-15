@@ -37,7 +37,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
-    public final boolean automaticEntitiesMapping;
+    public boolean automaticEntitiesMapping;
 
     public final EntityRepository entityRepository;
 
@@ -100,13 +100,15 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     @PostConstruct
     void init() {
-        mappedEntitiesThread.start();
+        if (automaticEntitiesMapping) mappedEntitiesThread.start();
     }
 
     @PreDestroy
     void destroy() throws InterruptedException {
-        mappedEntitiesThread.interrupt();
-        mappedEntitiesThread.join();
+        if (automaticEntitiesMapping) {
+            mappedEntitiesThread.interrupt();
+            mappedEntitiesThread.join();
+        }
     }
 
     @Getter(lazy = true)
@@ -233,6 +235,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         mappedEntity.setEntityType(targetEntityType);
                         mappedEntity.setValues(mappedValues);
                         entityRepository.save(mappedEntity);
+                        entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                                mappedEntity.getId(),
+                                mappedEntity.getEntityType().getName(),
+                                "CREATED",
+                                "NO_PROCESSING"));
                         var mappingEntityRelationship = new MappingEntityRelationship();
                         mappingEntityRelationship.setSource(sourceEntity);
                         mappingEntityRelationship.setTarget(mappedEntity);
@@ -317,6 +324,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     var mappedEntity = entityMappingRelationship.getTarget();
                     mappedEntity.setValues(mappedValues);
                     entityRepository.save(mappedEntity);
+                    entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                            mappedEntity.getId(), mappedEntity.getEntityType().getName(), "UPDATED", "NO_PROCESSING"));
                     updateMappedEntities(mappedEntity.getId());
                 }
             }

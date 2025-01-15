@@ -83,8 +83,7 @@ public class ApplicationConfig {
             EntityLifeCycleEventRepository entityLifeCycleEventRepository,
             PlatformTransactionManager transactionManager,
             AdvisoryLockManager advisoryLockManager) {
-        return new MappingService(
-                applicationConfigurationProperties.isAutomaticEntitiesMapping(),
+        var ms = new MappingService(
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -93,6 +92,8 @@ public class ApplicationConfig {
                 entityLifeCycleEventRepository,
                 transactionManager,
                 advisoryLockManager);
+        ms.automaticEntitiesMapping = applicationConfigurationProperties.isAutomaticEntitiesMapping();
+        return ms;
     }
 
     @Bean

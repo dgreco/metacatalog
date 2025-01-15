@@ -221,8 +221,11 @@ public class EntityService implements CommonService<Entity, String> {
     }
 
     private boolean checkLoops(
-            String sourceEntityId, Set<String> entityIdsVisited, String targetEntityId, RelationType relationType) {
-        var sourceEntity = entityRepository.findById(sourceEntityId).get();
+            String sourceEntityId, Set<String> entityIdsVisited, String targetEntityId, RelationType relationType)
+            throws ServiceError {
+        var sourceEntity = entityRepository
+                .findById(sourceEntityId)
+                .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
         var mappings = entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
 
         var targetIds = mappings.stream()

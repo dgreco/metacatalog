@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.context.ApplicationContext;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -44,6 +45,9 @@ class CommonServiceTests {
         // Thread.sleep(200000);
         postgres.stop();
     }
+
+    @Autowired
+    ApplicationContext applicationContext;
 
     @Autowired
     EntityTypeRepository entityTypeRepository;

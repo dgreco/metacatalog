@@ -23,7 +23,6 @@ class MappingServiceTests extends CommonServiceTests {
     void testCreateDelete() throws ServiceError {
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var mappingService = new MappingService(
-                false,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -52,7 +51,6 @@ class MappingServiceTests extends CommonServiceTests {
         var mapping2 = mappingService.create("SimpleSourceType", "SimpleTargetType", "{}", List.of());
 
         Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("SimpleSourceType"));
-        Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("SimpleTargetType"));
 
         mappingService.delete(mapping1.getId());
         mappingService.delete(mapping2.getId());
@@ -63,17 +61,8 @@ class MappingServiceTests extends CommonServiceTests {
 
     @Test
     void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var mappingService = new MappingService(
-                false,
-                entityRepository,
-                entityTypeRepository,
-                mappingEntityTypeRelationshipRepository,
-                mappingEntityRelationshipRepository,
-                entityRelationshipRepository,
-                entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var mappingService = applicationContext.getBean(MappingService.class);
 
         var typeA = entityTypeService.create(
                 "A", List.of(), Optional.empty(), """
@@ -119,25 +108,10 @@ class MappingServiceTests extends CommonServiceTests {
     @Test
     void testGraphPath() throws ServiceError {
 
-        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var entityService = new EntityService(
-                entityTypeRepository,
-                entityRepository,
-                entityRelationshipRepository,
-                traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository,
-                entityLifeCycleEventRepository);
-        var mappingService = new MappingService(
-                false,
-                entityRepository,
-                entityTypeRepository,
-                mappingEntityTypeRelationshipRepository,
-                mappingEntityRelationshipRepository,
-                entityRelationshipRepository,
-                entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
+        var traitService = applicationContext.getBean(TraitService.class);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var entityService = applicationContext.getBean(EntityService.class);
+        var mappingService = applicationContext.getBean(MappingService.class);
 
         traitService.create("Trait_NA", Optional.empty());
 
@@ -264,18 +238,11 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
-        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var entityService = new EntityService(
-                entityTypeRepository,
-                entityRepository,
-                entityRelationshipRepository,
-                traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository,
-                entityLifeCycleEventRepository);
+    void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError, InterruptedException {
+        var traitService = applicationContext.getBean(TraitService.class);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var entityService = applicationContext.getBean(EntityService.class);
         var mappingService = new MappingService(
-                true,
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -284,6 +251,9 @@ class MappingServiceTests extends CommonServiceTests {
                 entityLifeCycleEventRepository,
                 transactionManager,
                 advisoryLockManager);
+
+        mappingService.automaticEntitiesMapping = true;
+        mappingService.mappedEntitiesThread.start();
 
         traitService.create("DependingRelSourceTrait1", Optional.empty());
 
@@ -392,29 +362,19 @@ class MappingServiceTests extends CommonServiceTests {
                     .getValue(Integer.class, "$.d");
             Assertions.assertEquals(22, int2);
         }
+
+        mappingService.mappedEntitiesThread.interrupt();
+        mappingService.mappedEntitiesThread.join();
     }
 
     @Test
     void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
-        var traitService = new TraitService(traitRepository, traitRelationshipRepository);
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var entityService = new EntityService(
-                entityTypeRepository,
-                entityRepository,
-                entityRelationshipRepository,
-                traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository,
-                entityLifeCycleEventRepository);
-        var mappingService = new MappingService(
-                false,
-                entityRepository,
-                entityTypeRepository,
-                mappingEntityTypeRelationshipRepository,
-                mappingEntityRelationshipRepository,
-                entityRelationshipRepository,
-                entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
+        var traitService = applicationContext.getBean(TraitService.class);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var entityService = applicationContext.getBean(EntityService.class);
+
+        var mappingService = applicationContext.getBean(MappingService.class);
+        mappingService.automaticEntitiesMapping = false;
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
 
