@@ -136,3 +136,19 @@ ALTER TABLE mapping_entity_relationship
 
 ALTER TABLE mapping_entity_relationship
     ADD CONSTRAINT FK_MAPPING_ENTITY_RELATIONSHIP_ON_TARGET FOREIGN KEY (target_id) REFERENCES entity (id);
+
+CREATE SEQUENCE IF NOT EXISTS entity_lifecycle_event_seq START WITH 1 INCREMENT BY 50;
+
+CREATE TABLE entity_lifecycle_event
+(
+    id               BIGINT                      NOT NULL,
+    entity_id        VARCHAR(255)                NOT NULL,
+    entity_type_name VARCHAR(255)                NOT NULL,
+    event_time       TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    process_time     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    event_type       VARCHAR(255)                NOT NULL,
+    event_status     VARCHAR(255)                NOT NULL,
+    CONSTRAINT pk_entity_lifecycle_event PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_entitylifecycleevent_event_type_event_status ON entity_lifecycle_event (event_type, event_status);

@@ -26,7 +26,8 @@ class EntityServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
 
         var schema = jsonSchemaFactory
                 .getSchema(
@@ -87,7 +88,8 @@ class EntityServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
 
         var emptySchema =
                 """
@@ -141,7 +143,8 @@ class EntityServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
 
         entityTypeService.create(
                 "TestType",

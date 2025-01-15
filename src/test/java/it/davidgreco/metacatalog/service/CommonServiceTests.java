@@ -66,6 +66,9 @@ class CommonServiceTests {
     MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
     @Autowired
+    EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+
+    @Autowired
     PlatformTransactionManager transactionManager;
 
     @Autowired

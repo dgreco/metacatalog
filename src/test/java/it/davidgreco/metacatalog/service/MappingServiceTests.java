@@ -120,7 +120,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -262,7 +263,8 @@ class MappingServiceTests extends CommonServiceTests {
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
         var mappingService = new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -414,6 +416,9 @@ class MappingServiceTests extends CommonServiceTests {
                 ServiceError.class,
                 () -> mappingService.updateMappedEntities(
                         entityRepository.findByEntityType(targeType).getFirst().getId()));
+
+        // I cannot delete the source entity
+        Assertions.assertThrows(ServiceError.class, () -> entityService.delete(sourceInstance.getId()));
 
         mappingService.deleteMappedEntities(sourceInstance.getId());
 

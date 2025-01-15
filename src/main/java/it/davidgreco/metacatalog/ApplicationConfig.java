@@ -32,6 +32,9 @@ public class ApplicationConfig {
     MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
     @Autowired
+    EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+
+    @Autowired
     PlatformTransactionManager transactionManager;
 
     @Bean
@@ -52,13 +55,15 @@ public class ApplicationConfig {
             EntityRepository entityRepository,
             EntityRelationshipRepository entityRelationshipRepository,
             TraitRelationshipRepository traitRelationshipRepository,
-            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository) {
+            MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+            EntityLifeCycleEventRepository entityLifeCycleEventRepository) {
         return new EntityService(
                 entityTypeRepository,
                 entityRepository,
                 entityRelationshipRepository,
                 traitRelationshipRepository,
-                mappingEntityTypeRelationshipRepository);
+                mappingEntityTypeRelationshipRepository,
+                entityLifeCycleEventRepository);
     }
 
     @Bean

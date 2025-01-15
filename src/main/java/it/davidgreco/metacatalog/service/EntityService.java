@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,8 @@ public class EntityService implements CommonService<Entity, String> {
     private final TraitRelationshipRepository traitRelationshipRepository;
 
     private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+
+    private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
     @Transactional(
             propagation = Propagation.REQUIRED,
@@ -61,7 +64,12 @@ public class EntityService implements CommonService<Entity, String> {
             typedEntity.setEntityType(entityType);
             typedEntity.setValues(valuesJsonNode);
             var en = entityRepository.save(typedEntity);
-            MappingService.entityEvents.add(new MappingService.EntityEvent(en.getId(), typeName, "CREATED"));
+            if (isSourceEntityType(entityType))
+                entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                        en.getId(), en.getEntityType().getName(), "SOURCE_CREATED", "PENDING"));
+            else
+                entityLifeCycleEventRepository.save(
+                        new EntityLifeCycleEvent(en.getId(), en.getEntityType().getName(), "CREATED", "NO_PROCESSING"));
             return en;
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
@@ -101,8 +109,12 @@ public class EntityService implements CommonService<Entity, String> {
             }
             entity.setValues(valuesJsonNode);
             entityRepository.save(entity);
-            MappingService.entityEvents.add(new MappingService.EntityEvent(
-                    entityId, entity.getEntityType().getName(), "UPDATED"));
+            if (isSourceEntityType(entity.getEntityType()))
+                entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                        entity.getId(), entity.getEntityType().getName(), "SOURCE_UPDATED", "PENDING"));
+            else
+                entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                        entity.getId(), entity.getEntityType().getName(), "UPDATED", "NO_PROCESSING"));
         } catch (JsonProcessingException e) {
             throw new ServiceError(e.getMessage());
         }
@@ -112,16 +124,23 @@ public class EntityService implements CommonService<Entity, String> {
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
     public void delete(String entityId) throws ServiceError {
-        var entity = entityRepository
-                .findById(entityId)
-                .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+        try {
+            var entity = entityRepository
+                    .findById(entityId)
+                    .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
 
-        if (isTargetEntityType(entity.getEntityType()))
-            throw new ServiceError("Entity with id " + entityId + " is an instance of a target entity type");
+            if (isTargetEntityType(entity.getEntityType()))
+                throw new ServiceError("Entity with id " + entityId + " is an instance of a target entity type");
 
-        entityRepository.delete(entity);
-        MappingService.entityEvents.add(
-                new MappingService.EntityEvent(entityId, entity.getEntityType().getName(), "DELETED"));
+            if (isSourceEntityType(entity.getEntityType()))
+                throw new ServiceError("Entity with id " + entityId + " is an instance of a source entity type");
+
+            entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
+                    entity.getId(), entity.getEntityType().getName(), "DELETED", "NO_PROCESSING"));
+            entityRepository.delete(entity);
+        } catch (DataIntegrityViolationException e) {
+            throw new ServiceError(e.getMessage());
+        }
     }
 
     @Transactional(propagation = Propagation.REQUIRED)
@@ -253,6 +272,12 @@ public class EntityService implements CommonService<Entity, String> {
             if (allTheTraitsNamesForTheTargetType.contains(targetTrait.getName())) return true;
         }
         return false;
+    }
+
+    boolean isSourceEntityType(EntityType entityType) {
+        return !mappingEntityTypeRelationshipRepository
+                .findMappingEntityTypeRelationshipBySource(entityType)
+                .isEmpty();
     }
 
     boolean isTargetEntityType(EntityType entityType) {
