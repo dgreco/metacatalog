@@ -28,7 +28,9 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
-                transactionManager);
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
 
         entityTypeService.create(
                 "SimpleSourceType",
@@ -67,7 +69,9 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
-                transactionManager);
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
 
         var typeA = entityTypeService.create(
                 "A", List.of(), Optional.empty(), """
@@ -128,7 +132,9 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
-                transactionManager);
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
 
         traitService.create("Trait_NA", Optional.empty());
 
@@ -255,7 +261,7 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+    void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError, InterruptedException {
         var traitService = new TraitService(traitRepository, traitRelationshipRepository);
         var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
         var entityService = new EntityService(
@@ -271,7 +277,12 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
-                transactionManager);
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
+
+        mappingService.mappedEntitiesThread.interrupt();
+        mappingService.mappedEntitiesThread.join();
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
 
@@ -428,5 +439,11 @@ class MappingServiceTests extends CommonServiceTests {
 
         // Check that idempotency works
         mappingService.deleteMappedEntities(sourceInstance.getId());
+
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

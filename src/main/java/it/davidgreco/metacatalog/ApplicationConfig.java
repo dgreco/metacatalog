@@ -1,5 +1,6 @@
 package it.davidgreco.metacatalog;
 
+import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,9 @@ public class ApplicationConfig {
     @Autowired
     PlatformTransactionManager transactionManager;
 
+    @Autowired
+    AdvisoryLockManager advisoryLockManager;
+
     @Bean
     public TraitService traitService(
             TraitRepository traitRepository, TraitRelationshipRepository traitRelationshipRepository) {
@@ -73,14 +77,18 @@ public class ApplicationConfig {
             MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
             MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
             EntityRelationshipRepository entityRelationshipRepository,
-            PlatformTransactionManager transactionManager) {
+            EntityLifeCycleEventRepository entityLifeCycleEventRepository,
+            PlatformTransactionManager transactionManager,
+            AdvisoryLockManager advisoryLockManager) {
         return new MappingService(
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
-                transactionManager);
+                entityLifeCycleEventRepository,
+                transactionManager,
+                advisoryLockManager);
     }
 
     @Bean

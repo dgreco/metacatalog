@@ -135,9 +135,9 @@ public class EntityService implements CommonService<Entity, String> {
             if (isSourceEntityType(entity.getEntityType()))
                 throw new ServiceError("Entity with id " + entityId + " is an instance of a source entity type");
 
+            entityRepository.delete(entity);
             entityLifeCycleEventRepository.save(new EntityLifeCycleEvent(
                     entity.getId(), entity.getEntityType().getName(), "DELETED", "NO_PROCESSING"));
-            entityRepository.delete(entity);
         } catch (DataIntegrityViolationException e) {
             throw new ServiceError(e.getMessage());
         }
@@ -179,7 +179,7 @@ public class EntityService implements CommonService<Entity, String> {
                 .findById(targetId)
                 .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
 
-        if (entityRelationshipRepository // TODO the index is not working
+        if (entityRelationshipRepository
                 .findBySourceAndRelationTypeAndTarget(source, relType, target)
                 .isPresent())
             throw new ServiceError("Entity with id " + sourceId + " is already linked with entity with id " + targetId

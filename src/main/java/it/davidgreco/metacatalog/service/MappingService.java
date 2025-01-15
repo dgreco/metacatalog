@@ -15,8 +15,8 @@ import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.sql.Timestamp;
 import java.util.*;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
@@ -37,10 +37,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
-    public record EntityEvent(String entityId, String entityTypeName, String eventType) {}
-
-    public static final LinkedBlockingQueue<EntityEvent> entityEvents = new LinkedBlockingQueue<>();
-
     public final EntityRepository entityRepository;
 
     public final EntityTypeRepository entityTypeRepository;
@@ -51,16 +47,45 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final EntityRelationshipRepository entityRelationshipRepository;
 
+    private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+
     private final PlatformTransactionManager transactionManager;
+
+    private final AdvisoryLockManager advisoryLockManager;
+
+    private AdvisoryLockManager getAdvisoryLockManager() {
+        return advisoryLockManager;
+    }
+
+    private EntityLifeCycleEventRepository getEntityLifeCycleEventRepository() {
+        return entityLifeCycleEventRepository;
+    }
 
     public final Thread mappedEntitiesThread = new Thread(() -> {
         try {
+            getAdvisoryLockManager().acquireLock(1);
             while (true) {
-                var event = entityEvents.poll(10, TimeUnit.SECONDS);
-                if (event != null) {
-                    System.out.println(
-                            "Entity " + " " + event.entityTypeName + " " + event.entityId + " " + event.eventType);
-                }
+                var createdEvents =
+                        getEntityLifeCycleEventRepository().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+                createdEvents.forEach(event -> {
+                    try {
+                        // createMappedEntities(event);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+
+                var updatedEvents =
+                        getEntityLifeCycleEventRepository().findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+                updatedEvents.forEach(event -> {
+                    try {
+                        // updateMappedEntities(event);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+
+                Thread.sleep(TimeUnit.SECONDS.toMillis(1));
             }
         } catch (InterruptedException e) {
         }
@@ -146,6 +171,16 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
+        createMappedEntities(event.getEntityId());
+        event.setEventStatus("PROCESSED");
+        event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+        entityLifeCycleEventRepository.save(event);
+    }
+
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
         class CreateMappedEntities {
@@ -216,6 +251,16 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
             else throw e;
         }
+    }
+
+    @Transactional(
+            propagation = Propagation.REQUIRED,
+            rollbackFor = {ServiceError.class})
+    public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
+        updateMappedEntities(event.getEntityId());
+        event.setEventStatus("PROCESSED");
+        event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+        entityLifeCycleEventRepository.save(event);
     }
 
     public void updateMappedEntities(String sourceEntityId) throws ServiceError {
