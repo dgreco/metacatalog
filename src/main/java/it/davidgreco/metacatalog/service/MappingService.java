@@ -13,11 +13,8 @@ import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import java.sql.Timestamp;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -37,8 +34,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
-    public boolean automaticEntitiesMapping;
-
     public final EntityRepository entityRepository;
 
     public final EntityTypeRepository entityTypeRepository;
@@ -55,60 +50,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final AdvisoryLockManager advisoryLockManager;
 
-    private Boolean getAutomaticEntitiesMapping() {
-        return automaticEntitiesMapping;
-    }
-
     private AdvisoryLockManager getAdvisoryLockManager() {
         return advisoryLockManager;
     }
 
     private EntityLifeCycleEventRepository getEntityLifeCycleEventRepository() {
         return entityLifeCycleEventRepository;
-    }
-
-    public final Thread mappedEntitiesThread = new Thread(
-            () -> { // TODO Substitute with a scheduled task
-                try {
-                    if (getAutomaticEntitiesMapping()) getAdvisoryLockManager().acquireLock(1);
-                    while (true) {
-                        if (getAutomaticEntitiesMapping()) {
-                            var createdEvents = getEntityLifeCycleEventRepository()
-                                    .findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
-                            createdEvents.forEach(event -> {
-                                try {
-                                    createMappedEntities(event);
-                                } catch (Exception e) {
-                                    e.printStackTrace(); // TODO
-                                }
-                            });
-                            var updatedEvents = getEntityLifeCycleEventRepository()
-                                    .findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
-                            updatedEvents.forEach(event -> {
-                                try {
-                                    updateMappedEntities(event);
-                                } catch (Exception e) {
-                                    e.printStackTrace(); // TODO
-                                }
-                            });
-                        }
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(1));
-                    }
-                } catch (InterruptedException ignored) {
-                }
-            });
-
-    @PostConstruct
-    void init() {
-        if (automaticEntitiesMapping) mappedEntitiesThread.start();
-    }
-
-    @PreDestroy
-    void destroy() throws InterruptedException {
-        if (automaticEntitiesMapping) {
-            mappedEntitiesThread.interrupt();
-            mappedEntitiesThread.join();
-        }
     }
 
     @Getter(lazy = true)

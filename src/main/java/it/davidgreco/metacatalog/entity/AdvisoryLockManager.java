@@ -14,8 +14,8 @@ public class AdvisoryLockManager {
         this.entityManager = entityManager;
     }
 
-    public void acquireLock(int lockIdentifier) {
-        String pgLockQuery = String.format("SELECT pg_advisory_lock(%s)", String.valueOf(lockIdentifier));
-        entityManager.createNativeQuery(pgLockQuery).getSingleResult();
+    public boolean acquireLock(int lockIdentifier) {
+        String pgLockQuery = String.format("SELECT pg_try_advisory_lock(%s)", lockIdentifier);
+        return (Boolean) entityManager.createNativeQuery(pgLockQuery).getSingleResult();
     }
 }

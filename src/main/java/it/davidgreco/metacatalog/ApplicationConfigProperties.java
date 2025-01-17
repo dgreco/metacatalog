@@ -12,5 +12,4 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ApplicationConfigProperties {
 
     private final boolean automaticEntitiesMapping;
-    
 }

@@ -242,18 +242,9 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = applicationContext.getBean(TraitService.class);
         var entityTypeService = applicationContext.getBean(EntityTypeService.class);
         var entityService = applicationContext.getBean(EntityService.class);
-        var mappingService = new MappingService(
-                entityRepository,
-                entityTypeRepository,
-                mappingEntityTypeRelationshipRepository,
-                mappingEntityRelationshipRepository,
-                entityRelationshipRepository,
-                entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
-
-        mappingService.automaticEntitiesMapping = true;
-        mappingService.mappedEntitiesThread.start();
+        var mappingService = applicationContext.getBean(MappingService.class);
+        var mappingUpdaterService = applicationContext.getBean(MappingUpdaterService.class);
+        mappingUpdaterService.automaticEntitiesMapping = true;
 
         traitService.create("DependingRelSourceTrait1", Optional.empty());
 
@@ -316,7 +307,7 @@ class MappingServiceTests extends CommonServiceTests {
         entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
 
         try {
-            Thread.sleep(10000); // TODO
+            Thread.sleep(1000); // TODO
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -342,7 +333,7 @@ class MappingServiceTests extends CommonServiceTests {
                     """);
 
         try {
-            Thread.sleep(10000); // TODO
+            Thread.sleep(1000); // TODO
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -362,9 +353,6 @@ class MappingServiceTests extends CommonServiceTests {
                     .getValue(Integer.class, "$.d");
             Assertions.assertEquals(22, int2);
         }
-
-        mappingService.mappedEntitiesThread.interrupt();
-        mappingService.mappedEntitiesThread.join();
     }
 
     @Test
@@ -372,9 +360,7 @@ class MappingServiceTests extends CommonServiceTests {
         var traitService = applicationContext.getBean(TraitService.class);
         var entityTypeService = applicationContext.getBean(EntityTypeService.class);
         var entityService = applicationContext.getBean(EntityService.class);
-
         var mappingService = applicationContext.getBean(MappingService.class);
-        mappingService.automaticEntitiesMapping = false;
 
         traitService.create("DependingRelSourceTrait", Optional.empty());
 

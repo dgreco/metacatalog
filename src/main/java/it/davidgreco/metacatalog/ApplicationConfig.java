@@ -92,8 +92,14 @@ public class ApplicationConfig {
                 entityLifeCycleEventRepository,
                 transactionManager,
                 advisoryLockManager);
-        ms.automaticEntitiesMapping = applicationConfigurationProperties.isAutomaticEntitiesMapping();
         return ms;
+    }
+
+    @Bean
+    MappingUpdaterService mappingUpdaterService(MappingService mappingService) {
+        var mus = new MappingUpdaterService(advisoryLockManager, entityLifeCycleEventRepository, mappingService);
+        mus.automaticEntitiesMapping = applicationConfigurationProperties.isAutomaticEntitiesMapping();
+        return mus;
     }
 
     @Bean
