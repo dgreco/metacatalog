@@ -21,8 +21,7 @@ public class MappingUpdaterService {
     @Scheduled(fixedRate = 1000) // TODO Configurable
     void updateMappedEntities() {
         if (automaticEntitiesMapping) {
-            var lockAcquired = advisoryLockManager.acquireLock(1);
-            if (lockAcquired) {
+            if (advisoryLockManager.acquireLock(1)) {
                 var createdEvents =
                         entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
                 createdEvents.forEach(event -> {
@@ -41,6 +40,15 @@ public class MappingUpdaterService {
                         e.printStackTrace(); // TODO
                     }
                 });
+            }
+        }
+    }
+
+    @Scheduled(fixedRate = 1000) // TODO Configurable
+    void entityLifeCycleEventCleanup() {
+        if (automaticEntitiesMapping) {
+            if (advisoryLockManager.acquireLock(1)) {
+                //System.out.println("Cleaning up entity life cycle events");
             }
         }
     }
