@@ -1,8 +1,8 @@
 spring:
-  profiles:
-    active: prod
   config:
     automaticEntitiesMapping: true
+    activate:
+      on-profile: "prod"
   datasource:
     url: jdbc:postgresql://localhost:5432/metacatalog
     username: metacatalog
@@ -15,7 +15,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
+server:
+  port: 8080
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -27,5 +28,4 @@ springdoc:
 endpoints:
   flyway:
     web:
-      enabled=true:
-
+      enabled: true
