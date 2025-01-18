@@ -31,4 +31,6 @@ endpoints:
       enabled: true
 application:
   config:
-    automaticEntitiesMapping: false
+    automaticEntitiesMapping: true
+    updateMappedEntitiesSchedulingInterval: 1s
+    entityLifeCycleEventCleanupSchedulingInterval: 1s

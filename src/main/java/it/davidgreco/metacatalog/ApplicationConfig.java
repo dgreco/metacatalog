@@ -3,12 +3,14 @@ package it.davidgreco.metacatalog;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
+@Getter
 public class ApplicationConfig {
 
     @Autowired
@@ -98,7 +100,7 @@ public class ApplicationConfig {
     @Bean
     MappingUpdaterService mappingUpdaterService(MappingService mappingService) {
         var mus = new MappingUpdaterService(advisoryLockManager, entityLifeCycleEventRepository, mappingService);
-        mus.automaticEntitiesMapping = applicationConfigurationProperties.isAutomaticEntitiesMapping();
+        mus.automaticEntitiesMapping = applicationConfigurationProperties.automaticEntitiesMapping();
         return mus;
     }
 

@@ -18,7 +18,9 @@ public class MappingUpdaterService {
 
     public final MappingService mappingService;
 
-    @Scheduled(fixedRate = 1000) // TODO Configurable
+    @Scheduled(
+            fixedRateString =
+                    "#{@applicationConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
     void updateMappedEntities() {
         if (automaticEntitiesMapping) {
             if (advisoryLockManager.acquireLock(1)) {
@@ -44,12 +46,12 @@ public class MappingUpdaterService {
         }
     }
 
-    @Scheduled(fixedRate = 1000) // TODO Configurable
+    @Scheduled(
+            fixedRateString =
+                    "#{@applicationConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
     void entityLifeCycleEventCleanup() {
         if (automaticEntitiesMapping) {
-            if (advisoryLockManager.acquireLock(1)) {
-                //System.out.println("Cleaning up entity life cycle events");
-            }
+            if (advisoryLockManager.acquireLock(1)) {}
         }
     }
 }
