@@ -9,19 +9,16 @@ import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
 class EntityTypeServiceTests extends CommonServiceTests {
 
-    @Autowired
-    private TraitService traitService;
-
     @Test
     void testCreateDeleteExists() throws ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
 
         var baseSchema = jsonSchemaFactory
                 .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
@@ -31,7 +28,8 @@ class EntityTypeServiceTests extends CommonServiceTests {
         entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
 
         Assertions.assertThrows(
-                ServiceError.class, () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
+                DataIntegrityViolationException.class,
+                () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
 
         Assertions.assertTrue(entityTypeService.exists("NewType"));
 
@@ -46,7 +44,8 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     @Test
     void testInheritance() throws JsonProcessingException, ServiceError {
-        final EntityTypeService entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var traitService = applicationContext.getBean(TraitService.class);
 
         var inheritedSchema =
                 """
@@ -136,7 +135,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
         JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
                 .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
 
-        Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("MiddleType"));
+        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
 
         entityTypeService.delete("LeafType");
 

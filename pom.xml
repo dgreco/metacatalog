@@ -566,6 +566,7 @@
 
     <modules>
         <module>metacatalog-core</module>
+        <module>metacatalog-application</module>
     </modules>
 
 </project>
