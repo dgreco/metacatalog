@@ -1,4 +1,4 @@
-package it.davidgreco.metacatalog.common;
+package it.davidgreco.metacatalog.openapi.common;
 
 import java.io.File;
 import java.io.IOException;
