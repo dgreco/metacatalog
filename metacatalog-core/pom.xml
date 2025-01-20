@@ -11,9 +11,13 @@
     </parent>
 
     <groupId>it.davidgreco.metacatalog</groupId>
-    <artifactId>metacatalo-core</artifactId>
+    <artifactId>metacatalog-core</artifactId>
     <version>${project.version}</version>
     <name>Meta Catalog Core</name>
+    <properties>
+        <maven.compiler.source>23</maven.compiler.source>
+        <maven.compiler.target>23</maven.compiler.target>
+    </properties>
 
     <dependencies>
         <!-- SpringBoot & Openapi -->

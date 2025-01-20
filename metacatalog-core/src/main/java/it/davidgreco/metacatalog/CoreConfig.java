@@ -11,10 +11,10 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 @Getter
-public class ApplicationConfig {
+public class CoreConfig {
 
     @Autowired
-    ApplicationConfigProperties applicationConfigurationProperties;
+    CoreConfigProperties applicationConfigurationProperties;
 
     @Autowired
     EntityTypeRepository entityTypeRepository;
