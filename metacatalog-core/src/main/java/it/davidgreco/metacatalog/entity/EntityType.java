@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import java.util.ArrayList;
@@ -17,7 +16,6 @@ import lombok.ToString;
 @Table(
         name = "entity_type",
         indexes = {@Index(name = "idx_entity_type_name_unq", columnList = "name", unique = true)})
-@SuppressFBWarnings
 public class EntityType implements Type<EntityType> {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.entity;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.persistence.*;
 import java.sql.Timestamp;
 import lombok.Getter;
@@ -16,7 +15,6 @@ import lombok.ToString;
         indexes = {
             @Index(name = "idx_entitylifecycleevent_event_type_event_status", columnList = "event_type, event_status")
         })
-@SuppressFBWarnings
 public class EntityLifeCycleEvent {
     @Id
     @GeneratedValue

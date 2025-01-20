@@ -85,7 +85,7 @@ public class CoreConfig {
             EntityLifeCycleEventRepository entityLifeCycleEventRepository,
             PlatformTransactionManager transactionManager,
             AdvisoryLockManager advisoryLockManager) {
-        var ms = new MappingService(
+        return new MappingService(
                 entityRepository,
                 entityTypeRepository,
                 mappingEntityTypeRelationshipRepository,
@@ -94,7 +94,6 @@ public class CoreConfig {
                 entityLifeCycleEventRepository,
                 transactionManager,
                 advisoryLockManager);
-        return ms;
     }
 
     @Bean

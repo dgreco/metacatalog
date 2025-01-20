@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.entity;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.OneToOne;
@@ -24,7 +23,6 @@ import lombok.ToString;
                     columnList = "source_id, mapping_entity_type_relationship_id",
                     unique = true)
         })
-@SuppressFBWarnings
 public class MappingEntityRelationship extends CommonRelationship<Entity> {
     @OneToOne(fetch = FetchType.EAGER)
     private MappingEntityTypeRelationship mappingEntityTypeRelationship;

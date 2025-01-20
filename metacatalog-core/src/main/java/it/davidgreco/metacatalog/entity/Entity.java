@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -16,7 +15,6 @@ import org.hibernate.annotations.Type;
 @Table(
         name = "entity",
         indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
-@SuppressFBWarnings
 public class Entity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

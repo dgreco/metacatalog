@@ -65,6 +65,17 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-openapi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
@@ -324,12 +335,6 @@
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
             </dependency>
-            <dependency>
-                <groupId>com.github.spotbugs</groupId>
-                <artifactId>spotbugs-annotations</artifactId>
-                <version>${spotbugs-annotations.version}</version>
-                <optional>true</optional>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -455,13 +460,6 @@
                     </executions>
                 </plugin>
 
-                <!-- SpotBugs Plugin -->
-                <plugin>
-                    <groupId>com.github.spotbugs</groupId>
-                    <artifactId>spotbugs-maven-plugin</artifactId>
-                    <version>4.8.6.6</version>
-                </plugin>
-
                 <!-- JaCoCo Plugin -->
                 <plugin>
                     <groupId>org.jacoco</groupId>
@@ -566,6 +564,7 @@
 
     <modules>
         <module>metacatalog-core</module>
+        <module>metacatalog-openapi</module>
         <module>metacatalog-application</module>
     </modules>
 

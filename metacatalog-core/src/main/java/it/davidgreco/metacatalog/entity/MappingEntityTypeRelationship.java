@@ -3,7 +3,6 @@ package it.davidgreco.metacatalog.entity;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Index;
@@ -28,7 +27,6 @@ import lombok.ToString;
                     name = "idx_mapping_type_relationship_source_id_relation_type_target_id",
                     columnList = "source_id, relation_type, target_id")
         })
-@SuppressFBWarnings
 public class MappingEntityTypeRelationship extends CommonRelationship<EntityType> {
     @org.hibernate.annotations.Type(JsonBinaryType.class)
     @Column(name = "mapping_values", columnDefinition = "jsonb", nullable = false)

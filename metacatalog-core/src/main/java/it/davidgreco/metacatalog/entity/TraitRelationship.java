@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.entity;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -20,5 +19,4 @@ import lombok.ToString;
                     columnList = "source_id, relation_type, target_id",
                     unique = true),
         })
-@SuppressFBWarnings
 public class TraitRelationship extends CommonRelationship<Trait> {}

@@ -1,4 +1,4 @@
-package it.davidgreco.metacatalog.api;
+package it.davidgreco.metacatalog.openapi;
 
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
