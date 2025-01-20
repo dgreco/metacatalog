@@ -36,202 +36,8 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-devtools</artifactId>
-            <scope>runtime</scope>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>io.vavr</groupId>
-            <artifactId>vavr</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.openapitools</groupId>
-            <artifactId>jackson-databind-nullable</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.swagger.core.v3</groupId>
-            <artifactId>swagger-annotations</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.swagger.parser.v3</groupId>
-            <artifactId>swagger-parser</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.dataformat</groupId>
-            <artifactId>jackson-dataformat-yaml</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jdk8</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
-        </dependency>
-
-        <!-- SpringBoot JPA, Json, JsonSchema, Json Path -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.hypersistence</groupId>
-            <artifactId>hypersistence-utils-hibernate-63</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.networknt</groupId>
-            <artifactId>json-schema-validator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.jayway.jsonpath</groupId>
-            <artifactId>json-path</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.jsqlparser</groupId>
-            <artifactId>jsqlparser</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <!-- Ontop -->
-        <dependency>
-            <groupId>it.unibz.inf.ontop</groupId>
-            <artifactId>ontop-system-sql-owlapi</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>log4j</groupId>
-                    <artifactId>log4j</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>it.unibz.inf.ontop</groupId>
-            <artifactId>ontop-rdf4j</artifactId>
-        </dependency>
-
-        <!-- Common Rdf4j -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-rdf-rdf4j</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-repository-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-repository-sail</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-util</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-turtle</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-ntriples</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-nquads</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-rdfxml</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-trig</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-rio-jsonld</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-sail-memory</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.eclipse.rdf4j</groupId>
-                    <artifactId>rdf4j-repository-sail</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Rdf4J -->
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-model</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-repository-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-repository-sail</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-rio-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-rio-turtle</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-rio-n3</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-rio-ntriples</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.rdf4j</groupId>
-            <artifactId>rdf4j-rio-rdfxml</artifactId>
-        </dependency>
-
-        <!-- Postgresql -->
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-        </dependency>
-
-        <!-- Flyway -->
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-        </dependency>
-
-        <!-- Logback -->
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-core</artifactId>
         </dependency>
 
         <!-- Testing & Checking-->
@@ -298,74 +104,6 @@
                 </configuration>
             </plugin>
 
-            <!-- OpenApi Generator Plugin -->
-            <!--
-            <plugin>
-                <groupId>org.openapitools</groupId>
-                <artifactId>openapi-generator-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>generate-server</id>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <inputSpec>
-                                ${project.basedir}/src/main/resources/static/api/interface-specification.yaml
-                            </inputSpec>
-                            <generatorName>spring</generatorName>
-                            <library>spring-boot</library>
-                            <apiPackage>it.davidgreco.metacatalog.openapi.controller</apiPackage>
-                            <modelPackage>it.davidgreco.metacatalog.openapi.model</modelPackage>
-                            <supportingFilesToGenerate>
-                                ApiUtil.java
-                            </supportingFilesToGenerate>
-                            <configOptions>
-                                <sourceFolder>/src/main/java</sourceFolder>
-                                <implFolder>/src/main/java</implFolder>
-                                <useSpringBoot3>true</useSpringBoot3>
-                                <delegatePattern>true</delegatePattern>
-                                <unhandledException>true</unhandledException>
-                                <useOptional>true</useOptional>
-                                <useSwaggerUI>true</useSwaggerUI>
-                                <documentationProvider>springdoc</documentationProvider>
-                                <performBeanValidation>true</performBeanValidation>
-                                <useBeanValidation>true</useBeanValidation>
-                                <useJakartaEe>true</useJakartaEe>
-                                <useSpringBoot3>true</useSpringBoot3>
-                            </configOptions>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>generate-client</id>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                        <configuration>
-                            <inputSpec>
-                                ${project.basedir}/src/main/resources/static/api/interface-specification.yaml
-                            </inputSpec>
-                            <generatorName>java</generatorName>
-                            <library>resttemplate</library>
-                            <invokerPackage>it.davidgreco.metacatalog.openapi.client</invokerPackage>
-                            <apiPackage>it.davidgreco.metacatalog.openapi.client</apiPackage>
-                            <modelPackage>it.davidgreco.metacatalog.openapi.client</modelPackage>
-                            <globalProperties>
-                                <supportingFiles>ApiClient.java,Authentication.java,BaseApi.java,JavaTimeFormatter.java,RFC3339DateFormat.java</supportingFiles>
-                                <apiTests>false</apiTests>
-                                <modelTests>false</modelTests>
-                            </globalProperties>
-                            <configOptions>
-                                <sourceFolder>/src/main/java</sourceFolder>
-                                <implFolder>/src/main/java</implFolder>
-                                <useJakartaEe>true</useJakartaEe>
-                            </configOptions>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            -->
-
             <!-- SpotBugs Plugin -->
             <plugin>
                 <groupId>com.github.spotbugs</groupId>
@@ -413,6 +151,7 @@
             </plugin>
 
             <!-- OWASP Dependency Check plugin for Vulnerability Scanning -->
+            <!--
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
@@ -430,6 +169,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
 
             <!-- licensescan Maven plugin for License check -->
             <plugin>

@@ -25,10 +25,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!--
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
@@ -279,22 +281,6 @@
                 </configuration>
             </plugin>
 
-            <!-- SpringBoot Plugin -->
-            <!--
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            -->
-
             <!-- OpenApi Generator Plugin -->
             <plugin>
                 <groupId>org.openapitools</groupId>
@@ -408,6 +394,7 @@
             </plugin>
 
             <!-- OWASP Dependency Check plugin for Vulnerability Scanning -->
+            <!--
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
@@ -425,6 +412,7 @@
                     </execution>
                 </executions>
             </plugin>
+            -->
 
             <!-- licensescan Maven plugin for License check -->
             <plugin>

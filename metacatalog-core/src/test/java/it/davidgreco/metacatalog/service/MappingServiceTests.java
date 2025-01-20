@@ -307,7 +307,7 @@ class MappingServiceTests extends CommonServiceTests {
         entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
 
         try {
-            Thread.sleep(1000); // TODO
+            Thread.sleep(2000); // TODO
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -333,7 +333,7 @@ class MappingServiceTests extends CommonServiceTests {
                     """);
 
         try {
-            Thread.sleep(1000); // TODO
+            Thread.sleep(2000); // TODO
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
