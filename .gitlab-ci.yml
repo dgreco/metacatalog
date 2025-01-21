@@ -1,0 +1,32 @@
+variables:
+  MAVEN_OPTS: -Dmaven.repo.local=.m2/repository
+
+mage: maven:3-eclipse-temurin-22 
+
+stages:
+    - build
+    - test
+
+cache:
+  paths:
+    - .m2/repository
+    - target
+
+build_job:
+  stage: build
+  tags:
+    - docker 
+
+  script: 
+    - echo "Maven compile started"
+    - "mvn compile"
+
+
+test_job:
+  stage: test
+  tags:
+    - docker 
+
+  script: 
+    - echo "Maven test started"
+    - "mvn test"
