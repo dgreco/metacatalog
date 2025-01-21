@@ -7,11 +7,11 @@
 
 variables:
   # Instruct Testcontainers to use the daemon of DinD, use port 2375 for non-tls connections.
-  DOCKER_HOST: "tcp://172.17.0.1:2375"
+#  DOCKER_HOST: "tcp://172.17.0.1:2375"
   # Instruct Docker not to start over TLS.
-  DOCKER_TLS_CERTDIR: ""
+#  DOCKER_TLS_CERTDIR: ""
   # Improve performance with overlayfs.
-  DOCKER_DRIVER: overlay2
+#  DOCKER_DRIVER: overlay2
   TESTCONTAINERS_RYUK_DISABLED: "true"
 
 test:
