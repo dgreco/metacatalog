@@ -1,21 +1,18 @@
-# DinD service is required for Testcontainers
-#services:
-#  - name: docker:dind
-#    alias: docker
-#    # explicitly disable tls to avoid docker startup interruption
-#    command: ["--tls=false"]
+stages:
+  - test
 
-variables:
-  # Instruct Testcontainers to use the daemon of DinD, use port 2375 for non-tls connections.
-#  DOCKER_HOST: "tcp://172.17.0.1:2375"
-  # Instruct Docker not to start over TLS.
-#  DOCKER_TLS_CERTDIR: ""
-  # Improve performance with overlayfs.
-#  DOCKER_DRIVER: overlay2
-  TESTCONTAINERS_RYUK_DISABLED: "true"
-  TESTCONTAINERS_HOST_OVERRIDE: "127.17.0.1"
+integration-test:
+  stage: test
+  image: maven:3-eclipse-temurin-22-docker
 
-test:
- image: maven:3-eclipse-temurin-22
- stage: test
- script: mvn test
+  services:
+    - name: docker:20.10.1-dind
+      command: ['--tls=false', '--host=tcp://0.0.0.0:2376']
+
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: "overlay2"
+
+  script:
+    - mvn test
