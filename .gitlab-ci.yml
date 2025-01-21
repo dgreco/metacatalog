@@ -1,7 +1,7 @@
 variables:
   MAVEN_OPTS: -Dmaven.repo.local=.m2/repository
 
-mage: maven:3-eclipse-temurin-22 
+image: maven:3-eclipse-temurin-22 
 
 stages:
     - build
