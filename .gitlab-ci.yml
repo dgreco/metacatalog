@@ -1,4 +1,4 @@
-image: maven:3-eclipse-temurin-22
+image: maven:3-eclipse-temurin-22-docker
 
 variables:
   SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
