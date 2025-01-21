@@ -1,18 +1,31 @@
+services:
+  - name: docker:20.10.1-dind
+    command: ['--tls=false', '--host=tcp://0.0.0.0:2376']
+
+variables:
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: "overlay2"
+
 stages:
+  - format-check
+  - compile
   - test
 
-integration-test:
+format-check-job:
+  stage: compile
+  image: maven:3-eclipse-temurin-22
+  script:
+    - mvn spotless:check
+
+compile-job:
+  stage: compile
+  image: maven:3-eclipse-temurin-22
+  script:
+    - mvn compile
+
+test-job:
   stage: test
   image: maven:3-eclipse-temurin-22
-
-  services:
-    - name: docker:20.10.1-dind
-      command: ['--tls=false', '--host=tcp://0.0.0.0:2376']
-
-  variables:
-    DOCKER_HOST: "tcp://docker:2375"
-    DOCKER_TLS_CERTDIR: ""
-    DOCKER_DRIVER: "overlay2"
-
   script:
     - mvn test
