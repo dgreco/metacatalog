@@ -11,7 +11,7 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   # Improve performance with overlayfs.
   DOCKER_DRIVER: overlay2
-  TESTCONTAINERS_RYUK_DISABLED: true
+  TESTCONTAINERS_RYUK_DISABLED: "true"
 
 test:
  image: maven:3-eclipse-temurin-22
