@@ -1,6 +1,6 @@
 variables:
   MAVEN_OPTS: -Dmaven.repo.local=.m2/repository
-  TESTCONTAINERS_HOST_OVERRIDE: "localhost"
+  TESTCONTAINERS_HOST_OVERRIDE: "host.docker.internal"
 
 image: maven:3-eclipse-temurin-22 
 
