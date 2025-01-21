@@ -101,6 +101,14 @@ public class EntityService implements CommonService<Entity, String> {
                 .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
     }
 
+    /**
+     * Updates an existing entity with the given ID.
+     *
+     * @param entityId the ID of the entity to update
+     * @param values a JSON string containing the new values for the entity
+     * @throws ServiceError if the entity with the given ID does not exist, is an instance of a target entity type,
+     *                      validation fails, or a JSON processing error occurs
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})

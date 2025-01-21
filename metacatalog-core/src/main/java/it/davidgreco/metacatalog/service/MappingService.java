@@ -61,6 +61,17 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 
+    /**
+     * Creates a new MappingEntityTypeRelationship between the specified source and target entity types.
+     *
+     * @param sourceEntityTypeName the name of the source entity type
+     * @param targetEntityTypeName the name of the target entity type
+     * @param mappingValues a JSON string representing the mapping values
+     * @param entityPathReferences a list of entity path references used in the mapping
+     * @return the created MappingEntityTypeRelationship
+     * @throws ServiceError if loops are detected, entity types are not found, validation fails,
+     *                      or a JSON processing error occurs
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -108,6 +119,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
+    /**
+     * Deletes a mapping entity type relationship by its ID.
+     *
+     * @param mappingId the ID of the mapping entity type relationship to delete
+     */
     @Transactional(propagation = Propagation.REQUIRED)
     public void delete(String mappingId) {
         mappingEntityTypeRelationshipRepository.deleteById(mappingId);
@@ -122,11 +138,24 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
     }
 
+    /**
+     * Checks if a mapping entity type relationship with the given ID exists.
+     *
+     * @param mappingId the ID of the mapping entity type relationship to check
+     * @return true if the mapping entity type relationship with the given ID exists, false otherwise
+     */
     @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String mappingId) {
         return mappingEntityTypeRelationshipRepository.existsById(mappingId);
     }
 
+    /**
+     * Creates mapped entities for the given event, and then marks the event as
+     * processed.
+     *
+     * @param event the event to process
+     * @throws ServiceError if an error occurs while processing the event
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -137,6 +166,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         entityLifeCycleEventRepository.save(event);
     }
 
+    /**
+     * Creates mapped entities for the given source entity ID.
+     *
+     * @param sourceEntityId the ID of the source entity to process
+     * @throws ServiceError if an error occurs while processing the event
+     */
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
         class CreateMappedEntities {
@@ -223,6 +258,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
+    /**
+     * Updates mapped entities for the given event.
+     *
+     * @param event the event to process
+     * @throws ServiceError if an error occurs while processing the event
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -233,6 +274,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         entityLifeCycleEventRepository.save(event);
     }
 
+    /**
+     * Updates mapped entities for the given source entity ID.
+     *
+     * @param sourceEntityId the ID of the source entity to process
+     * @throws ServiceError if an error occurs while processing the event
+     */
     public void updateMappedEntities(String sourceEntityId) throws ServiceError {
 
         class UpdateMappedEntities {
@@ -299,6 +346,15 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         }
     }
 
+    /**
+     * Deletes all entities mapped from the given source entity.
+     *
+     * <p>This method only deletes entities that are instances of neither source nor target entity types.
+     *
+     * @param sourceEntityId the ID of the source entity
+     * @throws ServiceError if the entity with the given ID does not exist, is an instance of a source or target
+     *                      entity type, or a data integrity violation occurs
+     */
     public void deleteMappedEntities(String sourceEntityId) throws ServiceError {
 
         class DeleteMappedEntities {
@@ -381,7 +437,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .isEmpty();
     }
 
-    public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
+    Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) throws ServiceError {
 
         var pathSegments = pathString.split("/");
 

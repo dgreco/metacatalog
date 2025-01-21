@@ -18,6 +18,15 @@ public class MappingUpdaterService {
 
     public final MappingService mappingService;
 
+    /**
+     * Scheduled task that checks for new {@link EntityLifeCycleEvent}s that are source created or source updated.
+     * If the {@link EntityLifeCycleEvent} is source created, it calls {@link MappingService#createMappedEntities} to
+     * create the mapped entities. If the {@link EntityLifeCycleEvent} is source updated, it calls
+     * {@link MappingService#updateMappedEntities} to update the mapped entities.
+     *
+     * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is also synchronized
+     * using an advisory lock, so that only one instance of this task can run at the same time.
+     */
     @Scheduled(
             fixedRateString =
                     "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")

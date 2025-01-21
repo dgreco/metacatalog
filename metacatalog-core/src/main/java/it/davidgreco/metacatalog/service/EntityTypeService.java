@@ -31,6 +31,21 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
 
     private final TraitRepository traitRepository;
 
+    /**
+     * Creates a new EntityType with the specified name, traits, optional father, and schema.
+     *
+     * This method validates that each trait in the list exists and is unique. It also converts
+     * the provided schema to a JSON schema and merges it with the schemas of the traits and
+     * the optional father EntityType. The resulting EntityType is stored in the repository.
+     *
+     * @param name the name for the new EntityType
+     * @param traits a list of trait names to associate with the EntityType
+     * @param fatherName an optional name of the father EntityType, if any
+     * @param schema the JSON schema string for the EntityType
+     * @return the newly created and persisted EntityType
+     * @throws ServiceError if a trait does not exist, a schema validation error occurs,
+     *                      or a data integrity violation occurs
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class, DataIntegrityViolationException.class})
@@ -96,6 +111,13 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
                 .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
     }
 
+    /**
+     * Deletes an entity type given its name.
+     *
+     * @param name the name of the entity type to delete
+     * @throws ServiceError if the entity type is not found, or if a {@link DataIntegrityViolationException} occurs
+     *                      while deleting the entity type
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -110,6 +132,12 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         }
     }
 
+    /**
+     * Checks if an entity type with the given name exists.
+     *
+     * @param name the name of the entity type to check
+     * @return true if an entity type with the given name exists, false otherwise
+     */
     @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String name) {
         return entityTypeRepository.existsByName(name);
