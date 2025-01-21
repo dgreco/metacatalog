@@ -3,7 +3,7 @@ stages:
 
 integration-test:
   stage: test
-  image: maven:3-eclipse-temurin-22-docker
+  image: maven:3-eclipse-temurin-22
 
   services:
     - name: docker:20.10.1-dind
