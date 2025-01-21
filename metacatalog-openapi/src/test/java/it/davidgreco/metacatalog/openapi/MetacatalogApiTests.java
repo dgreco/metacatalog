@@ -57,6 +57,7 @@ public class MetacatalogApiTests {
         restTemplate.setMessageConverters(msgConverters);
 
         var apiClient = new ApiClient(restTemplate);
+        apiClient.setBasePath("http://localhost:9876");
 
         api = new MetaCatalogManagerApi(apiClient);
     }

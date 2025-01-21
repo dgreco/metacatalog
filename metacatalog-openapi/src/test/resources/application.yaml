@@ -16,6 +16,8 @@ spring:
         format_sql: true
   lifecycle:
     timeout-per-shutdown-phase: 5s
+server:
+  port: 9876
 application:
   config:
     automaticEntitiesMapping: false
