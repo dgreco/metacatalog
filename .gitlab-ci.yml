@@ -13,6 +13,7 @@ variables:
   # Improve performance with overlayfs.
 #  DOCKER_DRIVER: overlay2
   TESTCONTAINERS_RYUK_DISABLED: "true"
+  TESTCONTAINERS_HOST_OVERRIDE: "127.17.0.1"
 
 test:
  image: maven:3-eclipse-temurin-22
