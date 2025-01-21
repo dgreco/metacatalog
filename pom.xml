@@ -19,6 +19,10 @@
     <properties>
         <project.version>0.0.1-SNAPSHOT</project.version>
 
+        <sonar.projectKey>dgreco_metacatalog_facde50f-a3c4-4815-b98b-49c4e6345ca5</sonar.projectKey>
+        <sonar.projectName>metacatalog</sonar.projectName>
+        <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
+
         <maven.compiler.release>21</maven.compiler.release>
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->

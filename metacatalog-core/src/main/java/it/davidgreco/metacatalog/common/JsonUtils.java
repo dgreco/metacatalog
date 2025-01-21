@@ -51,6 +51,14 @@ public class JsonUtils {
             "not",
             "unevaluatedProperties");
 
+    /**
+     * Check if a given JSON node contains any of the keywords that are not
+     * allowed in a Metacatalog schema.
+     *
+     * @param node the JSON node to check
+     * @return true if the node contains any of the not allowed keywords,
+     *         false otherwise
+     */
     private static boolean checkNotAllowedKeywords(JsonNode node) {
         if (node.isObject()) {
             var entries = node.fields();
@@ -72,7 +80,15 @@ public class JsonUtils {
         return false;
     }
 
-    private static void convertFieldTypeToString(JsonNode node) {
+    /**
+     * Converts the field types of a JSON node to "string" if they are not
+     * already "string" or "object". This method recursively traverses
+     * through the JSON node and its nested objects or arrays, ensuring that
+     * all non-object, non-string types are set to "string".
+     *
+     * @param node the JSON node whose field types are to be converted
+     */
+    private static void convertFieldTypeToStringType(JsonNode node) {
         if (node.isObject()) {
             var entries = node.fields();
             while (entries.hasNext()) {
@@ -80,11 +96,11 @@ public class JsonUtils {
                 var key = entry.getKey();
                 var value = node.get(key);
                 if (value.isObject()) {
-                    convertFieldTypeToString(value);
+                    convertFieldTypeToStringType(value);
                 } else if (value.isArray()) {
                     var array = value.elements();
                     while (array.hasNext()) {
-                        convertFieldTypeToString(array.next());
+                        convertFieldTypeToStringType(array.next());
                     }
                 } else {
                     if (!value.asText().equals("string") && !value.asText().equals("object")) {
@@ -97,10 +113,19 @@ public class JsonUtils {
 
     public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
         var node = jsonSchema.getSchemaNode().deepCopy();
-        convertFieldTypeToString(node.get("properties"));
+        convertFieldTypeToStringType(node.get("properties"));
         return Either.right(jsonSchemaFactory.getSchema(node));
     }
 
+    /**
+     * Validate a given JSON schema string and return it as a {@link JsonSchema}
+     * if it is valid. Otherwise, return the validation errors as a list of
+     * strings.
+     *
+     * @param json the JSON schema string to validate
+     * @return the validated JSON schema if it is valid, otherwise a list of
+     *         validation errors
+     */
     public static Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
         try {
             var schemaNode = jsonFactory.readTree(json);
@@ -121,6 +146,13 @@ public class JsonUtils {
         }
     }
 
+    /**
+     * Merge a list of JSON schemas into a single JSON schema.
+     *
+     * @param schemas the JSON schemas to merge
+     * @return the merged JSON schema if it is valid, otherwise a list of
+     *         validation errors
+     */
     public static Either<List<String>, JsonNode> mergeSchemas(List<JsonNode> schemas) {
         Map<String, Tuple2<JsonNode, Boolean>> propertiesToMerge = new HashMap<>();
         List<String> propertiesNamesToMerge = new LinkedList<>();

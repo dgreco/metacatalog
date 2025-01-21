@@ -39,6 +39,15 @@ public class EntityService implements CommonService<Entity, String> {
 
     private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
+    /**
+     * Creates a new entity based on the given type name and JSON values.
+     *
+     * @param typeName the name of the entity type for the entity to create
+     * @param values a JSON string containing the values for the entity
+     * @return the created Entity
+     * @throws ServiceError if the entity type is not found, creation is not allowed,
+     *                      validation fails, or a JSON processing error occurs
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -76,6 +85,13 @@ public class EntityService implements CommonService<Entity, String> {
         }
     }
 
+    /**
+     * Reads an entity by its ID.
+     *
+     * @param entityId the ID of the entity to read
+     * @return the read entity
+     * @throws ServiceError if the entity with the given ID does not exist
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -120,6 +136,15 @@ public class EntityService implements CommonService<Entity, String> {
         }
     }
 
+    /**
+     * Deletes an entity by its ID.
+     *
+     * <p>This method only deletes entities that are instances of neither source nor target entity types.
+     *
+     * @param entityId the ID of the entity to delete
+     * @throws ServiceError if the entity with the given ID does not exist, is an instance of a source or target
+     *                      entity type, or a data integrity violation occurs
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -143,6 +168,12 @@ public class EntityService implements CommonService<Entity, String> {
         }
     }
 
+    /**
+     * Checks if an entity with the given ID exists.
+     *
+     * @param entityId the ID to check
+     * @return true if an entity with the given ID exists, false otherwise
+     */
     @Transactional(propagation = Propagation.REQUIRED)
     public boolean exists(String entityId) {
         return entityRepository.existsById(entityId);
@@ -161,6 +192,14 @@ public class EntityService implements CommonService<Entity, String> {
         }
     }
 
+    /**
+     * Links two entities with a given relation type.
+     *
+     * @param sourceId the ID of the source entity
+     * @param relType the relation type to use for the link
+     * @param targetId the ID of the target entity
+     * @throws ServiceError if the link is not allowed (e.g. due to a loop or an invalid relationship)
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -191,6 +230,14 @@ public class EntityService implements CommonService<Entity, String> {
         entityRelationshipRepository.save(rel1);
     }
 
+    /**
+     * Removes a link between two entities.
+     *
+     * @param sourceId the ID of the source entity
+     * @param relType the relation type of the link
+     * @param targetId the ID of the target entity
+     * @throws ServiceError if the link does not exist
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
@@ -208,6 +255,14 @@ public class EntityService implements CommonService<Entity, String> {
         entityRelationshipRepository.delete(rel);
     }
 
+    /**
+     * Retrieves a list of entities linked to the given source entity with a specific relation type.
+     *
+     * @param sourceId the ID of the source entity
+     * @param relType the relation type to filter the links
+     * @return a list of entities that are targets of the specified relation type from the source entity
+     * @throws ServiceError if the source entity with the given ID does not exist
+     */
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
