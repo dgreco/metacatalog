@@ -7,7 +7,7 @@ import it.davidgreco.metacatalog.service.*;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
@@ -18,36 +18,20 @@ import org.springframework.web.context.request.NativeWebRequest;
  * Microservice implementation class.
  */
 @Service
+@RequiredArgsConstructor
 public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
-    @Autowired
-    private TraitService traitService;
+    private final TraitService traitService;
 
-    @Autowired
-    private EntityTypeService entityTypeService;
+    private final EntityTypeService entityTypeService;
 
-    @Autowired
-    private EntityService entityService;
+    private final EntityService entityService;
 
-    @Autowired
-    private MappingService mappingService;
+    private final MappingService mappingService;
 
-    @Autowired
-    private BulkLoaderService bulkLoaderService;
+    private final BulkLoaderService bulkLoaderService;
 
-    /**
-     * Native request.
-     */
     private final NativeWebRequest request;
-
-    /**
-     * Constructor.
-     * @param req
-     */
-    @Autowired
-    public MetacatalogApiImpl(final NativeWebRequest req) {
-        this.request = req;
-    }
 
     @Override
     public Optional<NativeWebRequest> getRequest() {

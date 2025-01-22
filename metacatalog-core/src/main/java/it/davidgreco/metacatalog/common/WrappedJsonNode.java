@@ -22,6 +22,6 @@ public record WrappedJsonNode(JsonNode node) {
         else if (clazz == Float.class) return (T) Float.valueOf(((FloatNode) obj).intValue());
         else if (clazz == Double.class) return (T) Double.valueOf(((DoubleNode) obj).intValue());
         else if (clazz == Boolean.class) return (T) Boolean.valueOf(((BooleanNode) obj).booleanValue());
-        else throw new RuntimeException("Unsupported type: " + clazz);
+        else return (T) obj;
     }
 }

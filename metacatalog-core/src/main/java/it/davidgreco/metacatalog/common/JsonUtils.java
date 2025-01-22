@@ -15,6 +15,8 @@ import java.util.*;
 
 public class JsonUtils {
 
+    private JsonUtils() {}
+
     public static final ObjectMapper jsonFactory = new ObjectMapper();
 
     public static final ObjectMapper yamlFactory = new ObjectMapper(new YAMLFactory());

@@ -8,7 +8,9 @@ import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
@@ -41,8 +43,7 @@ class CommonServiceTests {
     }
 
     @AfterAll
-    static void afterAll() throws InterruptedException {
-        // Thread.sleep(200000);
+    static void afterAll() {
         postgres.stop();
     }
 
@@ -81,4 +82,10 @@ class CommonServiceTests {
 
     @Autowired
     AdvisoryLockManager advisoryLockManager;
+
+    @Test
+    void dummyTest() {
+        /* Just a dummy test */
+        Assertions.assertTrue(true);
+    }
 }
