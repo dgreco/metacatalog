@@ -215,117 +215,30 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>enforce-maven</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <requireMavenVersion>
-                                    <version>3.9.9</version>
-                                </requireMavenVersion>
-                            </rules>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
 
             <!-- Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
             </plugin>
 
             <!-- JaCoCo Plugin -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
 
             <!-- Spotless Plugin for Code Formatting -->
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <configuration>
-                    <java>
-                        <includes>
-                            <include>src/main/java/**/*.java</include>
-                            <include>src/test/java/**/*.java</include>
-                        </includes>
-                        <palantirJavaFormat>
-                            <version>2.50.0</version>
-                            <style>PALANTIR</style>
-                        </palantirJavaFormat>
-                    </java>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>maven-spotless-check</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
-
-            <!-- OWASP Dependency Check plugin for Vulnerability Scanning -->
-            <!--
-            <plugin>
-                <groupId>org.owasp</groupId>
-                <artifactId>dependency-check-maven</artifactId>
-                <configuration>
-                    <failBuildOnCVSS>9</failBuildOnCVSS>
-                    <suppressionFiles>
-                        <suppressionFile>suppressions/suppression.xml</suppressionFile>
-                    </suppressionFiles>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            -->
 
             <!-- licensescan Maven plugin for License check -->
             <plugin>
                 <groupId>com.github.carlomorelli</groupId>
                 <artifactId>licensescan-maven-plugin</artifactId>
-                <configuration>
-                    <printLicenses>true</printLicenses>
-                    <forbiddenLicenses>
-                        <license>GNU General Public License, v2.0</license>
-                    </forbiddenLicenses>
-                    <failBuildOnViolation>true</failBuildOnViolation>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase> <!-- choose the most relevant goal for your pipeline, e.g. 'compile', 'test' or 'deploy' -->
-                        <goals>
-                            <goal>audit</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
 
             <!-- maven-surefire-plugin to run unit tests through the command line -->
