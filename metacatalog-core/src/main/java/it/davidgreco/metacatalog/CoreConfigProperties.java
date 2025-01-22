@@ -7,4 +7,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record CoreConfigProperties(
         boolean automaticEntitiesMapping,
         Duration updateMappedEntitiesSchedulingInterval,
-        Duration entityLifeCycleEventCleanupSchedulingInterval) {}
+        Duration entityLifeCycleEventCleanupSchedulingInterval,
+        int entityPathResolutionMaxAttempts) {}

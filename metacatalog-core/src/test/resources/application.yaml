@@ -21,3 +21,4 @@ application:
     automaticEntitiesMapping: false
     updateMappedEntitiesSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1d
+    entityPathResolutionMaxAttempts: 3

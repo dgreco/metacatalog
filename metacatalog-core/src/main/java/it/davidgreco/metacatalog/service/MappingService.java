@@ -10,6 +10,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.ValidationMessage;
+import it.davidgreco.metacatalog.CoreConfigProperties;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
@@ -24,6 +25,7 @@ import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
@@ -50,6 +52,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+
+    private final CoreConfigProperties coreConfigProperties;
 
     /**
      * Creates a new MappingEntityTypeRelationship between the specified source and target entity types.
@@ -165,7 +169,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
         class CreateMappedEntities {
-            private void createMappedEntities(String sourceEntityId) throws ServiceError, InterruptedException {
+            private void createMappedEntities(String sourceEntityId) throws ServiceError {
+                RetryTemplate createRetryTemplate = RetryTemplate.builder()
+                        .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
+                        .fixedBackoff(500) // TODO magic number
+                        .retryOn(ServiceRuntimeError.class)
+                        .build();
+
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
@@ -183,13 +193,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                                 mappingRelationship.getEntityPathReferences()) {
                             var as = sourceReference.alias();
-                            Optional<JsonNode> jn; // TODO refactor this
-                            while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                            .map(Entity::getValues))
-                                    .isEmpty()) {
-                                Thread.sleep(1000);
-                            }
-                            additionalEntitiesValues.put(as, jn.get());
+                            var jn = createRetryTemplate.execute(
+                                    ctx -> retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                            .orElseThrow(() -> new ServiceRuntimeError("Entity not found")));
+                            additionalEntitiesValues.put(as, jn.getValues());
                         }
                         var mappedValues = generateMappedValues(
                                 sourceEntity.getValues(),
@@ -231,7 +238,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         throw new ServiceError(
                                 "Source entity type " + sourceEntityType.getName() + " is a target entity type");
                     new CreateMappedEntities().createMappedEntities(sourceEntityId);
-                } catch (ServiceError | InterruptedException e) {
+                } catch (ServiceError e) {
                     throw new RuntimeException(e);
                 }
             });
@@ -266,7 +273,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public void updateMappedEntities(String sourceEntityId) throws ServiceError {
 
         class UpdateMappedEntities {
-            private void updateMappedEntities(String sourceEntityId) throws ServiceError, InterruptedException {
+            private void updateMappedEntities(String sourceEntityId) throws ServiceError {
+                RetryTemplate updateRetryTemplate = RetryTemplate.builder()
+                        .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
+                        .fixedBackoff(500) // TODO magic number
+                        .retryOn(ServiceRuntimeError.class)
+                        .build();
+
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
@@ -277,13 +290,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     for (MappingEntityTypeRelationship.EntityPathReference sourceReference :
                             mappingTypeRelationship.getEntityPathReferences()) {
                         var as = sourceReference.alias();
-                        Optional<JsonNode> jn; // TODO: refactor this
-                        while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
-                                        .map(Entity::getValues))
-                                .isEmpty()) {
-                            Thread.sleep(1000);
-                        }
-                        additionalEntitiesValues.put(as, jn.get());
+                        var jn = updateRetryTemplate.execute(
+                                ctx -> retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
+                                        .orElseThrow(() -> new ServiceRuntimeError("Entity not found")));
+                        additionalEntitiesValues.put(as, jn.getValues());
                     }
                     var mappedValues = generateMappedValues(
                             sourceEntity.getValues(),
@@ -312,7 +322,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         throw new ServiceError(
                                 "Source entity type " + sourceEntityType.getName() + " is a target entity type");
                     new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
-                } catch (ServiceError | InterruptedException e) {
+                } catch (ServiceError e) {
                     throw new RuntimeException(e);
                 }
             });
