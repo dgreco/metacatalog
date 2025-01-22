@@ -172,7 +172,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             private void createMappedEntities(String sourceEntityId) throws ServiceError {
                 RetryTemplate createRetryTemplate = RetryTemplate.builder()
                         .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
-                        .fixedBackoff(500) // TODO magic number
+                        .fixedBackoff(500)
                         .retryOn(ServiceRuntimeError.class)
                         .build();
 
@@ -276,7 +276,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             private void updateMappedEntities(String sourceEntityId) throws ServiceError {
                 RetryTemplate updateRetryTemplate = RetryTemplate.builder()
                         .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
-                        .fixedBackoff(500) // TODO magic number
+                        .fixedBackoff(500)
                         .retryOn(ServiceRuntimeError.class)
                         .build();
 
