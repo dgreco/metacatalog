@@ -4,6 +4,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 import static it.davidgreco.metacatalog.service.MappingService.generateMappedValues;
+import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.IntNode;
@@ -12,6 +13,7 @@ import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,8 +31,7 @@ class MappingServiceTests extends CommonServiceTests {
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
                 entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
+                transactionManager);
 
         entityTypeService.create(
                 "SimpleSourceType",
@@ -238,7 +239,7 @@ class MappingServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError, InterruptedException {
+    void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
         var traitService = applicationContext.getBean(TraitService.class);
         var entityTypeService = applicationContext.getBean(EntityTypeService.class);
         var entityService = applicationContext.getBean(EntityService.class);
@@ -306,11 +307,7 @@ class MappingServiceTests extends CommonServiceTests {
 
         entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
 
-        try {
-            Thread.sleep(2000); // TODO
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
 
         {
             var int1 = new WrappedJsonNode(entityRepository
@@ -332,11 +329,7 @@ class MappingServiceTests extends CommonServiceTests {
                     {"a": 2}
                     """);
 
-        try {
-            Thread.sleep(2000); // TODO
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
 
         {
             var int1 = new WrappedJsonNode(entityRepository
@@ -517,11 +510,5 @@ class MappingServiceTests extends CommonServiceTests {
 
         // Check that idempotency works
         mappingService.deleteMappedEntities(sourceInstance.getId());
-
-        try {
-            Thread.sleep(10000);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
     }
 }

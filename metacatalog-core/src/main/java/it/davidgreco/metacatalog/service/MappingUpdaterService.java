@@ -5,6 +5,8 @@ import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
 @Getter
 @Setter
 public class MappingUpdaterService {
+
+    Logger logger = LoggerFactory.getLogger(MappingUpdaterService.class);
 
     private boolean automaticEntitiesMapping;
 
@@ -42,7 +46,7 @@ public class MappingUpdaterService {
                 try {
                     mappingService.createMappedEntities(event);
                 } catch (Exception e) {
-                    e.printStackTrace(); // TODO
+                    logger.error("Error creating mapped entities", e);
                 }
             });
             var updatedEvents =
@@ -51,7 +55,7 @@ public class MappingUpdaterService {
                 try {
                     mappingService.updateMappedEntities(event);
                 } catch (Exception e) {
-                    e.printStackTrace(); // TODO
+                    logger.error("Error updating mapped entities", e);
                 }
             });
         }
@@ -62,7 +66,7 @@ public class MappingUpdaterService {
                     "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
     void entityLifeCycleEventCleanup() {
         if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-            System.out.println("Cleaning up entity life cycle events");
+            logger.info("Cleaning up entity life cycle events");
         }
     }
 }

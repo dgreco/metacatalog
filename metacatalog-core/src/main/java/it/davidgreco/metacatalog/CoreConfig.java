@@ -82,8 +82,7 @@ public class CoreConfig {
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
                 entityLifeCycleEventRepository,
-                transactionManager,
-                advisoryLockManager);
+                transactionManager);
     }
 
     @Bean

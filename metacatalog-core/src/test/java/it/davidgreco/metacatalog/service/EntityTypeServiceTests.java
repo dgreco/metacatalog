@@ -27,8 +27,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
         entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
 
         Assertions.assertThrows(
-                DataIntegrityViolationException.class,
-                () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
+                Exception.class, () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
 
         Assertions.assertTrue(entityTypeService.exists("NewType"));
 

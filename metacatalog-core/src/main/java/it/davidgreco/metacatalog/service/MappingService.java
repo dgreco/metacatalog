@@ -48,8 +48,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final PlatformTransactionManager transactionManager;
 
-    private final AdvisoryLockManager advisoryLockManager;
-
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 
@@ -191,9 +189,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                                     .isEmpty()) {
                                 Thread.sleep(1000);
                             }
-                            if (jn.isEmpty())
-                                throw new ServiceError(
-                                        "Wrong reference path " + sourceReference.referencePath() + " for entity");
                             additionalEntitiesValues.put(as, jn.get());
                         }
                         var mappedValues = generateMappedValues(
@@ -288,9 +283,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                                 .isEmpty()) {
                             Thread.sleep(1000);
                         }
-                        if (jn.isEmpty())
-                            throw new ServiceError(
-                                    "Wrong reference path " + sourceReference.referencePath() + " for entity");
                         additionalEntitiesValues.put(as, jn.get());
                     }
                     var mappedValues = generateMappedValues(
@@ -342,7 +334,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public void deleteMappedEntities(String sourceEntityId) throws ServiceError {
 
         class DeleteMappedEntities {
-            private void retrieveMappedEntities(String sourceEntityId, Stack<String> retrievedEntitiesIds)
+            private void retrieveMappedEntities(String sourceEntityId, Deque<String> retrievedEntitiesIds)
                     throws ServiceError {
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
@@ -357,9 +349,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             }
 
             private void deleteMappedEntities(String sourceEntityId) throws ServiceError {
-                var retrievedEntitiesIds = new Stack<String>();
+                var retrievedEntitiesIds = new LinkedList<String>();
                 retrieveMappedEntities(sourceEntityId, retrievedEntitiesIds);
-                while (!retrievedEntitiesIds.empty()) {
+                while (!retrievedEntitiesIds.isEmpty()) {
                     var id = retrievedEntitiesIds.pop();
                     var entity = entityRepository.findById(id);
                     entity.ifPresent(entityRepository::delete);
