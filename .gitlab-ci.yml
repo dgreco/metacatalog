@@ -11,6 +11,7 @@ stages:
   - format-check
   - compile
   - test
+  - build-sonar
 
 format-check-job:
   stage: format-check
@@ -29,3 +30,23 @@ test-job:
   image: maven:3-eclipse-temurin-22
   script:
     - mvn test
+
+build-sonar-job:
+  stage: build-sonar
+  image: maven:3-eclipse-temurin-22
+
+  cache:
+    policy: pull-push
+    key: "sonar-cache-$CI_COMMIT_REF_SLUG"
+    paths:
+      - "${SONAR_USER_HOME}/cache"
+      - sonar-scanner/
+
+  script:
+    - mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
