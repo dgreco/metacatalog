@@ -15,7 +15,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
@@ -32,9 +34,20 @@ public class MetacatalogApiTests {
                     .withPortBindings(
                             new PortBinding(Ports.Binding.bindPort(POSTGRESQL_PORT), new ExposedPort(5432)))));
 
-    static MetaCatalogManagerApi api;
-
     static ConfigurableApplicationContext context;
+
+    @Autowired
+    private ServerProperties serverProperties;
+
+    private MetaCatalogManagerApi getMetaCatalogManagerApi() {
+        var restTemplate = new RestTemplate();
+        var msgConverters = restTemplate.getMessageConverters();
+        msgConverters.add(new FileHttpMessageConverter());
+        restTemplate.setMessageConverters(msgConverters);
+        var apiClient = new ApiClient(restTemplate);
+        apiClient.setBasePath("http://localhost:" + serverProperties.getPort());
+        return new MetaCatalogManagerApi(apiClient);
+    }
 
     @BeforeAll
     static void beforeAll() {
@@ -48,18 +61,6 @@ public class MetacatalogApiTests {
         flyway.migrate();
 
         context = SpringApplication.run(Application.class);
-
-        var restTemplate = new RestTemplate();
-
-        var msgConverters = restTemplate.getMessageConverters();
-        msgConverters.add(new FileHttpMessageConverter());
-
-        restTemplate.setMessageConverters(msgConverters);
-
-        var apiClient = new ApiClient(restTemplate);
-        apiClient.setBasePath("http://localhost:9876");
-
-        api = new MetaCatalogManagerApi(apiClient);
     }
 
     @AfterAll
@@ -69,6 +70,7 @@ public class MetacatalogApiTests {
 
     @Test
     void testCreateReadExistsDeleteTrait() {
+        var api = getMetaCatalogManagerApi();
         var trait = new Trait();
         trait.setName("TestTrait");
         api.createTrait(trait);
@@ -93,6 +95,7 @@ public class MetacatalogApiTests {
 
     @Test
     void testLinkUnlinkTraitGetLink() {
+        var api = getMetaCatalogManagerApi();
         var trait1 = new Trait();
         trait1.setName("TestTrait1");
         api.createTrait(trait1);
@@ -123,6 +126,7 @@ public class MetacatalogApiTests {
 
     @Test
     void testCreateReadExistsDeleteType() {
+        var api = getMetaCatalogManagerApi();
         var entityType = new EntityType();
         entityType.setName("TestType");
         entityType.setSchema("""
@@ -152,6 +156,7 @@ public class MetacatalogApiTests {
 
     @Test
     void testCreateReadExistsDeleteEntity() {
+        var api = getMetaCatalogManagerApi();
         var entityType = new EntityType();
         entityType.setName("AnotherTestType");
         entityType.setSchema(
@@ -191,6 +196,7 @@ public class MetacatalogApiTests {
 
     @Test
     void bulkCreation() {
+        var api = getMetaCatalogManagerApi();
         api.bulkCreation(new File("src/test/resources/bulk/bulk1.yaml"));
     }
 }
