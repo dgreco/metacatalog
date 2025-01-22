@@ -4,47 +4,37 @@ import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
 import lombok.Getter;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Configuration
 @Getter
+@RequiredArgsConstructor
 public class CoreConfig {
 
-    @Autowired
-    CoreConfigProperties applicationConfigurationProperties;
+    private final CoreConfigProperties applicationConfigurationProperties;
 
-    @Autowired
-    EntityTypeRepository entityTypeRepository;
+    private final EntityTypeRepository entityTypeRepository;
 
-    @Autowired
-    EntityRepository entityRepository;
+    private final EntityRepository entityRepository;
 
-    @Autowired
-    TraitRepository traitRepository;
+    private final TraitRepository traitRepository;
 
-    @Autowired
-    TraitRelationshipRepository traitRelationshipRepository;
+    private final TraitRelationshipRepository traitRelationshipRepository;
 
-    @Autowired
-    EntityRelationshipRepository entityRelationshipRepository;
+    private final EntityRelationshipRepository entityRelationshipRepository;
 
-    @Autowired
-    MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+    private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
-    @Autowired
-    MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+    private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
-    @Autowired
-    EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+    private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
-    @Autowired
-    PlatformTransactionManager transactionManager;
+    private final PlatformTransactionManager transactionManager;
 
-    @Autowired
-    AdvisoryLockManager advisoryLockManager;
+    private final AdvisoryLockManager advisoryLockManager;
 
     @Bean
     public TraitService traitService(
