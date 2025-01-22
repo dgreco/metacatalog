@@ -89,7 +89,7 @@ public class CoreConfig {
     @Bean
     MappingUpdaterService mappingUpdaterService(MappingService mappingService) {
         var mus = new MappingUpdaterService(advisoryLockManager, entityLifeCycleEventRepository, mappingService);
-        mus.automaticEntitiesMapping = applicationConfigurationProperties.automaticEntitiesMapping();
+        mus.setAutomaticEntitiesMapping(applicationConfigurationProperties.automaticEntitiesMapping());
         return mus;
     }
 

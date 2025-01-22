@@ -28,7 +28,6 @@ class CommonServiceTests {
             .withCreateContainerCmdModifier(cmd -> cmd.withHostConfig(new HostConfig()
                     .withPortBindings(
                             new PortBinding(Ports.Binding.bindPort(POSTGRESQL_PORT), new ExposedPort(5432)))));
-    ;
 
     @BeforeAll
     static void beforeAll() {

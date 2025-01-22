@@ -36,9 +36,17 @@ public class TraitService implements CommonTypeService<Trait, String> {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public Trait create(String name, String schema, Optional<String> fatherName) throws ServiceError {
+    public Trait create(String name, Optional<String> schema, Optional<String> fatherName) throws ServiceError {
         try {
-            var eitherSchema = stringToJsonSchema(schema);
+            var eitherSchema = stringToJsonSchema(
+                    schema.orElse(
+                            """
+                    {
+                      "type": "object",
+                      "properties": {
+                      }
+                    }
+                    """));
             if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
             var entityType = new Trait();
             entityType.setName(name);
@@ -64,21 +72,6 @@ public class TraitService implements CommonTypeService<Trait, String> {
         } catch (DataIntegrityViolationException e) {
             throw new ServiceError(e.getMessage());
         }
-    }
-
-    @Transactional(
-            propagation = Propagation.REQUIRED,
-            rollbackFor = {ServiceError.class})
-    public Trait create(String name, Optional<String> fatherName) throws ServiceError {
-        return create(
-                name,
-                """
-                {
-                   "type": "object",
-                   "properties": {
-                    }
-                }""",
-                fatherName);
     }
 
     @Transactional(

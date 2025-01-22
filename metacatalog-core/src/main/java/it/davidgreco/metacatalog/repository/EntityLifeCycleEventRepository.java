@@ -6,5 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface EntityLifeCycleEventRepository extends JpaRepository<EntityLifeCycleEvent, Long> {
 
-    List<EntityLifeCycleEvent> findByEventTypeAndEventStatus(String EventType, String eventStatus);
+    List<EntityLifeCycleEvent> findByEventTypeAndEventStatus(String eventType, String eventStatus);
 }

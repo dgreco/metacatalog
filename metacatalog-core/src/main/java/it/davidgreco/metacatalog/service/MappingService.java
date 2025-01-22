@@ -50,14 +50,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final AdvisoryLockManager advisoryLockManager;
 
-    private AdvisoryLockManager getAdvisoryLockManager() {
-        return advisoryLockManager;
-    }
-
-    private EntityLifeCycleEventRepository getEntityLifeCycleEventRepository() {
-        return entityLifeCycleEventRepository;
-    }
-
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
 
@@ -175,7 +167,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
         class CreateMappedEntities {
-            private void createMappedEntities(String sourceEntityId) throws ServiceError {
+            private void createMappedEntities(String sourceEntityId) throws ServiceError, InterruptedException {
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
@@ -197,11 +189,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                             while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
                                             .map(Entity::getValues))
                                     .isEmpty()) {
-                                try {
-                                    Thread.sleep(1000);
-                                } catch (InterruptedException e) {
-                                    throw new RuntimeException(e);
-                                }
+                                Thread.sleep(1000);
                             }
                             if (jn.isEmpty())
                                 throw new ServiceError(
@@ -248,12 +236,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         throw new ServiceError(
                                 "Source entity type " + sourceEntityType.getName() + " is a target entity type");
                     new CreateMappedEntities().createMappedEntities(sourceEntityId);
-                } catch (ServiceError e) {
+                } catch (ServiceError | InterruptedException e) {
                     throw new RuntimeException(e);
                 }
             });
         } catch (RuntimeException e) {
-            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            if (e.getCause() instanceof ServiceError se) throw se;
             else throw e;
         }
     }
@@ -283,7 +271,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     public void updateMappedEntities(String sourceEntityId) throws ServiceError {
 
         class UpdateMappedEntities {
-            private void updateMappedEntities(String sourceEntityId) throws ServiceError {
+            private void updateMappedEntities(String sourceEntityId) throws ServiceError, InterruptedException {
                 var sourceEntity = entityRepository
                         .findById(sourceEntityId)
                         .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
@@ -298,11 +286,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         while ((jn = retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
                                         .map(Entity::getValues))
                                 .isEmpty()) {
-                            try {
-                                Thread.sleep(1000);
-                            } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
-                            }
+                            Thread.sleep(1000);
                         }
                         if (jn.isEmpty())
                             throw new ServiceError(
@@ -336,12 +320,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                         throw new ServiceError(
                                 "Source entity type " + sourceEntityType.getName() + " is a target entity type");
                     new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
-                } catch (ServiceError e) {
+                } catch (ServiceError | InterruptedException e) {
                     throw new RuntimeException(e);
                 }
             });
         } catch (RuntimeException e) {
-            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            if (e.getCause() instanceof ServiceError se) throw se;
             else throw e;
         }
     }
@@ -399,7 +383,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 }
             });
         } catch (RuntimeException e) {
-            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+            if (e.getCause() instanceof ServiceError se) throw se;
             else throw e;
         }
     }
@@ -522,6 +506,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
 
         class GenerateValues {
+
+            private GenerateValues() {}
+
             private static final ExpressionParser parser = new SpelExpressionParser();
 
             private static JsonNode getMappedValues(JsonNode mappingValues, StandardEvaluationContext context)
@@ -530,7 +517,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 try {
                     evaluateMappingValues(mappedValues, context);
                     return mappedValues;
-                } catch (RuntimeException e) {
+                } catch (ServiceRuntimeError e) {
                     throw new ServiceError("Error while evaluating mapping values: " + e.getMessage());
                 }
             }
@@ -553,7 +540,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                             var result = exp.getValue(context);
 
                             switch (result) {
-                                case null -> throw new RuntimeException(
+                                case null -> throw new ServiceRuntimeError(
                                         "Error while evaluating expression: " + val.asText());
                                 case Boolean b -> ((ObjectNode) mappingValues).set(fieldName, BooleanNode.valueOf(b));
                                 case Integer i -> ((ObjectNode) mappingValues).set(fieldName, IntNode.valueOf(i));
@@ -561,9 +548,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                                 case String s -> ((ObjectNode) mappingValues).set(fieldName, TextNode.valueOf(s));
                                 case Float f -> ((ObjectNode) mappingValues).set(fieldName, FloatNode.valueOf(f));
                                 case Double d -> ((ObjectNode) mappingValues).set(fieldName, DoubleNode.valueOf(d));
-                                default -> {
-                                    throw new RuntimeException("Error while evaluating expression: " + val.asText());
-                                }
+                                default -> throw new ServiceRuntimeError(
+                                        "Error while evaluating expression: " + val.asText());
                             }
                         }
                     });

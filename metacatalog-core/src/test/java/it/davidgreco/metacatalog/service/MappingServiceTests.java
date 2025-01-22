@@ -113,13 +113,13 @@ class MappingServiceTests extends CommonServiceTests {
         var entityService = applicationContext.getBean(EntityService.class);
         var mappingService = applicationContext.getBean(MappingService.class);
 
-        traitService.create("Trait_NA", Optional.empty());
+        traitService.create("Trait_NA", Optional.empty(), Optional.empty());
 
-        traitService.create("Trait_NB", Optional.empty());
+        traitService.create("Trait_NB", Optional.empty(), Optional.empty());
 
-        traitService.create("Trait_NC", Optional.empty());
+        traitService.create("Trait_NC", Optional.empty(), Optional.empty());
 
-        traitService.create("Trait_ND", Optional.empty());
+        traitService.create("Trait_ND", Optional.empty(), Optional.empty());
 
         traitService.link("Trait_NA", DEPENDS_ON, "Trait_NB");
 
@@ -244,11 +244,11 @@ class MappingServiceTests extends CommonServiceTests {
         var entityService = applicationContext.getBean(EntityService.class);
         var mappingService = applicationContext.getBean(MappingService.class);
         var mappingUpdaterService = applicationContext.getBean(MappingUpdaterService.class);
-        mappingUpdaterService.automaticEntitiesMapping = true;
+        mappingUpdaterService.setAutomaticEntitiesMapping(true);
 
-        traitService.create("DependingRelSourceTrait1", Optional.empty());
+        traitService.create("DependingRelSourceTrait1", Optional.empty(), Optional.empty());
 
-        traitService.create("DependingRelTargetTrait1", Optional.empty());
+        traitService.create("DependingRelTargetTrait1", Optional.empty(), Optional.empty());
 
         traitService.link("DependingRelSourceTrait1", DEPENDS_ON, "DependingRelTargetTrait1");
 
@@ -362,9 +362,9 @@ class MappingServiceTests extends CommonServiceTests {
         var entityService = applicationContext.getBean(EntityService.class);
         var mappingService = applicationContext.getBean(MappingService.class);
 
-        traitService.create("DependingRelSourceTrait", Optional.empty());
+        traitService.create("DependingRelSourceTrait", Optional.empty(), Optional.empty());
 
-        traitService.create("DependingRelTargetTrait", Optional.empty());
+        traitService.create("DependingRelTargetTrait", Optional.empty(), Optional.empty());
 
         traitService.link("DependingRelSourceTrait", DEPENDS_ON, "DependingRelTargetTrait");
 
@@ -478,7 +478,7 @@ class MappingServiceTests extends CommonServiceTests {
 
         // Creating a target entity is not allowed
         {
-            var entity = entityRepository.findByEntityType(targeType).getFirst();
+            entityRepository.findByEntityType(targeType).getFirst();
             Assertions.assertThrows(
                     ServiceError.class,
                     () -> entityService.create("TargetType", """

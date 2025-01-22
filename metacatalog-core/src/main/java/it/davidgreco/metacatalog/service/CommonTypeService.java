@@ -10,39 +10,39 @@ import java.util.Optional;
 
 public interface CommonTypeService<T extends Type, K> extends CommonService<T, K> {
 
-    CommonTypeService<EntityType, String> commonTypeService = new CommonTypeService<>() {
+    CommonTypeService<EntityType, String> genericTypeService = new CommonTypeService<>() {
 
         @Override
         public void delete(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
 
         @Override
         public EntityType read(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
 
         @Override
         public boolean exists(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
     };
 
-    CommonTypeService<Trait, String> commonTraitService = new CommonTypeService<>() {
+    CommonTypeService<Trait, String> genericTraitService = new CommonTypeService<>() {
 
         @Override
         public void delete(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
 
         @Override
         public Trait read(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
 
         @Override
         public boolean exists(String key) {
-            throw new UnsupportedOperationException("Not supported yet.");
+            throw new UnsupportedOperationException();
         }
     };
 
@@ -51,7 +51,7 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
         inheritanceChain.add(type);
         var maybeFather = Optional.ofNullable(type.getFather());
         if (maybeFather.isPresent()) {
-            final var b = inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
+            inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
             return inheritanceChain;
         } else {
             return inheritanceChain;

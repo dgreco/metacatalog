@@ -47,7 +47,9 @@ class EntityServiceTests extends CommonServiceTests {
         SchemaValidationError exception =
                 assertThrows(SchemaValidationError.class, () -> entityService.create("TestType", invalidValues));
 
-        Assertions.assertEquals("$.price: must have an exclusive minimum value of 0", exception.errors.getFirst());
+        Assertions.assertEquals(
+                "$.price: must have an exclusive minimum value of 0",
+                exception.getErrors().getFirst());
 
         Assertions.assertEquals(1, entityRepository.countByEntityType(testType));
 
@@ -92,13 +94,13 @@ class EntityServiceTests extends CommonServiceTests {
                 {}
                 """;
 
-        traitService.create("SourceTrait", emptySchema, Optional.empty());
+        traitService.create("SourceTrait", Optional.empty(), Optional.empty());
 
-        traitService.create("TargetTrait", emptySchema, Optional.empty());
+        traitService.create("TargetTrait", Optional.empty(), Optional.empty());
 
-        traitService.create("InheritedSourceTrait", emptySchema, Optional.of("SourceTrait"));
+        traitService.create("InheritedSourceTrait", Optional.empty(), Optional.of("SourceTrait"));
 
-        traitService.create("InheritedTargetTrait", emptySchema, Optional.of("TargetTrait"));
+        traitService.create("InheritedTargetTrait", Optional.empty(), Optional.of("TargetTrait"));
 
         entityTypeService.create("SourceEntityType", List.of("InheritedSourceTrait"), Optional.empty(), emptySchema);
 
@@ -125,7 +127,7 @@ class EntityServiceTests extends CommonServiceTests {
     }
 
     @Test
-    public void testList() throws ServiceError {
+    void testList() throws ServiceError {
         var entityTypeService = applicationContext.getBean(EntityTypeService.class);
         var entityService = applicationContext.getBean(EntityService.class);
 

@@ -41,9 +41,7 @@ public class MappingEntityTypeRelationship extends CommonRelationship<EntityType
     public record EntityPathReference(String alias, String referencePath) {}
 
     public void setEntityPathReferences(List<EntityPathReference> eprs) {
-        var nodes = eprs.stream()
-                .map(obj -> (JsonNode) jsonFactory.valueToTree(obj))
-                .toList();
+        var nodes = eprs.stream().map(jsonFactory::<JsonNode>valueToTree).toList();
         var node = jsonFactory.createArrayNode();
         node.addAll(nodes);
         entityPathReferences = node;
@@ -52,11 +50,11 @@ public class MappingEntityTypeRelationship extends CommonRelationship<EntityType
     public List<MappingEntityTypeRelationship.EntityPathReference> getEntityPathReferences() {
         var list = new ArrayList<EntityPathReference>();
         var nodes = entityPathReferences.elements();
-        for (; nodes.hasNext(); ) {
+        while (nodes.hasNext()) {
             var node = nodes.next();
             var alias = node.get("alias").asText();
             var referencePath = node.get("referencePath").asText();
-            list.add(new MappingEntityTypeRelationship.EntityPathReference(alias, referencePath));
+            list.add(new EntityPathReference(alias, referencePath));
         }
         return list;
     }

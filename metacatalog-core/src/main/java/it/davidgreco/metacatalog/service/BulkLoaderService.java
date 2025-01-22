@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.RelationType;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
@@ -19,6 +20,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class BulkLoaderService {
+
+    private static final String SCHEMA = "schema";
+
+    private static final String INHERITS_FROM = "inheritsFrom";
+
+    private static final String EMPTY_SCHEMA =
+            """
+            {
+              "type": "object",
+              "properties": {
+              }
+            }
+            """;
 
     private final TraitService traitService;
 
@@ -34,13 +48,15 @@ public class BulkLoaderService {
     @Transactional(
             propagation = Propagation.REQUIRED,
             rollbackFor = {ServiceError.class})
-    public void bulkCreation(InputStream is) throws Exception {
+    public void bulkCreation(InputStream is) throws ServiceError {
         try {
-            var yamlParser = yamlFactory.createParser(is);
+            List<ObjectNode> docs;
+            try (var yamlParser = yamlFactory.createParser(is)) {
 
-            List<ObjectNode> docs = yamlFactory
-                    .readValues(yamlParser, new TypeReference<ObjectNode>() {})
-                    .readAll();
+                docs = yamlFactory
+                        .readValues(yamlParser, new TypeReference<ObjectNode>() {})
+                        .readAll();
+            }
 
             // Traits creation
             docs.stream().filter(doc -> doc.has("Traits")).findFirst().ifPresent(jsonTraits -> {
@@ -49,21 +65,16 @@ public class BulkLoaderService {
                     try {
                         traitService.create(
                                 getNamedNode(jsonTrait, "name").asText(),
-                                jsonTrait.has("schema")
-                                        ? jsonTrait.get("schema").toPrettyString()
-                                        : """
-                                        {
-                                          "type": "object",
-                                          "properties": {
-                                          }
-                                        }
-                                        """,
-                                jsonTrait.has("inheritsFrom")
+                                Optional.of(
+                                        jsonTrait.has(SCHEMA)
+                                                ? jsonTrait.get(SCHEMA).toPrettyString()
+                                                : EMPTY_SCHEMA),
+                                jsonTrait.has(INHERITS_FROM)
                                         ? Optional.of(
-                                                jsonTrait.get("inheritsFrom").asText())
+                                                jsonTrait.get(INHERITS_FROM).asText())
                                         : Optional.empty());
                     } catch (ServiceError e) {
-                        throw new RuntimeException(e);
+                        throw new ServiceRuntimeError(e);
                     }
                 });
             });
@@ -79,9 +90,9 @@ public class BulkLoaderService {
                                         .asText()),
                                 getNamedNode(jsonRelationship, "targetTrait").asText());
                     } catch (ServiceError e) {
-                        throw new RuntimeException(e);
+                        throw new ServiceRuntimeError(e);
                     } catch (IllegalArgumentException e) {
-                        throw new RuntimeException(new ServiceError("Invalid relationship type"));
+                        throw new ServiceRuntimeError(new ServiceError("Invalid relationship type"));
                     }
                 });
             });
@@ -99,19 +110,21 @@ public class BulkLoaderService {
                                                 .map(JsonNode::asText)
                                                 .toList()
                                         : List.of(),
-                                jsonType.has("inheritsFrom")
+                                jsonType.has(INHERITS_FROM)
                                         ? Optional.of(
-                                                jsonType.get("inheritsFrom").asText())
+                                                jsonType.get(INHERITS_FROM).asText())
                                         : Optional.empty(),
-                                getNamedNode(jsonType, "schema").toPrettyString());
+                                getNamedNode(jsonType, SCHEMA).toPrettyString());
                     } catch (ServiceError e) {
-                        throw new RuntimeException(e);
+                        throw new ServiceRuntimeError(e);
                     }
                 });
             });
-        } catch (RuntimeException e) {
-            if (e.getCause() instanceof ServiceError) throw (ServiceError) e.getCause();
+        } catch (ServiceRuntimeError e) {
+            if (e.getCause() instanceof ServiceError se) throw se;
             else throw e;
+        } catch (IOException e) {
+            throw new ServiceError("Error parsing YAML file");
         }
     }
 }

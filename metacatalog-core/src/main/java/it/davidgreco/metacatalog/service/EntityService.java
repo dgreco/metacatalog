@@ -2,8 +2,8 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
-import static it.davidgreco.metacatalog.service.CommonTypeService.commonTraitService;
-import static it.davidgreco.metacatalog.service.CommonTypeService.commonTypeService;
+import static it.davidgreco.metacatalog.service.CommonTypeService.genericTraitService;
+import static it.davidgreco.metacatalog.service.CommonTypeService.genericTypeService;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
@@ -317,14 +317,14 @@ public class EntityService implements CommonService<Entity, String> {
         var sourceEntityType = sourceEntity.getEntityType();
         var targetEntityType = targetEntity.getEntityType();
 
-        var allTheTraitsForTheSourceType = commonTypeService.loadInheritanceChain(sourceEntityType).stream()
+        var allTheTraitsForTheSourceType = genericTypeService.loadInheritanceChain(sourceEntityType).stream()
                 .flatMap(entityType -> entityType.getTraits().stream()
-                        .flatMap(trait -> commonTraitService.loadInheritanceChain(trait).stream()))
+                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
                 .toList();
 
-        var allTheTraitsNamesForTheTargetType = commonTypeService.loadInheritanceChain(targetEntityType).stream()
+        var allTheTraitsNamesForTheTargetType = genericTypeService.loadInheritanceChain(targetEntityType).stream()
                 .flatMap(entityType -> entityType.getTraits().stream()
-                        .flatMap(trait -> commonTraitService.loadInheritanceChain(trait).stream()))
+                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
                 .map(Trait::getName)
                 .collect(Collectors.toSet());
 

@@ -53,25 +53,16 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
             throws ServiceError {
         try {
             Set<String> traitNamesSet = new HashSet<>();
-            try {
-                traits.forEach(trait -> {
-                    if (traitNamesSet.contains(trait))
-                        throw new RuntimeException("Trait " + trait + " already defined");
-                    else traitNamesSet.add(trait);
-                });
-            } catch (RuntimeException e) {
-                throw new ServiceError(e.getMessage());
-            }
+            traits.forEach(trait -> {
+                if (traitNamesSet.contains(trait)) throw new ServiceRuntimeError("Trait " + trait + " already defined");
+                else traitNamesSet.add(trait);
+            });
             List<Trait> traitsList;
-            try {
-                traitsList = traits.stream()
-                        .map(trait -> traitRepository
-                                .findByName(trait)
-                                .orElseThrow(() -> new RuntimeException("Trait " + trait + " does not exist")))
-                        .toList();
-            } catch (RuntimeException e) {
-                throw new ServiceError(e.getMessage());
-            }
+            traitsList = traits.stream()
+                    .map(trait -> traitRepository
+                            .findByName(trait)
+                            .orElseThrow(() -> new ServiceRuntimeError("Trait " + trait + " does not exist")))
+                    .toList();
             var eitherSchema = stringToJsonSchema(schema);
             if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
             var entityType = new EntityType();
@@ -97,7 +88,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
                 entityType.setDerivedSchema(mergedSchema.get());
             }
             return entityTypeRepository.save(entityType);
-        } catch (DataIntegrityViolationException e) {
+        } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
             throw new ServiceError(e.getMessage());
         }
     }

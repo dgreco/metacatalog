@@ -2,15 +2,19 @@ package it.davidgreco.metacatalog.service;
 
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+@Getter
+@Setter
 public class MappingUpdaterService {
 
-    public boolean automaticEntitiesMapping;
+    private boolean automaticEntitiesMapping;
 
     private final AdvisoryLockManager advisoryLockManager;
 
@@ -31,27 +35,25 @@ public class MappingUpdaterService {
             fixedRateString =
                     "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
     void updateMappedEntities() {
-        if (automaticEntitiesMapping) {
-            if (advisoryLockManager.acquireLock(1)) {
-                var createdEvents =
-                        entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
-                createdEvents.forEach(event -> {
-                    try {
-                        mappingService.createMappedEntities(event);
-                    } catch (Exception e) {
-                        e.printStackTrace(); // TODO
-                    }
-                });
-                var updatedEvents =
-                        entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
-                updatedEvents.forEach(event -> {
-                    try {
-                        mappingService.updateMappedEntities(event);
-                    } catch (Exception e) {
-                        e.printStackTrace(); // TODO
-                    }
-                });
-            }
+        if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+            var createdEvents =
+                    entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+            createdEvents.forEach(event -> {
+                try {
+                    mappingService.createMappedEntities(event);
+                } catch (Exception e) {
+                    e.printStackTrace(); // TODO
+                }
+            });
+            var updatedEvents =
+                    entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+            updatedEvents.forEach(event -> {
+                try {
+                    mappingService.updateMappedEntities(event);
+                } catch (Exception e) {
+                    e.printStackTrace(); // TODO
+                }
+            });
         }
     }
 
@@ -59,8 +61,8 @@ public class MappingUpdaterService {
             fixedRateString =
                     "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
     void entityLifeCycleEventCleanup() {
-        if (automaticEntitiesMapping) {
-            if (advisoryLockManager.acquireLock(1)) {}
+        if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+            System.out.println("Cleaning up entity life cycle events");
         }
     }
 }

@@ -53,6 +53,10 @@ public class JsonUtils {
             "not",
             "unevaluatedProperties");
 
+    private static final String PROPERTIES = "properties";
+
+    private static final String REQUIRED = "required";
+
     /**
      * Check if a given JSON node contains any of the keywords that are not
      * allowed in a Metacatalog schema.
@@ -115,7 +119,7 @@ public class JsonUtils {
 
     public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
         var node = jsonSchema.getSchemaNode().deepCopy();
-        convertFieldTypeToStringType(node.get("properties"));
+        convertFieldTypeToStringType(node.get(PROPERTIES));
         return Either.right(jsonSchemaFactory.getSchema(node));
     }
 
@@ -161,16 +165,16 @@ public class JsonUtils {
         for (JsonNode node : schemas) {
             var requiredProperties = new HashSet<String>();
             var maybeRequired = Optional.<JsonNode>empty();
-            if (node.has("required")) maybeRequired = Optional.of(node.get("required"));
+            if (node.has(REQUIRED)) maybeRequired = Optional.of(node.get(REQUIRED));
             maybeRequired.ifPresent(required -> {
                 if (required.isArray()) {
                     required.elements()
                             .forEachRemaining(requiredElement -> requiredProperties.add(requiredElement.asText()));
                 }
             });
-            if (!node.has("properties")) return Either.left(List.of("The schema must have a properties field"));
+            if (!node.has(PROPERTIES)) return Either.left(List.of("The schema must have a properties field"));
 
-            node.get("properties").fields().forEachRemaining(entry -> {
+            node.get(PROPERTIES).fields().forEachRemaining(entry -> {
                 var key = entry.getKey();
                 var value = entry.getValue();
                 var isRequired = requiredProperties.contains(key);
@@ -186,11 +190,11 @@ public class JsonUtils {
             var tuple = propertiesToMerge.get(propertyName);
             var value = tuple._1();
             properties.set(propertyName, value);
-            if (tuple._2()) required.add(propertyName);
+            if (Boolean.TRUE.equals(tuple._2())) required.add(propertyName);
         });
         mergedSchemaJson.put("type", "object");
-        mergedSchemaJson.set("properties", properties);
-        mergedSchemaJson.set("required", required);
+        mergedSchemaJson.set(PROPERTIES, properties);
+        mergedSchemaJson.set(REQUIRED, required);
         mergedSchemaJson.put("additionalProperties", false);
         var res = jsonSchemaSchema.validate(
                 mergedSchemaJson.toPrettyString(),

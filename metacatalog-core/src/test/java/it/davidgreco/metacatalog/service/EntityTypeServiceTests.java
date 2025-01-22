@@ -3,7 +3,6 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
@@ -43,7 +42,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
     }
 
     @Test
-    void testInheritance() throws JsonProcessingException, ServiceError {
+    void testInheritance() throws ServiceError {
         var entityTypeService = applicationContext.getBean(EntityTypeService.class);
         var traitService = applicationContext.getBean(TraitService.class);
 
@@ -109,7 +108,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
                 .getSchemaNode()
                 .toPrettyString();
 
-        traitService.create("Trait1", traitSchema1, Optional.empty());
+        traitService.create("Trait1", Optional.of(traitSchema1), Optional.empty());
 
         var baseType = entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
 

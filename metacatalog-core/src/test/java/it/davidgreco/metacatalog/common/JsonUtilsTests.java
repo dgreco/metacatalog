@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.test.json.JsonAssert;
 
-public class JsonUtilsTests {
+class JsonUtilsTests {
 
     @Test
     void testMergeSchemas() {
