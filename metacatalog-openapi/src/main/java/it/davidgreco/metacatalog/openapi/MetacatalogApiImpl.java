@@ -21,6 +21,8 @@ import org.springframework.web.context.request.NativeWebRequest;
 @RequiredArgsConstructor
 public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
+    private static final String INVALID_RELATIONSHIP_TYPE = "Invalid relationship type";
+
     private final TraitService traitService;
 
     private final EntityTypeService entityTypeService;
@@ -42,11 +44,14 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     public ResponseEntity createTrait(Trait trait) {
         try {
             if (trait.getSchema().isPresent())
-                traitService.create(trait.getName(), trait.getSchema().get(), trait.getInheritsFrom());
-            else traitService.create(trait.getName(), trait.getInheritsFrom());
+                traitService.create(
+                        trait.getName(),
+                        Optional.of(trait.getSchema().orElseThrow(RuntimeException::new)),
+                        trait.getInheritsFrom());
+            else traitService.create(trait.getName(), Optional.empty(), trait.getInheritsFrom());
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -77,7 +82,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             traitService.delete(name);
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -99,15 +104,13 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     public ResponseEntity linkTrait(LinkTraitRequest linkTrait) {
         try {
             RelationType relType;
-            try {
-                relType = RelationType.valueOf(linkTrait.getRelationshipTypeName());
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.status(400).body(new ValidationError(List.of("Invalid relationship type")));
-            }
+            relType = RelationType.valueOf(linkTrait.getRelationshipTypeName());
             traitService.link(linkTrait.getSourceTrait(), relType, linkTrait.getTargetTrait());
             return ResponseEntity.status(204).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -118,12 +121,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     @Override
     public ResponseEntity linkedTrait(String nameTrait1, String relationshipTypeName) throws Exception {
         try {
-            RelationType relType;
-            try {
-                relType = RelationType.valueOf(relationshipTypeName);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.status(400).body(new ValidationError(List.of("Invalid relationship type")));
-            }
+            var relType = RelationType.valueOf(relationshipTypeName);
             var traits = traitService.linked(nameTrait1, relType).stream().map(t -> {
                 Trait trait = new Trait();
                 trait.setName(t.getName());
@@ -133,8 +131,10 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                 return trait;
             });
             return ResponseEntity.status(200).body(traits);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -146,15 +146,13 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     public ResponseEntity unlinkTrait(String sourceTrait, String relationshipTypeName, String targetTrait) {
         try {
             RelationType relType;
-            try {
-                relType = RelationType.valueOf(relationshipTypeName);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.status(400).body(new ValidationError(List.of("Invalid relationship type")));
-            }
+            relType = RelationType.valueOf(relationshipTypeName);
             traitService.unlink(sourceTrait, relType, targetTrait);
             return ResponseEntity.status(204).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -166,19 +164,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     public ResponseEntity existsLinkTrait(String sourceTrait, String relationshipTypeName, String targetTrait) {
         try {
             RelationType relType;
-            try {
-                relType = RelationType.valueOf(relationshipTypeName);
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.status(400).body(new ValidationError(List.of("Invalid relationship type")));
-            }
+            relType = RelationType.valueOf(relationshipTypeName);
             var linkedTraitsNames = traitService.linked(sourceTrait, relType).stream()
                     .map(it.davidgreco.metacatalog.entity.Trait::getName)
                     .collect(Collectors.toSet());
             if (linkedTraitsNames.contains(targetTrait))
                 return ResponseEntity.status(200).build();
             else return ResponseEntity.status(404).build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -193,7 +189,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                     entityType.getName(), entityType.getTraits(), entityType.getInheritsFrom(), entityType.getSchema());
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -207,7 +203,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             entityTypeService.delete(name);
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -252,7 +248,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             var ent = entityService.create(entity.getEntityType(), entity.getValues());
             return ResponseEntity.status(200).body(ent.getId());
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -266,7 +262,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             entityService.delete(id);
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {
@@ -300,12 +296,13 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
         }
     }
 
+    @Override
     public ResponseEntity bulkCreation(Resource body) throws Exception {
         try {
             bulkLoaderService.bulkCreation(body.getInputStream());
             return ResponseEntity.status(204).build();
         } catch (SchemaValidationError e) {
-            return ResponseEntity.status(400).body(new ValidationError(e.errors));
+            return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
         } catch (ServiceError | DataIntegrityViolationException e) {
             return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
         } catch (Exception e) {

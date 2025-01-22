@@ -25,7 +25,7 @@ import org.springframework.web.client.RestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest
-public class MetacatalogApiTests {
+class MetacatalogApiTests {
     static final int POSTGRESQL_PORT = 5433;
 
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -133,8 +133,7 @@ public class MetacatalogApiTests {
                 { "type": "object", "properties": { } }""");
         api.createEntityType(entityType);
 
-        var ex = Assertions.assertThrows(
-                HttpClientErrorException.BadRequest.class, () -> api.createEntityType(entityType));
+        Assertions.assertThrows(HttpClientErrorException.BadRequest.class, () -> api.createEntityType(entityType));
 
         var retrievedType = api.getEntityType("TestType");
         Assertions.assertEquals("TestType", retrievedType.getName());
