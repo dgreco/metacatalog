@@ -17,21 +17,15 @@ import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTests {
 
     @Test
     void testCreateDelete() throws ServiceError {
-        var entityTypeService = new EntityTypeService(entityTypeRepository, traitRepository);
-        var mappingService = new MappingService(
-                entityRepository,
-                entityTypeRepository,
-                mappingEntityTypeRelationshipRepository,
-                mappingEntityRelationshipRepository,
-                entityRelationshipRepository,
-                entityLifeCycleEventRepository,
-                transactionManager);
+        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+        var mappingService = applicationContext.getBean(MappingService.class);
 
         entityTypeService.create(
                 "SimpleSourceType",
@@ -51,7 +45,8 @@ class MappingServiceTests extends CommonServiceTests {
 
         var mapping2 = mappingService.create("SimpleSourceType", "SimpleTargetType", "{}", List.of());
 
-        Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("SimpleSourceType"));
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> entityTypeService.delete("SimpleSourceType"));
 
         mappingService.delete(mapping1.getId());
         mappingService.delete(mapping2.getId());

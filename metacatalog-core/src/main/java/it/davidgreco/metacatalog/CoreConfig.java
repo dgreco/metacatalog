@@ -74,7 +74,7 @@ public class CoreConfig {
             EntityRelationshipRepository entityRelationshipRepository,
             EntityLifeCycleEventRepository entityLifeCycleEventRepository,
             PlatformTransactionManager transactionManager,
-            AdvisoryLockManager advisoryLockManager) {
+            CoreConfigProperties applicationConfigurationProperties) {
         return new MappingService(
                 entityRepository,
                 entityTypeRepository,
@@ -82,7 +82,8 @@ public class CoreConfig {
                 mappingEntityRelationshipRepository,
                 entityRelationshipRepository,
                 entityLifeCycleEventRepository,
-                transactionManager);
+                transactionManager,
+                applicationConfigurationProperties);
     }
 
     @Bean

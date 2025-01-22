@@ -50,10 +50,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     private final PlatformTransactionManager transactionManager;
 
+    private final CoreConfigProperties coreConfigProperties;
+
     @Getter(lazy = true)
     private final TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-
-    private final CoreConfigProperties coreConfigProperties;
 
     /**
      * Creates a new MappingEntityTypeRelationship between the specified source and target entity types.
