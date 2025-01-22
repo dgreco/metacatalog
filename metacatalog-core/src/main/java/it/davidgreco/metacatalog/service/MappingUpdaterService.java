@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
+import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
