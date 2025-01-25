@@ -11,26 +11,26 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TraitRepository extends JpaRepository<Trait, String> {
 
-    @Cacheable(
-            cacheNames = {"Traits"},
-            key = "#name")
-    Optional<Trait> findByName(String name);
+  @Cacheable(
+      cacheNames = {"Traits"},
+      key = "#name")
+  Optional<Trait> findByName(String name);
 
-    @CachePut(
-            cacheNames = {"Traits"},
-            key = "#trait.name")
-    Trait save(Trait trait);
+  @CachePut(
+      cacheNames = {"Traits"},
+      key = "#trait.name")
+  Trait save(Trait trait);
 
-    @Override
-    @CacheEvict(
-            cacheNames = {"Traits"},
-            key = "#trait.name")
-    void delete(Trait trait);
+  @Override
+  @CacheEvict(
+      cacheNames = {"Traits"},
+      key = "#trait.name")
+  void delete(Trait trait);
 
-    @CacheEvict(
-            cacheNames = {"Traits"},
-            key = "#name")
-    boolean existsByName(String name);
+  @CacheEvict(
+      cacheNames = {"Traits"},
+      key = "#name")
+  boolean existsByName(String name);
 
-    long countTraitByFather(Trait trait);
+  long countTraitByFather(Trait trait);
 }

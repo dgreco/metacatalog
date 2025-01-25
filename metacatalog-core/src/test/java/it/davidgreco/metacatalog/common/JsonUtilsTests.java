@@ -9,11 +9,11 @@ import org.springframework.test.json.JsonAssert;
 
 class JsonUtilsTests {
 
-    @Test
-    void testMergeSchemas() {
+  @Test
+  void testMergeSchemas() {
 
-        var mergedSchema =
-                """
+    var mergedSchema =
+        """
                   {
                   "type" : "object",
                   "properties" : {
@@ -48,32 +48,43 @@ class JsonUtilsTests {
                   "additionalProperties" : false
                 }""";
 
-        var baseSchema = jsonSchemaFactory
-                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
-                .getSchemaNode();
+    var baseSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/base_schema.json"))
+            .getSchemaNode();
 
-        var middleSchema = jsonSchemaFactory
-                .getSchema(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/middle_schema.json"))
-                .getSchemaNode();
+    var middleSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/middle_schema.json"))
+            .getSchemaNode();
 
-        var leafSchema = jsonSchemaFactory
-                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
-                .getSchemaNode();
+    var leafSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/leaf_schema.json"))
+            .getSchemaNode();
 
-        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
-                .assertIsMatch(
-                        JsonUtils.mergeSchemas(List.of(baseSchema, middleSchema, leafSchema))
-                                .get()
-                                .toPrettyString(),
-                        mergedSchema);
-    }
+    JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
+        .assertIsMatch(
+            JsonUtils.mergeSchemas(List.of(baseSchema, middleSchema, leafSchema))
+                .get()
+                .toPrettyString(),
+            mergedSchema);
+  }
 
-    @Test
-    void testConvertMappingSchema() {
+  @Test
+  void testConvertMappingSchema() {
 
-        var convertedSchema =
-                """
+    var convertedSchema =
+        """
             {
               "type" : "object",
               "properties" : {
@@ -102,15 +113,15 @@ class JsonUtilsTests {
             }
             """;
 
-        var baseSchema = jsonSchemaFactory.getSchema(
-                Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"));
+    var baseSchema =
+        jsonSchemaFactory.getSchema(
+            Thread.currentThread()
+                .getContextClassLoader()
+                .getResourceAsStream("jsons/base_schema.json"));
 
-        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
-                .assertIsMatch(
-                        convertedSchema,
-                        JsonUtils.convertToMappingSchema(baseSchema)
-                                .get()
-                                .getSchemaNode()
-                                .toPrettyString());
-    }
+    JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
+        .assertIsMatch(
+            convertedSchema,
+            JsonUtils.convertToMappingSchema(baseSchema).get().getSchemaNode().toPrettyString());
+  }
 }

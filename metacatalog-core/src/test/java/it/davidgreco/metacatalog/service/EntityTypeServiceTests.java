@@ -15,38 +15,44 @@ import org.springframework.test.json.JsonAssert;
 @SpringBootTest
 class EntityTypeServiceTests extends CommonServiceTests {
 
-    @Test
-    void testCreateDeleteExists() throws ServiceError {
-        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+  @Test
+  void testCreateDeleteExists() throws ServiceError {
+    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
 
-        var baseSchema = jsonSchemaFactory
-                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
-                .getSchemaNode()
-                .toPrettyString();
+    var baseSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/base_schema.json"))
+            .getSchemaNode()
+            .toPrettyString();
 
-        entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
+    entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
 
-        Assertions.assertThrows(
-                Exception.class, () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
+    Assertions.assertThrows(
+        Exception.class,
+        () -> entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema));
 
-        Assertions.assertTrue(entityTypeService.exists("NewType"));
+    Assertions.assertTrue(entityTypeService.exists("NewType"));
 
-        entityTypeService.delete("NewType");
+    entityTypeService.delete("NewType");
 
-        Assertions.assertFalse(entityTypeService.exists("NewType"));
+    Assertions.assertFalse(entityTypeService.exists("NewType"));
 
-        ServiceError exception = assertThrows(ServiceError.class, () -> entityTypeService.delete("UnknownType"));
+    ServiceError exception =
+        assertThrows(ServiceError.class, () -> entityTypeService.delete("UnknownType"));
 
-        Assertions.assertEquals("EntityType UnknownType not found", exception.getMessage());
-    }
+    Assertions.assertEquals("EntityType UnknownType not found", exception.getMessage());
+  }
 
-    @Test
-    void testInheritance() throws ServiceError {
-        var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-        var traitService = applicationContext.getBean(TraitService.class);
+  @Test
+  void testInheritance() throws ServiceError {
+    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+    var traitService = applicationContext.getBean(TraitService.class);
 
-        var inheritedSchema =
-                """
+    var inheritedSchema =
+        """
                   {
                   "type" : "object",
                   "properties" : {
@@ -85,74 +91,95 @@ class EntityTypeServiceTests extends CommonServiceTests {
                   additionalProperties : false
                 }""";
 
-        var baseSchema = jsonSchemaFactory
-                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/base_schema.json"))
-                .getSchemaNode()
-                .toPrettyString();
+    var baseSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/base_schema.json"))
+            .getSchemaNode()
+            .toPrettyString();
 
-        var middleSchema = jsonSchemaFactory
-                .getSchema(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/middle_schema.json"))
-                .getSchemaNode()
-                .toPrettyString();
+    var middleSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/middle_schema.json"))
+            .getSchemaNode()
+            .toPrettyString();
 
-        var leafSchema = jsonSchemaFactory
-                .getSchema(Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/leaf_schema.json"))
-                .getSchemaNode()
-                .toPrettyString();
+    var leafSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/leaf_schema.json"))
+            .getSchemaNode()
+            .toPrettyString();
 
-        var traitSchema1 = jsonSchemaFactory
-                .getSchema(
-                        Thread.currentThread().getContextClassLoader().getResourceAsStream("jsons/trait_schema1.json"))
-                .getSchemaNode()
-                .toPrettyString();
+    var traitSchema1 =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/trait_schema1.json"))
+            .getSchemaNode()
+            .toPrettyString();
 
-        traitService.create("Trait1", Optional.of(traitSchema1), Optional.empty());
+    traitService.create("Trait1", Optional.of(traitSchema1), Optional.empty());
 
-        var baseType = entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
+    var baseType =
+        entityTypeService.create("BaseType", List.of("Trait1"), Optional.empty(), baseSchema);
 
-        var middleType = entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
+    var middleType =
+        entityTypeService.create("MiddleType", List.of(), Optional.of("BaseType"), middleSchema);
 
-        var leafType = entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
+    var leafType =
+        entityTypeService.create("LeafType", List.of(), Optional.of("MiddleType"), leafSchema);
 
-        var leafType1 = entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
+    var leafType1 =
+        entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
-        var cache = ((org.springframework.cache.concurrent.ConcurrentMapCache) cacheManager.getCache("EntityTypes"))
-                .getNativeCache();
+    var cache =
+        ((org.springframework.cache.concurrent.ConcurrentMapCache)
+                cacheManager.getCache("EntityTypes"))
+            .getNativeCache();
 
-        Assertions.assertTrue(cache.keySet().contains(baseType.getName()));
+    Assertions.assertTrue(cache.keySet().contains(baseType.getName()));
 
-        Assertions.assertTrue(cache.keySet().contains(middleType.getName()));
+    Assertions.assertTrue(cache.keySet().contains(middleType.getName()));
 
-        Assertions.assertTrue(cache.keySet().contains(leafType.getName()));
+    Assertions.assertTrue(cache.keySet().contains(leafType.getName()));
 
-        Assertions.assertTrue(cache.keySet().contains(leafType1.getName()));
+    Assertions.assertTrue(cache.keySet().contains(leafType1.getName()));
 
-        Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
+    Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
-        JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
-                .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
+    JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
+        .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
 
-        Assertions.assertThrows(DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
+    Assertions.assertThrows(
+        DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
 
-        entityTypeService.delete("LeafType");
+    entityTypeService.delete("LeafType");
 
-        Assertions.assertEquals(1, entityTypeService.countEntityTypeChildren("MiddleType"));
+    Assertions.assertEquals(1, entityTypeService.countEntityTypeChildren("MiddleType"));
 
-        entityTypeService.delete("LeafType1");
+    entityTypeService.delete("LeafType1");
 
-        Assertions.assertEquals(0, entityTypeService.countEntityTypeChildren("MiddleType"));
+    Assertions.assertEquals(0, entityTypeService.countEntityTypeChildren("MiddleType"));
 
-        entityTypeService.delete("MiddleType");
+    entityTypeService.delete("MiddleType");
 
-        entityTypeService.delete("BaseType");
+    entityTypeService.delete("BaseType");
 
-        Assertions.assertFalse(cache.keySet().contains(baseType.getName()));
+    Assertions.assertFalse(cache.keySet().contains(baseType.getName()));
 
-        Assertions.assertFalse(cache.keySet().contains(middleType.getName()));
+    Assertions.assertFalse(cache.keySet().contains(middleType.getName()));
 
-        Assertions.assertFalse(cache.keySet().contains(leafType.getName()));
+    Assertions.assertFalse(cache.keySet().contains(leafType.getName()));
 
-        Assertions.assertFalse(cache.keySet().contains(leafType1.getName()));
-    }
+    Assertions.assertFalse(cache.keySet().contains(leafType1.getName()));
+  }
 }

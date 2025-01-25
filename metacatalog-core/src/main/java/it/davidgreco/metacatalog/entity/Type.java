@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 public interface Type<T extends Type> {
 
-    T getFather();
+  T getFather();
 
-    JsonNode getSchema();
+  JsonNode getSchema();
 }

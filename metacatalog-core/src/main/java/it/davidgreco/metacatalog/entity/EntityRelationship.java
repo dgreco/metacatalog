@@ -11,13 +11,17 @@ import lombok.ToString;
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
-        name = "entity_relationship",
-        indexes = {
-            @Index(name = "idx_entity_relationship_source_id_relation_type", columnList = "source_id, relation_type"),
-            @Index(name = "idx_entity_relationship_target_id_relation_type", columnList = "target_id, relation_type"),
-            @Index(
-                    name = "idx_entity_relationship_source_id_relation_type_target_id",
-                    columnList = "source_id, relation_type, target_id",
-                    unique = true)
-        })
+    name = "entity_relationship",
+    indexes = {
+      @Index(
+          name = "idx_entity_relationship_source_id_relation_type",
+          columnList = "source_id, relation_type"),
+      @Index(
+          name = "idx_entity_relationship_target_id_relation_type",
+          columnList = "target_id, relation_type"),
+      @Index(
+          name = "idx_entity_relationship_source_id_relation_type_target_id",
+          columnList = "source_id, relation_type, target_id",
+          unique = true)
+    })
 public class EntityRelationship extends CommonRelationship<Entity> {}

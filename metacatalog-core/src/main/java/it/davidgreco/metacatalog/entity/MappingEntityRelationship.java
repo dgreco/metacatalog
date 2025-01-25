@@ -13,17 +13,17 @@ import lombok.ToString;
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
-        name = "mapping_entity_relationship",
-        indexes = {
-            @Index(
-                    name = "idx_mapping_entity_relationship_source_id_relation_type",
-                    columnList = "source_id, relation_type"),
-            @Index(
-                    name = "idx_mapping_entity_relationship_source_id_mapping_entity_type_relationship_id",
-                    columnList = "source_id, mapping_entity_type_relationship_id",
-                    unique = true)
-        })
+    name = "mapping_entity_relationship",
+    indexes = {
+      @Index(
+          name = "idx_mapping_entity_relationship_source_id_relation_type",
+          columnList = "source_id, relation_type"),
+      @Index(
+          name = "idx_mapping_entity_relationship_source_id_mapping_entity_type_relationship_id",
+          columnList = "source_id, mapping_entity_type_relationship_id",
+          unique = true)
+    })
 public class MappingEntityRelationship extends CommonRelationship<Entity> {
-    @OneToOne(fetch = FetchType.EAGER)
-    private MappingEntityTypeRelationship mappingEntityTypeRelationship;
+  @OneToOne(fetch = FetchType.EAGER)
+  private MappingEntityTypeRelationship mappingEntityTypeRelationship;
 }

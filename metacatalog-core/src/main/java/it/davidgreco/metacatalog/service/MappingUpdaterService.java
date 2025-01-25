@@ -17,57 +17,61 @@ import org.springframework.stereotype.Service;
 @Setter
 public class MappingUpdaterService {
 
-    Logger logger = LoggerFactory.getLogger(MappingUpdaterService.class);
+  Logger logger = LoggerFactory.getLogger(MappingUpdaterService.class);
 
-    private boolean automaticEntitiesMapping;
+  private boolean automaticEntitiesMapping;
 
-    private final AdvisoryLockManager advisoryLockManager;
+  private final AdvisoryLockManager advisoryLockManager;
 
-    private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+  private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
-    public final MappingService mappingService;
+  public final MappingService mappingService;
 
-    /**
-     * Scheduled task that checks for new {@link EntityLifeCycleEvent}s that are source created or source updated.
-     * If the {@link EntityLifeCycleEvent} is source created, it calls {@link MappingService#createMappedEntities} to
-     * create the mapped entities. If the {@link EntityLifeCycleEvent} is source updated, it calls
-     * {@link MappingService#updateMappedEntities} to update the mapped entities.
-     *
-     * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is also synchronized
-     * using an advisory lock, so that only one instance of this task can run at the same time.
-     */
-    @Scheduled(
-            fixedRateString =
-                    "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
-    void updateMappedEntities() {
-        if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-            var createdEvents =
-                    entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
-            createdEvents.forEach(event -> {
-                try {
-                    mappingService.createMappedEntities(event);
-                } catch (Exception e) {
-                    logger.error("Error creating mapped entities", e);
-                }
-            });
-            var updatedEvents =
-                    entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
-            updatedEvents.forEach(event -> {
-                try {
-                    mappingService.updateMappedEntities(event);
-                } catch (Exception e) {
-                    logger.error("Error updating mapped entities", e);
-                }
-            });
-        }
+  /**
+   * Scheduled task that checks for new {@link EntityLifeCycleEvent}s that are source created or
+   * source updated. If the {@link EntityLifeCycleEvent} is source created, it calls {@link
+   * MappingService#createMappedEntities} to create the mapped entities. If the {@link
+   * EntityLifeCycleEvent} is source updated, it calls {@link MappingService#updateMappedEntities}
+   * to update the mapped entities.
+   *
+   * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is
+   * also synchronized using an advisory lock, so that only one instance of this task can run at the
+   * same time.
+   */
+  @Scheduled(
+      fixedRateString =
+          "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
+  void updateMappedEntities() {
+    if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+      var createdEvents =
+          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+      createdEvents.forEach(
+          event -> {
+            try {
+              mappingService.createMappedEntities(event);
+            } catch (Exception e) {
+              logger.error("Error creating mapped entities", e);
+            }
+          });
+      var updatedEvents =
+          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+      updatedEvents.forEach(
+          event -> {
+            try {
+              mappingService.updateMappedEntities(event);
+            } catch (Exception e) {
+              logger.error("Error updating mapped entities", e);
+            }
+          });
     }
+  }
 
-    @Scheduled(
-            fixedRateString =
-                    "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
-    void entityLifeCycleEventCleanup() {
-        if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-            logger.info("Cleaning up entity life cycle events");
-        }
+  @Scheduled(
+      fixedRateString =
+          "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
+  void entityLifeCycleEventCleanup() {
+    if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+      logger.info("Cleaning up entity life cycle events");
     }
+  }
 }

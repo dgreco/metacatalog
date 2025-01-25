@@ -9,15 +9,15 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface EntityRepository extends JpaRepository<Entity, String> {
-    long countByEntityType(EntityType entityType);
+  long countByEntityType(EntityType entityType);
 
-    List<Entity> findByEntityType(EntityType entityType);
+  List<Entity> findByEntityType(EntityType entityType);
 
-    @Query(
-            value =
-                    """
+  @Query(
+      value =
+          """
                SELECT *, jsonb_path_query(values, CAST(:jsonPath AS jsonpath)) FROM entity
                """,
-            nativeQuery = true)
-    List<Entity> findByJsonPath(String jsonPath);
+      nativeQuery = true)
+  List<Entity> findByJsonPath(String jsonPath);
 }

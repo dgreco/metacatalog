@@ -10,57 +10,59 @@ import java.util.Optional;
 
 public interface CommonTypeService<T extends Type, K> extends CommonService<T, K> {
 
-    CommonTypeService<EntityType, String> genericTypeService = new CommonTypeService<>() {
+  CommonTypeService<EntityType, String> genericTypeService =
+      new CommonTypeService<>() {
 
         @Override
         public void delete(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
 
         @Override
         public EntityType read(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
 
         @Override
         public boolean exists(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
-    };
+      };
 
-    CommonTypeService<Trait, String> genericTraitService = new CommonTypeService<>() {
+  CommonTypeService<Trait, String> genericTraitService =
+      new CommonTypeService<>() {
 
         @Override
         public void delete(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
 
         @Override
         public Trait read(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
 
         @Override
         public boolean exists(String key) {
-            throw new UnsupportedOperationException();
+          throw new UnsupportedOperationException();
         }
-    };
+      };
 
-    default List<T> loadRevertedInheritanceChain(T type) {
-        LinkedList<T> inheritanceChain = new LinkedList<>();
-        inheritanceChain.add(type);
-        var maybeFather = Optional.ofNullable(type.getFather());
-        if (maybeFather.isPresent()) {
-            inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
-            return inheritanceChain;
-        } else {
-            return inheritanceChain;
-        }
+  default List<T> loadRevertedInheritanceChain(T type) {
+    LinkedList<T> inheritanceChain = new LinkedList<>();
+    inheritanceChain.add(type);
+    var maybeFather = Optional.ofNullable(type.getFather());
+    if (maybeFather.isPresent()) {
+      inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
+      return inheritanceChain;
+    } else {
+      return inheritanceChain;
     }
+  }
 
-    default List<T> loadInheritanceChain(T type) {
-        var list = loadRevertedInheritanceChain(type);
-        Collections.reverse(list);
-        return list;
-    }
+  default List<T> loadInheritanceChain(T type) {
+    var list = loadRevertedInheritanceChain(type);
+    Collections.reverse(list);
+    return list;
+  }
 }

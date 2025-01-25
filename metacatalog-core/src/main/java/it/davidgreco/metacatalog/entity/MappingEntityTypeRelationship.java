@@ -18,44 +18,44 @@ import lombok.ToString;
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
-        name = "mapping_type_relationship",
-        indexes = {
-            @Index(
-                    name = "idx_mapping_type_relationship_source_id_relation_type",
-                    columnList = "source_id, relation_type"),
-            @Index(
-                    name = "idx_mapping_type_relationship_source_id_relation_type_target_id",
-                    columnList = "source_id, relation_type, target_id")
-        })
+    name = "mapping_type_relationship",
+    indexes = {
+      @Index(
+          name = "idx_mapping_type_relationship_source_id_relation_type",
+          columnList = "source_id, relation_type"),
+      @Index(
+          name = "idx_mapping_type_relationship_source_id_relation_type_target_id",
+          columnList = "source_id, relation_type, target_id")
+    })
 public class MappingEntityTypeRelationship extends CommonRelationship<EntityType> {
-    @org.hibernate.annotations.Type(JsonBinaryType.class)
-    @Column(name = "mapping_values", columnDefinition = "jsonb", nullable = false)
-    @ToString.Include
-    private JsonNode mappingValues;
+  @org.hibernate.annotations.Type(JsonBinaryType.class)
+  @Column(name = "mapping_values", columnDefinition = "jsonb", nullable = false)
+  @ToString.Include
+  private JsonNode mappingValues;
 
-    @org.hibernate.annotations.Type(JsonBinaryType.class)
-    @Column(name = "entity_path_references", columnDefinition = "jsonb", nullable = false)
-    @ToString.Include
-    private JsonNode entityPathReferences;
+  @org.hibernate.annotations.Type(JsonBinaryType.class)
+  @Column(name = "entity_path_references", columnDefinition = "jsonb", nullable = false)
+  @ToString.Include
+  private JsonNode entityPathReferences;
 
-    public record EntityPathReference(String alias, String referencePath) {}
+  public record EntityPathReference(String alias, String referencePath) {}
 
-    public void setEntityPathReferences(List<EntityPathReference> eprs) {
-        var nodes = eprs.stream().map(jsonFactory::<JsonNode>valueToTree).toList();
-        var node = jsonFactory.createArrayNode();
-        node.addAll(nodes);
-        entityPathReferences = node;
+  public void setEntityPathReferences(List<EntityPathReference> eprs) {
+    var nodes = eprs.stream().map(jsonFactory::<JsonNode>valueToTree).toList();
+    var node = jsonFactory.createArrayNode();
+    node.addAll(nodes);
+    entityPathReferences = node;
+  }
+
+  public List<MappingEntityTypeRelationship.EntityPathReference> getEntityPathReferences() {
+    var list = new ArrayList<EntityPathReference>();
+    var nodes = entityPathReferences.elements();
+    while (nodes.hasNext()) {
+      var node = nodes.next();
+      var alias = node.get("alias").asText();
+      var referencePath = node.get("referencePath").asText();
+      list.add(new EntityPathReference(alias, referencePath));
     }
-
-    public List<MappingEntityTypeRelationship.EntityPathReference> getEntityPathReferences() {
-        var list = new ArrayList<EntityPathReference>();
-        var nodes = entityPathReferences.elements();
-        while (nodes.hasNext()) {
-            var node = nodes.next();
-            var alias = node.get("alias").asText();
-            var referencePath = node.get("referencePath").asText();
-            list.add(new EntityPathReference(alias, referencePath));
-        }
-        return list;
-    }
+    return list;
+  }
 }

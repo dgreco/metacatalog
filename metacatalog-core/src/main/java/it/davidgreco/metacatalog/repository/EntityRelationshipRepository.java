@@ -11,10 +11,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface EntityRelationshipRepository extends JpaRepository<EntityRelationship, Long> {
 
-    List<EntityRelationship> findBySourceAndRelationType(Entity source, RelationType relType);
+  List<EntityRelationship> findBySourceAndRelationType(Entity source, RelationType relType);
 
-    List<EntityRelationship> findByTargetAndRelationType(Entity target, RelationType relType);
+  List<EntityRelationship> findByTargetAndRelationType(Entity target, RelationType relType);
 
-    Optional<EntityRelationship> findBySourceAndRelationTypeAndTarget(
-            Entity source, RelationType relType, Entity target);
+  Optional<EntityRelationship> findBySourceAndRelationTypeAndTarget(
+      Entity source, RelationType relType, Entity target);
 }

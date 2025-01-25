@@ -14,31 +14,31 @@ import org.springframework.http.converter.HttpMessageNotWritableException;
 
 public class FileHttpMessageConverter extends AbstractGenericHttpMessageConverter<File> {
 
-    public FileHttpMessageConverter() {
-        super(MediaType.APPLICATION_OCTET_STREAM, MediaType.ALL);
-    }
+  public FileHttpMessageConverter() {
+    super(MediaType.APPLICATION_OCTET_STREAM, MediaType.ALL);
+  }
 
-    @Override
-    public boolean supports(Class<?> clazz) {
-        return File.class == clazz;
-    }
+  @Override
+  public boolean supports(Class<?> clazz) {
+    return File.class == clazz;
+  }
 
-    @Override
-    protected void writeInternal(File file, Type type, HttpOutputMessage outputMessage)
-            throws IOException, HttpMessageNotWritableException {
-        Path filePath = file.toPath();
-        Files.copy(filePath, outputMessage.getBody());
-    }
+  @Override
+  protected void writeInternal(File file, Type type, HttpOutputMessage outputMessage)
+      throws IOException, HttpMessageNotWritableException {
+    Path filePath = file.toPath();
+    Files.copy(filePath, outputMessage.getBody());
+  }
 
-    @Override
-    protected File readInternal(Class<? extends File> clazz, HttpInputMessage inputMessage)
-            throws HttpMessageNotReadableException {
-        throw new UnsupportedOperationException();
-    }
+  @Override
+  protected File readInternal(Class<? extends File> clazz, HttpInputMessage inputMessage)
+      throws HttpMessageNotReadableException {
+    throw new UnsupportedOperationException();
+  }
 
-    @Override
-    public File read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
-            throws IOException, HttpMessageNotReadableException {
-        throw new UnsupportedOperationException();
-    }
+  @Override
+  public File read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
+      throws IOException, HttpMessageNotReadableException {
+    throw new UnsupportedOperationException();
+  }
 }

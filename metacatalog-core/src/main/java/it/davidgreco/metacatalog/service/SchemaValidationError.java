@@ -5,10 +5,10 @@ import lombok.Getter;
 
 @Getter
 public class SchemaValidationError extends ServiceError {
-    private final List<String> errors;
+  private final List<String> errors;
 
-    public SchemaValidationError(List<String> errors) {
-        super("Schema validation failed");
-        this.errors = errors;
-    }
+  public SchemaValidationError(List<String> errors) {
+    super("Schema validation failed");
+    this.errors = errors;
+  }
 }

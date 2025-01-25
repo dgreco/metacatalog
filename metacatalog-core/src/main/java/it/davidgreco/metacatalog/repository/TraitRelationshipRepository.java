@@ -11,7 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface TraitRelationshipRepository extends JpaRepository<TraitRelationship, Long> {
 
-    List<TraitRelationship> findBySourceAndRelationType(Trait source, RelationType relType);
+  List<TraitRelationship> findBySourceAndRelationType(Trait source, RelationType relType);
 
-    Optional<TraitRelationship> findBySourceAndRelationTypeAndTarget(Trait source, RelationType relType, Trait target);
+  Optional<TraitRelationship> findBySourceAndRelationTypeAndTarget(
+      Trait source, RelationType relType, Trait target);
 }

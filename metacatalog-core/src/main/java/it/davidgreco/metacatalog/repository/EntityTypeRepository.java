@@ -11,26 +11,26 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface EntityTypeRepository extends JpaRepository<EntityType, String> {
 
-    @Cacheable(
-            cacheNames = {"EntityTypes"},
-            key = "#name")
-    Optional<EntityType> findByName(String name);
+  @Cacheable(
+      cacheNames = {"EntityTypes"},
+      key = "#name")
+  Optional<EntityType> findByName(String name);
 
-    @CachePut(
-            cacheNames = {"EntityTypes"},
-            key = "#entityType.name")
-    EntityType save(EntityType entityType);
+  @CachePut(
+      cacheNames = {"EntityTypes"},
+      key = "#entityType.name")
+  EntityType save(EntityType entityType);
 
-    @Override
-    @CacheEvict(
-            cacheNames = {"EntityTypes"},
-            key = "#entityType.name")
-    void delete(EntityType entityType);
+  @Override
+  @CacheEvict(
+      cacheNames = {"EntityTypes"},
+      key = "#entityType.name")
+  void delete(EntityType entityType);
 
-    @CacheEvict(
-            cacheNames = {"EntityTypes"},
-            key = "#name")
-    boolean existsByName(String name);
+  @CacheEvict(
+      cacheNames = {"EntityTypes"},
+      key = "#name")
+  boolean existsByName(String name);
 
-    long countEntityTypeByFather(EntityType entityType);
+  long countEntityTypeByFather(EntityType entityType);
 }

@@ -13,21 +13,28 @@ import org.hibernate.annotations.Type;
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
-        name = "entity",
-        indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
+    name = "entity",
+    indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
 public class Entity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    @Column(name = "id", nullable = false)
-    @ToString.Include
-    private String id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  @Column(name = "id", nullable = false)
+  @ToString.Include
+  private String id;
 
-    @Type(JsonBinaryType.class)
-    @Column(name = "values", columnDefinition = "jsonb", nullable = false)
-    @ToString.Include
-    private JsonNode values;
+  @Type(JsonBinaryType.class)
+  @Column(name = "values", columnDefinition = "jsonb", nullable = false)
+  @ToString.Include
+  private JsonNode values;
 
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "entity_type_id", nullable = false)
-    private EntityType entityType;
+  @ManyToOne(fetch = FetchType.EAGER)
+  @JoinColumn(name = "entity_type_id", nullable = false)
+  private EntityType entityType;
+
+  public Entity(EntityType entityType, JsonNode values) {
+    this.values = values;
+    this.entityType = entityType;
+  }
+
+  public Entity() {}
 }

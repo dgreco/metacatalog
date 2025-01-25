@@ -20,67 +20,63 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @EnableCaching
 class CommonServiceTests {
 
-    static final int POSTGRESQL_PORT = 5433;
+  static final int POSTGRESQL_PORT = 5433;
 
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withExposedPorts(5432)
-            .withCreateContainerCmdModifier(cmd -> cmd.withHostConfig(new HostConfig()
-                    .withPortBindings(
-                            new PortBinding(Ports.Binding.bindPort(POSTGRESQL_PORT), new ExposedPort(5432)))));
+  static PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>("postgres:16-alpine")
+          .withExposedPorts(5432)
+          .withCreateContainerCmdModifier(
+              cmd ->
+                  cmd.withHostConfig(
+                      new HostConfig()
+                          .withPortBindings(
+                              new PortBinding(
+                                  Ports.Binding.bindPort(POSTGRESQL_PORT),
+                                  new ExposedPort(5432)))));
 
-    @BeforeAll
-    static void beforeAll() {
-        postgres.start();
+  @BeforeAll
+  static void beforeAll() {
+    postgres.start();
 
-        var flyway = Flyway.configure()
-                .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-                .cleanDisabled(false)
-                .load();
-        flyway.clean();
-        flyway.migrate();
-    }
+    var flyway =
+        Flyway.configure()
+            .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+            .cleanDisabled(false)
+            .load();
+    flyway.clean();
+    flyway.migrate();
+  }
 
-    @AfterAll
-    static void afterAll() {
-        postgres.stop();
-    }
+  @AfterAll
+  static void afterAll() {
+    postgres.stop();
+  }
 
-    @Autowired
-    ApplicationContext applicationContext;
+  @Autowired ApplicationContext applicationContext;
 
-    @Autowired
-    EntityTypeRepository entityTypeRepository;
+  @Autowired EntityTypeRepository entityTypeRepository;
 
-    @Autowired
-    EntityRepository entityRepository;
+  @Autowired EntityRepository entityRepository;
 
-    @Autowired
-    TraitRepository traitRepository;
+  @Autowired TraitRepository traitRepository;
 
-    @Autowired
-    TraitRelationshipRepository traitRelationshipRepository;
+  @Autowired TraitRelationshipRepository traitRelationshipRepository;
 
-    @Autowired
-    EntityRelationshipRepository entityRelationshipRepository;
+  @Autowired EntityRelationshipRepository entityRelationshipRepository;
 
-    @Autowired
-    MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+  @Autowired MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
-    @Autowired
-    MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+  @Autowired MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
-    @Autowired
-    EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+  @Autowired EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
-    @Autowired
-    PlatformTransactionManager transactionManager;
+  @Autowired PlatformTransactionManager transactionManager;
 
-    @Autowired
-    CacheManager cacheManager;
+  @Autowired CacheManager cacheManager;
 
-    @Test
-    void dummyTest() {
-        /* Just a dummy test */
-        Assertions.assertTrue(true);
-    }
+  @Test
+  void dummyTest() {
+    /* Just a dummy test */
+    Assertions.assertTrue(true);
+  }
 }

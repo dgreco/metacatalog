@@ -14,13 +14,12 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableScheduling
 public class Application {
 
-    protected Application() {}
+  protected Application() {}
 
-    /**
-     *
-     * @param args
-     */
-    public static void main(final String[] args) {
-        SpringApplication.run(Application.class, args);
-    }
+  /**
+   * @param args
+   */
+  public static void main(final String[] args) {
+    SpringApplication.run(Application.class, args);
+  }
 }
