@@ -142,17 +142,16 @@ class EntityTypeServiceTests extends CommonServiceTests {
         entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
     var cache =
-        ((org.springframework.cache.concurrent.ConcurrentMapCache)
-                cacheManager.getCache("EntityTypes"))
+        ((org.springframework.cache.caffeine.CaffeineCache) cacheManager.getCache("EntityTypes"))
             .getNativeCache();
 
-    Assertions.assertTrue(cache.keySet().contains(baseType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(baseType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(middleType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(middleType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(leafType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(leafType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(leafType1.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(leafType1.getName()));
 
     Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
@@ -174,12 +173,12 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     entityTypeService.delete("BaseType");
 
-    Assertions.assertFalse(cache.keySet().contains(baseType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(baseType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(middleType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(middleType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(leafType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(leafType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(leafType1.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(leafType1.getName()));
   }
 }
