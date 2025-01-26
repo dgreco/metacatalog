@@ -18,7 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 class AggregateServiceTests extends CommonServiceTests {
 
   @Test
-  void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
+  void testCreateAndRead() throws IOException, ServiceError {
     var traitService = applicationContext.getBean(TraitService.class);
     var entityService = applicationContext.getBean(EntityService.class);
     var entityTypeService = applicationContext.getBean(EntityTypeService.class);
@@ -106,5 +106,11 @@ class AggregateServiceTests extends CommonServiceTests {
         entityService.linked(subRoot.getId(), RelationType.HAS_PART).stream()
             .map(entity -> entity.getValues().get("name").asText())
             .collect(Collectors.toSet()));
+
+    var retrievedAggregate = aggregateService.read(result.entity().getId());
+
+    Assertions.assertEquals(result.toString(), retrievedAggregate.toString());
+
+    Assertions.assertThrows(ServiceError.class, () -> aggregateService.read(subRoot.getId()));
   }
 }

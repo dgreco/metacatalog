@@ -1,8 +1,10 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
+import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
 
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,8 @@ public class AggregateService {
   public record Aggregate(Entity entity, List<AggregatePart> elements) implements AggregatePart {}
 
   private final EntityService entityService;
+
+  private final EntityRelationshipRepository entityRelationshipRepository;
 
   /**
    * Creates an aggregate entity (i.e. a collection of entities, each potentially being an aggregate
@@ -48,6 +52,7 @@ public class AggregateService {
         var childAggregate =
             entityService.create(
                 entity.getEntityType().getName(), entity.getValues().toPrettyString());
+        entity.setId(childAggregate.getId());
         entityService.link(rootAggregate.getId(), HAS_PART, childAggregate.getId());
         for (var childElement : elements) {
           if (childElement instanceof AggregateElement(Entity anotherEntity)) {
@@ -62,5 +67,68 @@ public class AggregateService {
       }
     }
     return aggregate;
+  }
+
+  /**
+   * Reads an aggregate entity (i.e. a collection of entities, each potentially being an aggregate
+   * itself) from the database.
+   *
+   * @param aggregateId the ID of the aggregate entity to read
+   * @return the read aggregate
+   * @throws ServiceError if an error occurs during creation
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public Aggregate read(String aggregateId) throws ServiceError {
+    class ReadAggregate {
+      private AggregatePart readAggregatePart(String entityId) throws ServiceError {
+        try {
+          var entity = entityService.read(entityId);
+          if (implementsTrait(entity.getEntityType(), "AggregateElement")
+              && !implementsTrait(entity.getEntityType(), "Aggregate")) {
+            return new AggregateElement(entity);
+          } else if (implementsTrait(entity.getEntityType(), "Aggregate")) {
+            var linkedEntities = entityService.linked(entityId, HAS_PART);
+            var elements =
+                linkedEntities.stream()
+                    .map(
+                        e -> {
+                          try {
+                            return readAggregatePart(e.getId());
+                          } catch (ServiceError ex) {
+                            throw new ServiceRuntimeError(ex);
+                          }
+                        })
+                    .toList();
+            return new Aggregate(entity, elements);
+          } else {
+            throw new ServiceError("Invalid entity type for aggregate part");
+          }
+        } catch (ServiceRuntimeError ex) {
+          throw (ServiceError) ex.getCause();
+        }
+      }
+    }
+
+    if (!entityService.exists(aggregateId)) {
+      throw new ServiceError("Aggregate with id: " + aggregateId + " not found");
+    }
+
+    var aggregateEntity = entityService.read(aggregateId);
+    if (!entityRelationshipRepository
+        .findByTargetAndRelationType(aggregateEntity, HAS_PART)
+        .isEmpty()) {
+      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
+    }
+
+    var result =
+        new ReadAggregate().readAggregatePart(aggregateId) instanceof Aggregate aggregate
+            ? aggregate
+            : null;
+
+    if (result == null) {
+      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
+    } else return result;
   }
 }
