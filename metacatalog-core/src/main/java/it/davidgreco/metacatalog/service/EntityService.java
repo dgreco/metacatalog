@@ -2,8 +2,6 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
-import static it.davidgreco.metacatalog.service.CommonTypeService.genericTraitService;
-import static it.davidgreco.metacatalog.service.CommonTypeService.genericTypeService;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
@@ -11,8 +9,6 @@ import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -58,7 +54,7 @@ public class EntityService implements CommonService<Entity, String> {
               .findByName(typeName)
               .orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
 
-      if (isTargetEntityType(entityType))
+      if (CommonService.isTargetEntityType(mappingEntityTypeRelationshipRepository, entityType))
         throw new ServiceError("Creating an entity for a target entity type is not allowed");
 
       var valuesJsonNode = jsonFactory.readTree(values);
@@ -72,7 +68,7 @@ public class EntityService implements CommonService<Entity, String> {
       typedEntity.setEntityType(entityType);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
-      if (isSourceEntityType(entityType))
+      if (CommonService.isSourceEntityType(mappingEntityTypeRelationshipRepository, entityType))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
                 en.getId(), en.getEntityType().getName(), "SOURCE_CREATED", "PENDING"));
@@ -120,7 +116,8 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
 
-      if (isTargetEntityType(entity.getEntityType()))
+      if (CommonService.isTargetEntityType(
+          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a target entity type");
 
@@ -133,7 +130,8 @@ public class EntityService implements CommonService<Entity, String> {
       }
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
-      if (isSourceEntityType(entity.getEntityType()))
+      if (CommonService.isSourceEntityType(
+          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
                 entity.getId(), entity.getEntityType().getName(), "SOURCE_UPDATED", "PENDING"));
@@ -166,11 +164,13 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
 
-      if (isTargetEntityType(entity.getEntityType()))
+      if (CommonService.isTargetEntityType(
+          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a target entity type");
 
-      if (isSourceEntityType(entity.getEntityType()))
+      if (CommonService.isSourceEntityType(
+          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a source entity type");
 
@@ -220,11 +220,17 @@ public class EntityService implements CommonService<Entity, String> {
       rollbackFor = {ServiceError.class})
   public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
     // Check loops
-    if (checkLoops(targetId, new HashSet<>(), sourceId, relType))
-      throw new ServiceError("Loops are not allowed");
+    if (CommonService.checkLoops(
+        entityRepository,
+        entityRelationshipRepository,
+        targetId,
+        new HashSet<>(),
+        sourceId,
+        relType)) throw new ServiceError("Loops are not allowed");
 
     // Check if the relationship is legit
-    if (!checkRelIsLegit(sourceId, relType, targetId))
+    if (!CommonService.checkRelIsLegit(
+        entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
       throw new ServiceError("Relationship is not legit");
 
     var rel1 = new EntityRelationship();
@@ -309,89 +315,5 @@ public class EntityService implements CommonService<Entity, String> {
     return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
         .map(EntityRelationship::getTarget)
         .toList();
-  }
-
-  private boolean checkLoops(
-      String sourceEntityId,
-      Set<String> entityIdsVisited,
-      String targetEntityId,
-      RelationType relationType)
-      throws ServiceError {
-    var sourceEntity =
-        entityRepository
-            .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
-    var mappings =
-        entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
-
-    var targetIds =
-        mappings.stream().map(EntityRelationship::getTarget).map(Entity::getId).toList();
-    for (var targetId : targetIds) {
-      if (entityIdsVisited.contains(targetEntityId)) return true;
-      else {
-        entityIdsVisited.add(targetId);
-        return checkLoops(targetId, entityIdsVisited, targetEntityId, relationType);
-      }
-    }
-    return entityIdsVisited.contains(targetEntityId);
-  }
-
-  private boolean checkRelIsLegit(
-      String sourceEntityId, RelationType relType, String targetEntityId) throws ServiceError {
-
-    var sourceEntity =
-        entityRepository
-            .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
-    var targetEntity =
-        entityRepository
-            .findById(targetEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + targetEntityId + " not found"));
-    var sourceEntityType = sourceEntity.getEntityType();
-    var targetEntityType = targetEntity.getEntityType();
-
-    var allTheTraitsForTheSourceType =
-        genericTypeService.loadInheritanceChain(sourceEntityType).stream()
-            .flatMap(
-                entityType ->
-                    entityType.getTraits().stream()
-                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
-            .toList();
-
-    var allTheTraitsNamesForTheTargetType =
-        genericTypeService.loadInheritanceChain(targetEntityType).stream()
-            .flatMap(
-                entityType ->
-                    entityType.getTraits().stream()
-                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
-            .map(Trait::getName)
-            .collect(Collectors.toSet());
-
-    var sourceRelationships =
-        allTheTraitsForTheSourceType.stream()
-            .flatMap(
-                sourceTrait ->
-                    traitRelationshipRepository
-                        .findBySourceAndRelationType(sourceTrait, relType)
-                        .stream())
-            .toList();
-
-    for (var sourceRelationship : sourceRelationships) {
-      var targetTrait = sourceRelationship.getTarget();
-      if (allTheTraitsNamesForTheTargetType.contains(targetTrait.getName())) return true;
-    }
-    return false;
-  }
-
-  boolean isSourceEntityType(EntityType entityType) {
-    return !mappingEntityTypeRelationshipRepository
-        .findMappingEntityTypeRelationshipBySource(entityType)
-        .isEmpty();
-  }
-
-  boolean isTargetEntityType(EntityType entityType) {
-    return !mappingEntityTypeRelationshipRepository
-        .findMappingEntityTypeRelationshipByTarget(entityType)
-        .isEmpty();
   }
 }

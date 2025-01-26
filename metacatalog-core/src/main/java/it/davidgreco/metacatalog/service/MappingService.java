@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.*;
+import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
 import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -35,6 +36,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Service
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
+
+  static final String DOES_NOT_EXIST = " does not exist";
+
+  public final TraitRelationshipRepository traitRelationshipRepository;
 
   public final EntityRepository entityRepository;
 
@@ -78,8 +83,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
       throws ServiceError {
     try {
-      if (this.checkLoops(targetEntityTypeName, new HashSet<>(), sourceEntityTypeName))
-        throw new ServiceError("Loops are not allowed");
+      if (CommonService.checkMappingLoops(
+          entityTypeRepository,
+          mappingEntityTypeRelationshipRepository,
+          targetEntityTypeName,
+          new HashSet<>(),
+          sourceEntityTypeName)) throw new ServiceError("Loops are not allowed");
 
       var mapping = new MappingEntityTypeRelationship();
 
@@ -87,13 +96,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
           entityTypeRepository
               .findByName(sourceEntityTypeName)
               .orElseThrow(
-                  () -> new ServiceError("EntityType " + sourceEntityTypeName + " does not exist"));
+                  () -> new ServiceError("EntityType " + sourceEntityTypeName + DOES_NOT_EXIST));
 
       var targetEntityType =
           entityTypeRepository
               .findByName(targetEntityTypeName)
               .orElseThrow(
-                  () -> new ServiceError("EntityType " + targetEntityTypeName + " does not exist"));
+                  () -> new ServiceError("EntityType " + targetEntityTypeName + DOES_NOT_EXIST));
 
       mapping.setSource(sourceEntityType);
       mapping.setRelationType(MAPPED_TO);
@@ -134,7 +143,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
     return mappingEntityTypeRelationshipRepository
         .findById(mappingId)
-        .orElseThrow(() -> new ServiceError("Mapping " + mappingId + " does not exist"));
+        .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
   }
 
   /**
@@ -184,8 +193,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(
-                    () -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
         var sourceEntityType = sourceEntity.getEntityType();
         var mappingRelationships =
             mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
@@ -202,7 +210,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
               var as = sourceReference.alias();
               var jn =
                   createRetryTemplate.execute(
-                      ctx ->
+                      _ ->
                           retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
                               .orElseThrow(() -> new ServiceRuntimeError("Entity not found")));
               additionalEntitiesValues.put(as, jn.getValues());
@@ -229,6 +237,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
             mappingEntityRelationship.setRelationType(MAPPED_TO);
             mappingEntityRelationshipRepository.save(mappingEntityRelationship);
+            if (CommonService.checkRelIsLegit(
+                entityRepository,
+                traitRelationshipRepository,
+                sourceEntity.getId(),
+                HAS_PART,
+                mappedEntity.getId())) {
+              var entityRelationship = new EntityRelationship();
+              entityRelationship.setSource(sourceEntity);
+              entityRelationship.setTarget(mappedEntity);
+              entityRelationship.setRelationType(HAS_PART);
+              entityRelationshipRepository.save(entityRelationship);
+            }
             createMappedEntities(mappedEntity.getId());
           } else {
             createMappedEntities(existingMappingEntityRels.getFirst().getTarget().getId());
@@ -240,14 +260,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     try {
       getTransactionTemplate()
           .executeWithoutResult(
-              status -> {
+              _ -> {
                 try {
                   var sourceEntity =
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () ->
-                                  new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -301,8 +320,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(
-                    () -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySource(sourceEntity);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
@@ -314,7 +332,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             var as = sourceReference.alias();
             var jn =
                 updateRetryTemplate.execute(
-                    ctx ->
+                    _ ->
                         retrieveEntityByPath(sourceEntityId, sourceReference.referencePath())
                             .orElseThrow(() -> new ServiceRuntimeError("Entity not found")));
             additionalEntitiesValues.put(as, jn.getValues());
@@ -342,14 +360,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     try {
       getTransactionTemplate()
           .executeWithoutResult(
-              status -> {
+              _ -> {
                 try {
                   var sourceEntity =
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () ->
-                                  new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -385,14 +402,19 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(
-                    () -> new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySource(sourceEntity);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
           var mappedEntity = entityMappingRelationship.getTarget();
           retrievedEntitiesIds.push(mappedEntity.getId());
           mappingEntityRelationshipRepository.delete(entityMappingRelationship);
+          entityRelationshipRepository
+              .findBySourceAndRelationTypeAndTarget(
+                  entityMappingRelationship.getSource(),
+                  HAS_PART,
+                  entityMappingRelationship.getTarget())
+              .ifPresent(entityRelationshipRepository::delete);
           retrieveMappedEntities(mappedEntity.getId(), retrievedEntitiesIds);
         }
       }
@@ -411,14 +433,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     try {
       getTransactionTemplate()
           .executeWithoutResult(
-              status -> {
+              _ -> {
                 try {
                   var sourceEntity =
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () ->
-                                  new ServiceError("Entity " + sourceEntityId + " does not exist"));
+                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -434,29 +455,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
     }
-  }
-
-  private boolean checkLoops(
-      String sourceEntityTypeName, Set<String> entityTypeNamesVisited, String targetEntityTypeName)
-      throws ServiceError {
-    var sourceEntityType =
-        entityTypeRepository
-            .findByName(sourceEntityTypeName)
-            .orElseThrow(
-                () -> new ServiceError("Entity type " + targetEntityTypeName + " not found"));
-    var mappings =
-        mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
-            sourceEntityType);
-
-    var targetTypes = mappings.stream().map(MappingEntityTypeRelationship::getTarget).toList();
-    for (var targetType : targetTypes) {
-      if (entityTypeNamesVisited.contains(targetEntityTypeName)) return true;
-      else {
-        entityTypeNamesVisited.add(targetType.getName());
-        return checkLoops(targetType.getName(), entityTypeNamesVisited, targetEntityTypeName);
-      }
-    }
-    return entityTypeNamesVisited.contains(targetEntityTypeName);
   }
 
   boolean isSourceEntityType(EntityType entityType) {
@@ -594,9 +592,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       var result = exp.getValue(context);
 
                       switch (result) {
-                        case null ->
-                            throw new ServiceRuntimeError(
-                                "Error while evaluating expression: " + val.asText());
                         case Boolean b ->
                             ((ObjectNode) mappingValues).set(fieldName, BooleanNode.valueOf(b));
                         case Integer i ->
@@ -609,7 +604,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                             ((ObjectNode) mappingValues).set(fieldName, FloatNode.valueOf(f));
                         case Double d ->
                             ((ObjectNode) mappingValues).set(fieldName, DoubleNode.valueOf(d));
-                        default ->
+                        case null, default ->
                             throw new ServiceRuntimeError(
                                 "Error while evaluating expression: " + val.asText());
                       }

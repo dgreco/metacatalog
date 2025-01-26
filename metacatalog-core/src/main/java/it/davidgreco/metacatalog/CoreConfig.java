@@ -67,6 +67,7 @@ public class CoreConfig {
 
   @Bean
   public MappingService mappingService(
+      TraitRelationshipRepository traitRelationshipRepository,
       EntityRepository entityRepository,
       EntityTypeRepository entityTypeRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
@@ -76,6 +77,7 @@ public class CoreConfig {
       PlatformTransactionManager transactionManager,
       CoreConfigProperties applicationConfigurationProperties) {
     return new MappingService(
+        traitRelationshipRepository,
         entityRepository,
         entityTypeRepository,
         mappingEntityTypeRelationshipRepository,
