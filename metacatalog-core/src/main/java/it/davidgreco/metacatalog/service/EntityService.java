@@ -62,7 +62,8 @@ public class EntityService implements CommonService<Entity, String> {
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entityType))
-        throw new ServiceError("Creating an entity for a target entity type is not allowed");
+        throw new ServiceError(
+            "Creating an entity for a mapping target entity type is not allowed");
 
       var valuesJsonNode = jsonFactory.readTree(values);
       var validationMessages =
@@ -127,7 +128,7 @@ public class EntityService implements CommonService<Entity, String> {
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
-            ENTITY_WITH_ID + entityId + " is an instance of a target entity type");
+            ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
 
       var valuesJsonNode = jsonFactory.readTree(values);
       var validationMessages =
