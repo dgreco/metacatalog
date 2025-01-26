@@ -54,7 +54,8 @@ public class EntityService implements CommonService<Entity, String> {
               .findByName(typeName)
               .orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
 
-      if (CommonService.isTargetEntityType(mappingEntityTypeRelationshipRepository, entityType))
+      if (CommonService.isMappingTargetEntityType(
+          mappingEntityTypeRelationshipRepository, entityType))
         throw new ServiceError("Creating an entity for a target entity type is not allowed");
 
       var valuesJsonNode = jsonFactory.readTree(values);
@@ -68,7 +69,8 @@ public class EntityService implements CommonService<Entity, String> {
       typedEntity.setEntityType(entityType);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
-      if (CommonService.isSourceEntityType(mappingEntityTypeRelationshipRepository, entityType))
+      if (CommonService.isMappingSourceEntityType(
+          mappingEntityTypeRelationshipRepository, entityType))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
                 en.getId(), en.getEntityType().getName(), "SOURCE_CREATED", "PENDING"));
@@ -116,7 +118,7 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
 
-      if (CommonService.isTargetEntityType(
+      if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a target entity type");
@@ -130,7 +132,7 @@ public class EntityService implements CommonService<Entity, String> {
       }
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
-      if (CommonService.isSourceEntityType(
+      if (CommonService.isMappingSourceEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
@@ -164,12 +166,12 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
 
-      if (CommonService.isTargetEntityType(
+      if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a target entity type");
 
-      if (CommonService.isSourceEntityType(
+      if (CommonService.isMappingSourceEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             "Entity with id " + entityId + " is an instance of a source entity type");

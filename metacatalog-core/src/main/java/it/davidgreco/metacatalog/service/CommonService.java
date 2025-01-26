@@ -16,6 +16,18 @@ public interface CommonService<T, K> {
 
   boolean exists(K key) throws ServiceError;
 
+  static boolean implementsTrait(EntityType entityType, String traitName) {
+    var allTheTraitsForTheType =
+        genericTypeService.loadInheritanceChain(entityType).stream()
+            .flatMap(
+                et ->
+                    et.getTraits().stream()
+                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
+            .map(Trait::getName)
+            .collect(Collectors.toSet());
+    return allTheTraitsForTheType.contains(traitName);
+  }
+
   static boolean checkRelIsLegit(
       EntityRepository entityRepository,
       TraitRelationshipRepository traitRelationshipRepository,
@@ -68,7 +80,7 @@ public interface CommonService<T, K> {
     return false;
   }
 
-  static boolean isSourceEntityType(
+  static boolean isMappingSourceEntityType(
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       EntityType entityType) {
     return !mappingEntityTypeRelationshipRepository
@@ -76,7 +88,7 @@ public interface CommonService<T, K> {
         .isEmpty();
   }
 
-  static boolean isTargetEntityType(
+  static boolean isMappingTargetEntityType(
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       EntityType entityType) {
     return !mappingEntityTypeRelationshipRepository
