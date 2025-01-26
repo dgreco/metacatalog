@@ -10,6 +10,10 @@ import java.util.stream.Collectors;
 
 public interface CommonService<T, K> {
 
+  String NOT_FOUND = " not found";
+
+  String ENTITY_WITH_ID = "Entity with id ";
+
   T read(K key) throws ServiceError;
 
   void delete(K key) throws ServiceError;
@@ -39,11 +43,11 @@ public interface CommonService<T, K> {
     var sourceEntity =
         entityRepository
             .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceEntityId + NOT_FOUND));
     var targetEntity =
         entityRepository
             .findById(targetEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + targetEntityId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetEntityId + NOT_FOUND));
     var sourceEntityType = sourceEntity.getEntityType();
     var targetEntityType = targetEntity.getEntityType();
 
@@ -107,7 +111,7 @@ public interface CommonService<T, K> {
     var sourceEntity =
         entityRepository
             .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceEntityId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceEntityId + NOT_FOUND));
     var mappings =
         entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
 
@@ -139,8 +143,7 @@ public interface CommonService<T, K> {
     var sourceEntityType =
         entityTypeRepository
             .findByName(sourceEntityTypeName)
-            .orElseThrow(
-                () -> new ServiceError("Entity type " + targetEntityTypeName + " not found"));
+            .orElseThrow(() -> new ServiceError("Entity type " + targetEntityTypeName + NOT_FOUND));
     var mappings =
         mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
             sourceEntityType);

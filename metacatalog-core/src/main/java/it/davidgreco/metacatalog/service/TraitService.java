@@ -29,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 @EnableCaching
 public class TraitService implements CommonTypeService<Trait, String> {
 
+  private static final String TRAIT = "Trait ";
+  private static final String NOT_FOUND = " not found";
+
   private final TraitRepository traitRepository;
 
   private final TraitRelationshipRepository traitRelationshipRepository;
@@ -58,8 +61,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
         var father =
             traitRepository
                 .findByName(fatherName.get())
-                .orElseThrow(
-                    () -> new ServiceError("Trait " + fatherName.get() + " does not exist"));
+                .orElseThrow(() -> new ServiceError(TRAIT + fatherName.get() + " does not exist"));
         entityType.setFather(father);
         schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
         var mergedSchema = mergeSchemas(schemasToMerge);
@@ -83,7 +85,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
   public Trait read(String name) throws ServiceError {
     return traitRepository
         .findByName(name)
-        .orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
+        .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
   }
 
   @Transactional(
@@ -94,7 +96,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
       var entityType =
           traitRepository
               .findByName(name)
-              .orElseThrow(() -> new ServiceError("Trait " + name + " not found"));
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
       traitRepository.delete(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
@@ -120,11 +122,11 @@ public class TraitService implements CommonTypeService<Trait, String> {
       var trait1 =
           traitRepository
               .findByName(traitName1)
-              .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
       var trait2 =
           traitRepository
               .findByName(traitName2)
-              .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
+              .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
       rel1.setSource(trait1);
       rel1.setTarget(trait2);
       rel1.setRelationType(relType);
@@ -142,18 +144,18 @@ public class TraitService implements CommonTypeService<Trait, String> {
     var trait1 =
         traitRepository
             .findByName(traitName1)
-            .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+            .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
     var trait2 =
         traitRepository
             .findByName(traitName2)
-            .orElseThrow(() -> new ServiceError("Trait " + traitName2 + " not found"));
+            .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
     var rel =
         traitRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(trait1, relType, trait2)
             .orElseThrow(
                 () ->
                     new ServiceError(
-                        "Trait "
+                        TRAIT
                             + traitName1
                             + " does not have a relationship "
                             + relType
@@ -169,7 +171,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
     var trait1 =
         traitRepository
             .findByName(traitName1)
-            .orElseThrow(() -> new ServiceError("Trait " + traitName1 + " not found"));
+            .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
     return traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
         .map(TraitRelationship::getTarget)
         .toList();
@@ -191,7 +193,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
     var sourceTrait =
         traitRepository
             .findByName(sourceTraitName)
-            .orElseThrow(() -> new ServiceError("Trait " + sourceTraitName + " not found"));
+            .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
     var relationships =
         traitRelationshipRepository.findBySourceAndRelationType(sourceTrait, relType);
 

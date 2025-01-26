@@ -37,7 +37,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class MappingService implements CommonService<MappingEntityTypeRelationship, String> {
 
-  static final String DOES_NOT_EXIST = " does not exist";
+  private static final String DOES_NOT_EXIST = " does not exist";
+
+  private static final String INVALID_PATH_SEGMENT = "Invalid path segment: ";
+
+  private static final String ENTITY = "Entity ";
 
   public final TraitRelationshipRepository traitRelationshipRepository;
 
@@ -193,7 +197,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var sourceEntityType = sourceEntity.getEntityType();
         var mappingRelationships =
             mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
@@ -266,7 +270,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -320,7 +324,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySource(sourceEntity);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
@@ -366,7 +370,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -402,7 +406,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySource(sourceEntity);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
@@ -439,7 +443,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError("Entity " + sourceEntityId + DOES_NOT_EXIST));
+                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -487,15 +491,15 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
           pathExpressionPattern.matcher(segment).results().map(MatchResult::group).toList();
       var relTypes = relTypePattern.matcher(segment).results().map(MatchResult::group).toList();
 
-      if (pathExpressions.size() != 1) throw new ServiceError("Invalid path segment: " + segment);
+      if (pathExpressions.size() != 1) throw new ServiceError(INVALID_PATH_SEGMENT + segment);
 
-      if (relTypes.size() != 1) throw new ServiceError("Invalid path segment: " + segment);
+      if (relTypes.size() != 1) throw new ServiceError(INVALID_PATH_SEGMENT + segment);
 
       var relTypeStr = relTypes.getFirst();
 
       var enumSet =
           Arrays.stream(RelationType.values()).map(Enum::name).collect(Collectors.toSet());
-      if (!enumSet.contains(relTypeStr)) throw new ServiceError("Invalid path segment: " + segment);
+      if (!enumSet.contains(relTypeStr)) throw new ServiceError(INVALID_PATH_SEGMENT + segment);
 
       var relType = RelationType.valueOf(relTypeStr);
       var pathExpression = pathExpressions.getFirst().trim();

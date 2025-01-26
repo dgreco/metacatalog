@@ -23,6 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class EntityService implements CommonService<Entity, String> {
 
+  private static final String ENTITY_WITH_ID = " Entity with id ";
+
+  private static final String NOT_FOUND = " not found";
+
+  private static final String NO_PROCESSING = "NO_PROCESSING";
+
   private final EntityTypeRepository entityTypeRepository;
 
   private final EntityRepository entityRepository;
@@ -52,7 +58,7 @@ public class EntityService implements CommonService<Entity, String> {
       var entityType =
           entityTypeRepository
               .findByName(typeName)
-              .orElseThrow(() -> new ServiceError("Entity type " + typeName + " not found"));
+              .orElseThrow(() -> new ServiceError("Entity type " + typeName + NOT_FOUND));
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entityType))
@@ -77,7 +83,7 @@ public class EntityService implements CommonService<Entity, String> {
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                en.getId(), en.getEntityType().getName(), "CREATED", "NO_PROCESSING"));
+                en.getId(), en.getEntityType().getName(), "CREATED", NO_PROCESSING));
       return en;
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
@@ -97,7 +103,7 @@ public class EntityService implements CommonService<Entity, String> {
   public Entity read(String entityId) throws ServiceError {
     return entityRepository
         .findById(entityId)
-        .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+        .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
   }
 
   /**
@@ -116,12 +122,12 @@ public class EntityService implements CommonService<Entity, String> {
       var entity =
           entityRepository
               .findById(entityId)
-              .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
-            "Entity with id " + entityId + " is an instance of a target entity type");
+            ENTITY_WITH_ID + entityId + " is an instance of a target entity type");
 
       var valuesJsonNode = jsonFactory.readTree(values);
       var validationMessages =
@@ -140,7 +146,7 @@ public class EntityService implements CommonService<Entity, String> {
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                entity.getId(), entity.getEntityType().getName(), "UPDATED", "NO_PROCESSING"));
+                entity.getId(), entity.getEntityType().getName(), "UPDATED", NO_PROCESSING));
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
     }
@@ -164,22 +170,22 @@ public class EntityService implements CommonService<Entity, String> {
       var entity =
           entityRepository
               .findById(entityId)
-              .orElseThrow(() -> new ServiceError("Entity with id " + entityId + " not found"));
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
-            "Entity with id " + entityId + " is an instance of a target entity type");
+            ENTITY_WITH_ID + entityId + " is an instance of a target entity type");
 
       if (CommonService.isMappingSourceEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
-            "Entity with id " + entityId + " is an instance of a source entity type");
+            ENTITY_WITH_ID + entityId + " is an instance of a source entity type");
 
       entityRepository.delete(entity);
       entityLifeCycleEventRepository.save(
           new EntityLifeCycleEvent(
-              entity.getId(), entity.getEntityType().getName(), "DELETED", "NO_PROCESSING"));
+              entity.getId(), entity.getEntityType().getName(), "DELETED", NO_PROCESSING));
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     }
@@ -239,11 +245,11 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     var target =
         entityRepository
             .findById(targetId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
     if (entityRelationshipRepository
         .findBySourceAndRelationTypeAndTarget(source, relType, target)
@@ -277,22 +283,22 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     var target =
         entityRepository
             .findById(targetId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + targetId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
     var rel =
         entityRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(source, relType, target)
             .orElseThrow(
                 () ->
                     new ServiceError(
-                        "Entity with id "
+                        ENTITY_WITH_ID
                             + source
                             + " does not have a relationship "
                             + relType
-                            + " with Entity with id"
+                            + ENTITY_WITH_ID
                             + target));
     entityRelationshipRepository.delete(rel);
   }
@@ -313,7 +319,7 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + sourceId + " not found"));
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
         .map(EntityRelationship::getTarget)
         .toList();

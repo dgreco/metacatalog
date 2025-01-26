@@ -27,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 @EnableCaching
 public class EntityTypeService implements CommonTypeService<EntityType, String> {
 
+  private static final String ENTITYTYPE = "EntityType ";
+
   private final EntityTypeRepository entityTypeRepository;
 
   private final TraitRepository traitRepository;
@@ -82,8 +84,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         var father =
             entityTypeRepository
                 .findByName(fatherName.get())
-                .orElseThrow(
-                    () -> new ServiceError("EntityType " + fatherName + " does not exist"));
+                .orElseThrow(() -> new ServiceError(ENTITYTYPE + fatherName + " does not exist"));
         entityType.setFather(father);
         schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
         var mergedSchema = mergeSchemas(schemasToMerge);
@@ -107,7 +108,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   public EntityType read(String name) throws ServiceError {
     return entityTypeRepository
         .findByName(name)
-        .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
+        .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
   }
 
   /**
@@ -125,7 +126,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       var entityType =
           entityTypeRepository
               .findByName(name)
-              .orElseThrow(() -> new ServiceError("EntityType " + name + " not found"));
+              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
       entityTypeRepository.delete(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
