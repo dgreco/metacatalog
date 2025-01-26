@@ -8,31 +8,10 @@ variables:
   DOCKER_DRIVER: "overlay2"
 
 stages:
-  - format-check
-  - compile
-  - test
-  - build-sonar
+  - build
 
-format-check-job:
-  stage: format-check
-  image: maven:3-eclipse-temurin-22
-  script:
-    - mvn spotless:check
-
-compile-job:
-  stage: compile
-  image: maven:3-eclipse-temurin-22
-  script:
-    - mvn compile
-
-test-job:
-  stage: test
-  image: maven:3-eclipse-temurin-22
-  script:
-    - mvn test
-
-build-sonar-job:
-  stage: build-sonar
+build:
+  stage: build
   image: maven:3-eclipse-temurin-22
 
   cache:
@@ -43,7 +22,7 @@ build-sonar-job:
       - sonar-scanner/
 
   script:
-    - mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
