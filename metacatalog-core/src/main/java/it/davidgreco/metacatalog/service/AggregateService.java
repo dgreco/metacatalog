@@ -6,6 +6,7 @@ import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -82,20 +83,19 @@ public class AggregateService {
       rollbackFor = {ServiceError.class})
   public Aggregate read(String aggregateId) throws ServiceError {
     class ReadAggregate {
-      private AggregatePart readAggregatePart(String entityId) throws ServiceError {
+      private AggregatePart readAggregatePart(Entity entity) throws ServiceError {
         try {
-          var entity = entityService.read(entityId);
           if (implementsTrait(entity.getEntityType(), "AggregateElement")
               && !implementsTrait(entity.getEntityType(), "Aggregate")) {
             return new AggregateElement(entity);
           } else if (implementsTrait(entity.getEntityType(), "Aggregate")) {
-            var linkedEntities = entityService.linked(entityId, HAS_PART);
+            var linkedEntities = entityService.linked(entity.getId(), HAS_PART);
             var elements =
                 linkedEntities.stream()
                     .map(
                         e -> {
                           try {
-                            return readAggregatePart(e.getId());
+                            return readAggregatePart(e);
                           } catch (ServiceError ex) {
                             throw new ServiceRuntimeError(ex);
                           }
@@ -111,10 +111,6 @@ public class AggregateService {
       }
     }
 
-    if (!entityService.exists(aggregateId)) {
-      throw new ServiceError("Aggregate with id: " + aggregateId + " not found");
-    }
-
     var aggregateEntity = entityService.read(aggregateId);
     if (!entityRelationshipRepository
         .findByTargetAndRelationType(aggregateEntity, HAS_PART)
@@ -123,12 +119,12 @@ public class AggregateService {
     }
 
     var result =
-        new ReadAggregate().readAggregatePart(aggregateId) instanceof Aggregate aggregate
-            ? aggregate
-            : null;
+        Optional.ofNullable(
+            new ReadAggregate().readAggregatePart(aggregateEntity) instanceof Aggregate aggregate
+                ? aggregate
+                : null);
 
-    if (result == null) {
-      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
-    } else return result;
+    return result.orElseThrow(
+        () -> new ServiceError("Entity with id: " + aggregateId + " is not an aggregate"));
   }
 }
