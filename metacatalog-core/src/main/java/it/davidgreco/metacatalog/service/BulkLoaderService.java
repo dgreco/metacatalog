@@ -83,7 +83,7 @@ public class BulkLoaderService {
         docs = yamlFactory.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
       }
 
-      // <></>raits creation
+      // Traits creation
       docs.stream()
           .filter(doc -> doc.has("Traits"))
           .findFirst()
