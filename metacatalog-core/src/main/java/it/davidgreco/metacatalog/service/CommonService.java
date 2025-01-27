@@ -8,6 +8,7 @@ import it.davidgreco.metacatalog.repository.*;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/** Common service interface for all services. */
 public interface CommonService<T, K> {
 
   String NOT_FOUND = " not found";

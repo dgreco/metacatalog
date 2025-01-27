@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Service class for managing {@link EntityType} entities. */
 @Slf4j
 @Service
 @Getter
@@ -56,6 +57,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   public EntityType create(
       String name, List<String> traits, Optional<String> fatherName, String schema)
       throws ServiceError {
+    log.info("Creating EntityType: {}", name);
     try {
       Set<String> traitNamesSet = new HashSet<>();
       traits.forEach(
@@ -101,6 +103,8 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       return entityTypeRepository.save(entityType);
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Created EntityType: {}", name);
     }
   }
 
@@ -108,9 +112,14 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public EntityType read(String name) throws ServiceError {
-    return entityTypeRepository
-        .findByName(name)
-        .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+    log.info("Reading EntityType: {}", name);
+    try {
+      return entityTypeRepository
+          .findByName(name)
+          .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+    } finally {
+      log.info("Read EntityType: {}", name);
+    }
   }
 
   /**
@@ -124,6 +133,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void delete(String name) throws ServiceError {
+    log.info("Deleting EntityType: {}", name);
     try {
       var entityType =
           entityTypeRepository
@@ -132,6 +142,8 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityTypeRepository.delete(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Deleted EntityType: {}", name);
     }
   }
 
@@ -143,14 +155,24 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String name) {
-    return entityTypeRepository.existsByName(name);
+    log.info("Checking if EntityType exists: {}", name);
+    try {
+      return entityTypeRepository.existsByName(name);
+    } finally {
+      log.info("Checked if EntityType exists: {}", name);
+    }
   }
 
   @Transactional(propagation = Propagation.REQUIRED)
   public long countEntityTypeChildren(String name) {
-    return entityTypeRepository
-        .findByName(name)
-        .map(entityTypeRepository::countEntityTypeByFather)
-        .orElse(0L);
+    log.info("Counting children of EntityType: {}", name);
+    try {
+      return entityTypeRepository
+          .findByName(name)
+          .map(entityTypeRepository::countEntityTypeByFather)
+          .orElse(0L);
+    } finally {
+      log.info("Counted children of EntityType: {}", name);
+    }
   }
 }

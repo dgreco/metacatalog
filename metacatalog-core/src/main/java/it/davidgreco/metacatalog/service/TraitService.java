@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Service class for managing {@link Trait} entities. */
 @Slf4j
 @Service
 @Getter
@@ -38,11 +39,26 @@ public class TraitService implements CommonTypeService<Trait, String> {
 
   private final TraitRelationshipRepository traitRelationshipRepository;
 
+  /**
+   * Creates a new Trait with the specified name, optional schema, and optional father.
+   *
+   * <p>This method validates that the trait does not already exist, and that the father trait
+   * exists, if specified. It also merges the provided schema with the schema of the father trait,
+   * if any, and sets the resulting schema as the derived schema of the new trait.
+   *
+   * @param name the name for the new Trait
+   * @param schema an optional JSON schema for the Trait
+   * @param fatherName an optional name of the father Trait, if any
+   * @return the newly created and persisted Trait
+   * @throws ServiceError if the trait already exists, the father trait does not exist, a schema
+   *     validation error occurs, or a data integrity violation occurs
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Trait create(String name, Optional<String> schema, Optional<String> fatherName)
       throws ServiceError {
+    log.info("Creating Trait: {}", name);
     try {
       var eitherSchema =
           stringToJsonSchema(
@@ -78,22 +94,48 @@ public class TraitService implements CommonTypeService<Trait, String> {
       return traitRepository.save(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Created Trait: {}", name);
     }
   }
 
+  /**
+   * Reads a Trait given its name.
+   *
+   * @param name the name of the Trait to read
+   * @return the Trait with the given name
+   * @throws ServiceError if the Trait is not found
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Trait read(String name) throws ServiceError {
-    return traitRepository
-        .findByName(name)
-        .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    log.info("Reading Trait: {}", name);
+    try {
+      return traitRepository
+          .findByName(name)
+          .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    } finally {
+      log.info("Read Trait: {}", name);
+    }
   }
 
+  /**
+   * Deletes a Trait given its name.
+   *
+   * <p>This method attempts to find the Trait by its name and delete it from the repository. If the
+   * Trait is not found, a {@link ServiceError} is thrown. If a data integrity violation occurs
+   * during the deletion process, a {@link ServiceError} is also thrown.
+   *
+   * @param name the name of the Trait to delete
+   * @throws ServiceError if the Trait is not found, or if a {@link DataIntegrityViolationException}
+   *     occurs while deleting the Trait
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void delete(String name) throws ServiceError {
+    log.info("Deleting Trait: {}", name);
     try {
       var entityType =
           traitRepository
@@ -102,20 +144,46 @@ public class TraitService implements CommonTypeService<Trait, String> {
       traitRepository.delete(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Deleted Trait: {}", name);
     }
   }
 
+  /**
+   * Checks if a Trait with the given name exists in the repository.
+   *
+   * @param name the name of the Trait to check for existence
+   * @return true if a Trait with the given name exists, false otherwise
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public boolean exists(String name) {
-    return traitRepository.existsByName(name);
+    log.info("Checking if Trait exists: {}", name);
+    try {
+      return traitRepository.existsByName(name);
+    } finally {
+      log.info("Checked if Trait exists: {}", name);
+    }
   }
 
+  /**
+   * Links two Traits with a given relation type.
+   *
+   * <p>This method validates that the two Traits exist, and that the link does not already exist.
+   * It also checks for loops before creating the link.
+   *
+   * @param traitName1 the name of the first Trait
+   * @param relType the relation type to use for the link
+   * @param traitName2 the name of the second Trait
+   * @throws ServiceError if the Traits do not exist, the link already exists, a loop is detected,
+   *     or a data integrity violation occurs
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
+    log.info("Linking Trait: {} with Trait: {}", traitName1, traitName2);
     try {
       if (checkLoops(traitName1, new HashSet<>(), traitName2, relType)) {
         throw new ServiceError("Loops are not allowed");
@@ -135,55 +203,84 @@ public class TraitService implements CommonTypeService<Trait, String> {
       traitRelationshipRepository.save(rel1);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Linked Trait: {} with Trait: {}", traitName1, traitName2);
+    }
+  }
+
+  /**
+   * Unlinks two Traits with a given relation type.
+   *
+   * <p>This method validates that the two Traits exist, and that the link does not already exist.
+   * It also checks for loops before creating the link.
+   *
+   * @param traitName1 the name of the first Trait
+   * @param relType the relation type to use for the link
+   * @param traitName2 the name of the second Trait
+   * @throws ServiceError if the Traits do not exist, the link already exists, a loop is detected,
+   *     or a data integrity violation occurs
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public void unlink(String traitName1, RelationType relType, String traitName2)
+      throws ServiceError {
+    log.info("Unlinking Trait: {} with Trait: {}", traitName1, traitName2);
+    try {
+      var trait1 =
+          traitRepository
+              .findByName(traitName1)
+              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
+      var trait2 =
+          traitRepository
+              .findByName(traitName2)
+              .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
+      var rel =
+          traitRelationshipRepository
+              .findBySourceAndRelationTypeAndTarget(trait1, relType, trait2)
+              .orElseThrow(
+                  () ->
+                      new ServiceError(
+                          TRAIT
+                              + traitName1
+                              + " does not have a relationship "
+                              + relType
+                              + " with "
+                              + traitName2));
+      traitRelationshipRepository.delete(rel);
+    } finally {
+      log.info("Unlinked Trait: {} with Trait: {}", traitName1, traitName2);
     }
   }
 
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public void unlink(String traitName1, RelationType relType, String traitName2)
-      throws ServiceError {
-    var trait1 =
-        traitRepository
-            .findByName(traitName1)
-            .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
-    var trait2 =
-        traitRepository
-            .findByName(traitName2)
-            .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
-    var rel =
-        traitRelationshipRepository
-            .findBySourceAndRelationTypeAndTarget(trait1, relType, trait2)
-            .orElseThrow(
-                () ->
-                    new ServiceError(
-                        TRAIT
-                            + traitName1
-                            + " does not have a relationship "
-                            + relType
-                            + " with "
-                            + traitName2));
-    traitRelationshipRepository.delete(rel);
-  }
-
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
   public List<Trait> linked(String traitName1, RelationType relType) throws ServiceError {
-    var trait1 =
-        traitRepository
-            .findByName(traitName1)
-            .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
-    return traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
-        .map(TraitRelationship::getTarget)
-        .toList();
+    log.info("Linked Trait: {}", traitName1);
+    try {
+      var trait1 =
+          traitRepository
+              .findByName(traitName1)
+              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
+      return traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
+          .map(TraitRelationship::getTarget)
+          .toList();
+    } finally {
+      log.info("Linked Trait: {}", traitName1);
+    }
   }
 
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public long countTraitChildren(String name) {
-    return traitRepository.findByName(name).map(traitRepository::countTraitByFather).orElse(0L);
+    log.info("Counting children of Trait: {}", name);
+    try {
+      return traitRepository.findByName(name).map(traitRepository::countTraitByFather).orElse(0L);
+    } finally {
+      log.info("Counting children of Trait: {}", name);
+    }
   }
 
   private boolean checkLoops(

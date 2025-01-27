@@ -34,6 +34,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+/**
+ * Service class for managing {@link MappingEntityTypeRelationship} entities and automatic
+ * management of mapped entities.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -88,6 +92,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       String mappingValues,
       List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences)
       throws ServiceError {
+    log.info(
+        "Creating MappingEntityTypeRelationship from {} to {}",
+        sourceEntityTypeName,
+        targetEntityTypeName);
     try {
       if (CommonService.checkMappingLoops(
           entityTypeRepository,
@@ -130,6 +138,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       return mappingEntityTypeRelationshipRepository.save(mapping);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info(
+          "Created MappingEntityTypeRelationship from {} to {}",
+          sourceEntityTypeName,
+          targetEntityTypeName);
     }
   }
 
@@ -140,16 +153,26 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public void delete(String mappingId) {
-    mappingEntityTypeRelationshipRepository.deleteById(mappingId);
+    log.info("Deleting MappingEntityTypeRelationship with id: {}", mappingId);
+    try {
+      mappingEntityTypeRelationshipRepository.deleteById(mappingId);
+    } finally {
+      log.info("Deleted MappingEntityTypeRelationship with id: {}", mappingId);
+    }
   }
 
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
-    return mappingEntityTypeRelationshipRepository
-        .findById(mappingId)
-        .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
+    log.info("Reading MappingEntityTypeRelationship with id: {}", mappingId);
+    try {
+      return mappingEntityTypeRelationshipRepository
+          .findById(mappingId)
+          .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
+    } finally {
+      log.info("Read MappingEntityTypeRelationship with id: {}", mappingId);
+    }
   }
 
   /**
@@ -160,7 +183,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String mappingId) {
-    return mappingEntityTypeRelationshipRepository.existsById(mappingId);
+    log.info("Checking if MappingEntityTypeRelationship with id: {}", mappingId);
+    try {
+      return mappingEntityTypeRelationshipRepository.existsById(mappingId);
+    } finally {
+      log.info("Checked if MappingEntityTypeRelationship with id: {}", mappingId);
+    }
   }
 
   /**
@@ -173,10 +201,15 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
-    createMappedEntities(event.getEntityId());
-    event.setEventStatus("PROCESSED");
-    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
-    entityLifeCycleEventRepository.save(event);
+    log.info("Creating mapped entities for event with ID: {}", event.getId());
+    try {
+      createMappedEntities(event.getEntityId());
+      event.setEventStatus("PROCESSED");
+      event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+      entityLifeCycleEventRepository.save(event);
+    } finally {
+      log.info("Created mapped entities for event with ID: {}", event.getId());
+    }
   }
 
   /**
@@ -263,6 +296,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       }
     }
 
+    log.info("Creating mapped entities for source entity with ID: {}", sourceEntityId);
     try {
       getTransactionTemplate()
           .executeWithoutResult(
@@ -287,6 +321,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
+    } finally {
+      log.info("Created mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 
@@ -300,10 +336,15 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
-    updateMappedEntities(event.getEntityId());
-    event.setEventStatus("PROCESSED");
-    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
-    entityLifeCycleEventRepository.save(event);
+    log.info("Updating mapped entities for event with ID: {}", event.getId());
+    try {
+      updateMappedEntities(event.getEntityId());
+      event.setEventStatus("PROCESSED");
+      event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+      entityLifeCycleEventRepository.save(event);
+    } finally {
+      log.info("Updated mapped entities for event with ID: {}", event.getId());
+    }
   }
 
   /**
@@ -363,6 +404,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       }
     }
 
+    log.info("Updating mapped entities for source entity with ID: {}", sourceEntityId);
     try {
       getTransactionTemplate()
           .executeWithoutResult(
@@ -387,6 +429,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
+    } finally {
+      log.info("Updated mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 
@@ -436,6 +480,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       }
     }
 
+    log.info("Deleting mapped entities for source entity with ID: {}", sourceEntityId);
     try {
       getTransactionTemplate()
           .executeWithoutResult(
@@ -460,6 +505,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
+    } finally {
+      log.info("Deleted mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 

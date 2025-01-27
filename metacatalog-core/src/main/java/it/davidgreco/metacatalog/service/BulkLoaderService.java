@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Service class for bulk loading entities, traits, and relationships from a YAML file. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -74,6 +75,7 @@ public class BulkLoaderService {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void bulkCreation(InputStream is) throws ServiceError {
+    log.info("Bulk creation started");
     try {
       List<ObjectNode> docs;
       try (var yamlParser = yamlFactory.createParser(is)) {
@@ -81,7 +83,7 @@ public class BulkLoaderService {
         docs = yamlFactory.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
       }
 
-      // Traits creation
+      // <></>raits creation
       docs.stream()
           .filter(doc -> doc.has("Traits"))
           .findFirst()
@@ -162,6 +164,8 @@ public class BulkLoaderService {
       else throw e;
     } catch (IOException e) {
       throw new ServiceError("Error parsing YAML file");
+    } finally {
+      log.info("Bulk creation completed");
     }
   }
 }

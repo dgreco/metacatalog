@@ -13,6 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Service class for managing aggregate entities. An aggregate entity is a collection of entities,
+ * each potentially being an aggregate itself.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -39,37 +43,42 @@ public class AggregateService {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Aggregate create(Aggregate aggregate) throws ServiceError {
-    var rootAggregate =
-        entityService.create(
-            aggregate.entity().getEntityType().getName(),
-            aggregate.entity().getValues().toPrettyString());
-    aggregate.entity().setId(rootAggregate.getId());
-    for (var element : aggregate.elements()) {
-      if (element instanceof AggregateElement(Entity entity)) {
-        var aggregateElement =
-            entityService.create(
-                entity.getEntityType().getName(), entity.getValues().toPrettyString());
-        entity.setId(aggregateElement.getId());
-        entityService.link(rootAggregate.getId(), HAS_PART, aggregateElement.getId());
-      } else if (element instanceof Aggregate(Entity entity, List<AggregatePart> elements)) {
-        var childAggregate =
-            entityService.create(
-                entity.getEntityType().getName(), entity.getValues().toPrettyString());
-        entity.setId(childAggregate.getId());
-        entityService.link(rootAggregate.getId(), HAS_PART, childAggregate.getId());
-        for (var childElement : elements) {
-          if (childElement instanceof AggregateElement(Entity anotherEntity)) {
-            var childAggregateElement =
-                entityService.create(
-                    anotherEntity.getEntityType().getName(),
-                    anotherEntity.getValues().toPrettyString());
-            anotherEntity.setId(childAggregateElement.getId());
-            entityService.link(childAggregate.getId(), HAS_PART, childAggregateElement.getId());
+    log.info("Creating aggregate: {}", aggregate);
+    try {
+      var rootAggregate =
+          entityService.create(
+              aggregate.entity().getEntityType().getName(),
+              aggregate.entity().getValues().toPrettyString());
+      aggregate.entity().setId(rootAggregate.getId());
+      for (var element : aggregate.elements()) {
+        if (element instanceof AggregateElement(Entity entity)) {
+          var aggregateElement =
+              entityService.create(
+                  entity.getEntityType().getName(), entity.getValues().toPrettyString());
+          entity.setId(aggregateElement.getId());
+          entityService.link(rootAggregate.getId(), HAS_PART, aggregateElement.getId());
+        } else if (element instanceof Aggregate(Entity entity, List<AggregatePart> elements)) {
+          var childAggregate =
+              entityService.create(
+                  entity.getEntityType().getName(), entity.getValues().toPrettyString());
+          entity.setId(childAggregate.getId());
+          entityService.link(rootAggregate.getId(), HAS_PART, childAggregate.getId());
+          for (var childElement : elements) {
+            if (childElement instanceof AggregateElement(Entity anotherEntity)) {
+              var childAggregateElement =
+                  entityService.create(
+                      anotherEntity.getEntityType().getName(),
+                      anotherEntity.getValues().toPrettyString());
+              anotherEntity.setId(childAggregateElement.getId());
+              entityService.link(childAggregate.getId(), HAS_PART, childAggregateElement.getId());
+            }
           }
         }
       }
+      return aggregate;
+    } finally {
+      log.info("Created aggregate: {}", aggregate);
     }
-    return aggregate;
   }
 
   /**

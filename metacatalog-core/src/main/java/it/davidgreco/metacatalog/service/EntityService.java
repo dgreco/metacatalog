@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Service class for managing {@link Entity} entities. */
 @Slf4j
 @Service
 @Getter
@@ -56,6 +57,7 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Entity create(String typeName, String values) throws ServiceError {
+    log.info("Creating entity of type {}: {}", typeName, values);
     try {
       var entityType =
           entityTypeRepository
@@ -90,6 +92,8 @@ public class EntityService implements CommonService<Entity, String> {
       return en;
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Created entity of type {}: {}", typeName, values);
     }
   }
 
@@ -104,9 +108,14 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Entity read(String entityId) throws ServiceError {
-    return entityRepository
-        .findById(entityId)
-        .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    log.info("Reading entity with id {}", entityId);
+    try {
+      return entityRepository
+          .findById(entityId)
+          .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    } finally {
+      log.info("Read entity with id {}", entityId);
+    }
   }
 
   /**
@@ -121,6 +130,7 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void update(String entityId, String values) throws ServiceError {
+    log.info("Updating entity with id {}: {}", entityId, values);
     try {
       var entity =
           entityRepository
@@ -152,6 +162,8 @@ public class EntityService implements CommonService<Entity, String> {
                 entity.getId(), entity.getEntityType().getName(), "UPDATED", NO_PROCESSING));
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Updated entity with id {}: {}", entityId, values);
     }
   }
 
@@ -169,6 +181,7 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void delete(String entityId) throws ServiceError {
+    log.info("Deleting entity with id {}", entityId);
     try {
       var entity =
           entityRepository
@@ -191,6 +204,8 @@ public class EntityService implements CommonService<Entity, String> {
               entity.getId(), entity.getEntityType().getName(), "DELETED", NO_PROCESSING));
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Deleted entity with id {}", entityId);
     }
   }
 
@@ -202,19 +217,27 @@ public class EntityService implements CommonService<Entity, String> {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String entityId) {
-    return entityRepository.existsById(entityId);
+    log.info("Checking if entity with id {} exists", entityId);
+    try {
+      return entityRepository.existsById(entityId);
+    } finally {
+      log.info("Checked if entity with id {} exists", entityId);
+    }
   }
 
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public List<Entity> list(String queryPath) throws ServiceError {
+    log.info("Listing entities with query path {}", queryPath);
     try {
       var qp = queryPath.trim();
       if (qp.isEmpty()) return entityRepository.findAll();
       else return entityRepository.findByJsonPath(queryPath);
     } catch (com.jayway.jsonpath.InvalidPathException e) {
       throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Listed entities with query path {}", queryPath);
     }
   }
 
@@ -230,45 +253,50 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
-    // Check loops
-    if (CommonService.checkLoops(
-        entityRepository,
-        entityRelationshipRepository,
-        targetId,
-        new HashSet<>(),
-        sourceId,
-        relType)) throw new ServiceError("Loops are not allowed");
+    log.info("Linking entity with id {} with entity with id {}", sourceId, targetId);
+    try {
+      // Check loops
+      if (CommonService.checkLoops(
+          entityRepository,
+          entityRelationshipRepository,
+          targetId,
+          new HashSet<>(),
+          sourceId,
+          relType)) throw new ServiceError("Loops are not allowed");
 
-    // Check if the relationship is legit
-    if (!CommonService.checkRelIsLegit(
-        entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
-      throw new ServiceError("Relationship is not legit");
+      // Check if the relationship is legit
+      if (!CommonService.checkRelIsLegit(
+          entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
+        throw new ServiceError("Relationship is not legit");
 
-    var rel1 = new EntityRelationship();
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    var target =
-        entityRepository
-            .findById(targetId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+      var rel1 = new EntityRelationship();
+      var source =
+          entityRepository
+              .findById(sourceId)
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+      var target =
+          entityRepository
+              .findById(targetId)
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
-    if (entityRelationshipRepository
-        .findBySourceAndRelationTypeAndTarget(source, relType, target)
-        .isPresent())
-      throw new ServiceError(
-          "Entity with id "
-              + sourceId
-              + " is already linked with entity with id "
-              + targetId
-              + "with relation type "
-              + relType);
+      if (entityRelationshipRepository
+          .findBySourceAndRelationTypeAndTarget(source, relType, target)
+          .isPresent())
+        throw new ServiceError(
+            "Entity with id "
+                + sourceId
+                + " is already linked with entity with id "
+                + targetId
+                + "with relation type "
+                + relType);
 
-    rel1.setSource(source);
-    rel1.setTarget(target);
-    rel1.setRelationType(relType);
-    entityRelationshipRepository.save(rel1);
+      rel1.setSource(source);
+      rel1.setTarget(target);
+      rel1.setRelationType(relType);
+      entityRelationshipRepository.save(rel1);
+    } finally {
+      log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
+    }
   }
 
   /**
@@ -283,27 +311,32 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void unlink(String sourceId, RelationType relType, String targetId) throws ServiceError {
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    var target =
-        entityRepository
-            .findById(targetId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
-    var rel =
-        entityRelationshipRepository
-            .findBySourceAndRelationTypeAndTarget(source, relType, target)
-            .orElseThrow(
-                () ->
-                    new ServiceError(
-                        ENTITY_WITH_ID
-                            + source
-                            + " does not have a relationship "
-                            + relType
-                            + ENTITY_WITH_ID
-                            + target));
-    entityRelationshipRepository.delete(rel);
+    log.info("Unlinking entity with id {} from entity with id {}", sourceId, targetId);
+    try {
+      var source =
+          entityRepository
+              .findById(sourceId)
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+      var target =
+          entityRepository
+              .findById(targetId)
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+      var rel =
+          entityRelationshipRepository
+              .findBySourceAndRelationTypeAndTarget(source, relType, target)
+              .orElseThrow(
+                  () ->
+                      new ServiceError(
+                          ENTITY_WITH_ID
+                              + source
+                              + " does not have a relationship "
+                              + relType
+                              + ENTITY_WITH_ID
+                              + target));
+      entityRelationshipRepository.delete(rel);
+    } finally {
+      log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
+    }
   }
 
   /**
@@ -319,12 +352,19 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public List<Entity> linked(String sourceId, RelationType relType) throws ServiceError {
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
-        .map(EntityRelationship::getTarget)
-        .toList();
+    log.info(
+        "Listing entities linked to entity with id {} with relation type {}", sourceId, relType);
+    try {
+      var source =
+          entityRepository
+              .findById(sourceId)
+              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+      return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
+          .map(EntityRelationship::getTarget)
+          .toList();
+    } finally {
+      log.info(
+          "Listed entities linked to entity with id {} with relation type {}", sourceId, relType);
+    }
   }
 }

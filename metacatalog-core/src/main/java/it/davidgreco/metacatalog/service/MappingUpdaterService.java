@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+/** Service class for updating mapped entities. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,30 +41,47 @@ public class MappingUpdaterService {
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   void updateMappedEntities() {
-    if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-      var createdEvents =
-          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
-      createdEvents.forEach(
-          event -> {
-            try {
-              mappingService.createMappedEntities(event);
-            } catch (Exception e) {
-              log.error("Error creating mapped entities", e);
-            }
-          });
-      var updatedEvents =
-          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
-      updatedEvents.forEach(
-          event -> {
-            try {
-              mappingService.updateMappedEntities(event);
-            } catch (Exception e) {
-              log.error("Error updating mapped entities", e);
-            }
-          });
+    log.info("Update mapped entities task started");
+    try {
+      if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+        var createdEvents =
+            entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
+                "SOURCE_CREATED", "PENDING");
+        createdEvents.forEach(
+            event -> {
+              try {
+                mappingService.createMappedEntities(event);
+              } catch (Exception e) {
+                log.error("Error creating mapped entities", e);
+              }
+            });
+        var updatedEvents =
+            entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
+                "SOURCE_UPDATED", "PENDING");
+        updatedEvents.forEach(
+            event -> {
+              try {
+                mappingService.updateMappedEntities(event);
+              } catch (Exception e) {
+                log.error("Error updating mapped entities", e);
+              }
+            });
+      }
+    } finally {
+      log.info("Update mapped entities task completed");
     }
   }
 
+  /**
+   * Scheduled task that cleans up entity life cycle events.
+   *
+   * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is
+   * also synchronized using an advisory lock, so that only one instance of this task can run at the
+   * same time.
+   *
+   * <p>The task logs a message indicating that cleanup is being performed, but does not actually
+   * perform any cleanup. This is a placeholder for future cleanup tasks.
+   */
   @Scheduled(
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")

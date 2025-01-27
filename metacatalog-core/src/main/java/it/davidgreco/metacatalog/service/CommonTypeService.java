@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 
+/** Common service interface for EntityType and Trait services. */
 public interface CommonTypeService<T extends Type, K> extends CommonService<T, K> {
 
   CommonTypeService<EntityType, String> genericTypeService =
@@ -48,6 +49,15 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
         }
       };
 
+  /**
+   * Loads the inheritance chain for a given type in reverse order, starting from the type itself
+   * and moving upwards to its ancestors. The returned list begins with the given type and ends with
+   * the root ancestor.
+   *
+   * @param type the initial type for which the reversed inheritance chain is generated
+   * @return a list of types representing the reversed inheritance chain, starting from the given
+   *     type and ending with the root ancestor
+   */
   default List<T> loadRevertedInheritanceChain(T type) {
     LinkedList<T> inheritanceChain = new LinkedList<>();
     inheritanceChain.add(type);
@@ -60,6 +70,15 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
     }
   }
 
+  /**
+   * Loads the inheritance chain for a given type in the normal order, starting from the given type
+   * and moving downwards to its descendants. The returned list begins with the given type and ends
+   * with its most derived descendant.
+   *
+   * @param type the initial type for which the inheritance chain is generated
+   * @return a list of types representing the inheritance chain, starting from the given type and
+   *     ending with its most derived descendant
+   */
   default List<T> loadInheritanceChain(T type) {
     var list = loadRevertedInheritanceChain(type);
     Collections.reverse(list);
