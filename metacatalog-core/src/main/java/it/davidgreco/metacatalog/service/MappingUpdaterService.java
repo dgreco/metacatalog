@@ -41,7 +41,9 @@ public class MappingUpdaterService {
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   void updateMappedEntities() {
-    log.info("Update mapped entities task started");
+    log.info(
+        "Update mapped entities task started with automaticEntitiesMapping={}",
+        automaticEntitiesMapping);
     try {
       if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
         var createdEvents =

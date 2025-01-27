@@ -79,7 +79,6 @@ public class BulkLoaderService {
     try {
       List<ObjectNode> docs;
       try (var yamlParser = yamlFactory.createParser(is)) {
-
         docs = yamlFactory.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
       }
 

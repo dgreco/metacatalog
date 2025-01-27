@@ -549,6 +549,77 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/link:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a link between two entities by a relation
+      operationId: linkEntity
+      requestBody:
+        description: A Link Entity spec
+        content:
+          application/json:
+            schema:
+              required:
+                - sourceEntityId
+                - relationshipTypeName
+                - targetEntityId
+              type: object
+              properties:
+                sourceEntityId:
+                  type: string
+                relationshipTypeName:
+                  type: string
+                targetEntityId:
+                  type: string
+        required: true
+      responses:
+        204:
+          description: Trait link created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get an aggregate by id
+      operationId: getAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Aggregate Id
+      responses:
+        200:
+          description: If successful, return an Aggregate object
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/Aggregate'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
@@ -586,6 +657,24 @@ components:
             type: string
         inheritsFrom:
           type: string
+    Aggregate:
+      required:
+        - id
+        - entityType
+        - values
+      type: object
+      properties:
+        id:
+          type: string
+        entityType:
+          type: string
+        values:
+          type: string
+        parts:
+          type: array
+          items:
+            schema:
+              $ref: '#/components/schemas/Aggregate'
     Entity:
       required:
         - id

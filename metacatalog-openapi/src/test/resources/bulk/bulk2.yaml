@@ -31,6 +31,7 @@ EntityTypes:
         properties: {}
     traits:
       - WithName
+      - Aggregate
       - AggregateElement
       - OutputPort
   - name: TableBasedOutputPortType
@@ -39,5 +40,16 @@ EntityTypes:
       properties: {}
     traits:
       - WithName
+      - Aggregate
       - AggregateElement
       - OutputPort
+  - name: S3FolderType
+    schema:
+      type: object
+      properties:
+        bucket:
+          type: string
+        path:
+          type: string
+    traits:
+      - AggregateElement

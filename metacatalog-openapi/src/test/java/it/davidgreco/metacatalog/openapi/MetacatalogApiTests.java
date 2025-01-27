@@ -1,5 +1,8 @@
 package it.davidgreco.metacatalog.openapi;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.*;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
@@ -7,6 +10,8 @@ import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.Application;
 import it.davidgreco.metacatalog.openapi.client.*;
 import it.davidgreco.metacatalog.openapi.common.FileHttpMessageConverter;
+import it.davidgreco.metacatalog.service.MappingService;
+import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.File;
 import java.util.List;
 import java.util.Objects;
@@ -43,6 +48,7 @@ class MetacatalogApiTests {
   static ConfigurableApplicationContext context;
 
   @Autowired private ServerProperties serverProperties;
+  @Autowired private MappingService mappingService;
 
   private MetaCatalogManagerApi getMetaCatalogManagerApi() {
     var restTemplate = new RestTemplate();
@@ -219,9 +225,57 @@ class MetacatalogApiTests {
   }
 
   @Test
-  void bulkCreationAndAggregateRead() {
+  void bulkCreationAndAggregateRead() throws JsonProcessingException, ServiceError {
     var api = getMetaCatalogManagerApi();
     api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
+
+    mappingService.create(
+        "FileBasedOutputPortType",
+        "S3FolderType",
+        """
+            {
+                "bucket": "'bucket'",
+                "path": "'path'"
+            }
+            """,
+        List.of());
+
+    var dp =
+        api.createEntity(
+            new Entity()
+                .entityType("DataProductType")
+                .values(
+                    """
+                    {
+                      "name": "dp1"
+                    }
+                    """));
+
+    var op1 =
+        api.createEntity(
+            new Entity()
+                .entityType("FileBasedOutputPortType")
+                .values(
+                    """
+                    {
+                      "name": "op1"
+                    }
+                    """));
+
+    mappingService.createMappedEntities(op1);
+
+    api.linkEntity(
+        new LinkEntityRequest()
+            .sourceEntityId(dp)
+            .targetEntityId(op1)
+            .relationshipTypeName("HAS_PART"));
+
+    Aggregate agg = api.getAggregate(dp);
+
+    System.out.println(
+        yamlFactory.writeValueAsString(
+            convertAggregateValuesIntoJsonNodes(jsonFactory.valueToTree(agg).deepCopy())));
+
     Assertions.assertTrue(true);
   }
 }

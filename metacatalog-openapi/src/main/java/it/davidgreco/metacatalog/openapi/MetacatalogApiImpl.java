@@ -6,6 +6,7 @@ import it.davidgreco.metacatalog.openapi.model.*;
 import it.davidgreco.metacatalog.service.*;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -32,6 +33,46 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   private final BulkLoaderService bulkLoaderService;
 
   private final NativeWebRequest request;
+  private final AggregateService aggregateService;
+
+  Function<it.davidgreco.metacatalog.entity.Entity, it.davidgreco.metacatalog.openapi.model.Entity>
+      entityToDtoEntity =
+          entity -> {
+            var dtoEntity = new it.davidgreco.metacatalog.openapi.model.Entity();
+            dtoEntity.setId(entity.getId());
+            dtoEntity.setEntityType(entity.getEntityType().getName());
+            dtoEntity.setValues(entity.getValues().toPrettyString());
+            return dtoEntity;
+          };
+
+  Function<
+          it.davidgreco.metacatalog.service.AggregateService.AggregatePart,
+          it.davidgreco.metacatalog.openapi.model.Aggregate>
+      aggregatePartToDtoAggregatePart =
+          new Function<>() {
+            @Override
+            public Aggregate apply(AggregateService.AggregatePart aggregatePart) {
+              if (aggregatePart
+                  instanceof
+                  AggregateService.AggregateElement(
+                      it.davidgreco.metacatalog.entity.Entity entity)) {
+                return new Aggregate()
+                    .id(entity.getId())
+                    .entityType(entity.getEntityType().getName())
+                    .values(entity.getValues().toPrettyString());
+              } else {
+                var aggregate = (AggregateService.Aggregate) aggregatePart;
+                var aggregateDto =
+                    new Aggregate()
+                        .id(aggregate.entity().getId())
+                        .entityType(aggregate.entity().getEntityType().getName())
+                        .values(aggregate.entity().getValues().toPrettyString());
+                aggregateDto.setParts(
+                    aggregate.elements().stream().map(this::apply).collect(Collectors.toList()));
+                return aggregateDto;
+              }
+            }
+          };
 
   @Override
   public Optional<NativeWebRequest> getRequest() {
@@ -105,6 +146,26 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       RelationType relType;
       relType = RelationType.valueOf(linkTrait.getRelationshipTypeName());
       traitService.link(linkTrait.getSourceTrait(), relType, linkTrait.getTargetTrait());
+      return ResponseEntity.status(204).build();
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.status(400)
+          .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
+    } catch (SchemaValidationError e) {
+      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity linkEntity(LinkEntityRequest linkEntityRequest) {
+    try {
+      RelationType relType;
+      relType = RelationType.valueOf(linkEntityRequest.getRelationshipTypeName());
+      entityService.link(
+          linkEntityRequest.getSourceEntityId(), relType, linkEntityRequest.getTargetEntityId());
       return ResponseEntity.status(204).build();
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
@@ -296,11 +357,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   public ResponseEntity getEntity(String id) {
     try {
       var entity = entityService.read(id);
-      Entity dtoEntity = new Entity();
-      dtoEntity.setId(entity.getId());
-      dtoEntity.setEntityType(entity.getEntityType().getName());
-      dtoEntity.setValues(entity.getValues().toPrettyString());
-      return ResponseEntity.status(200).body(dtoEntity);
+      return ResponseEntity.status(200).body(entityToDtoEntity.apply(entity));
     } catch (ServiceError e) {
       return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
@@ -316,6 +373,19 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     } catch (SchemaValidationError e) {
       return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
+      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity getAggregate(String aggregateId) {
+    try {
+      var aggregate = aggregateService.read(aggregateId);
+      var aggregateDto = aggregatePartToDtoAggregatePart.apply(aggregate);
+      return ResponseEntity.status(200).body(aggregateDto);
+    } catch (ServiceError e) {
       return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
       return ResponseEntity.status(500).body(new SystemError(e.getMessage()));

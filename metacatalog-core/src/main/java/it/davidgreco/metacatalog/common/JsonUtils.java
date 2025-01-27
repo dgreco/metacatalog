@@ -3,7 +3,9 @@ package it.davidgreco.metacatalog.common;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.jayway.jsonpath.Configuration;
@@ -221,5 +223,28 @@ public class JsonUtils {
       List<String> errors = new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
       return Either.left(errors);
     }
+  }
+
+  private static final String VALUES = "values";
+  private static final String PARTS = "parts";
+
+  public static JsonNode convertAggregateValuesIntoJsonNodes(JsonNode jsonNode)
+      throws JsonProcessingException {
+    if (jsonNode.has(VALUES)) {
+      var values = jsonNode.get(VALUES).asText();
+      var valuesJson = yamlFactory.readTree(values);
+      ((ObjectNode) jsonNode).set(VALUES, valuesJson);
+    }
+    if (jsonNode.has(PARTS)) {
+      var parts = (ArrayNode) jsonNode.get(PARTS);
+      if (parts.isEmpty()) {
+        ((ObjectNode) jsonNode).remove(PARTS);
+      } else {
+        for (JsonNode part : parts) {
+          convertAggregateValuesIntoJsonNodes(part);
+        }
+      }
+    }
+    return jsonNode;
   }
 }
