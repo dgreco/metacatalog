@@ -1,0 +1,43 @@
+Traits:
+  - name: WithName
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+  - name: DataProduct
+  - name: DataProductComponent
+  - name: OutputPort
+    inheritsFrom: DataProductComponent
+
+---
+Relationships:
+  - sourceTrait: DataProduct
+    relationshipType: HAS_PART
+    targetTrait: DataProductComponent
+
+---
+EntityTypes:
+  - name: DataProductType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - Aggregate
+      - WithName
+  - name: FileBasedOutputPortType
+    schema:
+        type: object
+        properties: {}
+    traits:
+      - WithName
+      - AggregateElement
+      - OutputPort
+  - name: TableBasedOutputPortType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - WithName
+      - AggregateElement
+      - OutputPort

@@ -217,4 +217,11 @@ class MetacatalogApiTests {
     api.bulkCreation(new File("src/test/resources/bulk/bulk1.yaml"));
     Assertions.assertTrue(true);
   }
+
+  @Test
+  void bulkCreationAndAggregateRead() {
+    var api = getMetaCatalogManagerApi();
+    api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
+    Assertions.assertTrue(true);
+  }
 }
