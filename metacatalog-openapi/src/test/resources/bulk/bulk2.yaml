@@ -18,6 +18,7 @@ Relationships:
 
 ---
 EntityTypes:
+
   - name: DataProductType
     schema:
       type: object
@@ -25,24 +26,29 @@ EntityTypes:
     traits:
       - Aggregate
       - WithName
-  - name: FileBasedOutputPortType
-    schema:
-        type: object
-        properties: {}
-    traits:
-      - WithName
-      - Aggregate
-      - AggregateElement
-      - OutputPort
-  - name: TableBasedOutputPortType
+
+  - name: OutputPortType
     schema:
       type: object
       properties: {}
     traits:
-      - WithName
       - Aggregate
       - AggregateElement
+      - WithName
       - OutputPort
+
+  - name: FileBasedOutputPortType
+    schema:
+        type: object
+        properties: {}
+    inheritsFrom: OutputPortType
+
+  - name: TableBasedOutputPortType
+    schema:
+      type: object
+      properties: {}
+    inheritsFrom: OutputPortType
+
   - name: S3FolderType
     schema:
       type: object
@@ -53,3 +59,14 @@ EntityTypes:
           type: string
     traits:
       - AggregateElement
+
+---
+Mappings:
+  - sourceEntityType: FileBasedOutputPortType
+    targetEntityType: S3FolderType
+    mappingValues:
+      path: "'/root/'+ #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      bucket: "'my-bucket'"
+    entityPathReferences:
+      - alias: "dp"
+        referencePath: "HAS_PART{$}"

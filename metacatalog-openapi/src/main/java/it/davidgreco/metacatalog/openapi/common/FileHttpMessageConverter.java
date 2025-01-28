@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.openapi.common;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -39,6 +40,10 @@ public class FileHttpMessageConverter extends AbstractGenericHttpMessageConverte
   @Override
   public File read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
       throws IOException, HttpMessageNotReadableException {
-    throw new UnsupportedOperationException();
+    var file = Files.createTempFile("temp", ".tmp");
+    try (OutputStream fos = Files.newOutputStream(file)) {
+      inputMessage.getBody().transferTo(fos);
+    }
+    return file.toFile();
   }
 }

@@ -1,9 +1,12 @@
 package it.davidgreco.metacatalog.openapi;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.*;
+
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
 import it.davidgreco.metacatalog.service.*;
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -11,6 +14,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -90,11 +94,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       else traitService.create(trait.getName(), Optional.empty(), trait.getInheritsFrom());
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -108,11 +118,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       dtoTrait.setInheritsFrom(
           Optional.ofNullable(trait.getFather())
               .map(it.davidgreco.metacatalog.entity.Trait::getName));
-      return ResponseEntity.status(200).body(dtoTrait);
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(dtoTrait);
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -122,11 +136,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       traitService.delete(name);
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -136,7 +156,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (traitService.exists(name)) return ResponseEntity.status(204).build();
       else return ResponseEntity.status(404).build();
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -149,13 +171,20 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       return ResponseEntity.status(204).build();
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -169,13 +198,20 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       return ResponseEntity.status(204).build();
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -196,16 +232,23 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                             .map(it.davidgreco.metacatalog.entity.Trait::getName));
                     return trait;
                   });
-      return ResponseEntity.status(200).body(traits);
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(traits);
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -219,13 +262,20 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       return ResponseEntity.status(204).build();
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -243,13 +293,20 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       else return ResponseEntity.status(404).build();
     } catch (IllegalArgumentException e) {
       return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -263,11 +320,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           entityType.getSchema());
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -277,11 +340,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       entityTypeService.delete(name);
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -291,7 +360,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (entityTypeService.exists(name)) return ResponseEntity.status(204).build();
       else return ResponseEntity.status(404).build();
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -307,11 +378,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       dtoType.setInheritsFrom(
           Optional.ofNullable(type.getFather())
               .map(it.davidgreco.metacatalog.entity.EntityType::getName));
-      return ResponseEntity.status(200).body(dtoType);
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(dtoType);
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -321,11 +396,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       var ent = entityService.create(entity.getEntityType(), entity.getValues());
       return ResponseEntity.status(200).body(ent.getId());
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -335,11 +416,17 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       entityService.delete(id);
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -349,7 +436,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (entityService.exists(id)) return ResponseEntity.status(204).build();
       else return ResponseEntity.status(404).build();
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -357,25 +446,37 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   public ResponseEntity getEntity(String id) {
     try {
       var entity = entityService.read(id);
-      return ResponseEntity.status(200).body(entityToDtoEntity.apply(entity));
+      return ResponseEntity.status(200)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(entityToDtoEntity.apply(entity));
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
   @Override
-  public ResponseEntity bulkCreation(Resource body) throws Exception {
+  public ResponseEntity bulkCreation(Resource body) {
     try {
       bulkLoaderService.bulkCreation(body.getInputStream());
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
-      return ResponseEntity.status(400).body(new ValidationError(e.getErrors()));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
     } catch (ServiceError | DataIntegrityViolationException e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
@@ -384,11 +485,93 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     try {
       var aggregate = aggregateService.read(aggregateId);
       var aggregateDto = aggregatePartToDtoAggregatePart.apply(aggregate);
-      return ResponseEntity.status(200).body(aggregateDto);
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(aggregateDto);
     } catch (ServiceError e) {
-      return ResponseEntity.status(400).body(new ValidationError(List.of(e.getMessage())));
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
-      return ResponseEntity.status(500).body(new SystemError(e.getMessage()));
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity unlinkEntity(
+      String sourceEntityId, String relationshipTypeName, String targetEntityId) {
+    try {
+      RelationType relType;
+      relType = RelationType.valueOf(relationshipTypeName);
+      entityService.unlink(sourceEntityId, relType, targetEntityId);
+      return ResponseEntity.status(204).build();
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
+    } catch (SchemaValidationError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity linkedEntity(String sourceEntityId, String relationshipTypeName) {
+    try {
+      var relType = RelationType.valueOf(relationshipTypeName);
+      var entitities =
+          entityService.linked(sourceEntityId, relType).stream()
+              .map(t -> entityToDtoEntity.apply(t));
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(entitities);
+    } catch (IllegalArgumentException e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(INVALID_RELATIONSHIP_TYPE)));
+    } catch (SchemaValidationError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity getAggregateAsYaml(String aggregateId) {
+    try {
+      var aggregate = aggregateService.read(aggregateId);
+      var aggregateDto = aggregatePartToDtoAggregatePart.apply(aggregate);
+      var bos = new ByteArrayOutputStream();
+      yamlFactory.writeValue(
+          bos,
+          convertAggregateValuesIntoJsonNodes(jsonFactory.valueToTree(aggregateDto).deepCopy()));
+      var resource = new org.springframework.core.io.ByteArrayResource(bos.toByteArray());
+      return ResponseEntity.status(200)
+          .contentType(MediaType.APPLICATION_OCTET_STREAM)
+          .body(resource);
+    } catch (ServiceError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 }

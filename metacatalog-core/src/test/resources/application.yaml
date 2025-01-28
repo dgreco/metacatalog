@@ -18,7 +18,7 @@ spring:
     timeout-per-shutdown-phase: 5s
 application:
   config:
-    automaticEntitiesMapping: false
+    automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1d
     entityPathResolutionMaxAttempts: 3

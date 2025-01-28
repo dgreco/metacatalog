@@ -1,8 +1,5 @@
 package it.davidgreco.metacatalog.openapi;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.*;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
@@ -13,6 +10,8 @@ import it.davidgreco.metacatalog.openapi.common.FileHttpMessageConverter;
 import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
 import org.flywaydb.core.Flyway;
@@ -225,20 +224,9 @@ class MetacatalogApiTests {
   }
 
   @Test
-  void bulkCreationAndAggregateRead() throws JsonProcessingException, ServiceError {
+  void bulkCreationAndAggregateRead() throws IOException, ServiceError {
     var api = getMetaCatalogManagerApi();
     api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
-
-    mappingService.create(
-        "FileBasedOutputPortType",
-        "S3FolderType",
-        """
-            {
-                "bucket": "'bucket'",
-                "path": "'path'"
-            }
-            """,
-        List.of());
 
     var dp =
         api.createEntity(
@@ -262,19 +250,19 @@ class MetacatalogApiTests {
                     }
                     """));
 
-    mappingService.createMappedEntities(op1);
-
     api.linkEntity(
         new LinkEntityRequest()
             .sourceEntityId(dp)
             .targetEntityId(op1)
             .relationshipTypeName("HAS_PART"));
 
-    Aggregate agg = api.getAggregate(dp);
+    mappingService.createMappedEntities(op1);
 
-    System.out.println(
-        yamlFactory.writeValueAsString(
-            convertAggregateValuesIntoJsonNodes(jsonFactory.valueToTree(agg).deepCopy())));
+    var aggYamlFile = api.getAggregateAsYaml(dp).toPath();
+
+    String contents = Files.readString(aggYamlFile);
+
+    System.out.println(contents);
 
     Assertions.assertTrue(true);
   }

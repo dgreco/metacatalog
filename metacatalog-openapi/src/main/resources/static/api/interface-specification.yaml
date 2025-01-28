@@ -446,7 +446,7 @@ paths:
         200:
           description: If successful, return an entity id
           content:
-             application/json:
+             application/text:
                 schema:
                   type: string
         400:
@@ -588,6 +588,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/link/{sourceEntityId}/{relationshipTypeName}/{targetEntityId}:
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a link between two entities by a relation
+      operationId: unlinkEntity
+      parameters:
+        - in: path
+          name: sourceEntityId
+          required: true
+          schema:
+            type: string
+            description: Source Entity Id
+        - in: path
+          name: relationshipTypeName
+          required: true
+          schema:
+            type: string
+            description: A relationship type name
+        - in: path
+          name: targetEntityId
+          required: true
+          schema:
+            type: string
+            description: Target Entity Id
+      responses:
+        204:
+          description: Link deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/link/{sourceEntityId}/{relationshipTypeName}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get the entities linked to an entity by a relation
+      operationId: linkedEntity
+      parameters:
+        - in: path
+          name: sourceEntityId
+          required: true
+          schema:
+            type: string
+            description: Source Entity Id
+        - in: path
+          name: relationshipTypeName
+          required: true
+          schema:
+            type: string
+            description: Relationship Type Name
+      responses:
+        200:
+          description: If successful, return a list of linked entities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entity'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}:
     get:
       tags:
@@ -608,6 +688,39 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/Aggregate'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/yaml:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get an aggregate by id
+      operationId: getAggregateAsYaml
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Aggregate Id
+      responses:
+        200:
+          description: If successful, return an Aggregate object as a YAML file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
         400:
             description: Invalid input
             content:

@@ -106,7 +106,9 @@ public class CoreConfig {
 
   @Bean
   public BulkLoaderService bulkLoaderService(
-      TraitService traitService, EntityTypeService entityTypeService, EntityService entityService) {
-    return new BulkLoaderService(traitService, entityTypeService, entityService);
+      TraitService traitService,
+      EntityTypeService entityTypeService,
+      MappingService mappingService) {
+    return new BulkLoaderService(traitService, entityTypeService, mappingService);
   }
 }

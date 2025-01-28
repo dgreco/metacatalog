@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,7 +42,7 @@ public class BulkLoaderService {
 
   private final EntityTypeService entityTypeService;
 
-  private final EntityService entityService;
+  private final MappingService mappingService;
 
   private JsonNode getNamedNode(JsonNode node, String name) throws ServiceError {
     if (node.has(name)) return node.get(name);
@@ -153,6 +154,42 @@ public class BulkLoaderService {
                                 ? Optional.of(jsonType.get(INHERITS_FROM).asText())
                                 : Optional.empty(),
                             getNamedNode(jsonType, SCHEMA).toPrettyString());
+                      } catch (ServiceError e) {
+                        throw new ServiceRuntimeError(e);
+                      }
+                    });
+              });
+
+      // Mappings creation
+      docs.stream()
+          .filter(doc -> doc.has("Mappings"))
+          .findFirst()
+          .ifPresent(
+              jsonEntities -> {
+                if (!(jsonEntities.get("Mappings") instanceof ArrayNode jsonEntitiesArray)) return;
+                jsonEntitiesArray.forEach(
+                    jsonEntity -> {
+                      try {
+                        var sourceEntityType =
+                            getNamedNode(jsonEntity, "sourceEntityType").asText();
+                        var targetEntityType =
+                            getNamedNode(jsonEntity, "targetEntityType").asText();
+                        var mappingValue =
+                            getNamedNode(jsonEntity, "mappingValues").toPrettyString();
+                        var referencesNode =
+                            (ArrayNode) getNamedNode(jsonEntity, "entityPathReferences");
+                        var references =
+                            StreamSupport.stream(referencesNode.spliterator(), false)
+                                .map(
+                                    refNode -> {
+                                      var alias = refNode.get("alias").asText();
+                                      var path = refNode.get("referencePath").asText();
+                                      return new MappingEntityTypeRelationship.EntityPathReference(
+                                          alias, path);
+                                    })
+                                .toList();
+                        mappingService.create(
+                            sourceEntityType, targetEntityType, mappingValue, references);
                       } catch (ServiceError e) {
                         throw new ServiceRuntimeError(e);
                       }
