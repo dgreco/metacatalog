@@ -26,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class EntityService implements CommonService<Entity, String> {
 
-  private static final String ENTITY_WITH_ID = " Entity with id ";
+  private static final String ENTITY_WITH_ID = " entity with id ";
 
   private static final String NOT_FOUND = " not found";
 
@@ -269,7 +269,6 @@ public class EntityService implements CommonService<Entity, String> {
           entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
         throw new ServiceError("Relationship is not legit");
 
-      var rel1 = new EntityRelationship();
       var source =
           entityRepository
               .findById(sourceId)
@@ -279,24 +278,35 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(targetId)
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
-      if (entityRelationshipRepository
-          .findBySourceAndRelationTypeAndTarget(source, relType, target)
-          .isPresent())
-        throw new ServiceError(
-            "Entity with id "
-                + sourceId
-                + " is already linked with entity with id "
-                + targetId
-                + "with relation type "
-                + relType);
-
-      rel1.setSource(source);
-      rel1.setTarget(target);
-      rel1.setRelationType(relType);
-      entityRelationshipRepository.save(rel1);
+      checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
+      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+        var inverseRelType = TraitRelationship.INVERSE_RELATION_TYPE.get(relType);
+        checkRelationshipExistenceAndSave(targetId, inverseRelType, sourceId, target, source);
+      }
     } finally {
       log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
     }
+  }
+
+  private void checkRelationshipExistenceAndSave(
+      String sourceId, RelationType relType, String targetId, Entity source, Entity target)
+      throws ServiceError {
+    if (entityRelationshipRepository
+        .findBySourceAndRelationTypeAndTarget(source, relType, target)
+        .isPresent())
+      throw new ServiceError(
+          "Entity with id "
+              + sourceId
+              + " is already linked with entity with id "
+              + targetId
+              + " with relation type "
+              + relType);
+
+    var directRel = new EntityRelationship();
+    directRel.setSource(source);
+    directRel.setTarget(target);
+    directRel.setRelationType(relType);
+    entityRelationshipRepository.save(directRel);
   }
 
   /**
@@ -321,19 +331,36 @@ public class EntityService implements CommonService<Entity, String> {
           entityRepository
               .findById(targetId)
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
-      var rel =
+      var directRel =
           entityRelationshipRepository
               .findBySourceAndRelationTypeAndTarget(source, relType, target)
               .orElseThrow(
                   () ->
                       new ServiceError(
                           ENTITY_WITH_ID
-                              + source
+                              + source.getId()
                               + " does not have a relationship "
                               + relType
-                              + ENTITY_WITH_ID
-                              + target));
-      entityRelationshipRepository.delete(rel);
+                              + " with entity with id "
+                              + target.getId()));
+      entityRelationshipRepository.delete(directRel);
+      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+        var inverseRelType = TraitRelationship.INVERSE_RELATION_TYPE.get(relType);
+        var inverseRel =
+            entityRelationshipRepository
+                .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)
+                .orElseThrow(
+                    () ->
+                        new ServiceError(
+                            ENTITY_WITH_ID
+                                + target.getId()
+                                + " does not have a relationship "
+                                + inverseRelType
+                                + " with entity with id "
+                                + source.getId()));
+        entityRelationshipRepository.delete(inverseRel);
+      }
+
     } finally {
       log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
     }

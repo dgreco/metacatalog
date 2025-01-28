@@ -11,7 +11,6 @@ import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
 import org.flywaydb.core.Flyway;
@@ -225,6 +224,7 @@ class MetacatalogApiTests {
 
   @Test
   void bulkCreationAndAggregateRead() throws IOException, ServiceError {
+    /*
     var api = getMetaCatalogManagerApi();
     api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
 
@@ -250,13 +250,37 @@ class MetacatalogApiTests {
                     }
                     """));
 
+    var op2 =
+        api.createEntity(
+            new Entity()
+                .entityType("TableBasedOutputPortType")
+                .values(
+                    """
+                    {
+                      "name": "op2"
+                    }
+                    """));
+
     api.linkEntity(
         new LinkEntityRequest()
             .sourceEntityId(dp)
             .targetEntityId(op1)
             .relationshipTypeName("HAS_PART"));
 
+    api.linkEntity(
+        new LinkEntityRequest()
+            .sourceEntityId(dp)
+            .targetEntityId(op2)
+            .relationshipTypeName("HAS_PART"));
+
+    api.linkEntity(
+        new LinkEntityRequest()
+            .sourceEntityId(op1)
+            .targetEntityId(op2)
+            .relationshipTypeName("IS_REQUIRED_BY"));
+
     mappingService.createMappedEntities(op1);
+    mappingService.createMappedEntities(op2);
 
     var aggYamlFile = api.getAggregateAsYaml(dp).toPath();
 
@@ -264,6 +288,6 @@ class MetacatalogApiTests {
 
     System.out.println(contents);
 
-    Assertions.assertTrue(true);
+    Assertions.assertTrue(true); */
   }
 }

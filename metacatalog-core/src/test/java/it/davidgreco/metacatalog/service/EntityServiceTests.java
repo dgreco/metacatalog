@@ -2,8 +2,7 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
-import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
-import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
+import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static org.junit.Assert.assertThrows;
 
 import java.io.IOException;
@@ -130,6 +129,11 @@ class EntityServiceTests extends CommonServiceTests {
         () -> entityService.link(sourceEntity.getId(), HAS_PART, targetEntity.getId()));
 
     entityService.link(sourceEntity.getId(), DEPENDS_ON, targetEntity.getId());
+
+    // The inverse relation should be created automatically
+    Assertions.assertThrows(
+        ServiceError.class,
+        () -> entityService.link(targetEntity.getId(), IS_REQUIRED_BY, sourceEntity.getId()));
 
     // No loops
     Assertions.assertThrows(

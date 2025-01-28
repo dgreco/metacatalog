@@ -173,38 +173,46 @@ public class TraitService implements CommonTypeService<Trait, String> {
    * <p>This method validates that the two Traits exist, and that the link does not already exist.
    * It also checks for loops before creating the link.
    *
-   * @param traitName1 the name of the first Trait
+   * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
-   * @param traitName2 the name of the second Trait
+   * @param targetTraitName the name of the second Trait
    * @throws ServiceError if the Traits do not exist, the link already exists, a loop is detected,
    *     or a data integrity violation occurs
    */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public void link(String traitName1, RelationType relType, String traitName2) throws ServiceError {
-    log.info("Linking Trait: {} with Trait: {}", traitName1, traitName2);
+  public void link(String sourceTraitName, RelationType relType, String targetTraitName)
+      throws ServiceError {
+    log.info("Linking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     try {
-      if (checkLoops(traitName1, new HashSet<>(), traitName2, relType)) {
+      if (checkLoops(sourceTraitName, new HashSet<>(), targetTraitName, relType)) {
         throw new ServiceError("Loops are not allowed");
       }
-      var rel1 = new TraitRelationship();
-      var trait1 =
+      var sourceTrait =
           traitRepository
-              .findByName(traitName1)
-              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
-      var trait2 =
+              .findByName(sourceTraitName)
+              .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
+      var targetTrait =
           traitRepository
-              .findByName(traitName2)
-              .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
-      rel1.setSource(trait1);
-      rel1.setTarget(trait2);
-      rel1.setRelationType(relType);
-      traitRelationshipRepository.save(rel1);
+              .findByName(targetTraitName)
+              .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
+      var directRel = new TraitRelationship();
+      directRel.setSource(sourceTrait);
+      directRel.setTarget(targetTrait);
+      directRel.setRelationType(relType);
+      traitRelationshipRepository.save(directRel);
+      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+        var inverseRel = new TraitRelationship();
+        inverseRel.setSource(targetTrait);
+        inverseRel.setTarget(sourceTrait);
+        inverseRel.setRelationType(TraitRelationship.INVERSE_RELATION_TYPE.get(relType));
+        traitRelationshipRepository.save(inverseRel);
+      }
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
-      log.info("Linked Trait: {} with Trait: {}", traitName1, traitName2);
+      log.info("Linked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     }
   }
 
@@ -214,42 +222,58 @@ public class TraitService implements CommonTypeService<Trait, String> {
    * <p>This method validates that the two Traits exist, and that the link does not already exist.
    * It also checks for loops before creating the link.
    *
-   * @param traitName1 the name of the first Trait
+   * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
-   * @param traitName2 the name of the second Trait
+   * @param targetTraitName the name of the second Trait
    * @throws ServiceError if the Traits do not exist, the link already exists, a loop is detected,
    *     or a data integrity violation occurs
    */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public void unlink(String traitName1, RelationType relType, String traitName2)
+  public void unlink(String sourceTraitName, RelationType relType, String targetTraitName)
       throws ServiceError {
-    log.info("Unlinking Trait: {} with Trait: {}", traitName1, traitName2);
+    log.info("Unlinking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     try {
-      var trait1 =
+      var sourceTrait =
           traitRepository
-              .findByName(traitName1)
-              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
-      var trait2 =
+              .findByName(sourceTraitName)
+              .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
+      var targetTrait =
           traitRepository
-              .findByName(traitName2)
-              .orElseThrow(() -> new ServiceError(TRAIT + traitName2 + NOT_FOUND));
+              .findByName(targetTraitName)
+              .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
       var rel =
           traitRelationshipRepository
-              .findBySourceAndRelationTypeAndTarget(trait1, relType, trait2)
+              .findBySourceAndRelationTypeAndTarget(sourceTrait, relType, targetTrait)
               .orElseThrow(
                   () ->
                       new ServiceError(
                           TRAIT
-                              + traitName1
+                              + sourceTraitName
                               + " does not have a relationship "
                               + relType
                               + " with "
-                              + traitName2));
+                              + targetTraitName));
       traitRelationshipRepository.delete(rel);
+      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+        var inverseRel =
+            traitRelationshipRepository
+                .findBySourceAndRelationTypeAndTarget(
+                    targetTrait, TraitRelationship.INVERSE_RELATION_TYPE.get(relType), sourceTrait)
+                .orElseThrow(
+                    () ->
+                        new ServiceError(
+                            TRAIT
+                                + targetTraitName
+                                + " does not have a relationship "
+                                + relType
+                                + " with "
+                                + sourceTraitName));
+        traitRelationshipRepository.delete(inverseRel);
+      }
     } finally {
-      log.info("Unlinked Trait: {} with Trait: {}", traitName1, traitName2);
+      log.info("Unlinked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     }
   }
 
