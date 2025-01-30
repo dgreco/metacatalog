@@ -11,6 +11,7 @@ import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
 import org.flywaydb.core.Flyway;
@@ -224,7 +225,7 @@ class MetacatalogApiTests {
 
   @Test
   void bulkCreationAndAggregateRead() throws IOException, ServiceError {
-    /*
+
     var api = getMetaCatalogManagerApi();
     api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
 
@@ -288,6 +289,6 @@ class MetacatalogApiTests {
 
     System.out.println(contents);
 
-    Assertions.assertTrue(true); */
+    Assertions.assertTrue(true);
   }
 }

@@ -202,11 +202,11 @@ public class TraitService implements CommonTypeService<Trait, String> {
       directRel.setTarget(targetTrait);
       directRel.setRelationType(relType);
       traitRelationshipRepository.save(directRel);
-      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+      if (relType.hasInverse()) {
         var inverseRel = new TraitRelationship();
         inverseRel.setSource(targetTrait);
         inverseRel.setTarget(sourceTrait);
-        inverseRel.setRelationType(TraitRelationship.INVERSE_RELATION_TYPE.get(relType));
+        inverseRel.setRelationType(relType.inverse());
         traitRelationshipRepository.save(inverseRel);
       }
     } catch (DataIntegrityViolationException e) {
@@ -256,11 +256,10 @@ public class TraitService implements CommonTypeService<Trait, String> {
                               + " with "
                               + targetTraitName));
       traitRelationshipRepository.delete(rel);
-      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
+      if (relType.hasInverse()) {
         var inverseRel =
             traitRelationshipRepository
-                .findBySourceAndRelationTypeAndTarget(
-                    targetTrait, TraitRelationship.INVERSE_RELATION_TYPE.get(relType), sourceTrait)
+                .findBySourceAndRelationTypeAndTarget(targetTrait, relType.inverse(), sourceTrait)
                 .orElseThrow(
                     () ->
                         new ServiceError(

@@ -1,8 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.*;
-import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
-import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
+import static it.davidgreco.metacatalog.entity.RelationType.*;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -276,18 +275,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
             mappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
             mappingEntityRelationship.setRelationType(MAPPED_TO);
             mappingEntityRelationshipRepository.save(mappingEntityRelationship);
-            if (CommonService.checkRelIsLegit(
-                entityRepository,
-                traitRelationshipRepository,
-                sourceEntity.getId(),
-                HAS_PART,
-                mappedEntity.getId())) {
-              var entityRelationship = new EntityRelationship();
-              entityRelationship.setSource(sourceEntity);
-              entityRelationship.setTarget(mappedEntity);
-              entityRelationship.setRelationType(HAS_PART);
-              entityRelationshipRepository.save(entityRelationship);
-            }
+            var inverseMappingEntityRelationship = new MappingEntityRelationship();
+            inverseMappingEntityRelationship.setSource(mappedEntity);
+            inverseMappingEntityRelationship.setTarget(sourceEntity);
+            inverseMappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
+            inverseMappingEntityRelationship.setRelationType(IS_MAPPED_BY);
+            mappingEntityRelationshipRepository.save(inverseMappingEntityRelationship);
             createMappedEntities(mappedEntity.getId());
           } else {
             createMappedEntities(existingMappingEntityRels.getFirst().getTarget().getId());
@@ -369,7 +362,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .findById(sourceEntityId)
                 .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
-            mappingEntityRelationshipRepository.findBySource(sourceEntity);
+            mappingEntityRelationshipRepository.findBySourceAndRelationType(
+                sourceEntity, MAPPED_TO);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
           var mappingTypeRelationship =
               entityMappingRelationship.getMappingEntityTypeRelationship();
@@ -454,17 +448,24 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 .findById(sourceEntityId)
                 .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
-            mappingEntityRelationshipRepository.findBySource(sourceEntity);
+            mappingEntityRelationshipRepository.findBySourceAndRelationType(
+                sourceEntity, MAPPED_TO);
         for (MappingEntityRelationship entityMappingRelationship : entityMappingRelationships) {
           var mappedEntity = entityMappingRelationship.getTarget();
           retrievedEntitiesIds.push(mappedEntity.getId());
           mappingEntityRelationshipRepository.delete(entityMappingRelationship);
-          entityRelationshipRepository
+          mappingEntityRelationshipRepository
               .findBySourceAndRelationTypeAndTarget(
                   entityMappingRelationship.getSource(),
-                  HAS_PART,
+                  MAPPED_TO,
                   entityMappingRelationship.getTarget())
-              .ifPresent(entityRelationshipRepository::delete);
+              .ifPresent(mappingEntityRelationshipRepository::delete);
+          mappingEntityRelationshipRepository
+              .findBySourceAndRelationTypeAndTarget(
+                  entityMappingRelationship.getTarget(),
+                  MAPPED_TO.inverse(),
+                  entityMappingRelationship.getSource())
+              .ifPresent(mappingEntityRelationshipRepository::delete);
           retrieveMappedEntities(mappedEntity.getId(), retrievedEntitiesIds);
         }
       }
@@ -553,21 +554,21 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       var relType = RelationType.valueOf(relTypeStr);
       var pathExpression = pathExpressions.getFirst().trim();
 
-      List<Entity> relationSources;
-      if (relType == MAPPED_TO)
-        relationSources =
-            mappingEntityRelationshipRepository
-                .findByTargetAndRelationType(currentEntity, relType)
-                .stream()
-                .map(MappingEntityRelationship::getSource)
-                .toList();
-      else
-        relationSources =
-            entityRelationshipRepository
-                .findByTargetAndRelationType(currentEntity, relType)
-                .stream()
-                .map(EntityRelationship::getSource)
-                .toList();
+      List<Entity> relationSources =
+          switch (relType) {
+            case IS_MAPPED_BY, MAPPED_TO ->
+                mappingEntityRelationshipRepository
+                    .findByTargetAndRelationType(currentEntity, relType.inverse())
+                    .stream()
+                    .map(MappingEntityRelationship::getSource)
+                    .toList();
+            default ->
+                entityRelationshipRepository
+                    .findByTargetAndRelationType(currentEntity, relType)
+                    .stream()
+                    .map(EntityRelationship::getSource)
+                    .toList();
+          };
 
       if (relationSources.isEmpty()) return Optional.empty();
 

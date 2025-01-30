@@ -279,9 +279,8 @@ public class EntityService implements CommonService<Entity, String> {
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
       checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
-      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
-        var inverseRelType = TraitRelationship.INVERSE_RELATION_TYPE.get(relType);
-        checkRelationshipExistenceAndSave(targetId, inverseRelType, sourceId, target, source);
+      if (relType.hasInverse()) {
+        checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
       }
     } finally {
       log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
@@ -344,8 +343,8 @@ public class EntityService implements CommonService<Entity, String> {
                               + " with entity with id "
                               + target.getId()));
       entityRelationshipRepository.delete(directRel);
-      if (TraitRelationship.INVERSE_RELATION_TYPE.containsKey(relType)) {
-        var inverseRelType = TraitRelationship.INVERSE_RELATION_TYPE.get(relType);
+      if (relType.hasInverse()) {
+        var inverseRelType = relType.inverse();
         var inverseRel =
             entityRelationshipRepository
                 .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)

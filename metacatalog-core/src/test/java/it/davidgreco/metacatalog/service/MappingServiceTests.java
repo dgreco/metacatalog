@@ -300,14 +300,14 @@ class MappingServiceTests extends CommonServiceTests {
 
     entityTypeService.create(
         "AnotherType1",
-        List.of("DependingRelSourceTrait1"),
+        List.of("DependingRelTargetTrait1"),
         Optional.empty(),
         """
                     { "type": "object", "properties": { "c": { "type": "integer" } } }""");
 
     entityTypeService.create(
         "SourceType1",
-        List.of("DependingRelTargetTrait1"),
+        List.of("DependingRelSourceTrait1"),
         Optional.empty(),
         """
                     { "type": "object", "properties": { "a": { "type": "integer" } } }""");
@@ -333,7 +333,7 @@ class MappingServiceTests extends CommonServiceTests {
         "TargetType1",
         """
                             {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
-        List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
+        List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "IS_REQUIRED_BY{$}")));
 
     mappingService.create(
         "TargetType1",
@@ -342,7 +342,7 @@ class MappingServiceTests extends CommonServiceTests {
                             {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
         List.of(
             new MappingEntityTypeRelationship.EntityPathReference(
-                "ai", "MAPPED_TO{$}/DEPENDS_ON{$}")));
+                "ai", "IS_MAPPED_BY{$}/IS_REQUIRED_BY{$}")));
 
     var anotherInstance =
         entityService.create(
@@ -358,7 +358,7 @@ class MappingServiceTests extends CommonServiceTests {
                     {"a": 1}
                     """);
 
-    entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
+    entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
     await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
 
@@ -412,14 +412,14 @@ class MappingServiceTests extends CommonServiceTests {
 
     entityTypeService.create(
         "AnotherType",
-        List.of("DependingRelSourceTrait"),
+        List.of("DependingRelTargetTrait"),
         Optional.empty(),
         """
                     { "type": "object", "properties": { "c": { "type": "integer" } } }""");
 
     entityTypeService.create(
         "SourceType",
-        List.of("DependingRelTargetTrait"),
+        List.of("DependingRelSourceTrait"),
         Optional.empty(),
         """
                     { "type": "object", "properties": { "a": { "type": "integer" } } }""");
@@ -445,7 +445,7 @@ class MappingServiceTests extends CommonServiceTests {
         "TargetType",
         """
                             {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
-        List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "DEPENDS_ON{$}")));
+        List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "IS_REQUIRED_BY{$}")));
 
     mappingService.create(
         "TargetType",
@@ -454,7 +454,7 @@ class MappingServiceTests extends CommonServiceTests {
                             {"d": "#source.getValue('$.b').intValue() + #ai.getValue('$.c').intValue()*10"}""",
         List.of(
             new MappingEntityTypeRelationship.EntityPathReference(
-                "ai", "MAPPED_TO{$}/DEPENDS_ON{$}")));
+                "ai", "IS_MAPPED_BY{$}/IS_REQUIRED_BY{$}")));
 
     var anotherInstance =
         entityService.create(
@@ -470,7 +470,7 @@ class MappingServiceTests extends CommonServiceTests {
                     {"a": 1}
                     """);
 
-    entityService.link(anotherInstance.getId(), DEPENDS_ON, sourceInstance.getId());
+    entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
     mappingService.createMappedEntities(sourceInstance.getId());
 
