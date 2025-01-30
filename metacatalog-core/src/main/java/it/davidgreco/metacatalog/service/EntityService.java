@@ -5,7 +5,10 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
-import it.davidgreco.metacatalog.entity.*;
+import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
+import it.davidgreco.metacatalog.entity.EntityRelationship;
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.HashSet;
 import java.util.List;

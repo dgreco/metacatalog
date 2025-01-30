@@ -1,7 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.*;
-import static it.davidgreco.metacatalog.entity.RelationType.*;
+import static it.davidgreco.metacatalog.entity.RelationType.IS_MAPPED_BY;
+import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
