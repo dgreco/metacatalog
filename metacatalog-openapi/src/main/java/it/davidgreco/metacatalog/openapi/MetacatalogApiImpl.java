@@ -481,9 +481,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
-  public ResponseEntity getAggregate(String aggregateId) {
+  public ResponseEntity getAggregate(String aggregateId, Boolean retrieveMappedInstances) {
     try {
-      var aggregate = aggregateService.read(aggregateId);
+      var aggregate = aggregateService.read(aggregateId, retrieveMappedInstances);
       var aggregateDto = aggregatePartToDtoAggregatePart.apply(aggregate);
       return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(aggregateDto);
     } catch (ServiceError e) {
@@ -552,9 +552,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
-  public ResponseEntity getAggregateAsYaml(String aggregateId) {
+  public ResponseEntity getAggregateAsYaml(String aggregateId, Boolean retrieveMappedInstances) {
     try {
-      var aggregate = aggregateService.read(aggregateId);
+      var aggregate = aggregateService.read(aggregateId, retrieveMappedInstances);
       var aggregateDto = aggregatePartToDtoAggregatePart.apply(aggregate);
       var bos = new ByteArrayOutputStream();
       yamlFactory.writeValue(

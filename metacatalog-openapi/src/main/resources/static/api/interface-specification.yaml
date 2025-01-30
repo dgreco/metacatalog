@@ -681,6 +681,12 @@ paths:
           schema:
             type: string
             description: Aggregate Id
+        - in: query
+          name: retrieveMappedEntities
+          required: true
+          schema:
+            type: boolean
+            description: if true, retrieve the mapped entities
       responses:
         200:
           description: If successful, return an Aggregate object
@@ -713,6 +719,12 @@ paths:
           schema:
             type: string
             description: Aggregate Id
+        - in: query
+          name: retrieveMappedEntities
+          required: true
+          schema:
+            type: boolean
+            description: if true, retrieve the mapped entities
       responses:
         200:
           description: If successful, return an Aggregate object as a YAML file

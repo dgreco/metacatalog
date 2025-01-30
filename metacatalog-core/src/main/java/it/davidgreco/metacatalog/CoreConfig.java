@@ -91,8 +91,11 @@ public class CoreConfig {
 
   @Bean
   public AggregateService aggregateService(
-      EntityService entityService, EntityRelationshipRepository entityRelationshipRepository) {
-    return new AggregateService(entityService, entityRelationshipRepository);
+      EntityService entityService,
+      EntityRelationshipRepository entityRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository) {
+    return new AggregateService(
+        entityService, entityRelationshipRepository, mappingEntityRelationshipRepository);
   }
 
   @Bean

@@ -107,10 +107,11 @@ class AggregateServiceTests extends CommonServiceTests {
             .map(entity -> entity.getValues().get("name").asText())
             .collect(Collectors.toSet()));
 
-    var retrievedAggregate = aggregateService.read(result.entity().getId());
+    var retrievedAggregate = aggregateService.read(result.entity().getId(), false);
 
     Assertions.assertEquals(result.toString(), retrievedAggregate.toString());
 
-    Assertions.assertThrows(ServiceError.class, () -> aggregateService.read(subRoot.getId()));
+    Assertions.assertThrows(
+        ServiceError.class, () -> aggregateService.read(subRoot.getId(), false));
   }
 }

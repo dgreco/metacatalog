@@ -283,7 +283,7 @@ class MetacatalogApiTests {
     mappingService.createMappedEntities(op1);
     mappingService.createMappedEntities(op2);
 
-    var aggYamlFile = api.getAggregateAsYaml(dp).toPath();
+    var aggYamlFile = api.getAggregateAsYaml(dp, Boolean.TRUE).toPath();
 
     String contents = Files.readString(aggYamlFile);
 

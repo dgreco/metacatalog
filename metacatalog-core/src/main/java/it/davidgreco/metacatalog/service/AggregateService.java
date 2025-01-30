@@ -1,12 +1,16 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
+import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
 
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
+import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AggregateService {
+
   public interface AggregatePart {}
 
   public record AggregateElement(Entity entity) implements AggregatePart {}
@@ -30,6 +35,8 @@ public class AggregateService {
   private final EntityService entityService;
 
   private final EntityRelationshipRepository entityRelationshipRepository;
+
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
   /**
    * Creates an aggregate entity (i.e. a collection of entities, each potentially being an aggregate
@@ -92,7 +99,7 @@ public class AggregateService {
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public Aggregate read(String aggregateId) throws ServiceError {
+  public Aggregate read(String aggregateId, boolean retrieveMappedInstances) throws ServiceError {
     class ReadAggregate {
       private AggregatePart readAggregatePart(Entity entity) throws ServiceError {
         try {
@@ -110,9 +117,25 @@ public class AggregateService {
                           } catch (ServiceError ex) {
                             throw new ServiceRuntimeError(ex);
                           }
-                        })
-                    .toList();
-            return new Aggregate(entity, elements);
+                        });
+            // Retrieve the mapped instances of the
+            if (retrieveMappedInstances) {
+              var mappedElements =
+                  mappingEntityRelationshipRepository
+                      .findBySourceAndRelationType(entity, MAPPED_TO)
+                      .stream()
+                      .map(MappingEntityRelationship::getTarget)
+                      .map(
+                          e -> {
+                            try {
+                              return readAggregatePart(e);
+                            } catch (ServiceError ex) {
+                              throw new ServiceRuntimeError(ex);
+                            }
+                          });
+              elements = Stream.concat(elements, mappedElements);
+            }
+            return new Aggregate(entity, elements.toList());
           } else {
             throw new ServiceError("Invalid entity type for aggregate part");
           }
