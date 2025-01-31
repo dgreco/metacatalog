@@ -463,7 +463,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   @Override
   public ResponseEntity bulkCreation(Resource body) {
     try {
-      bulkLoaderService.bulkCreation(body.getInputStream());
+      bulkLoaderService.bulkModelCreation(body.getInputStream());
       return ResponseEntity.status(204).build();
     } catch (SchemaValidationError e) {
       return ResponseEntity.status(400)

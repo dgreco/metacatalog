@@ -111,7 +111,8 @@ public class CoreConfig {
   public BulkLoaderService bulkLoaderService(
       TraitService traitService,
       EntityTypeService entityTypeService,
-      MappingService mappingService) {
-    return new BulkLoaderService(traitService, entityTypeService, mappingService);
+      MappingService mappingService,
+      EntityService entityService) {
+    return new BulkLoaderService(traitService, entityTypeService, mappingService, entityService);
   }
 }

@@ -1,17 +1,22 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.yamlFactory;
+import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
+import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +49,8 @@ public class BulkLoaderService {
 
   private final MappingService mappingService;
 
+  private final EntityService entityService;
+
   private JsonNode getNamedNode(JsonNode node, String name) throws ServiceError {
     if (node.has(name)) return node.get(name);
     throw new ServiceError("Node " + name + " not found");
@@ -75,8 +82,8 @@ public class BulkLoaderService {
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public void bulkCreation(InputStream is) throws ServiceError {
-    log.info("Bulk creation started");
+  public void bulkModelCreation(InputStream is) throws ServiceError {
+    log.info("Bulk model creation started");
     try {
       List<ObjectNode> docs;
       try (var yamlParser = yamlFactory.createParser(is)) {
@@ -201,7 +208,77 @@ public class BulkLoaderService {
     } catch (IOException e) {
       throw new ServiceError("Error parsing YAML file");
     } finally {
-      log.info("Bulk creation completed");
+      log.info("Bulk model creation completed");
+    }
+  }
+
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public List<String> bulkAggregateCreation(InputStream is) throws ServiceError {
+    log.info("Bulk aggregate creation started");
+    try {
+      var refs = new HashMap<String, Entity>();
+      var depends = new HashMap<String, String>();
+      List<ObjectNode> docs;
+      try (var yamlParser = yamlFactory.createParser(is)) {
+        docs = yamlFactory.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
+      }
+      class CreateEntity implements Function<ObjectNode, Entity> {
+        @Override
+        public Entity apply(ObjectNode doc) {
+          var ref = Optional.ofNullable(doc.get("ref"));
+          var dependsOn = Optional.ofNullable(doc.get("dependsOn"));
+          var entityTypeName = doc.get("entityType").asText();
+          var entityValues = doc.get("values").toPrettyString();
+          try {
+            var aggregate = entityService.create(entityTypeName, entityValues);
+            if (ref.isPresent()) {
+              var refId = ref.get().asText();
+              refs.put(refId, aggregate);
+            }
+            if (dependsOn.isPresent()) {
+              var dependsOnIds = (ArrayNode) dependsOn.get();
+              for (JsonNode dependsOnId : dependsOnIds)
+                depends.put(aggregate.getId(), dependsOnId.asText());
+            }
+            var parts = (ArrayNode) doc.get("parts");
+            if (parts == null) return aggregate;
+            else {
+              parts.forEach(
+                  part -> {
+                    var partEntity = apply((ObjectNode) part);
+                    try {
+                      entityService.link(aggregate.getId(), HAS_PART, partEntity.getId());
+                    } catch (ServiceError e) {
+                      throw new ServiceRuntimeError(e);
+                    }
+                  });
+              return aggregate;
+            }
+          } catch (ServiceError e) {
+            throw new ServiceRuntimeError(e);
+          }
+        }
+      }
+      var ids = docs.stream().map(new CreateEntity()).map(Entity::getId).toList();
+      // Linking refs
+      depends.forEach(
+          (entity, dependsOnId) -> {
+            try {
+              entityService.link(entity, DEPENDS_ON, refs.get(dependsOnId).getId());
+            } catch (ServiceError e) {
+              throw new ServiceRuntimeError(e);
+            }
+          });
+      return ids;
+    } catch (ServiceRuntimeError e) {
+      if (e.getCause() instanceof ServiceError se) throw se;
+      else throw e;
+    } catch (IOException | ClassCastException e) {
+      throw new ServiceError("Error parsing YAML file");
+    } finally {
+      log.info("Bulk aggregate creation completed");
     }
   }
 }
