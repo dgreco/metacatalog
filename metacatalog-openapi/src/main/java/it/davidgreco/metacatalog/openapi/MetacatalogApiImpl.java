@@ -59,18 +59,27 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
               if (aggregatePart
                   instanceof
                   AggregateService.AggregateElement(
-                      it.davidgreco.metacatalog.entity.Entity entity)) {
+                      it.davidgreco.metacatalog.entity.Entity entity,
+                      List<it.davidgreco.metacatalog.entity.Entity> dependencies)) {
                 return new Aggregate()
                     .id(entity.getId())
                     .entityType(entity.getEntityType().getName())
-                    .values(entity.getValues().toPrettyString());
+                    .values(entity.getValues().toPrettyString())
+                    .dependencies(
+                        dependencies.stream()
+                            .map(it.davidgreco.metacatalog.entity.Entity::getId)
+                            .toList());
               } else {
                 var aggregate = (AggregateService.Aggregate) aggregatePart;
                 var aggregateDto =
                     new Aggregate()
                         .id(aggregate.entity().getId())
                         .entityType(aggregate.entity().getEntityType().getName())
-                        .values(aggregate.entity().getValues().toPrettyString());
+                        .values(aggregate.entity().getValues().toPrettyString())
+                        .dependencies(
+                            aggregate.dependencies().stream()
+                                .map(it.davidgreco.metacatalog.entity.Entity::getId)
+                                .toList());
                 aggregateDto.setParts(
                     aggregate.elements().stream().map(this::apply).collect(Collectors.toList()));
                 return aggregateDto;

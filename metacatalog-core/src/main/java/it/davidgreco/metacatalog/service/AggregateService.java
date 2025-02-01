@@ -1,10 +1,10 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
-import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
+import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
 
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
@@ -28,9 +28,19 @@ public class AggregateService {
 
   public interface AggregatePart {}
 
-  public record AggregateElement(Entity entity) implements AggregatePart {}
+  public record AggregateElement(Entity entity, List<Entity> dependencies)
+      implements AggregatePart {
+    public AggregateElement(Entity entity) {
+      this(entity, List.of());
+    }
+  }
 
-  public record Aggregate(Entity entity, List<AggregatePart> elements) implements AggregatePart {}
+  public record Aggregate(Entity entity, List<Entity> dependencies, List<AggregatePart> elements)
+      implements AggregatePart {
+    public Aggregate(Entity entity, List<AggregatePart> elements) {
+      this(entity, List.of(), elements);
+    }
+  }
 
   private final EntityService entityService;
 
@@ -58,25 +68,38 @@ public class AggregateService {
               aggregate.entity().getValues().toPrettyString());
       aggregate.entity().setId(rootAggregate.getId());
       for (var element : aggregate.elements()) {
-        if (element instanceof AggregateElement(Entity entity)) {
+        if (element instanceof AggregateElement(Entity entity, List<Entity> dependencies)) {
           var aggregateElement =
               entityService.create(
                   entity.getEntityType().getName(), entity.getValues().toPrettyString());
           entity.setId(aggregateElement.getId());
+          for (var dependency : dependencies) {
+            entityService.link(aggregateElement.getId(), DEPENDS_ON, dependency.getId());
+          }
           entityService.link(rootAggregate.getId(), HAS_PART, aggregateElement.getId());
-        } else if (element instanceof Aggregate(Entity entity, List<AggregatePart> elements)) {
+        } else if (element
+            instanceof
+            Aggregate(Entity entity, List<Entity> dependencies, List<AggregatePart> elements)) {
           var childAggregate =
               entityService.create(
                   entity.getEntityType().getName(), entity.getValues().toPrettyString());
           entity.setId(childAggregate.getId());
           entityService.link(rootAggregate.getId(), HAS_PART, childAggregate.getId());
+          for (var dependency : dependencies) {
+            entityService.link(childAggregate.getId(), DEPENDS_ON, dependency.getId());
+          }
           for (var childElement : elements) {
-            if (childElement instanceof AggregateElement(Entity anotherEntity)) {
+            if (childElement
+                instanceof
+                AggregateElement(Entity anotherEntity, List<Entity> anotherDependencies)) {
               var childAggregateElement =
                   entityService.create(
                       anotherEntity.getEntityType().getName(),
                       anotherEntity.getValues().toPrettyString());
               anotherEntity.setId(childAggregateElement.getId());
+              for (var dependency : anotherDependencies) {
+                entityService.link(childAggregateElement.getId(), DEPENDS_ON, dependency.getId());
+              }
               entityService.link(childAggregate.getId(), HAS_PART, childAggregateElement.getId());
             }
           }
@@ -105,7 +128,13 @@ public class AggregateService {
         try {
           if (implementsTrait(entity.getEntityType(), "AggregateElement")
               && !implementsTrait(entity.getEntityType(), "Aggregate")) {
-            return new AggregateElement(entity);
+            var dependencies =
+                entityRelationshipRepository
+                    .findBySourceAndRelationType(entity, DEPENDS_ON)
+                    .stream()
+                    .map(EntityRelationship::getTarget)
+                    .toList();
+            return new AggregateElement(entity, dependencies);
           } else if (implementsTrait(entity.getEntityType(), "Aggregate")) {
             var linkedEntities = entityService.linked(entity.getId(), HAS_PART);
             var elements =
@@ -135,7 +164,13 @@ public class AggregateService {
                           });
               elements = Stream.concat(elements, mappedElements);
             }
-            return new Aggregate(entity, elements.toList());
+            var dependencies =
+                entityRelationshipRepository
+                    .findBySourceAndRelationType(entity, DEPENDS_ON)
+                    .stream()
+                    .map(EntityRelationship::getTarget)
+                    .toList();
+            return new Aggregate(entity, dependencies, elements.toList());
           } else {
             throw new ServiceError("Invalid entity type for aggregate part");
           }

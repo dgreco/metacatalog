@@ -795,6 +795,10 @@ components:
           type: string
         values:
           type: string
+        dependencies:
+          type: array
+          items:
+            type: string
         parts:
           type: array
           items:

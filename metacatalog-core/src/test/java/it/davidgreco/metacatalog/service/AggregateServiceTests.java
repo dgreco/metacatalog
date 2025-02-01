@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.EMPTY_SCHEMA;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
+import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.RelationType;
@@ -53,39 +54,51 @@ class AggregateServiceTests extends CommonServiceTests {
             Optional.empty(),
             EMPTY_SCHEMA);
 
+    traitService.link("AggregateElement", DEPENDS_ON, "AggregateElement");
+
+    var root =
+        new Entity(
+            aggregateType,
+            jsonFactory.readTree(
+                """
+                        {"name": "root"}"""));
+
+    var leaf1 =
+        new Entity(
+            aggregateElementType,
+            jsonFactory.readTree(
+                """
+                        {"name": "leaf1"}"""));
+
+    var leaf2 =
+        new Entity(
+            aggregateElementType,
+            jsonFactory.readTree(
+                """
+                        {"name": "leaf2"}"""));
+
+    var subRoot =
+        new Entity(
+            aggregateType,
+            jsonFactory.readTree(
+                """
+                        {"name": "subRoot"}"""));
+
+    var leaf3 =
+        new Entity(
+            aggregateElementType,
+            jsonFactory.readTree(
+                """
+                        {"name": "leaf3"}"""));
+
     var aggregate =
         new AggregateService.Aggregate(
-            new Entity(
-                aggregateType,
-                jsonFactory.readTree(
-                    """
-                        {"name": "root"}""")),
+            root,
             List.of(
-                new AggregateService.AggregateElement(
-                    new Entity(
-                        aggregateElementType,
-                        jsonFactory.readTree(
-                            """
-                        {"name": "leaf1"}"""))),
-                new AggregateService.AggregateElement(
-                    new Entity(
-                        aggregateElementType,
-                        jsonFactory.readTree(
-                            """
-                        {"name": "leaf2"}"""))),
+                new AggregateService.AggregateElement(leaf1, List.of()),
+                new AggregateService.AggregateElement(leaf2, List.of(leaf1)),
                 new AggregateService.Aggregate(
-                    new Entity(
-                        aggregateType,
-                        jsonFactory.readTree(
-                            """
-                                          {"name": "subRoot"}""")),
-                    List.of(
-                        new AggregateService.AggregateElement(
-                            new Entity(
-                                aggregateElementType,
-                                jsonFactory.readTree(
-                                    """
-                                              {"name": "leaf3"}""")))))));
+                    subRoot, List.of(new AggregateService.AggregateElement(leaf3)))));
 
     var result = aggregateService.create(aggregate);
 
@@ -95,7 +108,7 @@ class AggregateServiceTests extends CommonServiceTests {
             .map(entity -> entity.getValues().get("name").asText())
             .collect(Collectors.toSet()));
 
-    var subRoot =
+    var retrievedSubRoot =
         entityService.linked(result.entity().getId(), RelationType.HAS_PART).stream()
             .filter(entity -> entity.getValues().get("name").asText().equals("subRoot"))
             .findFirst()
@@ -103,7 +116,7 @@ class AggregateServiceTests extends CommonServiceTests {
 
     Assertions.assertEquals(
         Set.of("leaf3"),
-        entityService.linked(subRoot.getId(), RelationType.HAS_PART).stream()
+        entityService.linked(retrievedSubRoot.getId(), RelationType.HAS_PART).stream()
             .map(entity -> entity.getValues().get("name").asText())
             .collect(Collectors.toSet()));
 
@@ -112,6 +125,6 @@ class AggregateServiceTests extends CommonServiceTests {
     Assertions.assertEquals(result.toString(), retrievedAggregate.toString());
 
     Assertions.assertThrows(
-        ServiceError.class, () -> aggregateService.read(subRoot.getId(), false));
+        ServiceError.class, () -> aggregateService.read(retrievedSubRoot.getId(), false));
   }
 }
