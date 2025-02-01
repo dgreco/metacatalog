@@ -246,12 +246,30 @@ class MetacatalogApiTests {
 
     Assertions.assertEquals(op1.getId(), linkedToOp2.getId());
 
-    var aggYamlFile = api.getAggregateAsYaml(dp1.getId(), Boolean.TRUE).toPath();
+    var dp2 = api.getEntities("DataProductType", "$ ? (@.name == \"dp2\")").getFirst();
 
-    String contents = Files.readString(aggYamlFile);
+    var op3 = api.getEntities("FileBasedOutputPortType", "$ ? (@.name == \"op3\")").getFirst();
 
-    System.out.println(contents);
+    var op4 = api.getEntities("TableBasedOutputPortType", "$ ? (@.name == \"op4\")").getFirst();
 
-    Assertions.assertTrue(true);
+    var linkedToOp3 = api.linkedEntity(op4.getId(), "DEPENDS_ON").getFirst();
+
+    Assertions.assertEquals(op3.getId(), linkedToOp3.getId());
+
+    {
+      var aggYamlFile = api.getAggregateAsYaml(dp1.getId(), Boolean.TRUE).toPath();
+
+      String contents = Files.readString(aggYamlFile);
+
+      System.out.println(contents);
+    }
+
+    {
+      var aggYamlFile = api.getAggregateAsYaml(dp2.getId(), Boolean.TRUE).toPath();
+
+      String contents = Files.readString(aggYamlFile);
+
+      System.out.println(contents);
+    }
   }
 }

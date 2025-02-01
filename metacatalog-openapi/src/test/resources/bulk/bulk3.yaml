@@ -15,3 +15,22 @@ parts:
     name: "op2"
   dependsOn:
      - "op1"
+
+---
+entityType: "DataProductType"
+values:
+  name: "dp2"
+
+parts:
+
+- ref: "op3"
+  entityType: "FileBasedOutputPortType"
+  values:
+    name: "op3"
+
+- ref: "op4"
+  entityType: "TableBasedOutputPortType"
+  values:
+    name: "op4"
+  dependsOn:
+     - "op3"
