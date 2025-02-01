@@ -231,12 +231,16 @@ public class EntityService implements CommonService<Entity, String> {
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public List<Entity> list(String queryPath) throws ServiceError {
+  public List<Entity> list(String typeName, String queryPath) throws ServiceError {
     log.info("Listing entities with query path {}", queryPath);
     try {
+      var entityType =
+          entityTypeRepository
+              .findByName(typeName)
+              .orElseThrow(() -> new ServiceError("Entity type " + typeName + NOT_FOUND));
       var qp = queryPath.trim();
-      if (qp.isEmpty()) return entityRepository.findAll();
-      else return entityRepository.findByJsonPath(queryPath);
+      if (qp.isEmpty()) return entityRepository.findByEntityType(entityType);
+      else return entityRepository.findByEntityTypeIdAndJsonPath(entityType.getId(), queryPath);
     } catch (com.jayway.jsonpath.InvalidPathException e) {
       throw new ServiceError(e.getMessage());
     } finally {

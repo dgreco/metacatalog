@@ -192,6 +192,7 @@ class EntityServiceTests extends CommonServiceTests {
 
     var entities1 =
         entityService.list(
+            "TestType",
             """
                            $ ? (@.a == "a" && @.b == 1)
                          """);
@@ -200,6 +201,7 @@ class EntityServiceTests extends CommonServiceTests {
 
     var entities2 =
         entityService.list(
+            "TestType",
             """
                            $ ? (@.a == "b" && @.b > 1)
                          """);

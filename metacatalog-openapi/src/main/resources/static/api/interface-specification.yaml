@@ -461,6 +461,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a list of entities
+      operationId: getEntities
+      parameters:
+        - in: query
+          name: entityTypeName
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+        - in: query
+          name: queryPath
+          required: true
+          schema:
+            type: string
+            description: Query path expression
+      responses:
+        200:
+          description: If successful, return a list of entities
+          content:
+             application/json:
+               schema:
+                 type: array
+                 items:
+                   $ref: '#/components/schemas/Entity'
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity/{id}:
     get:
       tags:
@@ -668,6 +707,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/yaml:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create an aggregate
+      operationId: createAggregateAsYaml
+      requestBody:
+        description: A YAML file containing one or more aggregate YAML documents
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+         204:
+           description: Aggregates created
+         400:
+           description: Invalid input; details of the error are provided
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ValidationError'
+         500:
+           description: System problem, details of the error are provided
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}:
     get:
       tags:

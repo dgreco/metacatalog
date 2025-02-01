@@ -1,5 +1,7 @@
 package it.davidgreco.metacatalog.openapi;
 
+import static org.awaitility.Awaitility.await;
+
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
@@ -8,12 +10,12 @@ import it.davidgreco.metacatalog.Application;
 import it.davidgreco.metacatalog.openapi.client.*;
 import it.davidgreco.metacatalog.openapi.common.FileHttpMessageConverter;
 import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Objects;
+import org.awaitility.Durations;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
@@ -23,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.web.ServerProperties;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -48,6 +51,7 @@ class MetacatalogApiTests {
 
   @Autowired private ServerProperties serverProperties;
   @Autowired private MappingService mappingService;
+  @Autowired private ApplicationContext applicationContext;
 
   private MetaCatalogManagerApi getMetaCatalogManagerApi() {
     var restTemplate = new RestTemplate();
@@ -224,66 +228,25 @@ class MetacatalogApiTests {
   }
 
   @Test
-  void bulkCreationAndAggregateRead() throws IOException, ServiceError {
+  void bulkCreationAndAggregateRead() throws IOException {
 
     var api = getMetaCatalogManagerApi();
     api.bulkCreation(new File("src/test/resources/bulk/bulk2.yaml"));
+    api.createAggregateAsYaml(new File("src/test/resources/bulk/bulk3.yaml"));
 
-    var dp =
-        api.createEntity(
-            new Entity()
-                .entityType("DataProductType")
-                .values(
-                    """
-                    {
-                      "name": "dp1"
-                    }
-                    """));
+    await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
 
-    var op1 =
-        api.createEntity(
-            new Entity()
-                .entityType("FileBasedOutputPortType")
-                .values(
-                    """
-                    {
-                      "name": "op1"
-                    }
-                    """));
+    var dp1 = api.getEntities("DataProductType", "$ ? (@.name == \"dp1\")").getFirst();
 
-    var op2 =
-        api.createEntity(
-            new Entity()
-                .entityType("TableBasedOutputPortType")
-                .values(
-                    """
-                    {
-                      "name": "op2"
-                    }
-                    """));
+    var op1 = api.getEntities("FileBasedOutputPortType", "$ ? (@.name == \"op1\")").getFirst();
 
-    api.linkEntity(
-        new LinkEntityRequest()
-            .sourceEntityId(dp)
-            .targetEntityId(op1)
-            .relationshipTypeName("HAS_PART"));
+    var op2 = api.getEntities("TableBasedOutputPortType", "$ ? (@.name == \"op2\")").getFirst();
 
-    api.linkEntity(
-        new LinkEntityRequest()
-            .sourceEntityId(dp)
-            .targetEntityId(op2)
-            .relationshipTypeName("HAS_PART"));
+    var linkedToOp2 = api.linkedEntity(op2.getId(), "DEPENDS_ON").getFirst();
 
-    api.linkEntity(
-        new LinkEntityRequest()
-            .sourceEntityId(op1)
-            .targetEntityId(op2)
-            .relationshipTypeName("IS_REQUIRED_BY"));
+    Assertions.assertEquals(op1.getId(), linkedToOp2.getId());
 
-    mappingService.createMappedEntities(op1);
-    mappingService.createMappedEntities(op2);
-
-    var aggYamlFile = api.getAggregateAsYaml(dp, Boolean.TRUE).toPath();
+    var aggYamlFile = api.getAggregateAsYaml(dp1.getId(), Boolean.TRUE).toPath();
 
     String contents = Files.readString(aggYamlFile);
 

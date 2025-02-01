@@ -561,6 +561,25 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity getEntities(String entityTypeName, String queryPath) throws Exception {
+    try {
+      List<it.davidgreco.metacatalog.entity.Entity> entities =
+          entityService.list(entityTypeName, queryPath);
+      return ResponseEntity.status(200)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(entities.stream().map(entityToDtoEntity).toList());
+    } catch (ServiceError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
   public ResponseEntity getAggregateAsYaml(String aggregateId, Boolean retrieveMappedInstances) {
     try {
       var aggregate = aggregateService.read(aggregateId, retrieveMappedInstances);
@@ -574,6 +593,26 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_OCTET_STREAM)
           .body(resource);
     } catch (ServiceError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity createAggregateAsYaml(Resource body) throws Exception {
+    try {
+      bulkLoaderService.bulkAggregateCreation(body.getInputStream());
+      return ResponseEntity.status(204).build();
+    } catch (SchemaValidationError e) {
+      return ResponseEntity.status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
       return ResponseEntity.status(400)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));

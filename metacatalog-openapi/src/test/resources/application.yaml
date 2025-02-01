@@ -20,7 +20,7 @@ server:
   port: 54321
 application:
   config:
-    automaticEntitiesMapping: false
+    automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1d
     entityPathResolutionMaxAttempts: 3
