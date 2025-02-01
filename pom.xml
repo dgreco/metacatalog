@@ -521,6 +521,7 @@
 
     <modules>
         <module>metacatalog-core</module>
+        <module>metacatalog-functions</module>
         <module>metacatalog-openapi</module>
         <module>metacatalog-application</module>
     </modules>

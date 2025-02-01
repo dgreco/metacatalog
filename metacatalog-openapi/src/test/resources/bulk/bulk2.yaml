@@ -63,7 +63,7 @@ EntityTypes:
         path:
           type: string
     traits:
-      - AggregateElement
+      - ProvisionableResource
 
   - name: AthenaTableType
     schema:
@@ -76,7 +76,7 @@ EntityTypes:
         dataPath:
           type: string
     traits:
-      - AggregateElement
+      - ProvisionableResource
 
 ---
 Mappings:
