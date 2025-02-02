@@ -3,10 +3,9 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import static org.awaitility.Awaitility.await;
 
 import it.davidgreco.metacatalog.functions.CommonServiceTests;
+import it.davidgreco.metacatalog.functions.common.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
-import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
-import java.util.function.Consumer;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,9 +14,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 class ProvisioningProcedureTests extends CommonServiceTests {
 
   @Test
-  void testProvisioningProcedure() throws ServiceError, ClassNotFoundException {
-    var entityService = applicationContext.getBean(EntityService.class);
+  void testProvisioningProcedure() throws ServiceError {
     var bulkLoaderService = applicationContext.getBean(BulkLoaderService.class);
+    var procedureExecutor = applicationContext.getBean(ProcedureExecutor.class);
 
     var bulkFileStream1 =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("bulk/bulk1.yaml");
@@ -33,13 +32,6 @@ class ProvisioningProcedureTests extends CommonServiceTests {
 
     var functionName = "ProvisioningProcedure";
 
-    var clazz =
-        Thread.currentThread()
-            .getContextClassLoader()
-            .loadClass("it.davidgreco.metacatalog.functions.provisioning." + functionName);
-
-    var provisioningProcedure = (Consumer) applicationContext.getBean(clazz);
-
-    provisioningProcedure.accept(entityService.read(ids.getFirst()));
+    procedureExecutor.executeProcedure(functionName, ids.get(0));
   }
 }

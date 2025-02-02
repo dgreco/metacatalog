@@ -100,7 +100,7 @@ class AggregateServiceTests extends CommonServiceTests {
                 new AggregateService.Aggregate(
                     subRoot, List.of(new AggregateService.AggregateElement(leaf3)))));
 
-    var result = aggregateService.create(aggregate);
+    var result = (AggregateService.Aggregate) aggregateService.create(aggregate);
 
     Assertions.assertEquals(
         Set.of("leaf1", "leaf2", "subRoot"),

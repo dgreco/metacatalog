@@ -59,55 +59,57 @@ public class AggregateService {
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
-  public Aggregate create(Aggregate aggregate) throws ServiceError {
-    log.info("Creating aggregate: {}", aggregate);
-    try {
-      var rootAggregate =
-          entityService.create(
-              aggregate.entity().getEntityType().getName(),
-              aggregate.entity().getValues().toPrettyString());
-      aggregate.entity().setId(rootAggregate.getId());
-      for (var element : aggregate.elements()) {
-        if (element instanceof AggregateElement(Entity entity, List<Entity> dependencies)) {
-          var aggregateElement =
-              entityService.create(
-                  entity.getEntityType().getName(), entity.getValues().toPrettyString());
-          entity.setId(aggregateElement.getId());
-          for (var dependency : dependencies) {
-            entityService.link(aggregateElement.getId(), DEPENDS_ON, dependency.getId());
-          }
-          entityService.link(rootAggregate.getId(), HAS_PART, aggregateElement.getId());
-        } else if (element
-            instanceof
-            Aggregate(Entity entity, List<Entity> dependencies, List<AggregatePart> elements)) {
-          var childAggregate =
-              entityService.create(
-                  entity.getEntityType().getName(), entity.getValues().toPrettyString());
-          entity.setId(childAggregate.getId());
-          entityService.link(rootAggregate.getId(), HAS_PART, childAggregate.getId());
-          for (var dependency : dependencies) {
-            entityService.link(childAggregate.getId(), DEPENDS_ON, dependency.getId());
-          }
-          for (var childElement : elements) {
-            if (childElement
-                instanceof
-                AggregateElement(Entity anotherEntity, List<Entity> anotherDependencies)) {
-              var childAggregateElement =
-                  entityService.create(
-                      anotherEntity.getEntityType().getName(),
-                      anotherEntity.getValues().toPrettyString());
-              anotherEntity.setId(childAggregateElement.getId());
-              for (var dependency : anotherDependencies) {
-                entityService.link(childAggregateElement.getId(), DEPENDS_ON, dependency.getId());
-              }
-              entityService.link(childAggregate.getId(), HAS_PART, childAggregateElement.getId());
+  public AggregatePart create(AggregatePart aggregate) throws ServiceError {
+    class CreateAggregate {
+      AggregatePart create(AggregatePart aggregate) throws ServiceError {
+        switch (aggregate) {
+          case AggregateElement(Entity entity, List<Entity> dependencies) -> {
+            var aggregateElement =
+                entityService.create(
+                    entity.getEntityType().getName(), entity.getValues().toPrettyString());
+            entity.setId(aggregateElement.getId());
+            for (var dependency : dependencies) {
+              entityService.link(aggregateElement.getId(), DEPENDS_ON, dependency.getId());
             }
           }
+          case Aggregate(
+                  Entity entity,
+                  List<Entity> dependencies,
+                  List<AggregatePart> elements) -> {
+            var aggregateElement =
+                entityService.create(
+                    entity.getEntityType().getName(), entity.getValues().toPrettyString());
+            entity.setId(aggregateElement.getId());
+            for (var dependency : dependencies) {
+              entityService.link(aggregateElement.getId(), DEPENDS_ON, dependency.getId());
+            }
+            for (var childElement : elements) {
+              var childAggregate = create(childElement);
+              switch (childAggregate) {
+                case AggregateElement childAggregateAggregateElement ->
+                    entityService.link(
+                        aggregateElement.getId(),
+                        HAS_PART,
+                        childAggregateAggregateElement.entity().getId());
+                case Aggregate childAggregateAggregagte ->
+                    entityService.link(
+                        aggregateElement.getId(),
+                        HAS_PART,
+                        childAggregateAggregagte.entity().getId());
+                default -> throw new ServiceError("Invalid aggregate part type");
+              }
+            }
+          }
+          default -> throw new ServiceError("Invalid aggregate part type");
         }
+        return aggregate;
       }
-      return aggregate;
+    }
+    log.info("Creating aggregate: " + aggregate);
+    try {
+      return new CreateAggregate().create(aggregate);
     } finally {
-      log.info("Created aggregate: {}", aggregate);
+      log.info("Aggregate created: " + aggregate);
     }
   }
 
