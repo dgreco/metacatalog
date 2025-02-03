@@ -524,7 +524,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         .isEmpty();
   }
 
-  Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString)
+  public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString)
       throws ServiceError {
 
     var pathSegments = pathString.split("/");
