@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.entity;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -10,6 +11,7 @@ import org.hibernate.annotations.Type;
 
 @Getter
 @Setter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
@@ -20,6 +22,7 @@ public class Entity {
   @GeneratedValue(strategy = GenerationType.UUID)
   @Column(name = "id", nullable = false)
   @ToString.Include
+  @EqualsAndHashCode.Include
   private String id;
 
   @Type(JsonBinaryType.class)

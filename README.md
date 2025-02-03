@@ -5,8 +5,6 @@
 
 `mvn versions:display-plugin-updates`
 
-`mvn versions:display-plugin-updates`
-
 `mvn spotless:apply`
 
 `mvn dependency:check`

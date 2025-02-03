@@ -1,11 +1,10 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
 import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
-import static it.davidgreco.metacatalog.service.CommonTypeService.genericTraitService;
+import static it.davidgreco.metacatalog.service.CommonService.hasTrait;
 
 import io.vavr.Tuple2;
 import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.functions.common.AbstractEntityProcedure;
 import it.davidgreco.metacatalog.functions.common.ProcedureExecutor;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
@@ -16,9 +15,11 @@ import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jgrapht.Graph;
+import org.jgrapht.graph.DefaultDirectedGraph;
+import org.jgrapht.graph.DefaultEdge;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -86,22 +87,26 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
         .toList();
   }
 
-  private boolean hasTrait(Entity entity, String traitName) {
-    return entity.getEntityType().getTraits().stream()
-        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream())
-        .map(Trait::getName)
-        .collect(Collectors.toSet())
-        .contains(traitName);
-  }
-
   @Override
   protected void execute(Entity entity) throws ServiceError {
+    Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
+
     var aggregate = aggregateService.read(entity.getId(), true);
     var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
     physicalResourceSequence.stream()
         .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
         .toList()
-        .forEach(t -> log.error(t.toString()));
+        .forEach(
+            t -> {
+              if (!provisioningGraph.containsVertex(t._1)) provisioningGraph.addVertex(t._1);
+              t._2.forEach(
+                  e -> {
+                    if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
+                    provisioningGraph.addEdge(e, t._1);
+                  });
+            });
+    log.error(provisioningGraph.vertexSet().toString());
+    log.error(provisioningGraph.edgeSet().toString());
   }
 
   @Override

@@ -164,4 +164,12 @@ public interface CommonService<T, K> {
     }
     return entityTypeNamesVisited.contains(targetEntityTypeName);
   }
+
+  static boolean hasTrait(Entity entity, String traitName) {
+    return entity.getEntityType().getTraits().stream()
+        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream())
+        .map(Trait::getName)
+        .collect(Collectors.toSet())
+        .contains(traitName);
+  }
 }
