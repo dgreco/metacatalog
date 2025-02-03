@@ -18,6 +18,7 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jgrapht.Graph;
+import org.jgrapht.alg.cycle.CycleDetector;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.springframework.stereotype.Service;
@@ -107,6 +108,9 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
             });
     log.error(provisioningGraph.vertexSet().toString());
     log.error(provisioningGraph.edgeSet().toString());
+
+    if (new CycleDetector<Entity, DefaultEdge>(provisioningGraph).detectCycles())
+      throw new ServiceError("Cycle detected in provisioning graph");
   }
 
   @Override

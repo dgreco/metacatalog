@@ -18,7 +18,7 @@
 
     <properties>
         <!-- Sonarqube Properties -->
-        <sonar.projectKey>dgreco_metacatalog_a1aac5ad-232a-476b-a015-53dccc79cc9c</sonar.projectKey>
+        <sonar.projectKey>dgreco_metacatalog_c3b4a273-3848-4c86-9b30-1ce0d66b807a</sonar.projectKey>
         <sonar.projectName>metacatalog</sonar.projectName>
         <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
 
