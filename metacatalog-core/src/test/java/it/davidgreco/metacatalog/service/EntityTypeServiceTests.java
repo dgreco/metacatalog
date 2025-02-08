@@ -3,12 +3,14 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
@@ -50,6 +52,7 @@ class EntityTypeServiceTests extends CommonServiceTests {
   void testInheritance() throws ServiceError {
     var entityTypeService = applicationContext.getBean(EntityTypeService.class);
     var traitService = applicationContext.getBean(TraitService.class);
+    var cacheManager = applicationContext.getBean(CaffeineCacheManager.class);
 
     var inheritedSchema =
         """
@@ -141,18 +144,16 @@ class EntityTypeServiceTests extends CommonServiceTests {
     var leafType1 =
         entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
-    var cache =
-        ((org.springframework.cache.concurrent.ConcurrentMapCache)
-                cacheManager.getCache("EntityTypes"))
-            .getNativeCache();
+    Cache<String, Object> cache =
+        (Cache<String, Object>) cacheManager.getCache("EntityTypes").getNativeCache();
 
-    Assertions.assertTrue(cache.keySet().contains(baseType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(baseType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(middleType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(middleType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(leafType.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(leafType.getName()));
 
-    Assertions.assertTrue(cache.keySet().contains(leafType1.getName()));
+    Assertions.assertTrue(cache.asMap().keySet().contains(leafType1.getName()));
 
     Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
@@ -174,12 +175,12 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
     entityTypeService.delete("BaseType");
 
-    Assertions.assertFalse(cache.keySet().contains(baseType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(baseType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(middleType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(middleType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(leafType.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(leafType.getName()));
 
-    Assertions.assertFalse(cache.keySet().contains(leafType1.getName()));
+    Assertions.assertFalse(cache.asMap().keySet().contains(leafType1.getName()));
   }
 }

@@ -5,6 +5,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static org.junit.Assert.assertThrows;
 
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
@@ -20,6 +21,7 @@ class EntityServiceTests extends CommonServiceTests {
 
   @Test
   void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
+    var entityRepository = applicationContext.getBean(EntityRepository.class);
     var entityTypeService = applicationContext.getBean(EntityTypeService.class);
     var entityService = applicationContext.getBean(EntityService.class);
 

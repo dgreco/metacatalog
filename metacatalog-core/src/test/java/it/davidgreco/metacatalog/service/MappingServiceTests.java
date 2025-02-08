@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.IntNode;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -285,6 +286,7 @@ class MappingServiceTests extends CommonServiceTests {
 
   @Test
   void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+    var entityRepository = applicationContext.getBean(EntityRepository.class);
     var traitService = applicationContext.getBean(TraitService.class);
     var entityTypeService = applicationContext.getBean(EntityTypeService.class);
     var entityService = applicationContext.getBean(EntityService.class);
@@ -399,6 +401,7 @@ class MappingServiceTests extends CommonServiceTests {
 
   @Test
   void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+    var entityRepository = applicationContext.getBean(EntityRepository.class);
     var traitService = applicationContext.getBean(TraitService.class);
     var entityTypeService = applicationContext.getBean(EntityTypeService.class);
     var entityService = applicationContext.getBean(EntityService.class);

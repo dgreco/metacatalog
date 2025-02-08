@@ -186,7 +186,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
       throws ServiceError {
     log.info("Linking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     try {
-      if (checkLoops(sourceTraitName, new HashSet<>(), targetTraitName, relType)) {
+      if (checkLoops(targetTraitName, new HashSet<>(), sourceTraitName, relType)) {
         throw new ServiceError("Loops are not allowed");
       }
       var sourceTrait =
@@ -307,26 +307,26 @@ public class TraitService implements CommonTypeService<Trait, String> {
   }
 
   private boolean checkLoops(
-      String sourceTraitName,
-      Set<String> traitsNamesVisited,
       String targetTraitName,
+      Set<String> traitsNamesVisited,
+      String sourceTraitName,
       RelationType relType)
       throws ServiceError {
     var sourceTrait =
         traitRepository
-            .findByName(sourceTraitName)
-            .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
+            .findByName(targetTraitName)
+            .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
     var relationships =
         traitRelationshipRepository.findBySourceAndRelationType(sourceTrait, relType);
 
     var targetTraits = relationships.stream().map(TraitRelationship::getTarget).toList();
     for (var targetTrait : targetTraits) {
-      if (traitsNamesVisited.contains(targetTraitName)) return true;
+      if (traitsNamesVisited.contains(sourceTraitName)) return true;
       else {
         traitsNamesVisited.add(targetTrait.getName());
-        return checkLoops(targetTrait.getName(), traitsNamesVisited, targetTraitName, relType);
+        return checkLoops(targetTrait.getName(), traitsNamesVisited, sourceTraitName, relType);
       }
     }
-    return traitsNamesVisited.contains(targetTraitName);
+    return traitsNamesVisited.contains(sourceTraitName);
   }
 }

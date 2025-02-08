@@ -9,14 +9,15 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class TraitServiceTests extends CommonServiceTests {
 
   @Test
   void testCreation() throws ServiceError {
-    final TraitService traitService =
-        new TraitService(traitRepository, traitRelationshipRepository);
+
+    final TraitService traitService = applicationContext.getBean(TraitService.class);
 
     traitService.create("trait1", Optional.empty(), Optional.empty());
     traitService.create("trait2", Optional.empty(), Optional.empty());
@@ -24,24 +25,26 @@ class TraitServiceTests extends CommonServiceTests {
 
     traitService.link("trait1", DEPENDS_ON, "trait2");
 
-    traitService.link("trait1", DEPENDS_ON, "trait3");
+    traitService.link("trait2", DEPENDS_ON, "trait3");
 
     Assertions.assertThrows(
-        ServiceError.class, () -> traitService.link("trait1", DEPENDS_ON, "trait3"));
+        ServiceError.class, () -> traitService.link("trait3", DEPENDS_ON, "trait1"));
 
     var list = traitService.linked("trait1", DEPENDS_ON);
 
-    Assertions.assertEquals(2, list.size());
+    Assertions.assertEquals(1, list.size());
 
     Assertions.assertEquals(
-        Set.of("trait2", "trait3"), list.stream().map(Trait::getName).collect(Collectors.toSet()));
+        Set.of("trait2"), list.stream().map(Trait::getName).collect(Collectors.toSet()));
 
-    Assertions.assertThrows(ServiceError.class, () -> traitService.delete("trait1"));
+    Assertions.assertThrows(
+        DataIntegrityViolationException.class, () -> traitService.delete("trait1"));
 
     traitService.unlink("trait1", DEPENDS_ON, "trait2");
-    traitService.unlink("trait1", DEPENDS_ON, "trait3");
+    traitService.unlink("trait2", DEPENDS_ON, "trait3");
 
     traitService.delete("trait1");
     traitService.delete("trait2");
+    traitService.delete("trait3");
   }
 }

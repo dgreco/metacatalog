@@ -1,16 +1,21 @@
 package it.davidgreco.metacatalog;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
+import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** Configuration class for the core module. */
 @Configuration
+@EnableCaching
 @Getter
 @RequiredArgsConstructor
 public class CoreConfig {
@@ -36,6 +41,18 @@ public class CoreConfig {
   private final PlatformTransactionManager transactionManager;
 
   private final AdvisoryLockManager advisoryLockManager;
+
+  @Bean
+  public Caffeine<Object, Object> caffeineConfig() {
+    return Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.MINUTES);
+  }
+
+  @Bean
+  public CaffeineCacheManager cacheManager(Caffeine<Object, Object> caffeine) {
+    CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
+    caffeineCacheManager.setCaffeine(caffeine);
+    return caffeineCacheManager;
+  }
 
   @Bean
   public TraitService traitService(

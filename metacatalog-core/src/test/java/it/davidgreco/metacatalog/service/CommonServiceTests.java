@@ -4,17 +4,14 @@ import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
-import it.davidgreco.metacatalog.repository.*;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @EnableCaching
@@ -53,26 +50,6 @@ class CommonServiceTests {
   }
 
   @Autowired ApplicationContext applicationContext;
-
-  @Autowired EntityTypeRepository entityTypeRepository;
-
-  @Autowired EntityRepository entityRepository;
-
-  @Autowired TraitRepository traitRepository;
-
-  @Autowired TraitRelationshipRepository traitRelationshipRepository;
-
-  @Autowired EntityRelationshipRepository entityRelationshipRepository;
-
-  @Autowired MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
-
-  @Autowired MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
-
-  @Autowired EntityLifeCycleEventRepository entityLifeCycleEventRepository;
-
-  @Autowired PlatformTransactionManager transactionManager;
-
-  @Autowired CacheManager cacheManager;
 
   @Test
   void dummyTest() {
