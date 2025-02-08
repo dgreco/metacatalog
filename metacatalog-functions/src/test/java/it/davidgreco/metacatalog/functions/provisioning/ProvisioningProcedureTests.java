@@ -3,7 +3,7 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import static org.awaitility.Awaitility.await;
 
 import it.davidgreco.metacatalog.functions.CommonServiceTests;
-import it.davidgreco.metacatalog.functions.common.ProcedureExecutor;
+import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import org.awaitility.Durations;

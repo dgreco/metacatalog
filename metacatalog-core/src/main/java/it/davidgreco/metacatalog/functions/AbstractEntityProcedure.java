@@ -1,4 +1,4 @@
-package it.davidgreco.metacatalog.functions.common;
+package it.davidgreco.metacatalog.functions;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.ServiceError;

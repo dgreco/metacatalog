@@ -5,8 +5,8 @@ import static it.davidgreco.metacatalog.service.CommonService.hasTrait;
 
 import io.vavr.Tuple2;
 import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.functions.common.AbstractEntityProcedure;
-import it.davidgreco.metacatalog.functions.common.ProcedureExecutor;
+import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
+import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.MappingService;
