@@ -11,15 +11,20 @@ import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
-class EntityTypeServiceTests extends CommonServiceTests {
+class EntityTypeServiceTests extends CommonServiceTestingSupport {
+
+  public EntityTypeServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testCreateDeleteExists() throws ServiceError {
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
 
     var baseSchema =
         jsonSchemaFactory
@@ -50,9 +55,9 @@ class EntityTypeServiceTests extends CommonServiceTests {
 
   @Test
   void testInheritance() throws ServiceError {
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var traitService = applicationContext.getBean(TraitService.class);
-    var cacheManager = applicationContext.getBean(CaffeineCacheManager.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var cacheManager = getApplicationContext().getBean(CaffeineCacheManager.class);
 
     var inheritedSchema =
         """

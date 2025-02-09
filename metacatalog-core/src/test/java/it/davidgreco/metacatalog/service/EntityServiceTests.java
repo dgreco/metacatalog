@@ -13,17 +13,22 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
-class EntityServiceTests extends CommonServiceTests {
+class EntityServiceTests extends CommonServiceTestingSupport {
+
+  public EntityServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
-    var entityRepository = applicationContext.getBean(EntityRepository.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
 
     var schema =
         jsonSchemaFactory
@@ -89,9 +94,9 @@ class EntityServiceTests extends CommonServiceTests {
 
   @Test
   void testLinkUnlinkLinkedEntities() throws ServiceError {
-    var traitService = applicationContext.getBean(TraitService.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
 
     var emptySchema =
         """
@@ -150,8 +155,8 @@ class EntityServiceTests extends CommonServiceTests {
 
   @Test
   void testList() throws ServiceError {
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
 
     entityTypeService.create(
         "TestType",

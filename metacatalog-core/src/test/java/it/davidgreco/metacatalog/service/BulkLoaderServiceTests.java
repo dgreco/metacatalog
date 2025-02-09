@@ -5,14 +5,19 @@ import static org.awaitility.Awaitility.await;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 
 @SpringBootTest
-class BulkLoaderServiceTests extends CommonServiceTests {
+class BulkLoaderServiceTests extends CommonServiceTestingSupport {
+
+  public BulkLoaderServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testBulkLoad() throws ServiceError {
-    var bulkLoaderService = applicationContext.getBean(BulkLoaderService.class);
-    var aggregateService = applicationContext.getBean(AggregateService.class);
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
     var bulkFileStream1 =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("bulk/bulk1.yaml");

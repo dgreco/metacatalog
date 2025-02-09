@@ -109,7 +109,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     log.error(provisioningGraph.vertexSet().toString());
     log.error(provisioningGraph.edgeSet().toString());
 
-    if (new CycleDetector<Entity, DefaultEdge>(provisioningGraph).detectCycles())
+    if (new CycleDetector<>(provisioningGraph).detectCycles())
       throw new ServiceError("Cycle detected in provisioning graph");
   }
 

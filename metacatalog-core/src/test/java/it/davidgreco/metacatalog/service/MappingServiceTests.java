@@ -18,15 +18,20 @@ import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
-class MappingServiceTests extends CommonServiceTests {
+class MappingServiceTests extends CommonServiceTestingSupport {
+
+  public MappingServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testCreateDelete() throws ServiceError {
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var mappingService = applicationContext.getBean(MappingService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
 
     entityTypeService.create(
         "SimpleSourceType",
@@ -58,8 +63,8 @@ class MappingServiceTests extends CommonServiceTests {
 
   @Test
   void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var mappingService = applicationContext.getBean(MappingService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
 
     var typeA =
         entityTypeService.create(
@@ -122,10 +127,10 @@ class MappingServiceTests extends CommonServiceTests {
   @Test
   void testGraphPath() throws ServiceError {
 
-    var traitService = applicationContext.getBean(TraitService.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
-    var mappingService = applicationContext.getBean(MappingService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
 
     traitService.create("Trait_NA", Optional.empty(), Optional.empty());
 
@@ -286,12 +291,12 @@ class MappingServiceTests extends CommonServiceTests {
 
   @Test
   void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
-    var entityRepository = applicationContext.getBean(EntityRepository.class);
-    var traitService = applicationContext.getBean(TraitService.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
-    var mappingService = applicationContext.getBean(MappingService.class);
-    var mappingUpdaterService = applicationContext.getBean(MappingUpdaterService.class);
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappingUpdaterService = getApplicationContext().getBean(MappingUpdaterService.class);
     mappingUpdaterService.setAutomaticEntitiesMapping(true);
 
     traitService.create("DependingRelSourceTrait1", Optional.empty(), Optional.empty());
@@ -401,11 +406,11 @@ class MappingServiceTests extends CommonServiceTests {
 
   @Test
   void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
-    var entityRepository = applicationContext.getBean(EntityRepository.class);
-    var traitService = applicationContext.getBean(TraitService.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
-    var mappingService = applicationContext.getBean(MappingService.class);
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
 
     traitService.create("DependingRelSourceTrait", Optional.empty(), Optional.empty());
 

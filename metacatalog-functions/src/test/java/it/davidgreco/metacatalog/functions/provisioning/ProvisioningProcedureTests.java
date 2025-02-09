@@ -2,21 +2,26 @@ package it.davidgreco.metacatalog.functions.provisioning;
 
 import static org.awaitility.Awaitility.await;
 
-import it.davidgreco.metacatalog.functions.CommonServiceTests;
+import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 
 @SpringBootTest
-class ProvisioningProcedureTests extends CommonServiceTests {
+class ProvisioningProcedureTests extends CommonServiceTestingSupport {
+
+  public ProvisioningProcedureTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testProvisioningProcedure() throws ServiceError {
-    var bulkLoaderService = applicationContext.getBean(BulkLoaderService.class);
-    var procedureExecutor = applicationContext.getBean(ProcedureExecutor.class);
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);
 
     var bulkFileStream1 =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("bulk/bulk1.yaml");

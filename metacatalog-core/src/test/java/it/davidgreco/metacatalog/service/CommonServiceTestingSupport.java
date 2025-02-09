@@ -1,24 +1,22 @@
-package it.davidgreco.metacatalog.functions;
+package it.davidgreco.metacatalog.service;
 
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
-import it.davidgreco.metacatalog.repository.*;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @EnableCaching
-public class CommonServiceTests {
+@Getter
+@RequiredArgsConstructor
+class CommonServiceTestingSupport {
 
   static final int POSTGRESQL_PORT = 5433;
 
@@ -52,31 +50,5 @@ public class CommonServiceTests {
     postgres.stop();
   }
 
-  @Autowired public ApplicationContext applicationContext;
-
-  @Autowired public EntityTypeRepository entityTypeRepository;
-
-  @Autowired public EntityRepository entityRepository;
-
-  @Autowired public TraitRepository traitRepository;
-
-  @Autowired public TraitRelationshipRepository traitRelationshipRepository;
-
-  @Autowired public EntityRelationshipRepository entityRelationshipRepository;
-
-  @Autowired public MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
-
-  @Autowired public MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
-
-  @Autowired public EntityLifeCycleEventRepository entityLifeCycleEventRepository;
-
-  @Autowired public PlatformTransactionManager transactionManager;
-
-  @Autowired public CacheManager cacheManager;
-
-  @Test
-  void dummyTest() {
-    /* Just a dummy test */
-    Assertions.assertTrue(true);
-  }
+  private final ApplicationContext applicationContext;
 }

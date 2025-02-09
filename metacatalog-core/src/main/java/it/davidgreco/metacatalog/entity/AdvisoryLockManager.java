@@ -1,18 +1,14 @@
 package it.davidgreco.metacatalog.entity;
 
 import jakarta.persistence.EntityManager;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class AdvisoryLockManager {
 
   private final EntityManager entityManager;
-
-  @Autowired
-  public AdvisoryLockManager(EntityManager entityManager) {
-    this.entityManager = entityManager;
-  }
 
   public boolean acquireLock(int lockIdentifier) {
     String pgLockQuery = String.format("SELECT pg_try_advisory_lock(%s)", lockIdentifier);

@@ -14,16 +14,21 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 
 @SpringBootTest
-class AggregateServiceTests extends CommonServiceTests {
+class AggregateServiceTests extends CommonServiceTestingSupport {
+
+  public AggregateServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testCreateAndRead() throws IOException, ServiceError {
-    var traitService = applicationContext.getBean(TraitService.class);
-    var entityService = applicationContext.getBean(EntityService.class);
-    var entityTypeService = applicationContext.getBean(EntityTypeService.class);
-    var aggregateService = applicationContext.getBean(AggregateService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
     traitService.create(
         "NamedTrait",

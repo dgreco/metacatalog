@@ -1,21 +1,22 @@
-package it.davidgreco.metacatalog.service;
+package it.davidgreco.metacatalog.functions;
 
 import com.github.dockerjava.api.model.ExposedPort;
 import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.PortBinding;
 import com.github.dockerjava.api.model.Ports;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @EnableCaching
-class CommonServiceTests {
+@Getter
+@RequiredArgsConstructor
+public class CommonServiceTestingSupport {
 
   static final int POSTGRESQL_PORT = 5433;
 
@@ -49,11 +50,5 @@ class CommonServiceTests {
     postgres.stop();
   }
 
-  @Autowired ApplicationContext applicationContext;
-
-  @Test
-  void dummyTest() {
-    /* Just a dummy test */
-    Assertions.assertTrue(true);
-  }
+  private final ApplicationContext applicationContext;
 }

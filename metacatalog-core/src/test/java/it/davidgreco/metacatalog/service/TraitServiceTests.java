@@ -9,15 +9,20 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
-class TraitServiceTests extends CommonServiceTests {
+class TraitServiceTests extends CommonServiceTestingSupport {
+
+  public TraitServiceTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
 
   @Test
   void testCreation() throws ServiceError {
 
-    final TraitService traitService = applicationContext.getBean(TraitService.class);
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
     traitService.create("trait1", Optional.empty(), Optional.empty());
     traitService.create("trait2", Optional.empty(), Optional.empty());
