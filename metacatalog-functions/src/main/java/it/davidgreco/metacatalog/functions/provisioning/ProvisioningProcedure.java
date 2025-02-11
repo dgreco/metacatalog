@@ -12,9 +12,7 @@ import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jgrapht.Graph;
@@ -91,7 +89,6 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
   @Override
   protected void execute(Entity entity) throws ServiceError {
     Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
-
     var aggregate = aggregateService.read(entity.getId(), true);
     var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
     physicalResourceSequence.stream()
@@ -103,14 +100,27 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
               t._2.forEach(
                   e -> {
                     if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
-                    provisioningGraph.addEdge(e, t._1);
+                    provisioningGraph.addEdge(t._1, e);
                   });
             });
-    log.error(provisioningGraph.vertexSet().toString());
-    log.error(provisioningGraph.edgeSet().toString());
 
     if (new CycleDetector<>(provisioningGraph).detectCycles())
       throw new ServiceError("Cycle detected in provisioning graph");
+
+    var tasks = new HashMap<String, ProvisioningTask>();
+    provisioningGraph.vertexSet().forEach(e -> tasks.put(e.getId(), new ProvisioningTask(e)));
+    tasks
+        .values()
+        .forEach(
+            task -> {
+              var dependsOnTasks =
+                  provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
+                      .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
+                      .toList();
+              dependsOnTasks.forEach(task::dependsOn);
+            });
+    tasks.values().forEach(ProvisioningTask::schedule);
+    tasks.values().parallelStream().forEach(ProvisioningTask::join);
   }
 
   @Override
