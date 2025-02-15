@@ -2,15 +2,18 @@ package it.davidgreco.metacatalog.functions.provisioning;
 
 import static org.awaitility.Awaitility.await;
 
+import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.ServiceError;
+import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
+@Slf4j
 @SpringBootTest
 class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
@@ -37,6 +40,19 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     var functionName = "ProvisioningProcedure";
 
-    procedureExecutor.executeProcedure(functionName, ids.get(0));
+    ProvisioningTaskFactory factory =
+        (Entity entity) ->
+            new ProvisioningTask(entity) {
+              @Override
+              public Void apply() {
+                log.error("Provisioning task for entity: " + entity);
+                return null;
+              }
+            };
+
+    ProvisioningTaskScheduler.registerProvisioningTaskFactory("S3FolderType", factory);
+    ProvisioningTaskScheduler.registerProvisioningTaskFactory("AthenaTableType", factory);
+
+    procedureExecutor.executeProcedure(functionName, ids.getFirst());
   }
 }

@@ -17,11 +17,12 @@ import org.springframework.scheduling.annotation.Async;
 @Slf4j
 @Getter
 @RequiredArgsConstructor
-public class ProvisioningTask implements CheckedFunction0<Void> {
+public abstract class ProvisioningTask implements CheckedFunction0<Void> {
 
-  private AtomicReference<CompletableFuture<Try<Void>>> task = new AtomicReference<>();
+  private final AtomicReference<CompletableFuture<Try<Void>>> runningTaskFuture =
+      new AtomicReference<>();
 
-  private List<ProvisioningTask> dependsOnTask = new ArrayList<>();
+  private final List<ProvisioningTask> dependsOnTask = new ArrayList<>();
 
   private final transient Entity entity;
 
@@ -29,8 +30,8 @@ public class ProvisioningTask implements CheckedFunction0<Void> {
   public void schedule() {
     dependsOnTask.forEach(ProvisioningTask::schedule);
     dependsOnTask.forEach(ProvisioningTask::join);
-    if (task.get() == null) {
-      task.set(CompletableFuture.completedFuture(Try.of(this::apply)));
+    if (runningTaskFuture.get() == null) {
+      runningTaskFuture.set(CompletableFuture.completedFuture(Try.of(this::apply)));
     }
   }
 
@@ -38,12 +39,12 @@ public class ProvisioningTask implements CheckedFunction0<Void> {
     dependsOnTask.add(task);
   }
 
-  @Override
-  public Void apply() throws InterruptedException {
-    log.error("Provisioning task for entity: " + entity);
-    Thread.sleep(1000);
-    return null;
+  public void dependsOn(List<ProvisioningTask> tasks) {
+    dependsOnTask.addAll(tasks);
   }
+
+  @Override
+  public abstract Void apply();
 
   public void join() {
     RetryTemplate createRetryTemplate =
@@ -55,8 +56,9 @@ public class ProvisioningTask implements CheckedFunction0<Void> {
 
     createRetryTemplate.execute(
         _ -> {
-          if (task.get() == null) throw new ServiceRuntimeError("Task not yet started");
-          else return task.get().join();
+          if (runningTaskFuture.get() == null)
+            throw new ServiceRuntimeError("Task not yet started");
+          else return runningTaskFuture.get().join();
         });
   }
 }

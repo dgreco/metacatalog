@@ -12,7 +12,11 @@ import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jgrapht.Graph;
@@ -26,6 +30,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProvisioningProcedure extends AbstractEntityProcedure {
 
+  private static final String PROVISIONING_FAILED = "Provisioning failed: ";
   private static final String PROVISIONABLE_RESOURCE = "ProvisionableResource";
 
   static {
@@ -88,39 +93,73 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   @Override
   protected void execute(Entity entity) throws ServiceError {
-    Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
-    var aggregate = aggregateService.read(entity.getId(), true);
-    var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
-    physicalResourceSequence.stream()
-        .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
-        .toList()
-        .forEach(
-            t -> {
-              if (!provisioningGraph.containsVertex(t._1)) provisioningGraph.addVertex(t._1);
-              t._2.forEach(
-                  e -> {
-                    if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
-                    provisioningGraph.addEdge(t._1, e);
-                  });
-            });
+    Optional<ProvisioningTaskScheduler.Schedule> schedule = Optional.empty();
+    try {
+      Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
+      var aggregate = aggregateService.read(entity.getId(), true);
+      var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
+      physicalResourceSequence.stream()
+          .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
+          .toList()
+          .forEach(
+              t -> {
+                if (!provisioningGraph.containsVertex(t._1)) provisioningGraph.addVertex(t._1);
+                t._2.forEach(
+                    e -> {
+                      if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
+                      provisioningGraph.addEdge(t._1, e);
+                    });
+              });
 
-    if (new CycleDetector<>(provisioningGraph).detectCycles())
-      throw new ServiceError("Cycle detected in provisioning graph");
+      if (new CycleDetector<>(provisioningGraph).detectCycles())
+        throw new ServiceError("Cycle detected in provisioning graph");
 
-    var tasks = new HashMap<String, ProvisioningTask>();
-    provisioningGraph.vertexSet().forEach(e -> tasks.put(e.getId(), new ProvisioningTask(e)));
-    tasks
-        .values()
-        .forEach(
-            task -> {
-              var dependsOnTasks =
-                  provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
-                      .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
-                      .toList();
-              dependsOnTasks.forEach(task::dependsOn);
-            });
-    tasks.values().forEach(ProvisioningTask::schedule);
-    tasks.values().parallelStream().forEach(ProvisioningTask::join);
+      var tasks = new HashMap<String, ProvisioningTask>();
+      provisioningGraph
+          .vertexSet()
+          .forEach(
+              e -> {
+                try {
+                  tasks.put(e.getId(), ProvisioningTaskScheduler.createTask(e));
+                } catch (ServiceError ex) {
+                  throw new ServiceRuntimeError(ex);
+                }
+              });
+      tasks
+          .values()
+          .forEach(
+              task -> {
+                var dependsOnTasks =
+                    provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
+                        .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
+                        .toList();
+                dependsOnTasks.forEach(task::dependsOn);
+              });
+
+      schedule = Optional.of(ProvisioningTaskScheduler.createSchedule());
+      schedule.get().addTasks(tasks.values());
+      schedule.get().schedule();
+      ProvisioningTaskScheduler.joinSchedule(schedule.get().getId());
+
+      var runningScheduleFuture =
+          ProvisioningTaskScheduler.getRunningScheduleFuture(schedule.get().getId());
+      if (runningScheduleFuture.isPresent()) {
+        var res = runningScheduleFuture.get().get();
+        if (res.isFailure()) {
+          throw new ServiceError(PROVISIONING_FAILED + res.getCause().getMessage());
+        }
+      }
+    } catch (ServiceRuntimeError e) {
+      if (e.getCause() instanceof ServiceError se) throw se;
+      else throw e;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
+    } catch (ExecutionException e) {
+      throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
+    } finally {
+      ProvisioningTaskScheduler.clearRunningSchedule(schedule.get().getId());
+    }
   }
 
   @Override

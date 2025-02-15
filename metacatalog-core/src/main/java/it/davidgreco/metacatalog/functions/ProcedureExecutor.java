@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.functions;
 
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
+import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import lombok.Getter;
@@ -28,15 +29,17 @@ public class ProcedureExecutor {
   private final EntityService entityService;
 
   public void executeProcedure(String procedureName, String entityId) throws ServiceError {
-
-    var entity = entityService.read(entityId);
-
-    if (!procedureRegistry.containsKey(procedureName)) {
-      throw new ServiceError("Procedure/Function not found: " + procedureName);
+    try {
+      var entity = entityService.read(entityId);
+      if (!procedureRegistry.containsKey(procedureName)) {
+        throw new ServiceError("Procedure/Function not found: " + procedureName);
+      }
+      var provisioningProcedure =
+          (EntityProcedure) applicationContext.getBean(procedureRegistry.get(procedureName));
+      provisioningProcedure.accept(entity);
+    } catch (ServiceRuntimeError e) {
+      if (e.getCause() instanceof ServiceError se) throw se;
+      else throw e;
     }
-    var provisioningProcedure =
-        (EntityProcedure) applicationContext.getBean(procedureRegistry.get(procedureName));
-
-    provisioningProcedure.accept(entity);
   }
 }
