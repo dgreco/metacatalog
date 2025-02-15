@@ -28,9 +28,9 @@ public abstract class ProvisioningTask implements CheckedFunction0<Void> {
 
   @Async("threadPoolTaskExecutor")
   public void schedule() {
-    dependsOnTask.forEach(ProvisioningTask::schedule);
-    dependsOnTask.forEach(ProvisioningTask::join);
     if (runningTaskFuture.get() == null) {
+      dependsOnTask.forEach(ProvisioningTask::schedule);
+      dependsOnTask.forEach(ProvisioningTask::join);
       runningTaskFuture.set(CompletableFuture.completedFuture(Try.of(this::apply)));
     }
   }

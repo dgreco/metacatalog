@@ -138,9 +138,8 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
       schedule = Optional.of(ProvisioningTaskScheduler.createSchedule());
       schedule.get().addTasks(tasks.values());
-      schedule.get().schedule();
+      ProvisioningTaskScheduler.schedule(schedule.get());
       ProvisioningTaskScheduler.joinSchedule(schedule.get().getId());
-
       var runningScheduleFuture =
           ProvisioningTaskScheduler.getRunningScheduleFuture(schedule.get().getId());
       if (runningScheduleFuture.isPresent()) {
@@ -158,7 +157,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     } catch (ExecutionException e) {
       throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
     } finally {
-      ProvisioningTaskScheduler.clearRunningSchedule(schedule.get().getId());
+      schedule.ifPresent(s -> ProvisioningTaskScheduler.clearRunningSchedule(s.getId()));
     }
   }
 

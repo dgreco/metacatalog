@@ -10,7 +10,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 @EnableAsync
 public class ProvisioningConfig {
 
-  @Bean(name = "threadPoolTaskExecutor")
+  @Bean(name = "threadPoolProvisioningExecutor")
   public TaskExecutor threadPoolTaskExecutor() {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setCorePoolSize(5); // Minimum number of threads in the pool

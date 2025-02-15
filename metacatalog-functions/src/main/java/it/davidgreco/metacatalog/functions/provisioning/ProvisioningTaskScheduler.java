@@ -9,7 +9,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Async;
 
+@Slf4j
 public class ProvisioningTaskScheduler {
 
   private static final ConcurrentMap<String, ProvisioningTaskFactory> provisioningTaskFactories =
@@ -43,6 +46,11 @@ public class ProvisioningTaskScheduler {
     return Schedule.of(UUID.randomUUID().toString());
   }
 
+  public static void schedule(Schedule schedule) {
+    runningScheduleFutures.put(schedule.getId(), schedule.schedule());
+    runningSchedules.put(schedule.getId(), schedule);
+  }
+
   public static void joinSchedule(String id) {
     Optional.ofNullable(runningScheduleFutures.get(id)).ifPresent(CompletableFuture::join);
   }
@@ -66,7 +74,7 @@ public class ProvisioningTaskScheduler {
 
     private final String id;
 
-    private List<ProvisioningTask> tasks = new ArrayList<>();
+    private final List<ProvisioningTask> tasks = new ArrayList<>();
 
     public void addTask(ProvisioningTask task) {
       tasks.add(task);
@@ -76,17 +84,15 @@ public class ProvisioningTaskScheduler {
       tasks.addAll(tsks);
     }
 
-    public void schedule() {
-      runningScheduleFutures.put(
-          id,
-          CompletableFuture.completedFuture(
-              Try.of(
-                  () -> {
-                    tasks.forEach(ProvisioningTask::schedule);
-                    tasks.parallelStream().forEach(ProvisioningTask::join);
-                    return null;
-                  })));
-      runningSchedules.put(id, this);
+    @Async("threadPoolProvisioningExecutor")
+    public CompletableFuture<Try<Void>> schedule() {
+      return CompletableFuture.completedFuture(
+          Try.of(
+              () -> {
+                tasks.forEach(ProvisioningTask::schedule);
+                tasks.parallelStream().forEach(ProvisioningTask::join);
+                return null;
+              }));
     }
   }
 }
