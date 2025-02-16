@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @SpringBootApplication
 @EnableTransactionManagement
 @EnableConfigurationProperties(CoreConfigProperties.class)
-@EnableAsync
 @EnableScheduling
 public class Application {
 
