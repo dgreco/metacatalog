@@ -41,6 +41,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
   private final MappingService mappingService;
   private final AggregateService aggregateService;
+  private final ProvisioningTaskScheduler provisioningTaskScheduler;
 
   private List<Entity> getPhysicalResourceSequence(AggregateService.AggregatePart aggregate) {
     switch (aggregate) {
@@ -120,7 +121,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
           .forEach(
               e -> {
                 try {
-                  tasks.put(e.getId(), ProvisioningTaskScheduler.createTask(e));
+                  tasks.put(e.getId(), provisioningTaskScheduler.createTask(e));
                 } catch (ServiceError ex) {
                   throw new ServiceRuntimeError(ex);
                 }
@@ -136,12 +137,12 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
                 dependsOnTasks.forEach(task::dependsOn);
               });
 
-      schedule = Optional.of(ProvisioningTaskScheduler.createSchedule());
+      schedule = Optional.of(provisioningTaskScheduler.createSchedule());
       schedule.get().addTasks(tasks.values());
-      ProvisioningTaskScheduler.schedule(schedule.get());
-      ProvisioningTaskScheduler.joinSchedule(schedule.get().getId());
+      provisioningTaskScheduler.schedule(schedule.get());
+      provisioningTaskScheduler.joinSchedule(schedule.get().getId());
       var runningScheduleFuture =
-          ProvisioningTaskScheduler.getRunningScheduleFuture(schedule.get().getId());
+          provisioningTaskScheduler.getRunningScheduleFuture(schedule.get().getId());
       if (runningScheduleFuture.isPresent()) {
         var res = runningScheduleFuture.get().get();
         if (res.isFailure()) {
@@ -157,7 +158,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     } catch (ExecutionException e) {
       throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
     } finally {
-      schedule.ifPresent(s -> ProvisioningTaskScheduler.clearRunningSchedule(s.getId()));
+      schedule.ifPresent(s -> provisioningTaskScheduler.clearRunningSchedule(s.getId()));
     }
   }
 

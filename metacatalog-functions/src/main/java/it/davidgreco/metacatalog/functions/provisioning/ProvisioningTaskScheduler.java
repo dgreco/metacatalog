@@ -3,38 +3,41 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import io.vavr.control.Try;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.ServiceError;
+import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.stereotype.Service;
 
 @Slf4j
+@Getter
+@RequiredArgsConstructor
+@Service
 public class ProvisioningTaskScheduler {
 
-  private static final ConcurrentMap<String, ProvisioningTaskFactory> provisioningTaskFactories =
+  private final ConcurrentMap<String, ProvisioningTaskFactory> provisioningTaskFactories =
       new ConcurrentHashMap<>();
 
-  private static final ConcurrentMap<String, CompletableFuture<Try<Void>>> runningScheduleFutures =
+  private final ConcurrentMap<String, Future<Try<Void>>> runningScheduleFutures =
       new ConcurrentHashMap<>();
 
-  private static final ConcurrentMap<String, Schedule> runningSchedules = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, Schedule> runningSchedules = new ConcurrentHashMap<>();
 
-  private ProvisioningTaskScheduler() {}
+  private final AsyncTaskExecutor asyncTaskExecutor;
 
-  public static void registerProvisioningTaskFactory(
+  public void registerProvisioningTaskFactory(
       String entityTypeName, ProvisioningTaskFactory factory) {
     provisioningTaskFactories.put(entityTypeName, factory);
   }
 
-  public static void unregisterProvisioningTaskFactory(String entityTypeName) {
+  public void unregisterProvisioningTaskFactory(String entityTypeName) {
     provisioningTaskFactories.remove(entityTypeName);
   }
 
-  public static ProvisioningTask createTask(Entity entity) throws ServiceError {
+  public ProvisioningTask createTask(Entity entity) throws ServiceError {
     return Optional.ofNullable(provisioningTaskFactories.get(entity.getEntityType().getName()))
         .orElseThrow(
             () ->
@@ -42,38 +45,48 @@ public class ProvisioningTaskScheduler {
         .createProvisionTask(entity);
   }
 
-  public static Schedule createSchedule() {
-    return Schedule.of(UUID.randomUUID().toString());
+  public Schedule createSchedule() {
+    return new Schedule(UUID.randomUUID().toString());
   }
 
-  public static void schedule(Schedule schedule) {
+  public void schedule(Schedule schedule) {
     runningScheduleFutures.put(schedule.getId(), schedule.schedule());
     runningSchedules.put(schedule.getId(), schedule);
   }
 
-  public static void joinSchedule(String id) {
-    Optional.ofNullable(runningScheduleFutures.get(id)).ifPresent(CompletableFuture::join);
+  public void joinSchedule(String id) {
+    Optional.ofNullable(runningScheduleFutures.get(id))
+        .ifPresent(
+            fut -> {
+              try {
+                fut.get();
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ServiceRuntimeError(e);
+              } catch (ExecutionException e) {
+                throw new ServiceRuntimeError(e);
+              }
+            });
   }
 
-  public static Optional<CompletableFuture<Try<Void>>> getRunningScheduleFuture(String id) {
+  public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
     return Optional.ofNullable(runningScheduleFutures.get(id));
   }
 
-  public static Optional<Schedule> getRunningSchedule(String id) {
+  public Optional<Schedule> getRunningSchedule(String id) {
     return Optional.ofNullable(runningSchedules.get(id));
   }
 
-  public static void clearRunningSchedule(String id) {
+  public void clearRunningSchedule(String id) {
     runningScheduleFutures.remove(id);
     runningSchedules.remove(id);
   }
 
   @Getter
-  @RequiredArgsConstructor(staticName = "of")
-  public static class Schedule {
+  @RequiredArgsConstructor
+  public class Schedule {
 
     private final String id;
-
     private final List<ProvisioningTask> tasks = new ArrayList<>();
 
     public void addTask(ProvisioningTask task) {
@@ -84,15 +97,15 @@ public class ProvisioningTaskScheduler {
       tasks.addAll(tsks);
     }
 
-    @Async("threadPoolProvisioningExecutor")
-    public CompletableFuture<Try<Void>> schedule() {
-      return CompletableFuture.completedFuture(
-          Try.of(
-              () -> {
-                tasks.forEach(ProvisioningTask::schedule);
-                tasks.parallelStream().forEach(ProvisioningTask::join);
-                return null;
-              }));
+    public Future<Try<Void>> schedule() {
+      Callable<Try<Void>> callable =
+          () -> {
+            tasks.forEach(
+                task -> task.getRunningTaskFuture().set(task.schedule(asyncTaskExecutor)));
+            tasks.parallelStream().forEach(ProvisioningTask::join);
+            return Try.of(() -> null);
+          };
+      return asyncTaskExecutor.submit(callable);
     }
   }
 }

@@ -25,6 +25,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
   void testProvisioningProcedure() throws ServiceError {
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
     var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);
+    var provisioningTaskScheduler =
+        getApplicationContext().getBean(ProvisioningTaskScheduler.class);
 
     var bulkFileStream1 =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("bulk/bulk1.yaml");
@@ -45,13 +47,17 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
             new ProvisioningTask(entity) {
               @Override
               public Void apply() {
-                log.error("Provisioning task for entity: " + entity);
+                log.error(
+                    "Provisioning task for entity: "
+                        + entity
+                        + " executed by thread: "
+                        + Thread.currentThread().getName());
                 return null;
               }
             };
 
-    ProvisioningTaskScheduler.registerProvisioningTaskFactory("S3FolderType", factory);
-    ProvisioningTaskScheduler.registerProvisioningTaskFactory("AthenaTableType", factory);
+    provisioningTaskScheduler.registerProvisioningTaskFactory("S3FolderType", factory);
+    provisioningTaskScheduler.registerProvisioningTaskFactory("AthenaTableType", factory);
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
   }

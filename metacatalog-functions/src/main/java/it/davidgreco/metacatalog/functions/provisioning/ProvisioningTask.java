@@ -6,32 +6,42 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Component;
 
 @Slf4j
 @Getter
 @RequiredArgsConstructor
+@Component
 public abstract class ProvisioningTask implements CheckedFunction0<Void> {
 
-  private final AtomicReference<CompletableFuture<Try<Void>>> runningTaskFuture =
-      new AtomicReference<>();
+  private final AtomicReference<Future<Try<Void>>> runningTaskFuture = new AtomicReference<>();
 
   private final List<ProvisioningTask> dependsOnTask = new ArrayList<>();
 
   private final transient Entity entity;
 
-  @Async("threadPoolTaskExecutor")
-  public void schedule() {
+  public Future<Try<Void>> schedule(AsyncTaskExecutor asyncTaskExecutor) {
+    Callable<Try<Void>> callable =
+        () -> {
+          dependsOnTask.forEach(
+              task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
+          dependsOnTask.forEach(ProvisioningTask::join);
+          return Try.of(ProvisioningTask.this::apply);
+        };
     if (runningTaskFuture.get() == null) {
-      dependsOnTask.forEach(ProvisioningTask::schedule);
+      dependsOnTask.forEach(task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
       dependsOnTask.forEach(ProvisioningTask::join);
-      runningTaskFuture.set(CompletableFuture.completedFuture(Try.of(this::apply)));
+      return asyncTaskExecutor.submit(callable);
+    } else {
+      return runningTaskFuture.get();
     }
   }
 
@@ -54,11 +64,15 @@ public abstract class ProvisioningTask implements CheckedFunction0<Void> {
             .retryOn(ServiceRuntimeError.class)
             .build();
 
-    createRetryTemplate.execute(
-        _ -> {
-          if (runningTaskFuture.get() == null)
-            throw new ServiceRuntimeError("Task not yet started");
-          else return runningTaskFuture.get().join();
-        });
+    try {
+      createRetryTemplate.execute(
+          _ -> {
+            if (runningTaskFuture.get() == null)
+              throw new ServiceRuntimeError("Task not yet started");
+            else return runningTaskFuture.get().get();
+          });
+    } catch (Exception e) {
+      throw new ServiceRuntimeError(e);
+    }
   }
 }
