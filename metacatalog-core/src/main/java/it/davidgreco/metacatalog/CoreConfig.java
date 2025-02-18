@@ -11,6 +11,9 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /** Configuration class for the core module. */
@@ -131,5 +134,24 @@ public class CoreConfig {
       MappingService mappingService,
       EntityService entityService) {
     return new BulkLoaderService(traitService, entityTypeService, mappingService, entityService);
+  }
+
+  @Bean(name = "taskSchedulerExecutor")
+  @Primary
+  public AsyncTaskExecutor threadPoolTaskExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(5); // Minimum number of threads in the pool
+    executor.setMaxPoolSize(10); // Maximum number of threads in the pool
+    executor.setQueueCapacity(25); // Queue capacity for pending tasks
+    executor.setThreadNamePrefix("TaskSchedulerExecutor-"); // Prefix for thread names
+    executor.setWaitForTasksToCompleteOnShutdown(true); // Ensures tasks complete on shutdown
+    executor.setAwaitTerminationSeconds(60); // Timeout for waiting for tasks to complete
+    executor.initialize(); // Initializes the thread pool
+    return executor;
+  }
+
+  @Bean()
+  public TaskManager taskManager(AsyncTaskExecutor asyncTaskExecutor) {
+    return new TaskManager(asyncTaskExecutor);
   }
 }

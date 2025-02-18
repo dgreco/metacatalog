@@ -7,6 +7,8 @@ import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.ServiceError;
+import it.davidgreco.metacatalog.service.TaskFactory;
+import it.davidgreco.metacatalog.service.TaskManager;
 import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
@@ -25,8 +27,7 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
   void testProvisioningProcedure() throws ServiceError {
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
     var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);
-    var provisioningTaskScheduler =
-        getApplicationContext().getBean(ProvisioningTaskScheduler.class);
+    var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var bulkFileStream1 =
         Thread.currentThread().getContextClassLoader().getResourceAsStream("bulk/bulk1.yaml");
@@ -42,7 +43,7 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     var functionName = "ProvisioningProcedure";
 
-    ProvisioningTaskFactory factory =
+    TaskFactory<Entity> factory =
         (Entity entity) ->
             new ProvisioningTask(entity) {
               @Override
@@ -56,8 +57,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
               }
             };
 
-    provisioningTaskScheduler.registerProvisioningTaskFactory("S3FolderType", factory);
-    provisioningTaskScheduler.registerProvisioningTaskFactory("AthenaTableType", factory);
+    taskManager.registerTaskFactory("S3FolderType", factory);
+    taskManager.registerTaskFactory("AthenaTableType", factory);
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
   }

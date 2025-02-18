@@ -1,9 +1,6 @@
-package it.davidgreco.metacatalog.functions.provisioning;
+package it.davidgreco.metacatalog.service;
 
 import io.vavr.control.Try;
-import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.service.ServiceError;
-import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.*;
 import java.util.concurrent.*;
 import lombok.Getter;
@@ -16,10 +13,9 @@ import org.springframework.stereotype.Service;
 @Getter
 @RequiredArgsConstructor
 @Service
-public class ProvisioningTaskScheduler {
+public class TaskManager {
 
-  private final ConcurrentMap<String, ProvisioningTaskFactory> provisioningTaskFactories =
-      new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, TaskFactory<?>> taskFactories = new ConcurrentHashMap<>();
 
   private final ConcurrentMap<String, Future<Try<Void>>> runningScheduleFutures =
       new ConcurrentHashMap<>();
@@ -28,21 +24,18 @@ public class ProvisioningTaskScheduler {
 
   private final AsyncTaskExecutor asyncTaskExecutor;
 
-  public void registerProvisioningTaskFactory(
-      String entityTypeName, ProvisioningTaskFactory factory) {
-    provisioningTaskFactories.put(entityTypeName, factory);
+  public <T> void registerTaskFactory(String entityTypeName, TaskFactory<T> factory) {
+    taskFactories.put(entityTypeName, factory);
   }
 
-  public void unregisterProvisioningTaskFactory(String entityTypeName) {
-    provisioningTaskFactories.remove(entityTypeName);
+  public void unregisterTaskFactory(String entityTypeName) {
+    taskFactories.remove(entityTypeName);
   }
 
-  public ProvisioningTask createTask(Entity entity) throws ServiceError {
-    return Optional.ofNullable(provisioningTaskFactories.get(entity.getEntityType().getName()))
-        .orElseThrow(
-            () ->
-                new ServiceError("No factory for entity type: " + entity.getEntityType().getName()))
-        .createProvisionTask(entity);
+  public <T> Task<T> createTask(T entity, String factoryName) throws ServiceError {
+    return Optional.ofNullable((TaskFactory<T>) taskFactories.get(factoryName))
+        .orElseThrow(() -> new ServiceError("No factory for name: " + factoryName))
+        .createTask(entity);
   }
 
   public Schedule createSchedule() {
@@ -87,14 +80,18 @@ public class ProvisioningTaskScheduler {
   public class Schedule {
 
     private final String id;
-    private final List<ProvisioningTask> tasks = new ArrayList<>();
+    private final List<Task<?>> tasks = new ArrayList<>();
 
-    public void addTask(ProvisioningTask task) {
+    public <T> void addTask(Task<T> task) {
       tasks.add(task);
     }
 
-    public void addTasks(Collection<ProvisioningTask> tsks) {
+    public <T> void addTasks(Collection<Task<T>> tsks) {
       tasks.addAll(tsks);
+    }
+
+    public <T> void addTasks(Task<T>... tsks) {
+      tasks.addAll(Arrays.stream(tsks).toList());
     }
 
     public Future<Try<Void>> schedule() {
@@ -102,7 +99,7 @@ public class ProvisioningTaskScheduler {
           () -> {
             tasks.forEach(
                 task -> task.getRunningTaskFuture().set(task.schedule(asyncTaskExecutor)));
-            tasks.parallelStream().forEach(ProvisioningTask::join);
+            tasks.parallelStream().forEach(Task::join);
             return Try.of(() -> null);
           };
       return asyncTaskExecutor.submit(callable);

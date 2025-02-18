@@ -8,10 +8,7 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
-import it.davidgreco.metacatalog.service.AggregateService;
-import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.ServiceError;
-import it.davidgreco.metacatalog.service.ServiceRuntimeError;
+import it.davidgreco.metacatalog.service.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,7 +38,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
   private final MappingService mappingService;
   private final AggregateService aggregateService;
-  private final ProvisioningTaskScheduler provisioningTaskScheduler;
+  private final TaskManager taskManager;
 
   private List<Entity> getPhysicalResourceSequence(AggregateService.AggregatePart aggregate) {
     switch (aggregate) {
@@ -94,7 +91,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   @Override
   protected void execute(Entity entity) throws ServiceError {
-    Optional<ProvisioningTaskScheduler.Schedule> schedule = Optional.empty();
+    Optional<TaskManager.Schedule> schedule = Optional.empty();
     try {
       Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
       var aggregate = aggregateService.read(entity.getId(), true);
@@ -121,7 +118,9 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
           .forEach(
               e -> {
                 try {
-                  tasks.put(e.getId(), provisioningTaskScheduler.createTask(e));
+                  tasks.put(
+                      e.getId(),
+                      (ProvisioningTask) taskManager.createTask(e, e.getEntityType().getName()));
                 } catch (ServiceError ex) {
                   throw new ServiceRuntimeError(ex);
                 }
@@ -137,12 +136,13 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
                 dependsOnTasks.forEach(task::dependsOn);
               });
 
-      schedule = Optional.of(provisioningTaskScheduler.createSchedule());
-      schedule.get().addTasks(tasks.values());
-      provisioningTaskScheduler.schedule(schedule.get());
-      provisioningTaskScheduler.joinSchedule(schedule.get().getId());
-      var runningScheduleFuture =
-          provisioningTaskScheduler.getRunningScheduleFuture(schedule.get().getId());
+      schedule = Optional.of(taskManager.createSchedule());
+      for (var task : tasks.values()) {
+        schedule.get().addTask(task);
+      }
+      taskManager.schedule(schedule.get());
+      taskManager.joinSchedule(schedule.get().getId());
+      var runningScheduleFuture = taskManager.getRunningScheduleFuture(schedule.get().getId());
       if (runningScheduleFuture.isPresent()) {
         var res = runningScheduleFuture.get().get();
         if (res.isFailure()) {
@@ -158,7 +158,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     } catch (ExecutionException e) {
       throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
     } finally {
-      schedule.ifPresent(s -> provisioningTaskScheduler.clearRunningSchedule(s.getId()));
+      schedule.ifPresent(s -> taskManager.clearRunningSchedule(s.getId()));
     }
   }
 

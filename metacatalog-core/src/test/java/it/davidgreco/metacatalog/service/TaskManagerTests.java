@@ -1,0 +1,105 @@
+package it.davidgreco.metacatalog.service;
+
+import io.vavr.control.Try;
+import java.util.List;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
+
+@SpringBootTest
+class TaskManagerTests extends CommonServiceTestingSupport {
+
+  public TaskManagerTests(ApplicationContext applicationContext) {
+    super(applicationContext);
+  }
+
+  @Test
+  void testSchedulingWithDependencies() throws ServiceError {
+    var taskManager = getApplicationContext().getBean(TaskManager.class);
+
+    var list = new ConcurrentLinkedDeque<String>();
+
+    taskManager.registerTaskFactory(
+        "SimpleTaskType",
+        (String entity) ->
+            new Task(entity) {
+              public Void apply() {
+                list.add(entity);
+                return null;
+              }
+            });
+
+    var task1 = taskManager.createTask("1", "SimpleTaskType");
+    var task2 = taskManager.createTask("2", "SimpleTaskType");
+    var task3 = taskManager.createTask("3", "SimpleTaskType");
+    var task4 = taskManager.createTask("4", "SimpleTaskType");
+
+    var schedule = taskManager.createSchedule();
+
+    schedule.addTasks(task1, task2, task3, task4);
+
+    task1.dependsOn(task3);
+
+    task2.dependsOn(task4);
+
+    task4.dependsOn(task1);
+
+    taskManager.schedule(schedule);
+
+    taskManager.joinSchedule(schedule.getId());
+
+    Assertions.assertEquals(List.of("3", "1", "4", "2"), list.stream().toList());
+  }
+
+  @Test
+  void testSchedulingWithExceptions() throws ServiceError {
+    var taskManager = getApplicationContext().getBean(TaskManager.class);
+
+    var list = new ConcurrentLinkedDeque<String>();
+
+    taskManager.registerTaskFactory(
+        "SimpleTaskType",
+        (String entity) ->
+            new Task(entity) {
+              public Void apply() {
+                list.add(entity);
+                if (entity.equals("2")) {
+                  throw new RuntimeException("Error");
+                }
+                return null;
+              }
+            });
+
+    var task1 = taskManager.createTask("1", "SimpleTaskType");
+    var task2 = taskManager.createTask("2", "SimpleTaskType");
+    var task3 = taskManager.createTask("3", "SimpleTaskType");
+
+    var schedule = taskManager.createSchedule();
+
+    schedule.addTasks(task1, task2, task3);
+
+    task1.dependsOn(task2);
+
+    taskManager.schedule(schedule);
+
+    taskManager.joinSchedule(schedule.getId());
+
+    schedule
+        .getTasks()
+        .forEach(
+            task -> {
+              try {
+                var res = ((Future<Try<Void>>) task.getRunningTaskFuture().get()).get();
+                System.out.println(res);
+              } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+              }
+            });
+
+    Assertions.assertTrue(true);
+  }
+}
