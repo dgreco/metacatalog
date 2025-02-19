@@ -1,5 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import io.vavr.control.Try;
 import java.util.*;
 import java.util.concurrent.*;
@@ -17,10 +19,11 @@ public class TaskManager {
 
   private final ConcurrentMap<String, TaskFactory<?>> taskFactories = new ConcurrentHashMap<>();
 
-  private final ConcurrentMap<String, Future<Try<Void>>> runningScheduleFutures =
-      new ConcurrentHashMap<>();
+  private final Cache<String, Future<Try<Void>>> runningScheduleFutures =
+      Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).build();
 
-  private final ConcurrentMap<String, Schedule> runningSchedules = new ConcurrentHashMap<>();
+  private final Cache<String, Schedule> runningSchedules =
+      Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).build();
 
   private final AsyncTaskExecutor asyncTaskExecutor;
 
@@ -49,7 +52,7 @@ public class TaskManager {
   }
 
   public void joinSchedule(String id) {
-    Optional.ofNullable(runningScheduleFutures.get(id))
+    Optional.ofNullable(runningScheduleFutures.getIfPresent(id))
         .ifPresent(
             fut -> {
               try {
@@ -64,10 +67,10 @@ public class TaskManager {
   }
 
   public List<Try<Void>> getScheduleResults(String id) {
-    if (!runningSchedules.containsKey(id)) {
+    if (runningSchedules.getIfPresent(id) == null) {
       return List.of();
     }
-    return runningSchedules.get(id).getTasks().stream()
+    return runningSchedules.getIfPresent(id).getTasks().stream()
         .map(Task::getResult)
         .filter(Optional::isPresent)
         .map(Optional::get)
@@ -75,16 +78,11 @@ public class TaskManager {
   }
 
   public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
-    return Optional.ofNullable(runningScheduleFutures.get(id));
+    return Optional.ofNullable(runningScheduleFutures.getIfPresent(id));
   }
 
   public Optional<Schedule> getRunningSchedule(String id) {
-    return Optional.ofNullable(runningSchedules.get(id));
-  }
-
-  public void clearRunningSchedule(String id) {
-    runningScheduleFutures.remove(id);
-    runningSchedules.remove(id);
+    return Optional.ofNullable(runningSchedules.getIfPresent(id));
   }
 
   @Getter

@@ -157,8 +157,6 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
       throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
     } catch (ExecutionException e) {
       throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
-    } finally {
-      schedule.ifPresent(s -> taskManager.clearRunningSchedule(s.getId()));
     }
   }
 
