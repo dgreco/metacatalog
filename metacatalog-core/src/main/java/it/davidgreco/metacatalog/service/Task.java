@@ -4,8 +4,12 @@ import io.vavr.control.Try;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -17,8 +21,9 @@ import org.springframework.retry.support.RetryTemplate;
 public abstract class Task<T> {
 
   private final AtomicReference<Future<Try<Void>>> runningTaskFuture = new AtomicReference<>();
+  private final AtomicReference<Try<Void>> result = new AtomicReference<>();
 
-  private final List<Task<T>> dependsOnTask = new ArrayList<>();
+  private final List<Task<T>> dependsOnTasks = new ArrayList<>();
 
   private final T entity;
 
@@ -29,26 +34,36 @@ public abstract class Task<T> {
   Future<Try<Void>> schedule(AsyncTaskExecutor asyncTaskExecutor) {
     Callable<Try<Void>> callable =
         () -> {
-          dependsOnTask.forEach(
+          dependsOnTasks.forEach(
               task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
-          dependsOnTask.forEach(Task::join);
+          dependsOnTasks.forEach(Task::join);
           return Try.of(Task.this::apply);
         };
     if (runningTaskFuture.get() == null) {
-      dependsOnTask.forEach(task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
-      dependsOnTask.forEach(Task::join);
-      return asyncTaskExecutor.submit(callable);
+      dependsOnTasks.forEach(task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
+      dependsOnTasks.forEach(Task::join);
+      AtomicBoolean dependsOnTasksFailed = new AtomicBoolean(false);
+      dependsOnTasks.forEach(
+          task -> {
+            if (task.result.get().isFailure()) {
+              dependsOnTasksFailed.set(true);
+            }
+          });
+      if (dependsOnTasksFailed.get())
+        return CompletableFuture.completedFuture(
+            Try.failure(new ServiceRuntimeError("One or more of the depending tasks failed")));
+      else return asyncTaskExecutor.submit(callable);
     } else {
       return runningTaskFuture.get();
     }
   }
 
   public void dependsOn(Task<T> task) {
-    dependsOnTask.add(task);
+    dependsOnTasks.add(task);
   }
 
   public void dependsOn(Collection<Task<T>> tasks) {
-    dependsOnTask.addAll(tasks);
+    dependsOnTasks.addAll(tasks);
   }
 
   public abstract Void apply();
@@ -66,10 +81,24 @@ public abstract class Task<T> {
           _ -> {
             if (runningTaskFuture.get() == null)
               throw new ServiceRuntimeError("Task not yet started");
-            else return runningTaskFuture.get().get();
+            else {
+              try {
+                result.set(runningTaskFuture.get().get());
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ServiceRuntimeError(e);
+              } catch (ExecutionException e) {
+                throw new ServiceRuntimeError(e);
+              }
+            }
+            return new Object();
           });
     } catch (Exception e) {
       throw new ServiceRuntimeError(e);
     }
+  }
+
+  public Optional<Try<Void>> getResult() {
+    return Optional.ofNullable(result.get());
   }
 }

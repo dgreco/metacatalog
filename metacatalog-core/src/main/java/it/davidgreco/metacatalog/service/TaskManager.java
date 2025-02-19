@@ -42,9 +42,10 @@ public class TaskManager {
     return new Schedule(UUID.randomUUID().toString());
   }
 
-  public void schedule(Schedule schedule) {
+  public String schedule(Schedule schedule) {
     runningScheduleFutures.put(schedule.getId(), schedule.schedule());
     runningSchedules.put(schedule.getId(), schedule);
+    return schedule.id;
   }
 
   public void joinSchedule(String id) {
@@ -60,6 +61,17 @@ public class TaskManager {
                 throw new ServiceRuntimeError(e);
               }
             });
+  }
+
+  public List<Try<Void>> getScheduleResults(String id) {
+    if (!runningSchedules.containsKey(id)) {
+      return List.of();
+    }
+    return runningSchedules.get(id).getTasks().stream()
+        .map(Task::getResult)
+        .filter(Optional::isPresent)
+        .map(Optional::get)
+        .toList();
   }
 
   public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
@@ -88,10 +100,6 @@ public class TaskManager {
 
     public <T> void addTasks(Collection<Task<T>> tsks) {
       tasks.addAll(tsks);
-    }
-
-    public <T> void addTasks(Task<T>... tsks) {
-      tasks.addAll(Arrays.stream(tsks).toList());
     }
 
     public Future<Try<Void>> schedule() {

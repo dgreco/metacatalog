@@ -3,8 +3,6 @@ package it.davidgreco.metacatalog.service;
 import io.vavr.control.Try;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,7 +38,7 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     var schedule = taskManager.createSchedule();
 
-    schedule.addTasks(task1, task2, task3, task4);
+    schedule.addTasks(List.of(task1, task2, task3, task4));
 
     task1.dependsOn(task3);
 
@@ -80,26 +78,16 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     var schedule = taskManager.createSchedule();
 
-    schedule.addTasks(task1, task2, task3);
+    schedule.addTasks(List.of(task1, task2, task3));
 
     task1.dependsOn(task2);
 
-    taskManager.schedule(schedule);
+    var scheduleId = taskManager.schedule(schedule);
 
-    taskManager.joinSchedule(schedule.getId());
+    taskManager.joinSchedule(scheduleId);
 
-    schedule
-        .getTasks()
-        .forEach(
-            task -> {
-              try {
-                var res = ((Future<Try<Void>>) task.getRunningTaskFuture().get()).get();
-                System.out.println(res);
-              } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
-              }
-            });
-
-    Assertions.assertTrue(true);
+    Assertions.assertEquals(
+        List.of(true, true, false),
+        taskManager.getScheduleResults(scheduleId).stream().map(Try::isFailure).toList());
   }
 }
