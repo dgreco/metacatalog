@@ -8,6 +8,10 @@ import java.util.concurrent.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jgrapht.Graph;
+import org.jgrapht.alg.cycle.CycleDetector;
+import org.jgrapht.graph.DefaultDirectedGraph;
+import org.jgrapht.graph.DefaultEdge;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Service;
 
@@ -20,10 +24,10 @@ public class TaskManager {
   private final ConcurrentMap<String, TaskFactory<?>> taskFactories = new ConcurrentHashMap<>();
 
   private final Cache<String, Future<Try<Void>>> runningScheduleFutures =
-      Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).build();
+      Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(100).build();
 
   private final Cache<String, Schedule> runningSchedules =
-      Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).build();
+      Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(100).build();
 
   private final AsyncTaskExecutor asyncTaskExecutor;
 
@@ -45,7 +49,7 @@ public class TaskManager {
     return new Schedule(UUID.randomUUID().toString());
   }
 
-  public String schedule(Schedule schedule) {
+  public String schedule(Schedule schedule) throws ServiceError {
     runningScheduleFutures.put(schedule.getId(), schedule.schedule());
     runningSchedules.put(schedule.getId(), schedule);
     return schedule.id;
@@ -100,7 +104,21 @@ public class TaskManager {
       tasks.addAll(tsks);
     }
 
-    public Future<Try<Void>> schedule() {
+    public Future<Try<Void>> schedule() throws ServiceError {
+      Graph<Task<?>, DefaultEdge> taskGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
+      tasks.forEach(
+          t -> {
+            if (!taskGraph.containsVertex(t)) taskGraph.addVertex(t);
+            t.getDependsOnTasks()
+                .forEach(
+                    e -> {
+                      if (!taskGraph.containsVertex(e)) taskGraph.addVertex(e);
+                      taskGraph.addEdge(t, e);
+                    });
+          });
+      if (new CycleDetector<>(taskGraph).detectCycles())
+        throw new ServiceError("Cycle detected in task graph");
+
       Callable<Try<Void>> callable =
           () -> {
             tasks.forEach(

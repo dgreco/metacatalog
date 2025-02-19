@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -18,6 +19,7 @@ import org.springframework.retry.support.RetryTemplate;
 
 @Slf4j
 @Getter
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public abstract class Task<T> {
 
   private final AtomicReference<Future<Try<Void>>> runningTaskFuture = new AtomicReference<>();
@@ -67,6 +69,9 @@ public abstract class Task<T> {
   }
 
   public abstract Void apply();
+
+  @EqualsAndHashCode.Include
+  public abstract String getId();
 
   public void join() {
     RetryTemplate createRetryTemplate =

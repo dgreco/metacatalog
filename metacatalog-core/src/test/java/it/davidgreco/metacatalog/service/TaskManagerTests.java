@@ -29,6 +29,10 @@ class TaskManagerTests extends CommonServiceTestingSupport {
                 list.add(entity);
                 return null;
               }
+
+              public String getId() {
+                return entity;
+              }
             });
 
     var task1 = taskManager.createTask("1", "SimpleTaskType");
@@ -54,7 +58,7 @@ class TaskManagerTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSchedulingWithExceptions() throws ServiceError {
+  void testSchedulingWithExceptions() throws ServiceError, InterruptedException {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();
@@ -69,6 +73,10 @@ class TaskManagerTests extends CommonServiceTestingSupport {
                   throw new RuntimeException("Error");
                 }
                 return null;
+              }
+
+              public String getId() {
+                return entity;
               }
             });
 

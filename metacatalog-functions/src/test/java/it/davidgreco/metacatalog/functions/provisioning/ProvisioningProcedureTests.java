@@ -55,6 +55,10 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
                         + Thread.currentThread().getName());
                 return null;
               }
+
+              public String getId() {
+                return entity.getId();
+              }
             };
 
     taskManager.registerTaskFactory("S3FolderType", factory);
