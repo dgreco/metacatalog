@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface TraitRelationshipRepository extends JpaRepository<TraitRelationship, Long> {
+public interface TraitRelationshipRepository extends JpaRepository<TraitRelationship, String> {
 
   List<TraitRelationship> findBySourceAndRelationType(Trait source, RelationType relType);
 

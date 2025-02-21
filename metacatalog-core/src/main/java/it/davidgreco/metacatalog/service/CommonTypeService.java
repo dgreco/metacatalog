@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** Common service interface for EntityType and Trait services. */
-public interface CommonTypeService<T extends Type, K> extends CommonService<T, K> {
+public interface CommonTypeService<T extends Type<T>, K> extends CommonService<T, K> {
 
   CommonTypeService<EntityType, String> genericTypeService =
       new CommonTypeService<>() {
@@ -63,7 +63,7 @@ public interface CommonTypeService<T extends Type, K> extends CommonService<T, K
     inheritanceChain.add(type);
     var maybeFather = Optional.ofNullable(type.getFather());
     if (maybeFather.isPresent()) {
-      inheritanceChain.addAll(loadRevertedInheritanceChain((T) maybeFather.get()));
+      inheritanceChain.addAll(loadRevertedInheritanceChain(maybeFather.get()));
       return inheritanceChain;
     } else {
       return inheritanceChain;

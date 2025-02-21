@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface EntityRelationshipRepository extends JpaRepository<EntityRelationship, Long> {
+public interface EntityRelationshipRepository extends JpaRepository<EntityRelationship, String> {
 
   List<EntityRelationship> findBySourceAndRelationType(Entity source, RelationType relType);
 

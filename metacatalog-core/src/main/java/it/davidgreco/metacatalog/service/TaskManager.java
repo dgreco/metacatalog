@@ -21,7 +21,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class TaskManager {
 
-  private final ConcurrentMap<String, TaskFactory<?>> taskFactories = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, TypedTaskFactory<?>> taskFactories =
+      new ConcurrentHashMap<>();
 
   private final Cache<String, Future<Try<Void>>> runningScheduleFutures =
       Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(100).build();
@@ -31,18 +32,21 @@ public class TaskManager {
 
   private final AsyncTaskExecutor asyncTaskExecutor;
 
-  public <T> void registerTaskFactory(String entityTypeName, TaskFactory<T> factory) {
-    taskFactories.put(entityTypeName, factory);
+  public <T> void registerTaskFactory(String name, Class<T> type, TaskFactory<T> factory) {
+    taskFactories.put(name, new TypedTaskFactory<>(type, factory));
   }
 
   public void unregisterTaskFactory(String entityTypeName) {
     taskFactories.remove(entityTypeName);
   }
 
+  @SuppressWarnings("unchecked")
   public <T> Task<T> createTask(T entity, String factoryName) throws ServiceError {
-    return Optional.ofNullable((TaskFactory<T>) taskFactories.get(factoryName))
-        .orElseThrow(() -> new ServiceError("No factory for name: " + factoryName))
-        .createTask(entity);
+    TypedTaskFactory<?> typedFactory = taskFactories.get(factoryName);
+    if (typedFactory == null || !typedFactory.type.isInstance(entity)) {
+      throw new ServiceError("No factory for name: " + factoryName);
+    }
+    return ((TypedTaskFactory<T>) typedFactory).factory.createTask(entity);
   }
 
   public Schedule createSchedule() {
@@ -129,4 +133,6 @@ public class TaskManager {
       return asyncTaskExecutor.submit(callable);
     }
   }
+
+  private record TypedTaskFactory<T>(Class<T> type, TaskFactory<T> factory) {}
 }

@@ -23,8 +23,9 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     taskManager.registerTaskFactory(
         "SimpleTaskType",
-        (String entity) ->
-            new Task(entity) {
+        String.class,
+        entity ->
+            new Task<String>(entity) {
               public Void apply() {
                 list.add(entity);
                 return null;
@@ -58,15 +59,16 @@ class TaskManagerTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSchedulingWithExceptions() throws ServiceError, InterruptedException {
+  void testSchedulingWithExceptions() throws ServiceError {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();
 
     taskManager.registerTaskFactory(
         "SimpleTaskType",
-        (String entity) ->
-            new Task(entity) {
+        String.class,
+        entity ->
+            new Task<String>(entity) {
               public Void apply() {
                 list.add(entity);
                 if (entity.equals("2")) {

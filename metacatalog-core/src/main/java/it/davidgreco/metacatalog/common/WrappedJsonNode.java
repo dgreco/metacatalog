@@ -16,12 +16,12 @@ public record WrappedJsonNode(JsonNode node) {
     var dc = JsonPath.using(jsonPathConfiguration).parse(node);
     var obj = dc.read(pathExpression);
 
-    if (clazz == String.class) return (T) ((TextNode) obj).asText();
-    else if (clazz == Integer.class) return (T) Integer.valueOf(((IntNode) obj).intValue());
-    else if (clazz == Long.class) return (T) Long.valueOf(((LongNode) obj).intValue());
-    else if (clazz == Float.class) return (T) Float.valueOf(((FloatNode) obj).intValue());
-    else if (clazz == Double.class) return (T) Double.valueOf(((DoubleNode) obj).intValue());
-    else if (clazz == Boolean.class) return (T) Boolean.valueOf(((BooleanNode) obj).booleanValue());
-    else return (T) obj;
+    if (clazz == String.class) return clazz.cast(((TextNode) obj).asText());
+    else if (clazz == Integer.class) return clazz.cast(((NumericNode) obj).asInt());
+    else if (clazz == Long.class) return clazz.cast(((NumericNode) obj).asLong());
+    else if (clazz == Float.class) return clazz.cast(((NumericNode) obj).asDouble());
+    else if (clazz == Double.class) return clazz.cast(((NumericNode) obj).asDouble());
+    else if (clazz == Boolean.class) return clazz.cast(((BooleanNode) obj).booleanValue());
+    else return clazz.cast(obj);
   }
 }

@@ -61,8 +61,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
               }
             };
 
-    taskManager.registerTaskFactory("S3FolderType", factory);
-    taskManager.registerTaskFactory("AthenaTableType", factory);
+    taskManager.registerTaskFactory("S3FolderType", Entity.class, factory);
+    taskManager.registerTaskFactory("AthenaTableType", Entity.class, factory);
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
   }
