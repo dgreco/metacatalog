@@ -3,7 +3,9 @@ package it.davidgreco.metacatalog.common;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonPathConfiguration;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.*;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.NumericNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.jayway.jsonpath.JsonPath;
 
 public record WrappedJsonNode(JsonNode node) {
