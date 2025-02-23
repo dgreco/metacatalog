@@ -91,7 +91,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   @Override
   protected void execute(Entity entity) throws ServiceError {
-    Optional<TaskManager.Schedule> schedule = Optional.empty();
+    Optional<TaskManager.Schedule> schedule;
     try {
       Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
       var aggregate = aggregateService.read(entity.getId(), true);

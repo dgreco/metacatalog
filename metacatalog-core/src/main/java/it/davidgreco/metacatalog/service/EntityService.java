@@ -140,8 +140,9 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
-      if (CommonService.isMappingTargetEntityType(
-          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
+      if (!CommonService.implementsTrait(entity.getEntityType(), "ProvisionableResource")
+          && CommonService.isMappingTargetEntityType(
+              mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
 

@@ -5,12 +5,10 @@ import static org.awaitility.Awaitility.await;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
-import it.davidgreco.metacatalog.service.BulkLoaderService;
-import it.davidgreco.metacatalog.service.ServiceError;
-import it.davidgreco.metacatalog.service.TaskFactory;
-import it.davidgreco.metacatalog.service.TaskManager;
+import it.davidgreco.metacatalog.service.*;
 import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Durations;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
@@ -26,7 +24,9 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
   @Test
   void testProvisioningProcedure() throws ServiceError {
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
     var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var bulkFileStream1 =
@@ -45,19 +45,10 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     TaskFactory<Entity> factory =
         (Entity entity) ->
-            new ProvisioningTask(entity) {
+            new ProvisioningTask(entity, entityService) {
               @Override
-              public Void apply() {
-                log.error(
-                    "Provisioning task for entity: "
-                        + entity
-                        + " executed by thread: "
-                        + Thread.currentThread().getName());
-                return null;
-              }
-
-              public String getId() {
-                return entity.getId();
+              public void provision() {
+                log.info("Provisioning entity: " + getEntity());
               }
             };
 
@@ -65,5 +56,23 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
     taskManager.registerTaskFactory("AthenaTableType", Entity.class, factory);
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
+
+    var aggr = aggregateService.read(ids.getFirst(), true);
+    Assertions.assertEquals(
+        "PROVISIONED",
+        ((AggregateService.AggregateElement)
+                ((AggregateService.Aggregate) aggr.elements().get(0)).elements().getFirst())
+            .entity()
+            .getValues()
+            .get("provisioningStatus")
+            .asText());
+    Assertions.assertEquals(
+        "PROVISIONED",
+        ((AggregateService.AggregateElement)
+                ((AggregateService.Aggregate) aggr.elements().get(1)).elements().getFirst())
+            .entity()
+            .getValues()
+            .get("provisioningStatus")
+            .asText());
   }
 }
