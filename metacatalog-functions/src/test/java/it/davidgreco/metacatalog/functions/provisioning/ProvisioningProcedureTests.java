@@ -47,8 +47,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
         (Entity entity) ->
             new ProvisioningTask(entity, entityService) {
               @Override
-              public void provision() {
-                log.info("Provisioning entity: " + getEntity());
+              public String provision() {
+                return "Provisioned entity: " + getEntity().getId() + " successfully";
               }
             };
 
@@ -66,6 +66,25 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
             .getValues()
             .get("provisioningStatus")
             .asText());
+
+    var res1 =
+        ((AggregateService.AggregateElement)
+                ((AggregateService.Aggregate) aggr.elements().get(0)).elements().getFirst())
+            .entity()
+            .getValues()
+            .get("provisioningResult")
+            .asText();
+
+    var expectedRes1 =
+        "Provisioned entity: "
+            + ((AggregateService.AggregateElement)
+                    ((AggregateService.Aggregate) aggr.elements().get(0)).elements().getFirst())
+                .entity()
+                .getId()
+            + " successfully";
+
+    Assertions.assertEquals(expectedRes1, res1);
+
     Assertions.assertEquals(
         "PROVISIONED",
         ((AggregateService.AggregateElement)
@@ -74,5 +93,23 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
             .getValues()
             .get("provisioningStatus")
             .asText());
+
+    var res2 =
+        ((AggregateService.AggregateElement)
+                ((AggregateService.Aggregate) aggr.elements().get(1)).elements().getFirst())
+            .entity()
+            .getValues()
+            .get("provisioningResult")
+            .asText();
+
+    var expectedRes2 =
+        "Provisioned entity: "
+            + ((AggregateService.AggregateElement)
+                    ((AggregateService.Aggregate) aggr.elements().get(1)).elements().getFirst())
+                .entity()
+                .getId()
+            + " successfully";
+
+    Assertions.assertEquals(expectedRes2, res2);
   }
 }

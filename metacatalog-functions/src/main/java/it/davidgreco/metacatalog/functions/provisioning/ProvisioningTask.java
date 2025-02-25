@@ -27,14 +27,16 @@ public abstract class ProvisioningTask extends Task<Entity> {
             + " executed by thread: "
             + Thread.currentThread().getName());
     try {
-      provision();
+      var result = provision();
       ObjectNode values = (ObjectNode) getEntity().getValues();
       values.put("provisioningStatus", "PROVISIONED");
+      values.put("provisioningResult", result);
       getEntityService().update(getEntity().getId(), values.toPrettyString());
     } catch (Exception e) {
       try {
         ObjectNode values = (ObjectNode) getEntity().getValues();
         values.put("provisioningStatus", "FAILED");
+        values.put("provisioningResult", e.getMessage());
         getEntityService().update(getEntity().getId(), values.toPrettyString());
       } catch (Exception ex) {
         throw new ServiceRuntimeError(e);
@@ -65,5 +67,5 @@ public abstract class ProvisioningTask extends Task<Entity> {
     return super.hashCode();
   }
 
-  public abstract void provision();
+  public abstract String provision();
 }
