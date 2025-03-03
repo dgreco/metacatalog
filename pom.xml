@@ -28,7 +28,7 @@
 
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
-        <spring-boot.version>3.4.2</spring-boot.version>
+        <spring-boot.version>3.4.3</spring-boot.version>
 
         <!--   Hypersistence -->
         <hypersistence.version>3.9.0</hypersistence.version>
