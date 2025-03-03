@@ -30,6 +30,12 @@ management:
     web:
       exposure:
         include: beans, caches, health, info, flyway, metrics, env, configprops, loggers
+logging:
+  level:
+    root: ERROR                                # General logging level for the application
+    org.springframework.data.jpa.repository: ERROR  # Log JPA repository method calls
+    org.hibernate.SQL: ERROR                   # Log SQL statements executed by Hibernate
+    org.hibernate.type.descriptor.sql: ERROR   # Log SQL parameter binding
 application:
   config:
     automaticEntitiesMapping: true
