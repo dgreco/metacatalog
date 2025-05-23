@@ -60,18 +60,17 @@ public class TaskManager {
   }
 
   public void joinSchedule(String id) {
-    Optional.ofNullable(runningScheduleFutures.getIfPresent(id))
-        .ifPresent(
-            fut -> {
-              try {
-                fut.get();
-              } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ServiceRuntimeError(e);
-              } catch (ExecutionException e) {
-                throw new ServiceRuntimeError(e);
-              }
-            });
+    var fut = runningScheduleFutures.getIfPresent(id);
+    if (fut != null) {
+      try {
+        fut.get();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new ServiceRuntimeError(e);
+      } catch (ExecutionException e) {
+        throw new ServiceRuntimeError(e);
+      }
+    }
   }
 
   public List<Try<Void>> getScheduleResults(String id) {

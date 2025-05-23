@@ -630,7 +630,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         if (mappingValues.isObject()) {
           ObjectNode objectNode = (ObjectNode) mappingValues;
           objectNode
-              .fields()
+              .properties()
+              .iterator()
               .forEachRemaining(
                   entry -> {
                     String fieldName = entry.getKey();

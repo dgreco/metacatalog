@@ -11,6 +11,8 @@
 
 `mvn licensescan:audit`
 
+`mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar`
+
 `../ontop-cli-5/ontop endpoint --db-url "jdbc:postgresql://localhost:5432/metacatalog?loggerLevel=OFF" -m src/main/resources/ontop/mapping.obda -t src/main/resources/ontop/ontology.owl --db-user metacatalog --db-password metacatalog --port 8081`
 
 To bootstrap with ontop-cli: 

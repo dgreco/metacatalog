@@ -77,9 +77,8 @@ public class JsonUtils {
    */
   private static boolean checkNotAllowedKeywords(JsonNode node) {
     if (node.isObject()) {
-      var entries = node.fields();
-      while (entries.hasNext()) {
-        var key = entries.next().getKey();
+      for (Map.Entry<String, JsonNode> stringJsonNodeEntry : node.properties()) {
+        var key = stringJsonNodeEntry.getKey();
         var value = node.get(key);
         if (notAllowedKeywords.contains(key)) {
           return true;
@@ -105,9 +104,7 @@ public class JsonUtils {
    */
   private static void convertFieldTypeToStringType(JsonNode node) {
     if (node.isObject()) {
-      var entries = node.fields();
-      while (entries.hasNext()) {
-        var entry = entries.next();
+      for (Map.Entry<String, JsonNode> entry : node.properties()) {
         var key = entry.getKey();
         var value = node.get(key);
         if (value.isObject()) {
@@ -187,7 +184,8 @@ public class JsonUtils {
         return Either.left(List.of("The schema must have a properties field"));
 
       node.get(PROPERTIES)
-          .fields()
+          .properties()
+          .iterator()
           .forEachRemaining(
               entry -> {
                 var key = entry.getKey();
