@@ -36,7 +36,7 @@ class MetacatalogApiTests {
   static final int POSTGRESQL_PORT = 5433;
 
   static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:16-alpine")
+      new PostgreSQLContainer<>("postgres:17.5-alpine")
           .withExposedPorts(5432)
           .withCreateContainerCmdModifier(
               cmd ->
