@@ -83,7 +83,7 @@ public abstract class Task<T> {
 
     try {
       createRetryTemplate.execute(
-          _ -> {
+          rc -> {
             if (runningTaskFuture.get() == null)
               throw new ServiceRuntimeError("Task not yet started");
             else {

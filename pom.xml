@@ -24,7 +24,8 @@
 
         <!-- Project Properties -->
         <project.version>0.0.1-SNAPSHOT</project.version>
-        <maven.compiler.release>22</maven.compiler.release>
+        <maven.compiler.source>23</maven.compiler.source>
+        <maven.compiler.target>23</maven.compiler.target>
 
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
@@ -289,6 +290,7 @@
                                 <artifactId>lombok</artifactId>
                             </path>
                         </annotationProcessorPaths>
+                        <release>23</release>
                     </configuration>
                 </plugin>
 
@@ -338,7 +340,7 @@
                 <plugin>
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
-                    <version>2.44.2</version>
+                    <version>3.0.0</version>
                     <configuration>
                         <java>
                             <includes>
