@@ -12,7 +12,7 @@ stages:
 
 build:
   stage: build
-  image: maven:3-eclipse-temurin-23
+  image: maven:3-eclipse-temurin-24
 
   cache:
     policy: pull-push
