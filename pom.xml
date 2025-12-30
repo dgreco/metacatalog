@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.3</version>
+        <version>3.5.9</version>
         <relativePath/>
     </parent>
 
@@ -29,7 +29,7 @@
 
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
-        <spring-boot.version>3.5.3</spring-boot.version>
+        <spring-boot.version>3.5.9</spring-boot.version>
 
         <!--   Hypersistence -->
         <hypersistence.version>3.9.0</hypersistence.version>
@@ -39,8 +39,10 @@
         <json-path.version>2.9.0</json-path.version>
 
         <!--   Misc -->
+        <lombok.version>1.18.42</lombok.version>
         <vavr.version>0.10.5</vavr.version>
         <jsqlparser.version>5.1</jsqlparser.version>
+        <spring-retry.version>2.0.12</spring-retry.version>
 
         <!--   OpenApi Related -->
         <swagger-annotations.version>2.2.28</swagger-annotations.version>
@@ -288,6 +290,7 @@
                             <path>
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
                             </path>
                         </annotationProcessorPaths>
                         <release>23</release>
@@ -348,7 +351,7 @@
                                 <include>src/test/java/**/*.java</include>
                             </includes>
                             <googleJavaFormat>
-                                <version>1.25.2</version>
+                                <version>1.26.0</version>
                             </googleJavaFormat>
                         </java>
                     </configuration>
