@@ -38,7 +38,7 @@ public abstract class ProvisioningTask extends Task<Entity> {
         values.put("provisioningStatus", "FAILED");
         values.put("provisioningResult", e.getMessage());
         getEntityService().update(getEntity().getId(), values.toPrettyString());
-      } catch (Exception ex) {
+      } catch (Exception _) {
         throw new ServiceRuntimeError(e);
       }
       throw new ServiceRuntimeError(e);
