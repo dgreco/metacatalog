@@ -11,10 +11,10 @@ import com.fasterxml.jackson.databind.node.IntNode;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.repository.EntityRepository;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -367,7 +367,18 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () -> {
+              var entities = entityRepository.findByEntityType(targeType);
+              if (entities.isEmpty()) return false;
+              var int1 =
+                  new WrappedJsonNode(entities.getFirst().getValues())
+                      .getValue(Integer.class, "$.b");
+              return int1 == 11;
+            });
 
     {
       var int1 =
@@ -388,7 +399,17 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
-    await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .pollInterval(Duration.ofMillis(500))
+        .until(
+            () -> {
+              var int1 =
+                  new WrappedJsonNode(
+                          entityRepository.findByEntityType(targeType).getFirst().getValues())
+                      .getValue(Integer.class, "$.b");
+              return int1 == 12;
+            });
 
     {
       var int1 =

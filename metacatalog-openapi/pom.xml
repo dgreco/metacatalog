@@ -14,10 +14,6 @@
     <artifactId>metacatalog-openapi</artifactId>
     <version>${project.version}</version>
     <name>Meta Catalog OpenApi</name>
-    <properties>
-        <maven.compiler.source>24</maven.compiler.source>
-        <maven.compiler.target>24</maven.compiler.target>
-    </properties>
 
     <dependencies>
         <!-- SpringBoot & Openapi -->
