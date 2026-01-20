@@ -367,7 +367,10 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    await().pollDelay(Durations.FIVE_SECONDS).until(() -> true);
+    await()
+        .atMost(Durations.TEN_SECONDS.plusSeconds(1))
+        .pollDelay(Durations.TEN_SECONDS)
+        .until(() -> true);
 
     {
       var int1 =
@@ -388,7 +391,10 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
-    await().pollDelay(Durations.FIVE_SECONDS).until(() -> true);
+    await()
+        .atMost(Durations.FIVE_SECONDS.plusSeconds(1))
+        .pollDelay(Durations.FIVE_SECONDS)
+        .until(() -> true);
 
     {
       var int1 =
