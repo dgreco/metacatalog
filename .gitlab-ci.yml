@@ -24,7 +24,7 @@ build:
       - sonar-scanner/
 
   script:
-    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+    - mvn -DDOCKER_API_VERSION=1.44 spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
