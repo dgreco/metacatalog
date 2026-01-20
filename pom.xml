@@ -63,7 +63,7 @@
         <logback.version>1.5.16</logback.version>
 
         <!--   Testing & Checking -->
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <testcontainers.version>1.21.2</testcontainers.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
 
     </properties>
