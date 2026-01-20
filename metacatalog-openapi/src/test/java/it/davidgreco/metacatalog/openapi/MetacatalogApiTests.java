@@ -2,6 +2,11 @@ package it.davidgreco.metacatalog.openapi;
 
 import static org.awaitility.Awaitility.await;
 
+import com.github.dockerjava.api.model.ExposedPort;
+import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.PortBinding;
+import com.github.dockerjava.api.model.Ports;
+import it.davidgreco.metacatalog.Application;
 import it.davidgreco.metacatalog.openapi.client.*;
 import it.davidgreco.metacatalog.openapi.common.FileHttpMessageConverter;
 import java.io.File;
@@ -12,35 +17,39 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.awaitility.Durations;
 import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.boot.web.server.autoconfigure.ServerProperties;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest
 @RequiredArgsConstructor
 class MetacatalogApiTests {
+  static final int POSTGRESQL_PORT = 5433;
 
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.5-alpine");
+  static PostgreSQLContainer<?> postgres =
+      new PostgreSQLContainer<>("postgres:17.5")
+          .withExposedPorts(5432)
+          .withCreateContainerCmdModifier(
+              cmd ->
+                  cmd.withHostConfig(
+                      new HostConfig()
+                          .withPortBindings(
+                              new PortBinding(
+                                  Ports.Binding.bindPort(POSTGRESQL_PORT),
+                                  new ExposedPort(5432)))));
 
-  static {
-    postgres.start();
-  }
+  static ConfigurableApplicationContext context;
 
-  @LocalServerPort private int port;
-
-  @DynamicPropertySource
-  static void configureProperties(DynamicPropertyRegistry registry) {
-    registry.add("spring.datasource.url", postgres::getJdbcUrl);
-    registry.add("spring.datasource.username", postgres::getUsername);
-    registry.add("spring.datasource.password", postgres::getPassword);
-  }
+  @Autowired private ServerProperties serverProperties;
 
   private MetaCatalogManagerApi getMetaCatalogManagerApi() {
     var restTemplate = new RestTemplate();
@@ -48,12 +57,14 @@ class MetacatalogApiTests {
     msgConverters.add(new FileHttpMessageConverter());
     restTemplate.setMessageConverters(msgConverters);
     var apiClient = new ApiClient(restTemplate);
-    apiClient.setBasePath("http://localhost:" + port);
+    apiClient.setBasePath("http://localhost:" + serverProperties.getPort());
     return new MetaCatalogManagerApi(apiClient);
   }
 
   @BeforeAll
   static void beforeAll() {
+    postgres.start();
+
     var flyway =
         Flyway.configure()
             .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
@@ -61,6 +72,13 @@ class MetacatalogApiTests {
             .load();
     flyway.clean();
     flyway.migrate();
+
+    context = SpringApplication.run(Application.class);
+  }
+
+  @AfterAll
+  static void afterAll() {
+    postgres.stop();
   }
 
   @Test

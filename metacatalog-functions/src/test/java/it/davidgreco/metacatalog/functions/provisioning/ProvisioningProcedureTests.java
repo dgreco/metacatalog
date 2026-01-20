@@ -57,6 +57,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
 
+    await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
+
     var aggr = aggregateService.read(ids.getFirst(), true);
     Assertions.assertEquals(
         "PROVISIONED",

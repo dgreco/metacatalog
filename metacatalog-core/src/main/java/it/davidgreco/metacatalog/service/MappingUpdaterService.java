@@ -46,7 +46,6 @@ public class MappingUpdaterService {
         automaticEntitiesMapping);
     try {
       if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-        log.error("Lock acquired and update mapped entities started");
         var createdEvents =
             entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
                 "SOURCE_CREATED", "PENDING");
