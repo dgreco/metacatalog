@@ -367,8 +367,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    // Manually trigger the scheduled task instead of waiting for the scheduler
-    mappingUpdaterService.updateMappedEntities();
+    await().pollDelay(Durations.FIVE_SECONDS).until(() -> true);
 
     {
       var int1 =
