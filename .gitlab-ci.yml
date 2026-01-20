@@ -8,6 +8,8 @@ variables:
   DOCKER_DRIVER: "overlay2"
   DOCKER_API_VERSION: "1.44"
   TESTCONTAINERS_HOST_OVERRIDE: "docker"
+  TESTCONTAINERS_DOCKER_CLIENT_STRATEGY: "org.testcontainers.dockerclient.EnvironmentAndSystemPropertyClientProviderStrategy"
+  TESTCONTAINERS_RYUK_DISABLED: "true"
 
 stages:
   - build
@@ -23,6 +25,8 @@ build:
       - "${SONAR_USER_HOME}/cache"
       - sonar-scanner/
 
+  before_script:
+    - apt-get update && apt-get install -y docker.io
   script:
     - mvn -DDOCKER_API_VERSION=1.44 spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
   allow_failure: true
