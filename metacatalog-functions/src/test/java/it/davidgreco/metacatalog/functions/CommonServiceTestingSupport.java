@@ -3,7 +3,6 @@ package it.davidgreco.metacatalog.functions;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
@@ -38,11 +37,6 @@ public class CommonServiceTestingSupport {
             .load();
     flyway.clean();
     flyway.migrate();
-  }
-
-  @AfterAll
-  static void afterAll() {
-    postgres.stop();
   }
 
   private final ApplicationContext applicationContext;

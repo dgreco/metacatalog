@@ -12,7 +12,6 @@ import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.awaitility.Durations;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -62,11 +61,6 @@ class MetacatalogApiTests {
             .load();
     flyway.clean();
     flyway.migrate();
-  }
-
-  @AfterAll
-  static void afterAll() {
-    postgres.stop();
   }
 
   @Test
