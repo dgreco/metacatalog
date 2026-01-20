@@ -41,7 +41,7 @@ public class MappingUpdaterService {
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   void updateMappedEntities() {
-    log.info(
+    log.error(
         "Update mapped entities task started with automaticEntitiesMapping={}",
         automaticEntitiesMapping);
     try {
