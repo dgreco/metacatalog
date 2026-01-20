@@ -4,14 +4,12 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 import static it.davidgreco.metacatalog.service.MappingService.generateMappedValues;
-import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.IntNode;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.repository.EntityRepository;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -367,18 +365,8 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    await()
-        .atMost(Duration.ofSeconds(10))
-        .pollInterval(Duration.ofMillis(500))
-        .until(
-            () -> {
-              var entities = entityRepository.findByEntityType(targeType);
-              if (entities.isEmpty()) return false;
-              var int1 =
-                  new WrappedJsonNode(entities.getFirst().getValues())
-                      .getValue(Integer.class, "$.b");
-              return int1 == 11;
-            });
+    // Manually trigger the scheduled task instead of waiting for the scheduler
+    mappingUpdaterService.updateMappedEntities();
 
     {
       var int1 =
@@ -399,17 +387,8 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
-    await()
-        .atMost(Duration.ofSeconds(10))
-        .pollInterval(Duration.ofMillis(500))
-        .until(
-            () -> {
-              var int1 =
-                  new WrappedJsonNode(
-                          entityRepository.findByEntityType(targeType).getFirst().getValues())
-                      .getValue(Integer.class, "$.b");
-              return int1 == 12;
-            });
+    // Manually trigger the scheduled task instead of waiting for the scheduler
+    mappingUpdaterService.updateMappedEntities();
 
     {
       var int1 =
