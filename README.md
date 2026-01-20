@@ -116,13 +116,6 @@ Check for plugin updates:
 ```bash
 mvn versions:display-plugin-updates
 ```
-
-Analyze dependencies:
-
-```bash
-mvn dependency:check
-```
-
 ### Security & License Scanning
 
 Scan for license violations:

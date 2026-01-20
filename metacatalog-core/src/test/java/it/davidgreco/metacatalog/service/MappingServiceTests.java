@@ -4,6 +4,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 import static it.davidgreco.metacatalog.service.MappingService.generateMappedValues;
+import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.node.IntNode;
@@ -13,6 +14,7 @@ import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -365,8 +367,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    // Manually trigger the scheduled task instead of waiting for the scheduler
-    mappingUpdaterService.updateMappedEntities();
+    await().pollDelay(Durations.FIVE_SECONDS).until(() -> true);
 
     {
       var int1 =
@@ -387,8 +388,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
-    // Manually trigger the scheduled task instead of waiting for the scheduler
-    mappingUpdaterService.updateMappedEntities();
+    await().pollDelay(Durations.FIVE_SECONDS).until(() -> true);
 
     {
       var int1 =
