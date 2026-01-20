@@ -420,8 +420,7 @@
                     <version>3.5.2</version>
                     <configuration>
                         <environmentVariables>
-                            <DOCKER_HOST>${env.DOCKER_HOST}</DOCKER_HOST>
-                            <TESTCONTAINERS_RYUK_DISABLED>${env.TESTCONTAINERS_RYUK_DISABLED}</TESTCONTAINERS_RYUK_DISABLED>
+                            <!--DOCKER_HOST>${env.DOCKER_HOST}</DOCKER_HOST-->
                         </environmentVariables>
                         <argLine>--enable-native-access=ALL-UNNAMED</argLine>
                     </configuration>

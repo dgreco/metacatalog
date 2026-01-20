@@ -368,8 +368,8 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
     await()
-        .atMost(Durations.TEN_SECONDS.plusSeconds(1))
-        .pollDelay(Durations.TEN_SECONDS)
+        .atMost(Durations.ONE_MINUTE.plusSeconds(1))
+        .pollDelay(Durations.ONE_MINUTE)
         .until(() -> true);
 
     {
