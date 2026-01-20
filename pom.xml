@@ -421,7 +421,6 @@
                     <configuration>
                         <environmentVariables>
                             <DOCKER_HOST>${env.DOCKER_HOST}</DOCKER_HOST>
-                            <TESTCONTAINERS_HOST_OVERRIDE>${env.TESTCONTAINERS_HOST_OVERRIDE}</TESTCONTAINERS_HOST_OVERRIDE>
                             <TESTCONTAINERS_RYUK_DISABLED>${env.TESTCONTAINERS_RYUK_DISABLED}</TESTCONTAINERS_RYUK_DISABLED>
                         </environmentVariables>
                         <argLine>--enable-native-access=ALL-UNNAMED</argLine>
