@@ -35,14 +35,43 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ## Quick Start
 
-### 1. Clone the Repository
+### Option 1: Docker Compose (Recommended)
+
+The easiest way to run the application with all dependencies:
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd metacatalog
+
+# Build the Docker image using Spring Boot buildpacks
+mvn clean package -DskipTests
+mvn spring-boot:build-image -pl metacatalog-application -DskipTests
+
+# Start the application with Docker Compose
+docker compose up -d
+```
+
+This starts:
+- **PostgreSQL 16** on port 5432
+- **Meta Catalog Application** on port 8080
+
+To stop:
+```bash
+docker compose down      # Keep data
+docker compose down -v   # Remove data volumes
+```
+
+### Option 2: Local Development
+
+#### 1. Clone the Repository
 
 ```bash
 git clone <repository-url>
 cd metacatalog
 ```
 
-### 2. Setup Database
+#### 2. Setup Database
 
 ```bash
 # Create PostgreSQL database
@@ -53,19 +82,19 @@ psql -c "CREATE USER metacatalog WITH PASSWORD 'metacatalog';"
 psql -c "GRANT ALL PRIVILEGES ON DATABASE metacatalog TO metacatalog;"
 ```
 
-### 3. Build the Project
+#### 3. Build the Project
 
 ```bash
 mvn clean install
 ```
 
-### 4. Run the Application
+#### 4. Run the Application
 
 ```bash
 mvn spring-boot:run -pl metacatalog-application
 ```
 
-The application will start on the default Spring Boot port (8080).
+The application will start on port 8080.
 
 ## Project Structure
 
@@ -172,10 +201,11 @@ ontop bootstrap \
 
 ## API Documentation
 
-When the application is running, access the interactive API documentation:
+When the application is running, access the documentation:
 
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
-- **OpenAPI Spec**: http://localhost:8080/v3/api-docs
+- **OpenAPI Spec**: http://localhost:8080/api-docs
+- **Javadoc**: http://localhost:8080/javadoc/index.html
 
 ## Key Libraries & Frameworks
 
