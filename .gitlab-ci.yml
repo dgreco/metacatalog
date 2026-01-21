@@ -24,8 +24,8 @@ build:
       - sonar-scanner/
 
   script:
-#    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-     - mvn spotless:check verify test
+     - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+#     - mvn spotless:check verify test
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
