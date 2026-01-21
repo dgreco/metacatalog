@@ -9,6 +9,12 @@ import lombok.Setter;
 import lombok.ToString;
 import org.hibernate.annotations.Type;
 
+/**
+ * Represents a business entity instance in the metacatalog.
+ *
+ * <p>An entity is a concrete instance of an {@link EntityType}, containing attribute values stored
+ * as JSON. Entities can be related to other entities through {@link EntityRelationship}s.
+ */
 @Getter
 @Setter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
@@ -18,6 +24,8 @@ import org.hibernate.annotations.Type;
     name = "entity",
     indexes = {@Index(name = "idx_entity_entity_type_id_unq", columnList = "entity_type_id")})
 public class Entity {
+
+  /** The unique identifier for this entity, generated as a UUID. */
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   @Column(name = "id", nullable = false)
@@ -25,19 +33,28 @@ public class Entity {
   @EqualsAndHashCode.Include
   private String id;
 
+  /** The attribute values of this entity, stored as a JSON object. */
   @Type(JsonBinaryType.class)
   @Column(name = "values", columnDefinition = "jsonb", nullable = false)
   @ToString.Include
   private JsonNode values;
 
+  /** The type of this entity, which defines its schema and available traits. */
   @ManyToOne(fetch = FetchType.EAGER)
   @JoinColumn(name = "entity_type_id", nullable = false)
   private EntityType entityType;
 
+  /**
+   * Creates a new entity with the specified type and values.
+   *
+   * @param entityType the type of the entity
+   * @param values the attribute values as a JSON node
+   */
   public Entity(EntityType entityType, JsonNode values) {
     this.values = values;
     this.entityType = entityType;
   }
 
+  /** Default constructor required by JPA. */
   public Entity() {}
 }

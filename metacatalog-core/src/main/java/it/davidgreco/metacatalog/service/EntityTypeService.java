@@ -108,6 +108,13 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     }
   }
 
+  /**
+   * Reads an entity type by its name.
+   *
+   * @param name the name of the entity type to read
+   * @return the EntityType with the given name
+   * @throws ServiceError if the entity type is not found
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
@@ -163,6 +170,12 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     }
   }
 
+  /**
+   * Counts the number of child EntityTypes that inherit from the given EntityType.
+   *
+   * @param name the name of the parent EntityType
+   * @return the number of child EntityTypes, or 0 if the EntityType is not found
+   */
   @Transactional(propagation = Propagation.REQUIRED)
   public long countEntityTypeChildren(String name) {
     log.info("Counting children of EntityType: {}", name);

@@ -9,6 +9,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * Represents a reusable characteristic that can be applied to entity types.
+ *
+ * <p>Traits define additional schema properties that can be shared across multiple entity types.
+ * They support inheritance through a parent trait (father) and contribute to the derived schema of
+ * entity types they are associated with.
+ */
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
@@ -17,32 +24,44 @@ import lombok.ToString;
     name = "trait",
     indexes = {@Index(name = "idx_trait_name_unq", columnList = "name", unique = true)})
 public class Trait implements Type<Trait> {
+
+  /** The unique identifier for this trait, generated as a UUID. */
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   @Column(name = "id", nullable = false)
   @ToString.Include
   private String id;
 
+  /** The unique name of this trait. */
   @Column(name = "name", nullable = false)
   @ToString.Include
   private String name;
 
+  /** The base JSON schema that defines the properties contributed by this trait. */
   @org.hibernate.annotations.Type(JsonBinaryType.class)
   @Column(name = "base_schema", columnDefinition = "jsonb", nullable = false)
   @ToString.Include
   private JsonNode baseSchema;
 
+  /** The derived JSON schema, computed from base schema and inherited traits. */
   @org.hibernate.annotations.Type(JsonBinaryType.class)
   @Column(name = "derived_schema", columnDefinition = "jsonb", nullable = true)
   @ToString.Include
   private JsonNode derivedSchema;
 
+  /** The parent trait from which this trait inherits. */
   @OneToOne(fetch = FetchType.EAGER)
   private Trait father;
 
+  /** The entity types that have this trait. */
   @ManyToMany(mappedBy = "traits", fetch = FetchType.LAZY)
   private List<EntityType> types = new ArrayList<>();
 
+  /**
+   * Returns the effective schema for this trait.
+   *
+   * @return the derived schema if present, otherwise the base schema
+   */
   public JsonNode getSchema() {
     if (this.derivedSchema == null) {
       return this.baseSchema;

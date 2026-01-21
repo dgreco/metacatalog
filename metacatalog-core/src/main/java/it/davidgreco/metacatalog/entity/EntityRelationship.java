@@ -6,6 +6,16 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * Represents a relationship between two entities.
+ *
+ * <p>Entity relationships define how entities are connected to each other in the metacatalog. Each
+ * relationship has a source entity, a target entity, and a relationship type that describes the
+ * nature of the connection.
+ *
+ * @see CommonRelationship
+ * @see RelationType
+ */
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)

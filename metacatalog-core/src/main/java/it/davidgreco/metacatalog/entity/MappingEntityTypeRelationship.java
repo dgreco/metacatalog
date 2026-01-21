@@ -13,6 +13,16 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * Represents a mapping rule between two entity types.
+ *
+ * <p>Mapping entity type relationships define how entities of one type should be automatically
+ * transformed into entities of another type. The mapping includes transformation expressions and
+ * references to related entities that provide additional context for the transformation.
+ *
+ * @see CommonRelationship
+ * @see MappingEntityRelationship
+ */
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)
@@ -28,18 +38,32 @@ import lombok.ToString;
           columnList = "source_id, relation_type, target_id")
     })
 public class MappingEntityTypeRelationship extends CommonRelationship<EntityType> {
+
+  /** The JSON expressions that define how to map source values to target values. */
   @org.hibernate.annotations.Type(JsonBinaryType.class)
   @Column(name = "mapping_values", columnDefinition = "jsonb", nullable = false)
   @ToString.Include
   private JsonNode mappingValues;
 
+  /** The references to related entities used in the mapping expressions. */
   @org.hibernate.annotations.Type(JsonBinaryType.class)
   @Column(name = "entity_path_references", columnDefinition = "jsonb", nullable = false)
   @ToString.Include
   private JsonNode entityPathReferences;
 
+  /**
+   * Represents a reference to an entity path used in mapping expressions.
+   *
+   * @param alias the alias used to reference this path in mapping expressions
+   * @param referencePath the path expression to traverse entity relationships
+   */
   public record EntityPathReference(String alias, String referencePath) {}
 
+  /**
+   * Sets the entity path references from a list of reference objects.
+   *
+   * @param eprs the list of entity path references to set
+   */
   public void setEntityPathReferences(List<EntityPathReference> eprs) {
     var nodes = eprs.stream().map(jsonFactory::<JsonNode>valueToTree).toList();
     var node = jsonFactory.createArrayNode();
@@ -47,6 +71,11 @@ public class MappingEntityTypeRelationship extends CommonRelationship<EntityType
     entityPathReferences = node;
   }
 
+  /**
+   * Returns the entity path references as a list of reference objects.
+   *
+   * @return the list of entity path references
+   */
   public List<MappingEntityTypeRelationship.EntityPathReference> getEntityPathReferences() {
     var list = new ArrayList<EntityPathReference>();
     var nodes = entityPathReferences.elements();

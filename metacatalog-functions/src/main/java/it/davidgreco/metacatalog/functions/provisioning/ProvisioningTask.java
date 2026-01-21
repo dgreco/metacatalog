@@ -8,17 +8,46 @@ import it.davidgreco.metacatalog.service.Task;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Abstract base class for provisioning tasks that operate on entities.
+ *
+ * <p>Subclasses must implement the {@link #provision()} method to perform the actual provisioning
+ * logic. This base class handles the lifecycle of the provisioning operation, including updating
+ * the entity's provisioning status and result.
+ *
+ * <p>After execution:
+ *
+ * <ul>
+ *   <li>On success: provisioningStatus is set to "PROVISIONED" and provisioningResult contains the
+ *       result
+ *   <li>On failure: provisioningStatus is set to "FAILED" and provisioningResult contains the error
+ *       message
+ * </ul>
+ */
 @Slf4j
 @Getter
 public abstract class ProvisioningTask extends Task<Entity> {
 
+  /** Service for updating entity values after provisioning. */
   private final EntityService entityService;
 
+  /**
+   * Creates a new provisioning task for the given entity.
+   *
+   * @param entity the entity to provision
+   * @param entityService the service for updating entity values
+   */
   protected ProvisioningTask(Entity entity, EntityService entityService) {
     super(entity);
     this.entityService = entityService;
   }
 
+  /**
+   * Executes the provisioning task and updates the entity's status.
+   *
+   * @return always returns null (Void)
+   * @throws ServiceRuntimeError if provisioning fails
+   */
   @Override
   public Void apply() {
     log.info(
@@ -52,6 +81,11 @@ public abstract class ProvisioningTask extends Task<Entity> {
     return null;
   }
 
+  /**
+   * Gets the unique identifier for this task, which is the entity's ID.
+   *
+   * @return the entity's ID
+   */
   @Override
   public String getId() {
     return getEntity().getId();
@@ -67,5 +101,13 @@ public abstract class ProvisioningTask extends Task<Entity> {
     return super.hashCode();
   }
 
+  /**
+   * Performs the actual provisioning operation.
+   *
+   * <p>Subclasses must implement this method to execute the specific provisioning logic for their
+   * resource type.
+   *
+   * @return a result string describing the provisioning outcome
+   */
   public abstract String provision();
 }

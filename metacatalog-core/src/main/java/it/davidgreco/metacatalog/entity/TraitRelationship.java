@@ -6,6 +6,16 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
+/**
+ * Represents a relationship between two traits.
+ *
+ * <p>Trait relationships define how traits are connected to each other in the metacatalog. These
+ * relationships are used to express dependencies or associations between traits, which in turn
+ * affect the entities that have those traits.
+ *
+ * @see CommonRelationship
+ * @see RelationType
+ */
 @Getter
 @Setter
 @ToString(onlyExplicitlyIncluded = true)

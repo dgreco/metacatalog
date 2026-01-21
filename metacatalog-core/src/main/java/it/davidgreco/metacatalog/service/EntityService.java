@@ -229,6 +229,15 @@ public class EntityService implements CommonService<Entity, String> {
     }
   }
 
+  /**
+   * Lists entities of the specified type, optionally filtered by a JSON path query.
+   *
+   * @param typeName the name of the entity type to list entities for
+   * @param queryPath a JSON path query to filter entities; empty string returns all entities of the
+   *     type
+   * @return a list of entities matching the criteria
+   * @throws ServiceError if the entity type is not found or the query path is invalid
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})

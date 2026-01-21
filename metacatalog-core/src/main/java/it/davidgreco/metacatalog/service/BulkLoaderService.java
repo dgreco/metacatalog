@@ -212,6 +212,25 @@ public class BulkLoaderService {
     }
   }
 
+  /**
+   * Creates multiple aggregates from a YAML file in the given {@link InputStream}.
+   *
+   * <p>The file is expected to contain a list of aggregate definitions, each with the following
+   * structure:
+   *
+   * <ul>
+   *   <li>{@code ref}: an optional reference identifier for the aggregate
+   *   <li>{@code entityType}: the name of the entity type
+   *   <li>{@code values}: the JSON values for the entity
+   *   <li>{@code dependsOn}: an optional list of reference identifiers that this aggregate depends
+   *       on
+   *   <li>{@code parts}: an optional list of child aggregates
+   * </ul>
+   *
+   * @param is the {@link InputStream} containing the YAML file
+   * @return a list of IDs of the created root aggregates
+   * @throws ServiceError if any error occurs during the creation or YAML parsing fails
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})

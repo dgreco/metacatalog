@@ -371,12 +371,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     await()
         .atMost(Duration.ofSeconds(30))
         .pollDelay(Durations.ONE_SECOND)
-        .until(
-            () -> {
-              var entities = entityRepository.findByEntityType(targeType);
-              System.out.println("UPD1 - found: " + entities.size());
-              return !entities.isEmpty();
-            });
+        .until(() -> !entityRepository.findByEntityType(targeType).isEmpty());
 
     {
       var int1 =
@@ -400,11 +395,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     await()
         .atMost(Durations.TEN_SECONDS)
         .pollDelay(Durations.ONE_SECOND)
-        .until(
-            () -> {
-              System.out.println("UPD2");
-              return !entityRepository.findByEntityType(targeType).isEmpty();
-            });
+        .until(() -> !entityRepository.findByEntityType(targeType).isEmpty());
 
     {
       var int1 =

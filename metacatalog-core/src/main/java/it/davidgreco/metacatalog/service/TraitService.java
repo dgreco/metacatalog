@@ -276,6 +276,14 @@ public class TraitService implements CommonTypeService<Trait, String> {
     }
   }
 
+  /**
+   * Retrieves all Traits linked to the given trait with the specified relation type.
+   *
+   * @param traitName1 the name of the source Trait
+   * @param relType the relation type to filter the links
+   * @return a list of Traits that are targets of the specified relation type from the source Trait
+   * @throws ServiceError if the source Trait is not found
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
@@ -294,6 +302,12 @@ public class TraitService implements CommonTypeService<Trait, String> {
     }
   }
 
+  /**
+   * Counts the number of child Traits that inherit from the given Trait.
+   *
+   * @param name the name of the parent Trait
+   * @return the number of child Traits, or 0 if the Trait is not found
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})

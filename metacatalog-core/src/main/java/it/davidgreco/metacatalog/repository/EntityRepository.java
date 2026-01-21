@@ -7,12 +7,41 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Repository interface for {@link Entity} persistence operations.
+ *
+ * <p>Provides CRUD operations and custom queries for entities, including queries that leverage
+ * PostgreSQL's JSONB path query capabilities.
+ */
 @Repository
 public interface EntityRepository extends JpaRepository<Entity, String> {
+
+  /**
+   * Counts the number of entities of a given type.
+   *
+   * @param entityType the entity type to count instances of
+   * @return the number of entities of the specified type
+   */
   long countByEntityType(EntityType entityType);
 
+  /**
+   * Finds all entities of a given type.
+   *
+   * @param entityType the entity type to search for
+   * @return list of entities of the specified type
+   */
   List<Entity> findByEntityType(EntityType entityType);
 
+  /**
+   * Finds entities by type and JSON path expression.
+   *
+   * <p>Uses PostgreSQL's native JSONB path query functionality to filter entities based on their
+   * JSON values.
+   *
+   * @param entityTypeId the ID of the entity type
+   * @param jsonPath the JSON path expression to apply
+   * @return list of matching entities
+   */
   @Query(
       value =
           """

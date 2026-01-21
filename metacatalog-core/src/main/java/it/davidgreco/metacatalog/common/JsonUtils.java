@@ -15,14 +15,24 @@ import io.vavr.Tuple2;
 import io.vavr.control.Either;
 import java.util.*;
 
+/**
+ * Utility class providing JSON and JSON Schema operations for the metacatalog.
+ *
+ * <p>This class contains static methods and constants for working with JSON data, including schema
+ * validation, schema merging, and JSON path operations. It uses Jackson for JSON processing and
+ * NetworkNT for JSON Schema validation.
+ */
 public class JsonUtils {
 
   private JsonUtils() {}
 
+  /** Jackson ObjectMapper configured for JSON processing. */
   public static final ObjectMapper jsonFactory = new ObjectMapper();
 
+  /** Jackson ObjectMapper configured for YAML processing. */
   public static final ObjectMapper yamlFactory = new ObjectMapper(new YAMLFactory());
 
+  /** An empty JSON schema template with no properties defined. */
   public static final String EMPTY_SCHEMA =
       """
             {
@@ -37,13 +47,16 @@ public class JsonUtils {
     yamlFactory.registerModule(new Jdk8Module());
   }
 
+  /** Factory for creating JSON Schema validators using the 2020-12 specification. */
   public static final JsonSchemaFactory jsonSchemaFactory =
       JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
+  /** JSON Schema validator for validating JSON Schema documents themselves. */
   public static final JsonSchema jsonSchemaSchema =
       jsonSchemaFactory.getSchema(
           SchemaLocation.of(SchemaId.V201909), SchemaValidatorsConfig.builder().build());
 
+  /** Configuration for JSON Path operations using Jackson as the JSON provider. */
   public static final Configuration jsonPathConfiguration =
       Configuration.builder().jsonProvider(new JacksonJsonNodeJsonProvider()).build();
 
@@ -123,6 +136,12 @@ public class JsonUtils {
     }
   }
 
+  /**
+   * Converts a JSON schema to a mapping schema by changing all field types to string.
+   *
+   * @param jsonSchema the JSON schema to convert
+   * @return the converted mapping schema, or validation errors if conversion fails
+   */
   public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
     var node = jsonSchema.getSchemaNode().deepCopy();
     convertFieldTypeToStringType(node.get(PROPERTIES));
@@ -226,6 +245,16 @@ public class JsonUtils {
   private static final String VALUES = "values";
   private static final String PARTS = "parts";
 
+  /**
+   * Converts aggregate values stored as strings into proper JSON nodes.
+   *
+   * <p>This method recursively processes a JSON structure, converting any "values" fields that are
+   * stored as YAML/JSON strings into parsed JSON nodes.
+   *
+   * @param jsonNode the JSON node to process
+   * @return the processed JSON node with converted values
+   * @throws JsonProcessingException if the string values cannot be parsed as JSON
+   */
   public static JsonNode convertAggregateValuesIntoJsonNodes(JsonNode jsonNode)
       throws JsonProcessingException {
     if (jsonNode.has(VALUES)) {

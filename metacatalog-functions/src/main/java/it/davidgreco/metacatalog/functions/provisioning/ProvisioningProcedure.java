@@ -22,6 +22,21 @@ import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.springframework.stereotype.Service;
 
+/**
+ * Procedure for provisioning entities with the Provisionable trait.
+ *
+ * <p>This procedure orchestrates the provisioning of aggregate entities by:
+ *
+ * <ol>
+ *   <li>Reading the aggregate structure including mapped instances
+ *   <li>Identifying all ProvisionableResource entities in the hierarchy
+ *   <li>Building a dependency graph based on mapping relationships
+ *   <li>Creating provisioning tasks for each resource
+ *   <li>Scheduling and executing tasks in dependency order
+ * </ol>
+ *
+ * <p>The procedure detects cycles in the provisioning graph and fails early if any are found.
+ */
 @Slf4j
 @RequiredArgsConstructor
 @Service
@@ -89,6 +104,12 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
         .toList();
   }
 
+  /**
+   * Executes the provisioning logic for the given entity.
+   *
+   * @param entity the aggregate entity to provision
+   * @throws ServiceError if provisioning fails or cycles are detected
+   */
   @Override
   protected void execute(Entity entity) throws ServiceError {
     Optional<TaskManager.Schedule> schedule;
@@ -160,6 +181,12 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     }
   }
 
+  /**
+   * Validates that the entity has the Provisionable trait.
+   *
+   * @param entity the entity to validate
+   * @throws ServiceError if the entity does not have the Provisionable trait
+   */
   @Override
   protected void checkInputType(Entity entity) throws ServiceError {
     if (!hasTrait(entity, "Provisionable"))

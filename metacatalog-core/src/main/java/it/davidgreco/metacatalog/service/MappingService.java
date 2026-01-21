@@ -161,6 +161,13 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     }
   }
 
+  /**
+   * Reads a mapping entity type relationship by its ID.
+   *
+   * @param mappingId the ID of the mapping entity type relationship to read
+   * @return the MappingEntityTypeRelationship with the given ID
+   * @throws ServiceError if the mapping entity type relationship is not found
+   */
   @Transactional(
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
@@ -512,18 +519,42 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     }
   }
 
+  /**
+   * Checks if the given entity type is a source entity type in any mapping relationship.
+   *
+   * @param entityType the entity type to check
+   * @return true if the entity type is a source in at least one mapping, false otherwise
+   */
   boolean isSourceEntityType(EntityType entityType) {
     return !mappingEntityTypeRelationshipRepository
         .findMappingEntityTypeRelationshipBySource(entityType)
         .isEmpty();
   }
 
+  /**
+   * Checks if the given entity type is a target entity type in any mapping relationship.
+   *
+   * @param entityType the entity type to check
+   * @return true if the entity type is a target in at least one mapping, false otherwise
+   */
   boolean isTargetEntityType(EntityType entityType) {
     return !mappingEntityTypeRelationshipRepository
         .findMappingEntityTypeRelationshipByTarget(entityType)
         .isEmpty();
   }
 
+  /**
+   * Retrieves an entity by traversing a path from a starting entity.
+   *
+   * <p>The path is specified as a string of segments separated by slashes. Each segment consists of
+   * a relation type followed by a JSON path expression in curly braces, e.g.,
+   * "HAS_PART{$.name=='foo'}/DEPENDS_ON{$}".
+   *
+   * @param startEntityId the ID of the starting entity
+   * @param pathString the path string to traverse
+   * @return an Optional containing the entity at the end of the path, or empty if not found
+   * @throws ServiceError if the starting entity is not found or the path is invalid
+   */
   public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString)
       throws ServiceError {
 
@@ -597,6 +628,22 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     else return Optional.of(currentEntity);
   }
 
+  /**
+   * Generates mapped values by evaluating Spring Expression Language (SpEL) expressions in the
+   * mapping values.
+   *
+   * <p>The mapping values can reference source entity values using "#source" and additional entity
+   * values using their aliases (e.g., "#alias"). SpEL expressions are evaluated and the resulting
+   * values are validated against the target schema.
+   *
+   * @param sourceValues the JSON values of the source entity
+   * @param externalValues a map of alias to JSON values for additional entities referenced in the
+   *     mapping
+   * @param mappingValues the JSON mapping definition containing SpEL expressions
+   * @param targetSchema the JSON schema to validate the generated values against
+   * @return the generated JSON values
+   * @throws ServiceError if expression evaluation fails or schema validation fails
+   */
   public static JsonNode generateMappedValues(
       JsonNode sourceValues,
       Map<String, JsonNode> externalValues,

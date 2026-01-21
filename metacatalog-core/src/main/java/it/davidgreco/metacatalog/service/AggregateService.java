@@ -26,8 +26,15 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AggregateService {
 
+  /** Marker interface for aggregate parts (either elements or nested aggregates). */
   public interface AggregatePart {}
 
+  /**
+   * Represents a leaf element in an aggregate hierarchy.
+   *
+   * @param entity the entity for this element
+   * @param dependencies the list of entities this element depends on
+   */
   public record AggregateElement(Entity entity, List<Entity> dependencies)
       implements AggregatePart {
     public AggregateElement(Entity entity) {
@@ -35,6 +42,13 @@ public class AggregateService {
     }
   }
 
+  /**
+   * Represents a composite aggregate containing other aggregate parts.
+   *
+   * @param entity the root entity for this aggregate
+   * @param dependencies the list of entities this aggregate depends on
+   * @param elements the child aggregate parts contained in this aggregate
+   */
   public record Aggregate(Entity entity, List<Entity> dependencies, List<AggregatePart> elements)
       implements AggregatePart {
     public Aggregate(Entity entity, List<AggregatePart> elements) {

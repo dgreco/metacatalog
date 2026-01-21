@@ -17,6 +17,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.retry.support.RetryTemplate;
 
+/**
+ * Abstract base class for asynchronous tasks that operate on entities.
+ *
+ * <p>Tasks can have dependencies on other tasks and are executed asynchronously. The task framework
+ * ensures that dependent tasks complete before a task begins execution.
+ *
+ * @param <T> the type of entity this task operates on
+ */
 @Slf4j
 @Getter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
@@ -60,19 +68,43 @@ public abstract class Task<T> {
     }
   }
 
+  /**
+   * Adds a dependency on another task.
+   *
+   * @param task the task that must complete before this task runs
+   */
   public void dependsOn(Task<T> task) {
     dependsOnTasks.add(task);
   }
 
+  /**
+   * Adds dependencies on multiple tasks.
+   *
+   * @param tasks the tasks that must complete before this task runs
+   */
   public void dependsOn(Collection<Task<T>> tasks) {
     dependsOnTasks.addAll(tasks);
   }
 
+  /**
+   * Executes the task logic. Implementations should perform the actual work of the task.
+   *
+   * @return always returns null (Void)
+   */
   public abstract Void apply();
 
+  /**
+   * Gets the unique identifier for this task. Used for equality comparison and cycle detection.
+   *
+   * @return the task's unique identifier
+   */
   @EqualsAndHashCode.Include
   public abstract String getId();
 
+  /**
+   * Waits for this task and all its dependencies to complete. Uses retry logic to handle the case
+   * where the task has not yet been started.
+   */
   public void join() {
     RetryTemplate createRetryTemplate =
         RetryTemplate.builder()
@@ -103,6 +135,12 @@ public abstract class Task<T> {
     }
   }
 
+  /**
+   * Gets the result of this task after completion.
+   *
+   * @return an Optional containing the result (success or failure), or empty if task hasn't
+   *     completed
+   */
   public Optional<Try<Void>> getResult() {
     return Optional.ofNullable(result.get());
   }

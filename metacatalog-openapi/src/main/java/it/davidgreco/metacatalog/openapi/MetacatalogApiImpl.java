@@ -19,7 +19,24 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.NativeWebRequest;
 
-/** Microservice implementation class. */
+/**
+ * Implementation of the Metacatalog REST API.
+ *
+ * <p>This service implements the {@link MetacatalogApiDelegate} interface generated from the
+ * OpenAPI specification. It provides REST endpoints for managing:
+ *
+ * <ul>
+ *   <li>Traits - reusable characteristics that can be applied to entity types
+ *   <li>Entity Types - type definitions for entities with schemas
+ *   <li>Entities - instances of entity types with JSON values
+ *   <li>Relationships - links between traits and entities
+ *   <li>Aggregates - hierarchical collections of entities
+ *   <li>Bulk operations - loading models and aggregates from YAML files
+ * </ul>
+ *
+ * <p>All operations return appropriate HTTP status codes and error responses for validation errors
+ * (400) and system errors (500).
+ */
 @Service
 @RequiredArgsConstructor
 public class MetacatalogApiImpl implements MetacatalogApiDelegate {
