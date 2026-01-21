@@ -204,7 +204,7 @@ ontop bootstrap \
 When the application is running, access the documentation:
 
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
-- **OpenAPI Spec**: http://localhost:8080/api-docs
+- **OpenAPI Spec**: http://localhost:8080/api/interface-specification.yaml
 - **Javadoc**: http://localhost:8080/javadoc/index.html
 
 ## Key Libraries & Frameworks
