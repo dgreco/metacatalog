@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: metacatalog-postgres
+    environment:
+      POSTGRES_DB: metacatalog
+      POSTGRES_USER: metacatalog
+      POSTGRES_PASSWORD: metacatalog
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metacatalog -d metacatalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: metacatalog:0.0.1-SNAPSHOT
+    container_name: metacatalog-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:

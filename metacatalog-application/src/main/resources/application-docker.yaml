@@ -1,9 +1,6 @@
 spring:
-  config:
-    activate:
-      on-profile: "default"
   datasource:
-    url: jdbc:postgresql://localhost:5432/metacatalog
+    url: jdbc:postgresql://postgres:5432/metacatalog
     username: metacatalog
     password: metacatalog
     driverClassName: org.postgresql.Driver
@@ -37,10 +34,13 @@ management:
         include: beans, caches, health, info, flyway, metrics, env, configprops, loggers
 logging:
   level:
-    root: ERROR                                # General logging level for the application
-    org.springframework.data.jpa.repository: ERROR  # Log JPA repository method calls
-    org.hibernate.SQL: ERROR                   # Log SQL statements executed by Hibernate
-    org.hibernate.type.descriptor.sql: ERROR   # Log SQL parameter binding
+    root: INFO
+    org.flywaydb: DEBUG
+    org.springframework.boot.autoconfigure.flyway: DEBUG
+    org.springframework.boot.autoconfigure: DEBUG
+    org.springframework.data.jpa.repository: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: DEBUG
 application:
   config:
     automaticEntitiesMapping: true
