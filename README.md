@@ -29,7 +29,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 - Java 25
 - Maven 3.9.9 or higher
-- PostgreSQL 14+
+- PostgreSQL 18+
 - Docker (for testing with Testcontainers)
 - Ontop CLI v5 (optional, for ontology integration)
 
@@ -53,7 +53,7 @@ docker compose up -d
 ```
 
 This starts:
-- **PostgreSQL 16** on port 5432
+- **PostgreSQL 18.1** on port 5432
 - **Meta Catalog Application** on port 8080
 
 To stop:

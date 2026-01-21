@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.1-alpine
     container_name: metacatalog-postgres
     environment:
       POSTGRES_DB: metacatalog

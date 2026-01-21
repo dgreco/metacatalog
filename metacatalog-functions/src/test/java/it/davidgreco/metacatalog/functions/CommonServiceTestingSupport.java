@@ -21,7 +21,7 @@ public class CommonServiceTestingSupport {
   static final int POSTGRESQL_PORT = 5433;
 
   static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:17.5")
+      new PostgreSQLContainer<>("postgres:18.1")
           .withExposedPorts(5432)
           .withCreateContainerCmdModifier(
               cmd ->
