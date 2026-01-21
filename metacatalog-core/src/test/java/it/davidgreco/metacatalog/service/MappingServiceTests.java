@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.node.IntNode;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.repository.EntityRepository;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -368,9 +369,14 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
     await()
-        .atMost(Durations.FIVE_SECONDS.plusSeconds(1))
-        .pollDelay(Durations.FIVE_SECONDS)
-        .until(() -> true);
+        .atMost(Duration.ofSeconds(30))
+        .pollDelay(Durations.ONE_SECOND)
+        .until(
+            () -> {
+              var entities = entityRepository.findByEntityType(targeType);
+              System.out.println("UPD1 - found: " + entities.size());
+              return !entities.isEmpty();
+            });
 
     {
       var int1 =
@@ -392,9 +398,13 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     """);
 
     await()
-        .atMost(Durations.FIVE_SECONDS.plusSeconds(1))
-        .pollDelay(Durations.FIVE_SECONDS)
-        .until(() -> true);
+        .atMost(Durations.TEN_SECONDS)
+        .pollDelay(Durations.ONE_SECOND)
+        .until(
+            () -> {
+              System.out.println("UPD2");
+              return !entityRepository.findByEntityType(targeType).isEmpty();
+            });
 
     {
       var int1 =

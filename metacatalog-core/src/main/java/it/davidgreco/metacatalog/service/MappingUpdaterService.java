@@ -44,34 +44,35 @@ public class MappingUpdaterService {
     log.info(
         "Update mapped entities task started with automaticEntitiesMapping={}",
         automaticEntitiesMapping);
-    try {
-      if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
-        var createdEvents =
-            entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
-                "SOURCE_CREATED", "PENDING");
-        createdEvents.forEach(
-            event -> {
-              try {
-                mappingService.createMappedEntities(event);
-              } catch (Exception e) {
-                log.error("Error creating mapped entities", e);
-              }
-            });
-        var updatedEvents =
-            entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
-                "SOURCE_UPDATED", "PENDING");
-        updatedEvents.forEach(
-            event -> {
-              try {
-                mappingService.updateMappedEntities(event);
-              } catch (Exception e) {
-                log.error("Error updating mapped entities", e);
-              }
-            });
-      }
-    } finally {
-      log.info("Update mapped entities task completed");
+    var lockAcquired = advisoryLockManager.acquireLock(1);
+    log.debug("Advisory lock acquired: {}", lockAcquired);
+    if (automaticEntitiesMapping && lockAcquired) {
+      var createdEvents =
+          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+      log.debug("Found {} SOURCE_CREATED PENDING events", createdEvents.size());
+      createdEvents.forEach(
+          event -> {
+            try {
+              log.debug("Processing SOURCE_CREATED event for entity {}", event.getEntityId());
+              mappingService.createMappedEntities(event);
+            } catch (Exception e) {
+              log.error("Error creating mapped entities", e);
+            }
+          });
+      var updatedEvents =
+          entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+      log.debug("Found {} SOURCE_UPDATED PENDING events", updatedEvents.size());
+      updatedEvents.forEach(
+          event -> {
+            try {
+              log.debug("Processing SOURCE_UPDATED event for entity {}", event.getEntityId());
+              mappingService.updateMappedEntities(event);
+            } catch (Exception e) {
+              log.error("Error updating mapped entities", e);
+            }
+          });
     }
+    log.info("Update mapped entities task completed");
   }
 
   /**
@@ -88,7 +89,8 @@ public class MappingUpdaterService {
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
   void entityLifeCycleEventCleanup() {
-    if (automaticEntitiesMapping && advisoryLockManager.acquireLock(1)) {
+    var lockAcquired = advisoryLockManager.acquireLock(1);
+    if (automaticEntitiesMapping && lockAcquired) {
       log.info("Cleaning up entity life cycle events");
     }
   }

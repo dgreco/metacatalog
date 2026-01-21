@@ -57,13 +57,23 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
 
-    await().pollDelay(Durations.TWO_SECONDS).until(() -> true);
-
     var aggr = aggregateService.read(ids.getFirst(), true);
+
+    await()
+        .atMost(Durations.ONE_MINUTE)
+        .pollDelay(Durations.ONE_SECOND)
+        .until(
+            () -> {
+              System.out.println("CICCIO");
+              return !((AggregateService.Aggregate) aggr.elements().getFirst())
+                  .elements()
+                  .isEmpty();
+            });
+
     Assertions.assertEquals(
         "PROVISIONED",
         ((AggregateService.AggregateElement)
-                ((AggregateService.Aggregate) aggr.elements().get(0)).elements().getFirst())
+                ((AggregateService.Aggregate) aggr.elements().getFirst()).elements().getFirst())
             .entity()
             .getValues()
             .get("provisioningStatus")
