@@ -424,19 +424,7 @@
                 <plugin>
                     <groupId>org.sonarsource.scanner.maven</groupId>
                     <artifactId>sonar-maven-plugin</artifactId>
-                    <version>5.5.0.6356</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>io.github.hakky54</groupId>
-                            <artifactId>sslcontext-kickstart</artifactId>
-                            <version>9.1.0</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>io.github.hakky54</groupId>
-                            <artifactId>sslcontext-kickstart-for-pem</artifactId>
-                            <version>9.1.0</version>
-                        </dependency>
-                    </dependencies>
+                    <version>5.0.0.4389</version>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->
