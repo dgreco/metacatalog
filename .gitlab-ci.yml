@@ -4,7 +4,6 @@ variables:
 
 stages:
   - build
-  - helm
 
 # Build, test, and push Docker image
 build:
@@ -77,34 +76,3 @@ build:
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
-
-# Package Helm chart
-helm:package:
-  stage: helm
-  image:
-    name: alpine/helm:3.14.0
-    entrypoint: [""]
-
-  script:
-    # Update Chart.yaml with current version
-    - |
-      VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
-      sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" helm/metacatalog/Chart.yaml
-
-    # Update dependencies
-    - helm dependency update helm/metacatalog
-
-    # Lint the chart
-    - helm lint helm/metacatalog
-
-    # Package the chart
-    - helm package helm/metacatalog --destination ./helm-packages
-
-  artifacts:
-    paths:
-      - helm-packages/*.tgz
-    expire_in: 1 week
-
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-    - if: $CI_COMMIT_BRANCH == 'main'

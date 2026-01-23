@@ -8,7 +8,7 @@ image:
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   # Use "latest" or a specific commit SHA (e.g., "abc1234")
-  tag: ""
+  tag: "4.0.1"
 
 # Image pull secrets for private registries (GitLab Container Registry)
 # Create secret: kubectl create secret docker-registry gitlab-registry \
@@ -16,8 +16,8 @@ image:
 #   --docker-username=<gitlab-username> \
 #   --docker-password=<gitlab-token> \
 #   --docker-email=<email>
-imagePullSecrets: []
-  # - name: gitlab-registry
+imagePullSecrets:
+  - name: gitlab-registry
 
 nameOverride: ""
 fullnameOverride: ""
