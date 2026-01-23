@@ -59,7 +59,7 @@ build:
 
         # Also tag with version on main/master
         if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-          VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
           mvn spring-boot:build-image -pl metacatalog-application -B \
             -DskipTests \
             -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
