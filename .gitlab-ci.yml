@@ -50,6 +50,11 @@ docker:build:
   stage: docker
   image: maven:3-eclipse-temurin-25
 
+  services:
+    - name: docker:24-dind
+      alias: docker
+      command: ['--tls=false', '--host=tcp://0.0.0.0:2375']
+
   cache:
     policy: pull
     key: "maven-cache-$CI_COMMIT_REF_SLUG"
@@ -58,6 +63,14 @@ docker:build:
 
   variables:
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    DOCKER_HOST: "tcp://docker:2375"
+    DOCKER_TLS_CERTDIR: ""
+
+  before_script:
+    # Install Docker CLI in the Maven container
+    - apt-get update && apt-get install -y docker.io
+    # Wait for Docker daemon to be ready
+    - until docker info; do sleep 1; done
 
   script:
     # First install all modules to local Maven repository
