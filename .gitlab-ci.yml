@@ -60,6 +60,9 @@ docker:build:
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
 
   script:
+    # First install all modules to local Maven repository
+    - mvn install -DskipTests -B
+
     # Build and push Docker image to GitLab Container Registry
     - |
       mvn spring-boot:build-image -pl metacatalog-application -B \
