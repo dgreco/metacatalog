@@ -1,10 +1,4 @@
-services:
-  - name: docker:24-dind
-    alias: docker
-
 variables:
-  DOCKER_HOST: "tcp://docker:2375"
-  DOCKER_TLS_CERTDIR: ""
   DOCKER_DRIVER: "overlay2"
   TESTCONTAINERS_RYUK_DISABLED: "true"
 
@@ -31,16 +25,26 @@ build:
   before_script:
     # Install Docker CLI
     - apt-get update && apt-get install -y docker.io
-    # Wait for Docker daemon
-    - until docker info; do sleep 1; done
+    # Use Docker socket if available (mounted by runner), otherwise skip Docker build
+    - |
+      if [ -S /var/run/docker.sock ]; then
+        echo "Using Docker socket"
+        export DOCKER_HOST=unix:///var/run/docker.sock
+      else
+        echo "WARNING: Docker socket not available, Docker builds will be skipped"
+        export SKIP_DOCKER_BUILD=true
+      fi
+    - docker info || export SKIP_DOCKER_BUILD=true
 
   script:
     # Build and test
     - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
 
-    # Build and push Docker images (only on main/master/develop)
+    # Build and push Docker images (only on main/master/develop and if Docker is available)
     - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
+      if [ "$SKIP_DOCKER_BUILD" != "true" ] && { [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; }; then
+        echo "Building and pushing Docker images..."
+
         # Build and push with commit SHA tag
         mvn spring-boot:build-image -pl metacatalog-application -B \
           -DskipTests \
@@ -60,20 +64,21 @@ build:
           -Ddocker.registry.url=${CI_REGISTRY} \
           -Ddocker.registry.username=${CI_REGISTRY_USER} \
           -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
-      fi
 
-    # Also tag with version on main/master
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-        VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-        mvn spring-boot:build-image -pl metacatalog-application -B \
-          -DskipTests \
-          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
-          -Ddocker.image.tag=${VERSION} \
-          -Ddocker.publish=true \
-          -Ddocker.registry.url=${CI_REGISTRY} \
-          -Ddocker.registry.username=${CI_REGISTRY_USER} \
-          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+        # Also tag with version on main/master
+        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
+          VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          mvn spring-boot:build-image -pl metacatalog-application -B \
+            -DskipTests \
+            -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+            -Ddocker.image.tag=${VERSION} \
+            -Ddocker.publish=true \
+            -Ddocker.registry.url=${CI_REGISTRY} \
+            -Ddocker.registry.username=${CI_REGISTRY_USER} \
+            -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+        fi
+      else
+        echo "Skipping Docker build (Docker not available or not on main/master/develop branch)"
       fi
 
   allow_failure: true
