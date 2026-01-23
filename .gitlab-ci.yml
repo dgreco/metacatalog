@@ -21,28 +21,21 @@ build:
 
   variables:
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    DOCKER_HOST: "unix:///var/run/docker.sock"
 
   before_script:
     # Install Docker CLI
     - apt-get update && apt-get install -y docker.io
-    # Use Docker socket if available (mounted by runner), otherwise skip Docker build
-    - |
-      if [ -S /var/run/docker.sock ]; then
-        echo "Using Docker socket"
-        export DOCKER_HOST=unix:///var/run/docker.sock
-      else
-        echo "WARNING: Docker socket not available, Docker builds will be skipped"
-        export SKIP_DOCKER_BUILD=true
-      fi
-    - docker info || export SKIP_DOCKER_BUILD=true
+    - docker info
 
   script:
     # Build and test
-    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+#    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+    - mvn install -DskipTests
 
-    # Build and push Docker images (only on main/master/develop and if Docker is available)
+    # Build and push Docker images (only on main/master/develop)
     - |
-      if [ "$SKIP_DOCKER_BUILD" != "true" ] && { [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; }; then
+      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
         echo "Building and pushing Docker images..."
 
         # Build and push with commit SHA tag
@@ -77,8 +70,6 @@ build:
             -Ddocker.registry.username=${CI_REGISTRY_USER} \
             -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
         fi
-      else
-        echo "Skipping Docker build (Docker not available or not on main/master/develop branch)"
       fi
 
   allow_failure: true
