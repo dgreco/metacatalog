@@ -11,24 +11,121 @@ variables:
 
 stages:
   - build
+  - docker
+  - helm
 
+# Build and test the application
 build:
   stage: build
-  image: maven:3-eclipse-temurin-25
+  image: maven:3-eclipse-temurin-23
 
   cache:
     policy: pull-push
-    key: "sonar-cache-$CI_COMMIT_REF_SLUG"
+    key: "maven-cache-$CI_COMMIT_REF_SLUG"
     paths:
+      - .m2/repository
       - "${SONAR_USER_HOME}/cache"
       - sonar-scanner/
 
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
   script:
-     - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-#     - mvn spotless:check verify test
+    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+
+  artifacts:
+    paths:
+      - metacatalog-application/target/*.jar
+    expire_in: 1 hour
+
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
+
+# Build and push Docker image using Spring Boot Maven plugin
+docker:build:
+  stage: docker
+  image: maven:3-eclipse-temurin-23
+
+  cache:
+    policy: pull
+    key: "maven-cache-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository
+
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+  script:
+    # Build and push Docker image to GitLab Container Registry
+    - |
+      mvn spring-boot:build-image -pl metacatalog-application -B \
+        -DskipTests \
+        -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+        -Ddocker.image.tag=${CI_COMMIT_SHORT_SHA} \
+        -Ddocker.publish=true \
+        -Ddocker.registry.url=${CI_REGISTRY} \
+        -Ddocker.registry.username=${CI_REGISTRY_USER} \
+        -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+
+    # Build and push with 'latest' tag
+    - |
+      mvn spring-boot:build-image -pl metacatalog-application -B \
+        -DskipTests \
+        -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+        -Ddocker.image.tag=latest \
+        -Ddocker.publish=true \
+        -Ddocker.registry.url=${CI_REGISTRY} \
+        -Ddocker.registry.username=${CI_REGISTRY_USER} \
+        -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+
+    # Build and push with version tag on main/master
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
+        VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+        mvn spring-boot:build-image -pl metacatalog-application -B \
+          -DskipTests \
+          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+          -Ddocker.image.tag=${VERSION} \
+          -Ddocker.publish=true \
+          -Ddocker.registry.url=${CI_REGISTRY} \
+          -Ddocker.registry.username=${CI_REGISTRY_USER} \
+          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+      fi
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
+
+# Package Helm chart
+helm:package:
+  stage: helm
+  image: alpine/helm:3.14.0
+
+  script:
+    # Update Chart.yaml with current version
+    - |
+      VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+      sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" helm/metacatalog/Chart.yaml
+
+    # Update dependencies
+    - helm dependency update helm/metacatalog
+
+    # Lint the chart
+    - helm lint helm/metacatalog
+
+    # Package the chart
+    - helm package helm/metacatalog --destination ./helm-packages
+
+  artifacts:
+    paths:
+      - helm-packages/*.tgz
+    expire_in: 1 week
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'

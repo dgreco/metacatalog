@@ -66,6 +66,14 @@
         <testcontainers.version>1.21.4</testcontainers.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
 
+        <!-- Docker Image Properties (can be overridden via -D flags) -->
+        <docker.image.name>metacatalog</docker.image.name>
+        <docker.image.tag>${project.version}</docker.image.tag>
+        <docker.publish>false</docker.publish>
+        <docker.registry.url></docker.registry.url>
+        <docker.registry.username></docker.registry.username>
+        <docker.registry.password></docker.registry.password>
+
     </properties>
 
     <dependencyManagement>

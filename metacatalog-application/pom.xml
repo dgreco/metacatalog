@@ -110,11 +110,19 @@
                         </exclude>
                     </excludes>
                     <image>
-                        <name>metacatalog:${project.version}</name>
+                        <name>${docker.image.name}:${docker.image.tag}</name>
                         <env>
-                            <BP_JVM_VERSION>25</BP_JVM_VERSION>
+                            <BP_JVM_VERSION>23</BP_JVM_VERSION>
                         </env>
+                        <publish>${docker.publish}</publish>
                     </image>
+                    <docker>
+                        <publishRegistry>
+                            <url>${docker.registry.url}</url>
+                            <username>${docker.registry.username}</username>
+                            <password>${docker.registry.password}</password>
+                        </publishRegistry>
+                    </docker>
                 </configuration>
             </plugin>
 
