@@ -17,7 +17,7 @@ stages:
 # Build and test the application
 build:
   stage: build
-  image: maven:3-eclipse-temurin-23
+  image: maven:3-eclipse-temurin-25
 
   cache:
     policy: pull-push
@@ -48,7 +48,7 @@ build:
 # Build and push Docker image using Spring Boot Maven plugin
 docker:build:
   stage: docker
-  image: maven:3-eclipse-temurin-23
+  image: maven:3-eclipse-temurin-25
 
   cache:
     policy: pull
