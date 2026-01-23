@@ -10,10 +10,9 @@ variables:
 
 stages:
   - build
-  - docker
   - helm
 
-# Build and test the application
+# Build, test, and push Docker image
 build:
   stage: build
   image: maven:3-eclipse-temurin-25
@@ -29,48 +28,57 @@ build:
   variables:
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
 
+  before_script:
+    # Install Docker CLI
+    - apt-get update && apt-get install -y docker.io
+    # Wait for Docker daemon
+    - until docker info; do sleep 1; done
+
   script:
+    # Build and test
     - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
 
-  artifacts:
-    paths:
-      - metacatalog-application/target/*.jar
-    expire_in: 1 hour
+    # Build and push Docker images (only on main/master/develop)
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
+        # Build and push with commit SHA tag
+        mvn spring-boot:build-image -pl metacatalog-application -B \
+          -DskipTests \
+          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+          -Ddocker.image.tag=${CI_COMMIT_SHORT_SHA} \
+          -Ddocker.publish=true \
+          -Ddocker.registry.url=${CI_REGISTRY} \
+          -Ddocker.registry.username=${CI_REGISTRY_USER} \
+          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+
+        # Build and push with 'latest' tag
+        mvn spring-boot:build-image -pl metacatalog-application -B \
+          -DskipTests \
+          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+          -Ddocker.image.tag=latest \
+          -Ddocker.publish=true \
+          -Ddocker.registry.url=${CI_REGISTRY} \
+          -Ddocker.registry.username=${CI_REGISTRY_USER} \
+          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+      fi
+
+    # Also tag with version on main/master
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
+        VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+        mvn spring-boot:build-image -pl metacatalog-application -B \
+          -DskipTests \
+          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
+          -Ddocker.image.tag=${VERSION} \
+          -Ddocker.publish=true \
+          -Ddocker.registry.url=${CI_REGISTRY} \
+          -Ddocker.registry.username=${CI_REGISTRY_USER} \
+          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+      fi
 
   allow_failure: true
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-    - if: $CI_COMMIT_BRANCH == 'master'
-    - if: $CI_COMMIT_BRANCH == 'main'
-    - if: $CI_COMMIT_BRANCH == 'develop'
-
-# Build and push Docker image
-docker:build:
-  stage: docker
-  image: docker:24
-
-  before_script:
-    - until docker info; do sleep 1; done
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-
-  script:
-    # Build the Docker image
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
-    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:latest
-
-    # Tag with version on main/master
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-        VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-        docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:$VERSION
-        docker push $CI_REGISTRY_IMAGE:$VERSION
-      fi
-
-    # Push images
-    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
-    - docker push $CI_REGISTRY_IMAGE:latest
-
-  rules:
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
