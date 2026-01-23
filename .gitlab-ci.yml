@@ -30,8 +30,7 @@ build:
 
   script:
     # Build and test
-#    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
-    - mvn install -DskipTests
+    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
 
     # Build and push Docker images (only on main/master/develop)
     - |
@@ -82,7 +81,9 @@ build:
 # Package Helm chart
 helm:package:
   stage: helm
-  image: alpine/helm:3.14.0
+  image:
+    name: alpine/helm:3.14.0
+    entrypoint: [""]
 
   script:
     # Update Chart.yaml with current version
