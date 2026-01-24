@@ -8,6 +8,7 @@ resources:
   # Apply them before running kustomize:
   #   kubectl apply -f db-secret.yaml -f registry-secret.yaml
   - cnpg-cluster.yaml
+  - cnpg-cluster-scheduled-backup.yaml
   - app-serviceaccount.yaml
   - app-configmap.yaml
   - app-deployment.yaml
