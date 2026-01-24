@@ -38,6 +38,7 @@ public class MappingUpdaterService {
    * same time.
    */
   @Scheduled(
+      initialDelay = 100,
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   void updateMappedEntities() {
