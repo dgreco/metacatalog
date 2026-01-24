@@ -70,3 +70,12 @@ spec:
 #        compression: gzip
 #        encryption: AES256
         jobs: 2
+
+  managed:
+    roles:
+    - name: metacatalog
+      ensure: present
+      login: true
+      superuser: false
+      passwordSecret:
+        name: metacatalog-db-credentials
