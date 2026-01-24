@@ -65,6 +65,7 @@ spec:
 
       wal:
         maxParallel: 2
+        compression: gzip
 
       data:
 #        compression: gzip
