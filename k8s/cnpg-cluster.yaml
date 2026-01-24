@@ -46,33 +46,6 @@ spec:
   monitoring:
     enablePodMonitor: false  # Set to true if using Prometheus Operator
 
-  # Backup temporarily disabled - XAmzContentSHA256Mismatch error with MinIO
-  # Debug steps:
-  # 1. Check if there's a reverse proxy in front of MinIO modifying requests
-  # 2. Try accessing MinIO directly without proxy
-  # 3. Check MinIO signature version settings (MINIO_SIGNATURE_VERSION=v4)
-  # 4. Verify no nginx/traefik is buffering uploads
-  #
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://postgresql-backups/applications/metacatalog
-  #     endpointURL: https://doc.fairytales.local:4443
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: s3-secret
-  #         key: accessKey
-  #       secretAccessKey:
-  #         name: s3-secret
-  #         key: secretKey
-  #     endpointCA:
-  #       name: s3-ca-tls
-  #       key: ca.crt
-  #     wal:
-  #       maxParallel: 2
-  #       compression: gzip
-  #     data:
-  #       jobs: 2
-
   managed:
     roles:
     - name: metacatalog
