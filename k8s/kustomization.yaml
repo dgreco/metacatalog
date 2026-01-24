@@ -5,8 +5,9 @@ namespace: applications
 
 resources:
   - namespace.yaml
-  - db-secret.yaml
-  - registry-secret.yaml
+  # Secrets are managed manually - not in git
+  # Apply them before running kustomize:
+  #   kubectl apply -f db-secret.yaml -f registry-secret.yaml
   - cnpg-cluster.yaml
   - app-serviceaccount.yaml
   - app-configmap.yaml
