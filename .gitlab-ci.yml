@@ -1,9 +1,11 @@
 variables:
   DOCKER_DRIVER: "overlay2"
   TESTCONTAINERS_RYUK_DISABLED: "true"
+  KUBE_NAMESPACE: "applications"
 
 stages:
   - build
+  - deploy
 
 # Build, test, and push Docker image
 build:
@@ -76,3 +78,60 @@ build:
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
+
+# Deploy to Kubernetes
+deploy:
+  stage: deploy
+  image:
+    name: alpine/k8s:1.31.4
+    entrypoint: [""]
+
+  variables:
+    KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: "gitlab-deployer"
+
+  before_script:
+    # Configure kubectl with the GitLab-provided kubeconfig
+    # Requires KUBECONFIG_CONTENT variable set in GitLab CI/CD settings (base64 encoded)
+    - |
+      if [ -n "$KUBECONFIG_CONTENT" ]; then
+        mkdir -p ~/.kube
+        echo "$KUBECONFIG_CONTENT" | base64 -d > ~/.kube/config
+        chmod 600 ~/.kube/config
+      fi
+    - kubectl version --client
+    - kustomize version
+
+  script:
+    # Update image tag in kustomization
+    - cd k8s
+    - kustomize edit set image gitlab.davidgreco.it:5050/dgreco/metacatalog=gitlab.davidgreco.it:5050/dgreco/metacatalog:${CI_COMMIT_SHORT_SHA}
+
+    # Apply the manifests (namespace is defined in kustomization.yaml)
+    - kubectl apply -k .
+
+    # Wait for CNPG cluster to be ready (first deployment only)
+    - |
+      if ! kubectl get cluster metacatalog-db -n ${KUBE_NAMESPACE} >/dev/null 2>&1; then
+        echo "Waiting for CNPG cluster to be ready..."
+        kubectl wait --for=condition=Ready cluster/metacatalog-db -n ${KUBE_NAMESPACE} --timeout=300s || true
+      fi
+
+    # Wait for deployment to be ready
+    - kubectl rollout status deployment/metacatalog -n ${KUBE_NAMESPACE} --timeout=300s
+
+    # Show deployment status
+    - kubectl get pods -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
+    - kubectl get svc -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
+    - kubectl get ingress -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
+
+  environment:
+    name: production
+    url: http://metacatalog.fairytales.local
+
+  needs:
+    - job: build
+      artifacts: false
+
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'master'

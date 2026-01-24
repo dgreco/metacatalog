@@ -1,0 +1,34 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: metacatalog
+  namespace: applications
+  labels:
+    app.kubernetes.io/name: metacatalog
+    app.kubernetes.io/component: application
+  annotations:
+    # Uncomment for nginx ingress controller
+    # nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # Uncomment for cert-manager TLS
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx  # Change if using different ingress controller
+  rules:
+    - host: metacatalog.fairytales.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: metacatalog
+                port:
+                  name: http
+  # Uncomment for TLS
+  # tls:
+  #   - hosts:
+  #       - metacatalog.fairytales.local
+  #     secretName: metacatalog-tls

@@ -1,0 +1,61 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: metacatalog-db
+  namespace: applications
+  labels:
+    app.kubernetes.io/name: metacatalog
+    app.kubernetes.io/component: database
+spec:
+  instances: 3
+
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "256MB"
+      effective_cache_size: "768MB"
+      maintenance_work_mem: "128MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      effective_io_concurrency: "200"
+      work_mem: "4MB"
+      min_wal_size: "1GB"
+      max_wal_size: "4GB"
+
+  bootstrap:
+    initdb:
+      database: metacatalog
+      owner: metacatalog
+      secret:
+        name: metacatalog-db-credentials
+
+  storage:
+    size: 5Gi
+    storageClass: ""  # Uses default storage class; change if needed
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+
+  monitoring:
+    enablePodMonitor: false  # Set to true if using Prometheus Operator
+
+  backup:
+    retentionPolicy: "7d"
+    # Uncomment and configure for S3/MinIO backups:
+    # barmanObjectStore:
+    #   destinationPath: s3://metacatalog-backups/
+    #   endpointURL: https://minio.example.com
+    #   s3Credentials:
+    #     accessKeyId:
+    #       name: metacatalog-backup-creds
+    #       key: ACCESS_KEY_ID
+    #     secretAccessKey:
+    #       name: metacatalog-backup-creds
+    #       key: ACCESS_SECRET_KEY
