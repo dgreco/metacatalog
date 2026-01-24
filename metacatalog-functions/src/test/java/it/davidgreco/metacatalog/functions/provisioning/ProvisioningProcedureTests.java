@@ -63,12 +63,7 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
         .atMost(Durations.ONE_MINUTE)
         .pollDelay(Durations.ONE_SECOND)
         .until(
-            () -> {
-              System.out.println("CICCIO");
-              return !((AggregateService.Aggregate) aggr.elements().getFirst())
-                  .elements()
-                  .isEmpty();
-            });
+            () -> !((AggregateService.Aggregate) aggr.elements().getFirst()).elements().isEmpty());
 
     Assertions.assertEquals(
         "PROVISIONED",

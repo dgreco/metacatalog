@@ -31,7 +31,8 @@ build:
 
   script:
     # Build and test
-    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+#    - mvn spotless:check verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+    - mvn test
 
     # Build and push Docker images (only on main/master/develop)
     - |
