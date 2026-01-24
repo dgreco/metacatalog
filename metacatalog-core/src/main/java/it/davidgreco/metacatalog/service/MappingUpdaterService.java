@@ -38,6 +38,7 @@ public class MappingUpdaterService {
    * same time.
    */
   @Scheduled(
+      initialDelay = 5000,
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   void updateMappedEntities() {
@@ -86,6 +87,7 @@ public class MappingUpdaterService {
    * perform any cleanup. This is a placeholder for future cleanup tasks.
    */
   @Scheduled(
+      initialDelay = 5000,
       fixedRateString =
           "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
   void entityLifeCycleEventCleanup() {

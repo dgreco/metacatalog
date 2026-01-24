@@ -33,7 +33,7 @@ spec:
 
   storage:
     size: 5Gi
-    storageClass: ""  # Uses default storage class; change if needed
+    storageClass: "ceph-rbd"
 
   resources:
     requests:
