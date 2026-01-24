@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: metacatalog
     app.kubernetes.io/component: database
 spec:
-  instances: 3
+  instances: 1
 
   postgresql:
     parameters:
@@ -47,15 +47,26 @@ spec:
     enablePodMonitor: false  # Set to true if using Prometheus Operator
 
   backup:
-    retentionPolicy: "7d"
-    # Uncomment and configure for S3/MinIO backups:
-    # barmanObjectStore:
-    #   destinationPath: s3://metacatalog-backups/
-    #   endpointURL: https://minio.example.com
-    #   s3Credentials:
-    #     accessKeyId:
-    #       name: metacatalog-backup-creds
-    #       key: ACCESS_KEY_ID
-    #     secretAccessKey:
-    #       name: metacatalog-backup-creds
-    #       key: ACCESS_SECRET_KEY
+    barmanObjectStore:
+      destinationPath: s3://postgresql-backups/applications/metacatalog
+      endpointURL: https://doc.fairytales.local:4443
+
+      s3Credentials:
+        accessKeyId:
+          name: s3-secret
+          key: accessKey
+        secretAccessKey:
+          name: s3-secret
+          key: secretKey
+
+      endpointCA:
+        name: s3-ca-tls
+        key: ca.crt
+
+      wal:
+        maxParallel: 2
+
+      data:
+#        compression: gzip
+#        encryption: AES256
+        jobs: 2
