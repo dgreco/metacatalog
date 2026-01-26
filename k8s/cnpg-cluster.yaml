@@ -9,6 +9,13 @@ metadata:
 spec:
   instances: 1
 
+  # Environment variables to configure boto3 for S3 compatibility
+  env:
+    - name: AWS_REQUEST_CHECKSUM_CALCULATION
+      value: when_required
+    - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+      value: when_required
+
   postgresql:
     parameters:
       max_connections: "200"
@@ -54,3 +61,29 @@ spec:
       superuser: false
       passwordSecret:
         name: metacatalog-db-credentials
+
+  # Backup configuration
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://postgresql-backups/applications/metacatalog
+      endpointURL: https://doc.fairytales.local:4443
+
+      s3Credentials:
+        accessKeyId:
+          name: s3-secret
+          key: accessKey
+        secretAccessKey:
+          name: s3-secret
+          key: secretKey
+
+      endpointCA:
+        name: s3-ca-tls
+        key: ca.crt
+
+      wal:
+        maxParallel: 2
+
+      data:
+#        compression: gzip
+#        encryption: AES256
+        jobs: 2
