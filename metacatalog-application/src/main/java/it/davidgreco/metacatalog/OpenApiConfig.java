@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.servers.Server;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -17,36 +18,47 @@ import org.springframework.context.annotation.Configuration;
  *   <li>Supporting both local development and production environments
  * </ul>
  *
- * <p>The ingress URL is configurable via the {@code springdoc.server.url} property, allowing the
+ * <p>The ingress URL is configurable via the {@code INGRESS_URL} environment variable, allowing the
  * Swagger UI to correctly reference the external ingress endpoint in Kubernetes deployments.
  */
 @Configuration
 public class OpenApiConfig {
 
-  @Value("${springdoc.server.url:#{null}}")
-  private String serverUrl;
+  @Value("${INGRESS_URL:#{null}}")
+  private String ingressUrl;
 
-  @Value("${springdoc.server.description:Metacatalog API}")
-  private String serverDescription;
+  @Value("${INGRESS_DESCRIPTION:Metacatalog API (Ingress)}")
+  private String ingressDescription;
 
   /**
    * Customizes the OpenAPI specification with dynamic server configuration.
    *
-   * <p>If a server URL is configured (e.g., ingress URL in Kubernetes), it will be added to the
-   * OpenAPI servers list. This ensures Swagger UI displays the correct base URL for API requests.
+   * <p>If an ingress URL is configured (e.g., in Kubernetes), it will be added to the OpenAPI
+   * servers list alongside the default localhost server. This ensures Swagger UI displays both the
+   * local development URL and the production ingress URL.
    *
    * @return customized OpenAPI instance
    */
   @Bean
   public OpenAPI customOpenAPI() {
     final OpenAPI openAPI = new OpenAPI();
+    final List<Server> servers = new ArrayList<>();
 
-    if (serverUrl != null && !serverUrl.isBlank()) {
-      final Server server = new Server();
-      server.setUrl(serverUrl);
-      server.setDescription(serverDescription);
-      openAPI.setServers(List.of(server));
+    // Add ingress server if configured (for Kubernetes deployments)
+    if (ingressUrl != null && !ingressUrl.isBlank()) {
+      final Server ingressServer = new Server();
+      ingressServer.setUrl(ingressUrl);
+      ingressServer.setDescription(ingressDescription);
+      servers.add(ingressServer);
     }
+
+    // Always add localhost for local development/testing
+    final Server localhostServer = new Server();
+    localhostServer.setUrl("http://localhost:8080");
+    localhostServer.setDescription("Local development server");
+    servers.add(localhostServer);
+
+    openAPI.setServers(servers);
 
     return openAPI;
   }
