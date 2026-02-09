@@ -32,49 +32,6 @@ public class OpenApiConfig {
   private String ingressDescription;
 
   /**
-   * Customizes the OpenAPI specification with dynamic server configuration.
-   *
-   * <p>If an ingress URL is configured (e.g., in Kubernetes), it will be added to the OpenAPI
-   * servers list alongside the default localhost server. This ensures Swagger UI displays both the
-   * local development URL and the production ingress URL.
-   *
-   * @return customized OpenAPI instance
-   */
-  //  @Bean
-  //  public OpenAPI customOpenAPI() {
-  //    final OpenAPI openAPI = new OpenAPI();
-  //
-  //    // Set basic info
-  //    openAPI.info(new Info().title("Metacatalog API").version("1.0"));
-  //
-  //    final List<Server> servers = new ArrayList<>();
-  //    System.out.println("Configuring OpenAPI with ingress URL: " + ingressUrl);
-  //
-  //    // Add ingress server if configured (for Kubernetes deployments)
-  //    if (ingressUrl != null && !ingressUrl.isBlank()) {
-  //      final Server ingressServer = new Server();
-  //      ingressServer.setUrl(ingressUrl);
-  //      ingressServer.setDescription(ingressDescription);
-  //      servers.add(ingressServer);
-  //      System.out.println("Added ingress server: " + ingressUrl);
-  //    }
-  //
-  //    // Always add localhost for local development/testing
-  //    final Server localhostServer = new Server();
-  //    localhostServer.setUrl("http://localhost:8080");
-  //    localhostServer.setDescription("Local development server");
-  //    servers.add(localhostServer);
-  //
-  //    if (!servers.isEmpty()) {
-  //      openAPI.servers(servers);
-  //    }
-  //
-  //    System.out.println("Total servers configured: " + servers.size());
-  //
-  //    return openAPI;
-  //  }
-
-  /**
    * GroupedOpenApi with custom server URLs.
    *
    * <p>Using GroupedOpenApi ensures the OpenApiCustomizer is properly invoked by SpringDoc.
@@ -83,7 +40,6 @@ public class OpenApiConfig {
    */
   @Bean
   public GroupedOpenApi publicApi() {
-    System.out.println("Creating GroupedOpenApi with server customizer");
     return GroupedOpenApi.builder()
         .group("public")
         .pathsToMatch("/**")
