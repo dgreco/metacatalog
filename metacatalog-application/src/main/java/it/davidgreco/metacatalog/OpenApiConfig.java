@@ -6,6 +6,7 @@ import io.swagger.v3.oas.models.servers.Server;
 import java.util.ArrayList;
 import java.util.List;
 import org.springdoc.core.customizers.OpenApiCustomizer;
+import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,6 +77,23 @@ public class OpenApiConfig {
   }
 
   /**
+   * GroupedOpenApi with custom server URLs.
+   *
+   * <p>Using GroupedOpenApi ensures the OpenApiCustomizer is properly invoked by SpringDoc.
+   *
+   * @return GroupedOpenApi configuration
+   */
+  @Bean
+  public GroupedOpenApi publicApi() {
+    System.out.println("Creating GroupedOpenApi with server customizer");
+    return GroupedOpenApi.builder()
+        .group("public")
+        .pathsToMatch("/**")
+        .addOpenApiCustomizer(customServerCustomizer())
+        .build();
+  }
+
+  /**
    * OpenApiCustomizer to ensure servers are preserved after SpringDoc processing.
    *
    * <p>This customizer runs after SpringDoc builds the OpenAPI spec and forcibly sets the servers
@@ -83,8 +101,7 @@ public class OpenApiConfig {
    *
    * @return OpenApiCustomizer that sets server URLs
    */
-  @Bean
-  public OpenApiCustomizer customServerCustomizer() {
+  private OpenApiCustomizer customServerCustomizer() {
     return openApi -> {
       final List<Server> servers = new ArrayList<>();
 
