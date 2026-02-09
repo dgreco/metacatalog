@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,8 +43,13 @@ public class OpenApiConfig {
   @Bean
   public OpenAPI customOpenAPI() {
     final OpenAPI openAPI = new OpenAPI();
+
+    // Set basic info
+    openAPI.info(new Info().title("Metacatalog API").version("1.0"));
+
     final List<Server> servers = new ArrayList<>();
     System.out.println("Configuring OpenAPI with ingress URL: " + ingressUrl);
+
     // Add ingress server if configured (for Kubernetes deployments)
     if (ingressUrl != null && !ingressUrl.isBlank()) {
       final Server ingressServer = new Server();
@@ -59,7 +65,10 @@ public class OpenApiConfig {
     localhostServer.setDescription("Local development server");
     servers.add(localhostServer);
 
-    openAPI.setServers(servers);
+    if (!servers.isEmpty()) {
+      openAPI.servers(servers);
+    }
+
     System.out.println("Total servers configured: " + servers.size());
 
     return openAPI;
