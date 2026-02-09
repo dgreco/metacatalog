@@ -24,7 +24,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-  @Value("${INGRESS_URL:#{null}}")
+  @Value("${INGRESS_URL:}")
   private String ingressUrl;
 
   @Value("${INGRESS_DESCRIPTION:Metacatalog API (Ingress)}")
