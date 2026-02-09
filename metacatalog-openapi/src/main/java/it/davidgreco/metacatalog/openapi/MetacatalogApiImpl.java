@@ -196,6 +196,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
               .map(
                   t -> {
                     Trait trait = new Trait();
+                    trait.setId(t.getId());
                     trait.setName(t.getName());
                     trait.setSchema(Optional.of(t.getSchema().toPrettyString()));
                     trait.setInheritsFrom(
