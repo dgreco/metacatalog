@@ -5,6 +5,7 @@ import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.ArrayList;
 import java.util.List;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -72,5 +73,38 @@ public class OpenApiConfig {
     System.out.println("Total servers configured: " + servers.size());
 
     return openAPI;
+  }
+
+  /**
+   * OpenApiCustomizer to ensure servers are preserved after SpringDoc processing.
+   *
+   * <p>This customizer runs after SpringDoc builds the OpenAPI spec and forcibly sets the servers
+   * list to prevent auto-detection from overriding our custom configuration.
+   *
+   * @return OpenApiCustomizer that sets server URLs
+   */
+  @Bean
+  public OpenApiCustomizer customServerCustomizer() {
+    return openApi -> {
+      final List<Server> servers = new ArrayList<>();
+
+      // Add ingress server if configured
+      if (ingressUrl != null && !ingressUrl.isBlank()) {
+        final Server ingressServer = new Server();
+        ingressServer.setUrl(ingressUrl);
+        ingressServer.setDescription(ingressDescription);
+        servers.add(ingressServer);
+        System.out.println("Customizer: Added ingress server: " + ingressUrl);
+      }
+
+      // Add localhost server
+      final Server localhostServer = new Server();
+      localhostServer.setUrl("http://localhost:8080");
+      localhostServer.setDescription("Local development server");
+      servers.add(localhostServer);
+
+      openApi.setServers(servers);
+      System.out.println("Customizer: Set " + servers.size() + " servers");
+    };
   }
 }
