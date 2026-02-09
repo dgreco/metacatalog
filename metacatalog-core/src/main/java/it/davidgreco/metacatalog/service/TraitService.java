@@ -168,6 +168,23 @@ public class TraitService implements CommonTypeService<Trait, String> {
   }
 
   /**
+   * Retrieves all Traits from the repository.
+   *
+   * @return a list of all Traits
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public List<Trait> list() {
+    log.info("Listing all Traits");
+    try {
+      return traitRepository.findAll();
+    } finally {
+      log.info("Listed all Traits");
+    }
+  }
+
+  /**
    * Links two Traits with a given relation type.
    *
    * <p>This method validates that the two Traits exist, and that the link does not already exist.

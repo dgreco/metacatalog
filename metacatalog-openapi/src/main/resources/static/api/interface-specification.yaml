@@ -40,6 +40,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/trait:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get all traits
+      operationId: listTraits
+      responses:
+        200:
+          description: If successful, return a list of Trait objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trait'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     post:
       tags:
         - Meta Catalog Manager

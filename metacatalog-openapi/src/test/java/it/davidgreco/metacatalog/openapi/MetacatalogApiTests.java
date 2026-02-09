@@ -109,6 +109,38 @@ class MetacatalogApiTests {
   }
 
   @Test
+  void testListTraits() {
+    var api = getMetaCatalogManagerApi();
+
+    var trait1 = new Trait();
+    trait1.setName("ListTestTrait1");
+    api.createTrait(trait1);
+
+    var trait2 = new Trait();
+    trait2.setName("ListTestTrait2");
+    api.createTrait(trait2);
+
+    var trait3 = new Trait();
+    trait3.setName("ListTestTrait3");
+    api.createTrait(trait3);
+
+    var allTraits = api.listTraits();
+
+    Assertions.assertNotNull(allTraits);
+    Assertions.assertTrue(allTraits.size() >= 3);
+
+    var traitNames = allTraits.stream().map(Trait::getName).toList();
+
+    Assertions.assertTrue(traitNames.contains("ListTestTrait1"));
+    Assertions.assertTrue(traitNames.contains("ListTestTrait2"));
+    Assertions.assertTrue(traitNames.contains("ListTestTrait3"));
+
+    api.deleteTrait("ListTestTrait1");
+    api.deleteTrait("ListTestTrait2");
+    api.deleteTrait("ListTestTrait3");
+  }
+
+  @Test
   void testLinkUnlinkTraitGetLink() {
     var api = getMetaCatalogManagerApi();
     var trait1 = new Trait();

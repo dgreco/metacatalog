@@ -52,4 +52,28 @@ class TraitServiceTests extends CommonServiceTestingSupport {
     traitService.delete("trait2");
     traitService.delete("trait3");
   }
+
+  @Test
+  void testListTraits() throws ServiceError {
+
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("listTestTrait1", Optional.empty(), Optional.empty());
+    traitService.create("listTestTrait2", Optional.empty(), Optional.empty());
+    traitService.create("listTestTrait3", Optional.empty(), Optional.empty());
+
+    var allTraits = traitService.list();
+
+    Assertions.assertTrue(allTraits.size() >= 3);
+
+    var traitNames = allTraits.stream().map(Trait::getName).collect(Collectors.toSet());
+
+    Assertions.assertTrue(traitNames.contains("listTestTrait1"));
+    Assertions.assertTrue(traitNames.contains("listTestTrait2"));
+    Assertions.assertTrue(traitNames.contains("listTestTrait3"));
+
+    traitService.delete("listTestTrait1");
+    traitService.delete("listTestTrait2");
+    traitService.delete("listTestTrait3");
+  }
 }
