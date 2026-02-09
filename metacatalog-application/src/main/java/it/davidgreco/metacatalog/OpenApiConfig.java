@@ -43,7 +43,7 @@ public class OpenApiConfig {
   public OpenAPI customOpenAPI() {
     final OpenAPI openAPI = new OpenAPI();
     final List<Server> servers = new ArrayList<>();
-
+    System.out.println("Configuring OpenAPI with ingress URL: " + ingressUrl);
     // Add ingress server if configured (for Kubernetes deployments)
     if (ingressUrl != null && !ingressUrl.isBlank()) {
       final Server ingressServer = new Server();
