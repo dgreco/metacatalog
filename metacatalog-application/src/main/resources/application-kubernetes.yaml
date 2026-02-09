@@ -28,6 +28,9 @@ springdoc:
   api-docs:
     path: /api-docs
     enabled: true
+  server:
+    url: ${INGRESS_URL:}
+    description: ${INGRESS_DESCRIPTION:Metacatalog API Server}
 
 management:
   endpoints:

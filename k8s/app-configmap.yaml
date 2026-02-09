@@ -8,3 +8,5 @@ metadata:
     app.kubernetes.io/component: application
 data:
   SPRING_PROFILES_ACTIVE: "kubernetes"
+  INGRESS_URL: "https://metacatalog.fairytales.local"
+  INGRESS_DESCRIPTION: "Metacatalog API (Ingress)"
