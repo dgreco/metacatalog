@@ -1,7 +1,5 @@
 package it.davidgreco.metacatalog;
 
-import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.servers.Server;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,39 +40,39 @@ public class OpenApiConfig {
    *
    * @return customized OpenAPI instance
    */
-//  @Bean
-//  public OpenAPI customOpenAPI() {
-//    final OpenAPI openAPI = new OpenAPI();
-//
-//    // Set basic info
-//    openAPI.info(new Info().title("Metacatalog API").version("1.0"));
-//
-//    final List<Server> servers = new ArrayList<>();
-//    System.out.println("Configuring OpenAPI with ingress URL: " + ingressUrl);
-//
-//    // Add ingress server if configured (for Kubernetes deployments)
-//    if (ingressUrl != null && !ingressUrl.isBlank()) {
-//      final Server ingressServer = new Server();
-//      ingressServer.setUrl(ingressUrl);
-//      ingressServer.setDescription(ingressDescription);
-//      servers.add(ingressServer);
-//      System.out.println("Added ingress server: " + ingressUrl);
-//    }
-//
-//    // Always add localhost for local development/testing
-//    final Server localhostServer = new Server();
-//    localhostServer.setUrl("http://localhost:8080");
-//    localhostServer.setDescription("Local development server");
-//    servers.add(localhostServer);
-//
-//    if (!servers.isEmpty()) {
-//      openAPI.servers(servers);
-//    }
-//
-//    System.out.println("Total servers configured: " + servers.size());
-//
-//    return openAPI;
-//  }
+  //  @Bean
+  //  public OpenAPI customOpenAPI() {
+  //    final OpenAPI openAPI = new OpenAPI();
+  //
+  //    // Set basic info
+  //    openAPI.info(new Info().title("Metacatalog API").version("1.0"));
+  //
+  //    final List<Server> servers = new ArrayList<>();
+  //    System.out.println("Configuring OpenAPI with ingress URL: " + ingressUrl);
+  //
+  //    // Add ingress server if configured (for Kubernetes deployments)
+  //    if (ingressUrl != null && !ingressUrl.isBlank()) {
+  //      final Server ingressServer = new Server();
+  //      ingressServer.setUrl(ingressUrl);
+  //      ingressServer.setDescription(ingressDescription);
+  //      servers.add(ingressServer);
+  //      System.out.println("Added ingress server: " + ingressUrl);
+  //    }
+  //
+  //    // Always add localhost for local development/testing
+  //    final Server localhostServer = new Server();
+  //    localhostServer.setUrl("http://localhost:8080");
+  //    localhostServer.setDescription("Local development server");
+  //    servers.add(localhostServer);
+  //
+  //    if (!servers.isEmpty()) {
+  //      openAPI.servers(servers);
+  //    }
+  //
+  //    System.out.println("Total servers configured: " + servers.size());
+  //
+  //    return openAPI;
+  //  }
 
   /**
    * GroupedOpenApi with custom server URLs.
@@ -111,7 +109,6 @@ public class OpenApiConfig {
         ingressServer.setUrl(ingressUrl);
         ingressServer.setDescription(ingressDescription);
         servers.add(ingressServer);
-        System.out.println("Customizer: Added ingress server: " + ingressUrl);
       }
 
       // Add localhost server
@@ -121,7 +118,6 @@ public class OpenApiConfig {
       servers.add(localhostServer);
 
       openApi.setServers(servers);
-      System.out.println("Customizer: Set " + servers.size() + " servers");
     };
   }
 }
