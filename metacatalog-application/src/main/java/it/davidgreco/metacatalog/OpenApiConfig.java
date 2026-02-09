@@ -50,6 +50,7 @@ public class OpenApiConfig {
       ingressServer.setUrl(ingressUrl);
       ingressServer.setDescription(ingressDescription);
       servers.add(ingressServer);
+      System.out.println("Added ingress server: " + ingressUrl);
     }
 
     // Always add localhost for local development/testing
@@ -59,6 +60,7 @@ public class OpenApiConfig {
     servers.add(localhostServer);
 
     openAPI.setServers(servers);
+    System.out.println("Total servers configured: " + servers.size());
 
     return openAPI;
   }
