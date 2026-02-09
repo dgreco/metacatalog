@@ -207,8 +207,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(traits);
     } catch (Exception e) {
       return ResponseEntity.status(500)
-              .contentType(MediaType.APPLICATION_JSON)
-              .body(new SystemError(e.getMessage()));
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
     }
   }
 
