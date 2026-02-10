@@ -188,4 +188,38 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
 
     Assertions.assertFalse(cache.asMap().keySet().contains(leafType1.getName()));
   }
+
+  @Test
+  void testList() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+
+    var baseSchema =
+        jsonSchemaFactory
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/base_schema.json"))
+            .getSchemaNode()
+            .toPrettyString();
+
+    entityTypeService.create("ListTestType1", List.of(), Optional.empty(), baseSchema);
+    entityTypeService.create("ListTestType2", List.of(), Optional.empty(), baseSchema);
+    entityTypeService.create("ListTestType3", List.of(), Optional.empty(), baseSchema);
+
+    var allEntityTypes = entityTypeService.list();
+
+    Assertions.assertNotNull(allEntityTypes);
+    Assertions.assertTrue(allEntityTypes.size() >= 3);
+
+    var entityTypeNames =
+        allEntityTypes.stream().map(it.davidgreco.metacatalog.entity.EntityType::getName).toList();
+
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType1"));
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType2"));
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType3"));
+
+    entityTypeService.delete("ListTestType1");
+    entityTypeService.delete("ListTestType2");
+    entityTypeService.delete("ListTestType3");
+  }
 }

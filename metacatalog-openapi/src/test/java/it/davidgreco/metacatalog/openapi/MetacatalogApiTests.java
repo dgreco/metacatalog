@@ -209,6 +209,47 @@ class MetacatalogApiTests {
   }
 
   @Test
+  void testListEntityTypes() {
+    var api = getMetaCatalogManagerApi();
+
+    var entityType1 = new EntityType();
+    entityType1.setName("ListTestType1");
+    entityType1.setSchema(
+        """
+                { "type": "object", "properties": { } }""");
+    api.createEntityType(entityType1);
+
+    var entityType2 = new EntityType();
+    entityType2.setName("ListTestType2");
+    entityType2.setSchema(
+        """
+                { "type": "object", "properties": { } }""");
+    api.createEntityType(entityType2);
+
+    var entityType3 = new EntityType();
+    entityType3.setName("ListTestType3");
+    entityType3.setSchema(
+        """
+                { "type": "object", "properties": { } }""");
+    api.createEntityType(entityType3);
+
+    var allEntityTypes = api.listEntityTypes();
+
+    Assertions.assertNotNull(allEntityTypes);
+    Assertions.assertTrue(allEntityTypes.size() >= 3);
+
+    var entityTypeNames = allEntityTypes.stream().map(EntityType::getName).toList();
+
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType1"));
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType2"));
+    Assertions.assertTrue(entityTypeNames.contains("ListTestType3"));
+
+    api.deleteEntityType("ListTestType1");
+    api.deleteEntityType("ListTestType2");
+    api.deleteEntityType("ListTestType3");
+  }
+
+  @Test
   void testCreateReadExistsDeleteEntity() {
     var api = getMetaCatalogManagerApi();
     var entityType = new EntityType();

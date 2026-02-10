@@ -171,6 +171,23 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   }
 
   /**
+   * Retrieves all EntityTypes from the repository.
+   *
+   * @return a list of all EntityTypes
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public List<EntityType> list() {
+    log.info("Listing all EntityTypes");
+    try {
+      return entityTypeRepository.findAll();
+    } finally {
+      log.info("Listed all EntityTypes");
+    }
+  }
+
+  /**
    * Counts the number of child EntityTypes that inherit from the given EntityType.
    *
    * @param name the name of the parent EntityType

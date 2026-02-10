@@ -214,6 +214,35 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity listEntityTypes() throws Exception {
+    try {
+      var entityTypes =
+          entityTypeService.list().stream()
+              .map(
+                  et -> {
+                    EntityType dtoType = new EntityType();
+                    dtoType.setId(et.getId());
+                    dtoType.setName(et.getName());
+                    dtoType.setSchema(et.getSchema().toPrettyString());
+                    dtoType.setTraits(
+                        et.getTraits().stream()
+                            .map(it.davidgreco.metacatalog.entity.Trait::getName)
+                            .toList());
+                    dtoType.setInheritsFrom(
+                        Optional.ofNullable(et.getFather())
+                            .map(it.davidgreco.metacatalog.entity.EntityType::getName));
+                    return dtoType;
+                  })
+              .toList();
+      return ResponseEntity.status(200).contentType(MediaType.APPLICATION_JSON).body(entityTypes);
+    } catch (Exception e) {
+      return ResponseEntity.status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
   public ResponseEntity linkTrait(LinkTraitRequest linkTrait) {
     try {
       RelationType relType;
