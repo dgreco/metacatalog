@@ -133,7 +133,7 @@ public class BulkLoaderService {
                             getNamedNode(jsonRelationship, "targetTrait").asText());
                       } catch (ServiceError e) {
                         throw new ServiceRuntimeError(e);
-                      } catch (IllegalArgumentException e) {
+                      } catch (IllegalArgumentException _) {
                         throw new ServiceRuntimeError(
                             new ServiceError("Invalid relationship type"));
                       }
@@ -205,7 +205,7 @@ public class BulkLoaderService {
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } catch (IOException e) {
+    } catch (IOException _) {
       throw new ServiceError("Error parsing YAML file");
     } finally {
       log.info("Bulk model creation completed");
@@ -294,7 +294,7 @@ public class BulkLoaderService {
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } catch (IOException | ClassCastException e) {
+    } catch (IOException | ClassCastException _) {
       throw new ServiceError("Error parsing YAML file");
     } finally {
       log.info("Bulk aggregate creation completed");

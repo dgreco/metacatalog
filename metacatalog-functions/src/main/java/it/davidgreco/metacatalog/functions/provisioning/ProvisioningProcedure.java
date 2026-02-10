@@ -57,7 +57,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   private List<Entity> getPhysicalResourceSequence(AggregateService.AggregatePart aggregate) {
     switch (aggregate) {
-      case AggregateService.AggregateElement(Entity entity, List<Entity> _):
+      case AggregateService.AggregateElement(Entity entity, _):
         if (hasTrait(entity, PROVISIONABLE_RESOURCE)) {
           return List.of(entity);
         } else {
@@ -65,7 +65,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
         }
       case AggregateService.Aggregate(
           Entity entity,
-          List<Entity> _,
+          _,
           List<AggregateService.AggregatePart> elements):
         var sequence = new ArrayList<Entity>();
         if (hasTrait(entity, PROVISIONABLE_RESOURCE)) {
