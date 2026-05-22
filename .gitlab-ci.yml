@@ -38,37 +38,22 @@ build:
       if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
         echo "Building and pushing Docker images..."
 
-        # Build and push with commit SHA tag
-        mvn spring-boot:build-image -pl metacatalog-application -B \
-          -DskipTests \
-          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
-          -Ddocker.image.tag=${CI_COMMIT_SHORT_SHA} \
-          -Ddocker.publish=true \
-          -Ddocker.registry.url=${CI_REGISTRY} \
-          -Ddocker.registry.username=${CI_REGISTRY_USER} \
-          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+        # Build the application JAR for packaging
+        mvn package -pl metacatalog-application -B -DskipTests
 
-        # Build and push with 'latest' tag
-        mvn spring-boot:build-image -pl metacatalog-application -B \
-          -DskipTests \
-          -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
-          -Ddocker.image.tag=latest \
-          -Ddocker.publish=true \
-          -Ddocker.registry.url=${CI_REGISTRY} \
-          -Ddocker.registry.username=${CI_REGISTRY_USER} \
-          -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+        # Build and push Docker image with commit SHA tag
+        docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} metacatalog-application/
+        docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+
+        # Tag and push 'latest'
+        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
+        docker push ${CI_REGISTRY_IMAGE}:latest
 
         # Also tag with version on main/master
         if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
           VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
-          mvn spring-boot:build-image -pl metacatalog-application -B \
-            -DskipTests \
-            -Ddocker.image.name=${CI_REGISTRY_IMAGE} \
-            -Ddocker.image.tag=${VERSION} \
-            -Ddocker.publish=true \
-            -Ddocker.registry.url=${CI_REGISTRY} \
-            -Ddocker.registry.username=${CI_REGISTRY_USER} \
-            -Ddocker.registry.password=${CI_REGISTRY_PASSWORD}
+          docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:${VERSION}
+          docker push ${CI_REGISTRY_IMAGE}:${VERSION}
         fi
       fi
 
