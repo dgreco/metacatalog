@@ -14,7 +14,7 @@ build:
 
   cache:
     policy: pull-push
-    key: "maven-cache-$CI_COMMIT_REF_SLUG"
+    key: "maven-cache-v2-$CI_COMMIT_REF_SLUG"
     paths:
       - .m2/repository
       - "${SONAR_USER_HOME}/cache"
