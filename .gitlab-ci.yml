@@ -44,17 +44,16 @@ analyze:
   stage: analyze
   image: maven:3-eclipse-temurin-25
   cache:
-    policy: pull
-    key: "maven-cache-v7-$CI_COMMIT_REF_SLUG"
+    policy: pull-push
+    key: "scanner-cache-v1-$CI_COMMIT_REF_SLUG"
     paths:
-      - .m2/repository
+      - sonar-scanner/
   variables:
-    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
     SONAR_SCANNER_VERSION: "7.1.0.4889"
   before_script:
     - |
       if [ ! -d "sonar-scanner" ]; then
-        wget -q -O sonar-scanner.zip \
+        curl -sL -o sonar-scanner.zip \
           "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
         unzip -q sonar-scanner.zip
         mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner
