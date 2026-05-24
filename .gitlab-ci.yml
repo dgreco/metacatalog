@@ -55,8 +55,10 @@ analyze:
       if [ ! -d "sonar-scanner" ]; then
         curl -sL -o sonar-scanner.zip \
           "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
-        unzip -q sonar-scanner.zip
-        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner
+        mkdir -p sonar-scanner
+        jar xf sonar-scanner.zip
+        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64"/* sonar-scanner/
+        rm -rf "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner.zip
       fi
   script:
     - ./sonar-scanner/bin/sonar-scanner
