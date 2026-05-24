@@ -5,68 +5,104 @@ variables:
 
 stages:
   - build
+  - analyze
   - deploy
 
-# Build, test, and push Docker image
+# Build and test (no Sonar — that runs separately)
 build:
   stage: build
   image: maven:3-eclipse-temurin-25
-
   cache:
     policy: pull-push
-    key: "maven-cache-v6-$CI_COMMIT_REF_SLUG"
+    key: "maven-cache-v7-$CI_COMMIT_REF_SLUG"
     paths:
       - .m2/repository
-      - .sonar/cache
-      - sonar-scanner/
-
   variables:
-    SONAR_USER_HOME: ".sonar"
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
     DOCKER_HOST: "unix:///var/run/docker.sock"
-
   before_script:
-    # Clear any corrupted Sonar scanner engine cache so it re-downloads fresh
-    - rm -rf .sonar/cache sonar-scanner/ || true
-    - mkdir -p .sonar/cache sonar-scanner/
-
-    # Install Docker CLI
     - apt-get update && apt-get install -y docker.io
     - docker info
     - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
-
   script:
-    # Build and test (install to local repo for multi-module dependencies)
-    - mvn clean install spotless:check sonar:sonar -B -U
-
-    # Build and push Docker images (only on main/master/develop)
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
-        echo "Building and pushing Docker images..."
-
-        # Build the application JAR for packaging
-        mvn package -pl metacatalog-application -B -DskipTests
-
-        # Build and push Docker image with commit SHA tag
-        docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} metacatalog-application/
-        docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
-
-        # Tag and push 'latest'
-        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
-        docker push ${CI_REGISTRY_IMAGE}:latest
-
-        # Also tag with version on main/master
-        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-          VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
-          docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:${VERSION}
-          docker push ${CI_REGISTRY_IMAGE}:${VERSION}
-        fi
-      fi
-
+    - mvn clean install spotless:check -B
+    - cp -r metacatalog-core/target/classes target-artifacts/metacatalog-core || true
+    - cp -r metacatalog-functions/target/classes target-artifacts/metacatalog-functions || true
+    - cp -r metacatalog-openapi/target/classes target-artifacts/metacatalog-openapi || true
+    - cp -r metacatalog-application/target/classes target-artifacts/metacatalog-application || true
+  artifacts:
+    paths:
+      - target-artifacts/
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
+
+# SonarQube analysis via self-contained CLI to avoid Maven plugin classloader issues
+analyze:
+  stage: analyze
+  image: maven:3-eclipse-temurin-25
+  cache:
+    policy: pull
+    key: "maven-cache-v7-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .m2/repository
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+    SONAR_SCANNER_VERSION: "7.1.0.4889"
+  before_script:
+    - |
+      if [ ! -d "sonar-scanner" ]; then
+        wget -q -O sonar-scanner.zip \
+          "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
+        unzip -q sonar-scanner.zip
+        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner
+      fi
+  script:
+    - ./sonar-scanner/bin/sonar-scanner
+        -Dsonar.projectKey=${SONAR_PROJECT_KEY}
+        -Dsonar.host.url=${SONAR_HOST_URL}
+        -Dsonar.token=${SONAR_TOKEN}
+        -Dsonar.sources=.
+        -Dsonar.java.binaries=metacatalog-core/target/classes,metacatalog-functions/target/classes,metacatalog-openapi/target/classes,metacatalog-application/target/classes
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
+
+# Build and push Docker image (reusing build artifacts)
+push-image:
+  stage: deploy
+  image: maven:3-eclipse-temurin-25
+  variables:
+    DOCKER_HOST: "unix:///var/run/docker.sock"
+  before_script:
+    - apt-get update && apt-get install -y docker.io
+    - docker info
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+  script:
+    - mvn package -pl metacatalog-application -B -DskipTests
+    - docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} metacatalog-application/
+    - docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
+    - docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
+    - docker push ${CI_REGISTRY_IMAGE}:latest
+    - |
+      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
+        VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
+        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:${VERSION}
+        docker push ${CI_REGISTRY_IMAGE}:${VERSION}
+      fi
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'develop'
 
 # Deploy to Kubernetes
@@ -75,13 +111,9 @@ deploy:
   image:
     name: alpine/k8s:1.31.4
     entrypoint: [""]
-
   variables:
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: "gitlab-deployer"
-
   before_script:
-    # Configure kubectl with the GitLab-provided kubeconfig
-    # Requires KUBECONFIG_CONTENT variable set in GitLab CI/CD settings (base64 encoded)
     - |
       if [ -n "$KUBECONFIG_CONTENT" ]; then
         mkdir -p ~/.kube
@@ -90,38 +122,25 @@ deploy:
       fi
     - kubectl version --client
     - kustomize version
-
   script:
-    # Update image tag in kustomization
     - cd k8s
     - kustomize edit set image gitlab.davidgreco.it:5050/dgreco/metacatalog=gitlab.davidgreco.it:5050/dgreco/metacatalog:${CI_COMMIT_SHORT_SHA}
-
-    # Apply the manifests (namespace is defined in kustomization.yaml)
     - kubectl apply -k .
-
-    # Wait for CNPG cluster to be ready (first deployment only)
     - |
       if ! kubectl get cluster metacatalog-db -n ${KUBE_NAMESPACE} >/dev/null 2>&1; then
         echo "Waiting for CNPG cluster to be ready..."
         kubectl wait --for=condition=Ready cluster/metacatalog-db -n ${KUBE_NAMESPACE} --timeout=300s || true
       fi
-
-    # Wait for deployment to be ready
     - kubectl rollout status deployment/metacatalog -n ${KUBE_NAMESPACE} --timeout=300s
-
-    # Show deployment status
     - kubectl get pods -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
     - kubectl get svc -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
     - kubectl get ingress -n ${KUBE_NAMESPACE} -l app.kubernetes.io/name=metacatalog
-
   environment:
     name: production
     url: http://metacatalog.fairytales.local
-
   needs:
-    - job: build
+    - job: push-image
       artifacts: false
-
   rules:
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'master'
