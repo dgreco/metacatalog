@@ -51,14 +51,15 @@ analyze:
   variables:
     SONAR_SCANNER_VERSION: "7.1.0.4889"
   before_script:
+    - apt-get update && apt-get install -y unzip
     - |
-      if [ ! -d "sonar-scanner" ]; then
+      if [ ! -d "sonar-scanner/bin" ]; then
+        rm -rf sonar-scanner sonar-scanner.zip
         curl -sL -o sonar-scanner.zip \
           "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
-        mkdir -p sonar-scanner
-        jar xf sonar-scanner.zip
-        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64"/* sonar-scanner/
-        rm -rf "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner.zip
+        unzip -q sonar-scanner.zip
+        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner
+        rm -f sonar-scanner.zip
       fi
   script:
     - ./sonar-scanner/bin/sonar-scanner
