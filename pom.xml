@@ -90,11 +90,6 @@
             </dependency>
 
             <dependency>
-                <groupId>io.github.hakky54</groupId>
-                <artifactId>sslcontext-kickstart</artifactId>
-                <version>9.1.0</version>
-            </dependency>
-            <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
@@ -278,16 +273,6 @@
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <!-- Declared at root level so the Sonar Scanner Engine can find
-             GenericKeyStoreException on the build classpath. -->
-        <dependency>
-            <groupId>io.github.hakky54</groupId>
-            <artifactId>sslcontext-kickstart</artifactId>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
-
     <build>
         <pluginManagement>
             <plugins>
@@ -464,7 +449,7 @@
                 <plugin>
                     <groupId>org.sonarsource.scanner.maven</groupId>
                     <artifactId>sonar-maven-plugin</artifactId>
-                    <version>5.4.0.6343</version>
+                    <version>5.0.0.4389</version>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->
@@ -481,15 +466,6 @@
                 </plugin>
             </plugins>
         </pluginManagement>
-        <plugins>
-            <!-- Sonar plugin must be declared here (not just pluginManagement) so
-                 Maven binds it to the build lifecycle and its dependencies are
-                 visible to the scanner engine classloader. -->
-            <plugin>
-                <groupId>org.sonarsource.scanner.maven</groupId>
-                <artifactId>sonar-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
     </build>
 
     <pluginRepositories>
