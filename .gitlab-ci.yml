@@ -45,7 +45,7 @@ analyze:
   image: maven:3-eclipse-temurin-25
   cache:
     policy: pull-push
-    key: "scanner-cache-v1-$CI_COMMIT_REF_SLUG"
+    key: "scanner-cache-v2-$CI_COMMIT_REF_SLUG"
     paths:
       - sonar-scanner/
   variables:
@@ -55,8 +55,14 @@ analyze:
     - |
       if [ ! -d "sonar-scanner/bin" ]; then
         rm -rf sonar-scanner sonar-scanner.zip
+        ARCH=$(uname -m)
+        if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+          SCANNER_ARCH="linux-aarch64"
+        else
+          SCANNER_ARCH="linux-x64"
+        fi
         curl -sL -o sonar-scanner.zip \
-          "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
+          "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-${SCANNER_ARCH}.zip"
         unzip -q sonar-scanner.zip
         EXTRACTED_DIR=$(ls -d sonar-scanner* | head -n 1)
         mv "$EXTRACTED_DIR" sonar-scanner
