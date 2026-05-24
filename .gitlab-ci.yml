@@ -14,20 +14,21 @@ build:
 
   cache:
     policy: pull-push
-    key: "maven-cache-v4-$CI_COMMIT_REF_SLUG"
+    key: "maven-cache-v5-$CI_COMMIT_REF_SLUG"
     paths:
       - .m2/repository
-      - "${SONAR_USER_HOME}/cache"
+      - .sonar/cache
       - sonar-scanner/
 
   variables:
+    SONAR_USER_HOME: ".sonar"
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
     DOCKER_HOST: "unix:///var/run/docker.sock"
 
   before_script:
-    # Clear corrupted Sonar scanner cache
-    - rm -rf "${SONAR_USER_HOME}/cache" sonar-scanner/
-    - mkdir -p "${SONAR_USER_HOME}/cache" sonar-scanner/
+    # Clear any corrupted Sonar scanner engine cache so it re-downloads fresh
+    - rm -rf .sonar/cache sonar-scanner/ || true
+    - mkdir -p .sonar/cache sonar-scanner/
 
     # Install Docker CLI
     - apt-get update && apt-get install -y docker.io
@@ -36,7 +37,7 @@ build:
 
   script:
     # Build and test (install to local repo for multi-module dependencies)
-    - mvn clean install spotless:check org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -B
+    - mvn clean install spotless:check sonar:sonar -B -U
 
     # Build and push Docker images (only on main/master/develop)
     - |
