@@ -58,7 +58,8 @@ analyze:
         curl -sL -o sonar-scanner.zip \
           "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64.zip"
         unzip -q sonar-scanner.zip
-        mv "sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-x64" sonar-scanner
+        EXTRACTED_DIR=$(ls -d sonar-scanner* | head -n 1)
+        mv "$EXTRACTED_DIR" sonar-scanner
         rm -f sonar-scanner.zip
       fi
   script:
