@@ -450,13 +450,6 @@
                     <groupId>org.sonarsource.scanner.maven</groupId>
                     <artifactId>sonar-maven-plugin</artifactId>
                     <version>5.0.0.4389</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>io.github.hakky54</groupId>
-                            <artifactId>sslcontext-kickstart</artifactId>
-                            <version>9.1.0</version>
-                        </dependency>
-                    </dependencies>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->

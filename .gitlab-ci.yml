@@ -14,7 +14,7 @@ build:
 
   cache:
     policy: pull-push
-    key: "maven-cache-v3-$CI_COMMIT_REF_SLUG"
+    key: "maven-cache-v4-$CI_COMMIT_REF_SLUG"
     paths:
       - .m2/repository
       - "${SONAR_USER_HOME}/cache"
@@ -25,6 +25,10 @@ build:
     DOCKER_HOST: "unix:///var/run/docker.sock"
 
   before_script:
+    # Clear corrupted Sonar scanner cache
+    - rm -rf "${SONAR_USER_HOME}/cache" sonar-scanner/
+    - mkdir -p "${SONAR_USER_HOME}/cache" sonar-scanner/
+
     # Install Docker CLI
     - apt-get update && apt-get install -y docker.io
     - docker info
