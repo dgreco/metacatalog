@@ -70,6 +70,11 @@ analyze:
       fi
   script:
     - SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-$(grep '<sonar.projectKey>' pom.xml | sed 's/.*<sonar.projectKey>\(.*\)<\/sonar.projectKey>.*/\1/')}"
+    - mkdir -p metacatalog-core/target metacatalog-functions/target metacatalog-openapi/target metacatalog-application/target
+    - cp -r target-artifacts/metacatalog-core metacatalog-core/target/classes || true
+    - cp -r target-artifacts/metacatalog-functions metacatalog-functions/target/classes || true
+    - cp -r target-artifacts/metacatalog-openapi metacatalog-openapi/target/classes || true
+    - cp -r target-artifacts/metacatalog-application metacatalog-application/target/classes || true
     - ./sonar-scanner/bin/sonar-scanner
         -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
         -Dsonar.host.url="${SONAR_HOST_URL}"
