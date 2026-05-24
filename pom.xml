@@ -90,6 +90,11 @@
             </dependency>
 
             <dependency>
+                <groupId>io.github.hakky54</groupId>
+                <artifactId>sslcontext-kickstart</artifactId>
+                <version>9.1.0</version>
+            </dependency>
+            <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
                 <version>${testcontainers.version}</version>
@@ -272,6 +277,16 @@
             </dependency> 
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <!-- Declared at root level so the Sonar Scanner Engine can find
+             GenericKeyStoreException on the build classpath. -->
+        <dependency>
+            <groupId>io.github.hakky54</groupId>
+            <artifactId>sslcontext-kickstart</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 
     <build>
         <pluginManagement>
