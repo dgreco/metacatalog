@@ -69,10 +69,11 @@ analyze:
         rm -f sonar-scanner.zip
       fi
   script:
+    - SONAR_PROJECT_KEY="${SONAR_PROJECT_KEY:-$(grep '<sonar.projectKey>' pom.xml | sed 's/.*<sonar.projectKey>\(.*\)<\/sonar.projectKey>.*/\1/')}"
     - ./sonar-scanner/bin/sonar-scanner
-        -Dsonar.projectKey=${SONAR_PROJECT_KEY}
-        -Dsonar.host.url=${SONAR_HOST_URL}
-        -Dsonar.token=${SONAR_TOKEN}
+        -Dsonar.projectKey="${SONAR_PROJECT_KEY}"
+        -Dsonar.host.url="${SONAR_HOST_URL}"
+        -Dsonar.token="${SONAR_TOKEN}"
         -Dsonar.sources=.
         -Dsonar.java.binaries=metacatalog-core/target/classes,metacatalog-functions/target/classes,metacatalog-openapi/target/classes,metacatalog-application/target/classes
   needs:
