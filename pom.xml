@@ -452,9 +452,9 @@
                     <version>5.0.0.4389</version>
                     <dependencies>
                         <dependency>
-                            <groupId>nl.altindag</groupId>
+                            <groupId>io.github.hakky54</groupId>
                             <artifactId>sslcontext-kickstart</artifactId>
-                            <version>9.0.0</version>
+                            <version>9.1.0</version>
                         </dependency>
                     </dependencies>
                 </plugin>
