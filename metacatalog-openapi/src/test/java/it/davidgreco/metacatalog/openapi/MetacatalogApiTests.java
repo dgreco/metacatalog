@@ -22,6 +22,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.web.server.autoconfigure.ServerProperties;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -30,6 +32,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @RequiredArgsConstructor
 class MetacatalogApiTests {
   static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1");
+
+  @DynamicPropertySource
+  static void datasourceProperties(DynamicPropertyRegistry registry) {
+    registry.add("spring.datasource.url", postgres::getJdbcUrl);
+    registry.add("spring.datasource.username", postgres::getUsername);
+    registry.add("spring.datasource.password", postgres::getPassword);
+  }
 
   static ConfigurableApplicationContext context;
 
