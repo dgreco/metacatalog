@@ -2,10 +2,6 @@ package it.davidgreco.metacatalog.openapi;
 
 import static org.awaitility.Awaitility.await;
 
-import com.github.dockerjava.api.model.ExposedPort;
-import com.github.dockerjava.api.model.HostConfig;
-import com.github.dockerjava.api.model.PortBinding;
-import com.github.dockerjava.api.model.Ports;
 import it.davidgreco.metacatalog.Application;
 import it.davidgreco.metacatalog.openapi.client.*;
 import it.davidgreco.metacatalog.openapi.common.FileHttpMessageConverter;
@@ -33,19 +29,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @SpringBootTest
 @RequiredArgsConstructor
 class MetacatalogApiTests {
-  static final int POSTGRESQL_PORT = 5433;
-
-  static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:18.1")
-          .withExposedPorts(5432)
-          .withCreateContainerCmdModifier(
-              cmd ->
-                  cmd.withHostConfig(
-                      new HostConfig()
-                          .withPortBindings(
-                              new PortBinding(
-                                  Ports.Binding.bindPort(POSTGRESQL_PORT),
-                                  new ExposedPort(5432)))));
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1");
 
   static ConfigurableApplicationContext context;
 
@@ -73,7 +57,12 @@ class MetacatalogApiTests {
     flyway.clean();
     flyway.migrate();
 
-    context = SpringApplication.run(Application.class);
+    context =
+        SpringApplication.run(
+            Application.class,
+            "--spring.datasource.url=" + postgres.getJdbcUrl(),
+            "--spring.datasource.username=" + postgres.getUsername(),
+            "--spring.datasource.password=" + postgres.getPassword());
   }
 
   @AfterAll
