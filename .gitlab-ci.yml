@@ -2,11 +2,17 @@ variables:
   DOCKER_DRIVER: "overlay2"
   TESTCONTAINERS_RYUK_DISABLED: "true"
   KUBE_NAMESPACE: "applications"
+  # --- DinD / Testcontainers (global so all jobs get it) ---
+  DOCKER_HOST: "tcp://docker:2376"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_CERT_PATH: "/certs/client"
+  TESTCONTAINERS_HOST_OVERRIDE: "docker"
 
 stages:
   - build
   - deploy
 
+# Build, test, and push Docker image
 build:
   stage: build
   image: maven:3-eclipse-temurin-25
@@ -19,25 +25,38 @@ build:
       - .m2/repository
   variables:
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
-    # DO NOT set DOCKER_HOST here — the runner injects tcp://docker:2376 + TLS
+    # NOTE: DOCKER_HOST intentionally NOT overridden here — inherits tcp://docker:2376
   before_script:
+    # Install Docker CLI (client only; the daemon is the dind service)
     - apt-get update && apt-get install -y docker.io
-    - until docker info; do echo "waiting for dind..."; sleep 1; done
+    # Wait for the dind daemon to be ready before using it
+    - until docker info >/dev/null 2>&1; do echo "waiting for dind..."; sleep 1; done
+    - docker info
     - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
+    # Build and test (install to local repo for multi-module dependencies)
     - mvn clean install spotless:check test -B
+    # Build and push Docker images (only on main/master/develop)
     - |
       if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
         echo "Building and pushing Docker images..."
+
+        # Build the application JAR for packaging
         mvn package -pl metacatalog-application -B -DskipTests
-        docker build -t ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} metacatalog-application/
-        docker push ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}
-        docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:latest
-        docker push ${CI_REGISTRY_IMAGE}:latest
+
+        # Build and push Docker image with commit SHA tag
+        docker build -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" metacatalog-application/
+        docker push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
+
+        # Tag and push 'latest'
+        docker tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}:latest"
+        docker push "${CI_REGISTRY_IMAGE}:latest"
+
+        # Also tag with version on main/master
         if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
           VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
-          docker tag ${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA} ${CI_REGISTRY_IMAGE}:${VERSION}
-          docker push ${CI_REGISTRY_IMAGE}:${VERSION}
+          docker tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}:${VERSION}"
+          docker push "${CI_REGISTRY_IMAGE}:${VERSION}"
         fi
       fi
   rules:
