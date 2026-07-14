@@ -17,11 +17,6 @@
     <name>Meta Catalog</name>
 
     <properties>
-        <!-- Sonarqube Properties -->
-        <sonar.projectKey>dgreco_metacatalog_c3b4a273-3848-4c86-9b30-1ce0d66b807a</sonar.projectKey>
-        <sonar.projectName>metacatalog</sonar.projectName>
-        <sonar.qualitygate.wait>true</sonar.qualitygate.wait>
-
         <!-- Project Properties -->
         <project.version>0.0.1-SNAPSHOT</project.version>
         <java.version>25</java.version>
@@ -443,25 +438,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.2</version>
-                </plugin>
-
-                <!-- SonarQube Maven Plugin -->
-                <plugin>
-                    <groupId>org.sonarsource.scanner.maven</groupId>
-                    <artifactId>sonar-maven-plugin</artifactId>
-                    <version>5.5.0.6356</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>io.github.hakky54</groupId>
-                            <artifactId>sslcontext-kickstart</artifactId>
-                            <version>9.1.0</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>io.github.hakky54</groupId>
-                            <artifactId>sslcontext-kickstart-for-pem</artifactId>
-                            <version>9.1.0</version>
-                        </dependency>
-                    </dependencies>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->
