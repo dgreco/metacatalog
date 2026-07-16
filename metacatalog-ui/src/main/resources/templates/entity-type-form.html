@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Entity Type — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>New Entity Type</h1>
+    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <form method="post" th:action="@{/ui/entity-types}" th:object="${entityTypeForm}" id="type-form">
+        <label>
+            Name
+            <input type="text" th:field="*{name}" required autofocus/>
+        </label>
+
+        <label>
+            Father (optional)
+            <select th:field="*{father}">
+                <option value="">— none —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}">entity type</option>
+            </select>
+        </label>
+
+        <fieldset class="traits-picker">
+            <legend>Traits (optional)</legend>
+            <p class="empty" th:if="${traits.isEmpty()}">No traits defined yet.</p>
+            <label class="check" th:each="trait : ${traits}">
+                <input type="checkbox" th:field="*{traits}" th:value="${trait.name}"/>
+                <span th:text="${trait.name}">trait</span>
+            </label>
+        </fieldset>
+
+        <fieldset id="schema-builder" th:attr="data-initial-schema=*{schema}">
+            <legend>Schema properties</legend>
+            <table class="builder">
+                <thead>
+                <tr>
+                    <th>Property name</th>
+                    <th>Type</th>
+                    <th>Required</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody id="prop-rows"></tbody>
+            </table>
+            <button type="button" id="add-prop" class="btn">+ Add property</button>
+
+            <details class="preview-wrap">
+                <summary>Generated JSON schema</summary>
+                <pre id="schema-preview">{}</pre>
+            </details>
+        </fieldset>
+
+        <input type="hidden" th:field="*{schema}" id="schema-input"/>
+
+        <div class="actions">
+            <button type="submit" class="btn primary">Create entity type</button>
+            <a class="btn" th:href="@{/ui}">Cancel</a>
+        </div>
+    </form>
+</main>
+
+<script th:src="@{/ui/js/schema-builder.js}"></script>
+</body>
+</html>

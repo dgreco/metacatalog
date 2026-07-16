@@ -83,6 +83,11 @@
                 <artifactId>metacatalog-openapi</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-ui</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <dependency>
                 <groupId>org.testcontainers</groupId>
@@ -467,6 +472,7 @@
         <module>metacatalog-core</module>
         <module>metacatalog-functions</module>
         <module>metacatalog-openapi</module>
+        <module>metacatalog-ui</module>
         <module>metacatalog-application</module>
     </modules>
 
