@@ -26,7 +26,6 @@ server:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
-    url: /api/interface-specification.yaml
   api-docs:
     path: /api-docs
     enabled: true

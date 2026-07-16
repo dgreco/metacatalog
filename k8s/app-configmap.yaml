@@ -10,5 +10,4 @@ data:
   SPRING_PROFILES_ACTIVE: "kubernetes"
   INGRESS_URL: "https://metacatalog.fairytales.local"
   INGRESS_DESCRIPTION: "Metacatalog API (Ingress)"
-  SPRINGDOC_SWAGGER_UI_URL: "https://metacatalog.fairytales.local/api/interface-specification.yaml"
   SPRINGDOC_API_DOCS_ENABLED: "true"
