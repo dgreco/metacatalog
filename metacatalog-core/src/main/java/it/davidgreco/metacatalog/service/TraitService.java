@@ -9,10 +9,10 @@ import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
+import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -188,7 +188,8 @@ public class TraitService implements CommonTypeService<Trait, String> {
    * Links two Traits with a given relation type.
    *
    * <p>This method validates that the two Traits exist, and that the link does not already exist.
-   * It also checks for loops before creating the link.
+   * It also checks for loops before creating the link. A self-referential link (source and target
+   * are the same Trait) is permitted and is not treated as a loop.
    *
    * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
@@ -203,7 +204,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
       throws ServiceError {
     log.info("Linking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     try {
-      if (checkLoops(targetTraitName, new HashSet<>(), sourceTraitName, relType)) {
+      if (wouldCreateLoop(sourceTraitName, targetTraitName, relType)) {
         throw new ServiceError("Loops are not allowed");
       }
       var sourceTrait =
@@ -337,27 +338,42 @@ public class TraitService implements CommonTypeService<Trait, String> {
     }
   }
 
-  private boolean checkLoops(
-      String targetTraitName,
-      Set<String> traitsNamesVisited,
-      String sourceTraitName,
-      RelationType relType)
-      throws ServiceError {
-    var sourceTrait =
-        traitRepository
-            .findByName(targetTraitName)
-            .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
-    var relationships =
-        traitRelationshipRepository.findBySourceAndRelationType(sourceTrait, relType);
-
-    var targetTraits = relationships.stream().map(TraitRelationship::getTarget).toList();
-    for (var targetTrait : targetTraits) {
-      if (traitsNamesVisited.contains(sourceTraitName)) return true;
-      else {
-        traitsNamesVisited.add(targetTrait.getName());
-        return checkLoops(targetTrait.getName(), traitsNamesVisited, sourceTraitName, relType);
+  /**
+   * Determines whether adding a {@code source --relType--> target} edge would close a cycle, i.e.
+   * whether {@code target} can already reach {@code source} through a path of one or more existing
+   * {@code relType} relationships.
+   *
+   * <p>Performs an iterative depth-first search seeded with the neighbours of {@code target} so
+   * that every outgoing edge of every visited trait is explored (a visited set prevents
+   * re-traversal and guards against runaway recursion). Seeding with the neighbours rather than
+   * {@code target} itself means a self-referential link (source equals target) is not treated as a
+   * loop, since only paths of length one or more count.
+   */
+  private boolean wouldCreateLoop(
+      String sourceTraitName, String targetTraitName, RelationType relType) throws ServiceError {
+    var visited = new HashSet<String>();
+    var toVisit = new ArrayDeque<>(neighbours(targetTraitName, relType));
+    while (!toVisit.isEmpty()) {
+      var current = toVisit.pop();
+      if (current.equals(sourceTraitName)) {
+        return true;
       }
+      if (!visited.add(current)) {
+        continue;
+      }
+      toVisit.addAll(neighbours(current, relType));
     }
-    return traitsNamesVisited.contains(sourceTraitName);
+    return false;
+  }
+
+  /** Returns the names of the traits reachable from {@code traitName} via a single relType edge. */
+  private List<String> neighbours(String traitName, RelationType relType) throws ServiceError {
+    var trait =
+        traitRepository
+            .findByName(traitName)
+            .orElseThrow(() -> new ServiceError(TRAIT + traitName + NOT_FOUND));
+    return traitRelationshipRepository.findBySourceAndRelationType(trait, relType).stream()
+        .map(rel -> rel.getTarget().getName())
+        .toList();
   }
 }
