@@ -1,5 +1,8 @@
 # Git
-.git
+# NOTE: .git IS intentionally kept in the build context so the git-commit-id
+# plugin can stamp the image with the current commit (surfaced at /actuator/info).
+# Because .git changes on every commit, the `COPY . .` layer is invalidated per
+# commit, which also guarantees `docker compose up --build` rebuilds the latest code.
 .gitignore
 
 # IDE

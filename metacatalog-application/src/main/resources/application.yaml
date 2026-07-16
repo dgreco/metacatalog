@@ -35,12 +35,21 @@ management:
     web:
       exposure:
         include: beans, caches, health, info, flyway, metrics, env, configprops, loggers
+  info:
+    git:
+      enabled: true
+      mode: full        # expose the full commit details at /actuator/info
+    build:
+      enabled: true     # expose build.version / build.time at /actuator/info
+    java:
+      enabled: true
 logging:
   level:
     root: ERROR                                # General logging level for the application
     org.springframework.data.jpa.repository: ERROR  # Log JPA repository method calls
     org.hibernate.SQL: ERROR                   # Log SQL statements executed by Hibernate
     org.hibernate.type.descriptor.sql: ERROR   # Log SQL parameter binding
+    it.davidgreco.metacatalog.BuildInfoLogger: INFO # allow the startup version line through
 application:
   config:
     automaticEntitiesMapping: true

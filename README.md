@@ -64,12 +64,46 @@ Once up, the app is available at:
 > build skips tests (they require a Docker daemon for Testcontainers) — run `mvn verify`
 > on the host for the full test suite.
 
-To run detached, or to stop:
+**Always pass `--build` to run the latest code.** Plain `docker compose up` reuses the
+existing `metacatalog:0.0.1-SNAPSHOT` image and can therefore run a stale application.
+The build context includes `.git`, so any commit invalidates the image layer and forces
+a rebuild; `--build` also rebuilds whenever any source file changes. A `Makefile` wraps
+the common flows so this is hard to get wrong:
+
+```bash
+make run        # docker compose up --build            (foreground, latest code)
+make up-d       # docker compose up --build -d          (detached)
+make rebuild    # docker compose build --no-cache app   (force a full rebuild) + up -d
+make logs       # follow the application logs
+make down       # stop (make down ARGS=-v to drop the DB volume)
+```
+
+To run detached, or to stop, without the Makefile:
 ```bash
 docker compose up --build -d   # start in the background
 docker compose down            # stop (keep data)
 docker compose down -v         # stop and remove data volumes
 ```
+
+#### Verifying which version is running
+
+The application stamps the build with its version, git commit and build time. After
+startup it logs a line such as:
+
+```
+Meta Catalog 0.0.1-SNAPSHOT started (git a1b2c3d, built 2026-07-16T10:51:00Z)
+```
+
+and the same information is served by the info actuator endpoint:
+
+```bash
+curl http://localhost:8080/actuator/info   # or: make info
+# { "git": { "commit": { "id": { "abbrev": "a1b2c3d" }, ... }, "branch": "..." },
+#   "build": { "version": "0.0.1-SNAPSHOT", "time": "..." }, ... }
+```
+
+Compare `git.commit.id.abbrev` with `git rev-parse --short HEAD` (and check `git.dirty`)
+to confirm the container is running exactly the code you expect.
 
 ### Option 2: Local Development
 
@@ -262,7 +296,7 @@ Migrations run automatically on application startup.
 
 Spring Boot Actuator endpoints are enabled for monitoring:
 - `/actuator/health` - Health check
-- `/actuator/info` - Application info
+- `/actuator/info` - Application info, including the running build's version, git commit and build time
 - `/actuator/metrics` - Metrics
 
 ## Contributing
