@@ -5,6 +5,8 @@ import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.Trait;
+import it.davidgreco.metacatalog.entity.Type;
+import it.davidgreco.metacatalog.entity.TypeLinearization;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import java.util.HashSet;
@@ -82,24 +84,26 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityType.setTraits(traitsList);
       entityType.setName(name);
       entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
-      var traitSchemas = traitsList.stream().map(Trait::getSchema).toList();
-      var schemasToMerge = new java.util.ArrayList<>(traitSchemas);
       if (fatherName.isPresent()) {
         var father =
             entityTypeRepository
                 .findByName(fatherName.get())
                 .orElseThrow(() -> new ServiceError(ENTITYTYPE + fatherName + " does not exist"));
         entityType.setFather(father);
-        schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
-        var mergedSchema = mergeSchemas(schemasToMerge);
-        if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-        entityType.setDerivedSchema(mergedSchema.get());
-      } else {
-        schemasToMerge.add(eitherSchema.get().getSchemaNode());
-        var mergedSchema = mergeSchemas(schemasToMerge);
-        if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-        entityType.setDerivedSchema(mergedSchema.get());
       }
+
+      // Compute the derived schema by merging the base schemas of every ancestor following the
+      // Scala class linearization of this type (father as superclass, traits as mixins). The
+      // linearization is ordered most-specific first, so it is reversed before merging: schemas are
+      // applied from the most general ancestor to this type itself, letting the most specific
+      // declaration of each property win.
+      var linearization = new java.util.ArrayList<>(TypeLinearization.linearize(entityType));
+      java.util.Collections.reverse(linearization);
+      var schemasToMerge = linearization.stream().map(Type::getBaseSchema).toList();
+      var mergedSchema = mergeSchemas(schemasToMerge);
+      if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
+      entityType.setDerivedSchema(mergedSchema.get());
+
       return entityTypeRepository.save(entityType);
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());

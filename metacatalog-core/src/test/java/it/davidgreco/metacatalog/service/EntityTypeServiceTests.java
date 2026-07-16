@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
 import java.util.List;
 import java.util.Optional;
@@ -187,6 +188,105 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     Assertions.assertFalse(cache.asMap().keySet().contains(leafType.getName()));
 
     Assertions.assertFalse(cache.asMap().keySet().contains(leafType1.getName()));
+  }
+
+  /**
+   * Verifies that the derived schema is built following the Scala class linearization: traits
+   * (Scala mixins) override the father (Scala superclass), and a trait declared later in the list
+   * overrides one declared earlier. Both are cases where the previous ad-hoc merge order produced
+   * the wrong precedence.
+   */
+  @Test
+  void testLinearization() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+
+    // A property named "shared" is declared by several ancestors with a different "type" each, so
+    // the winner can be identified by inspecting the merged schema.
+    var traitSharedNumber =
+        """
+        {
+          "type": "object",
+          "properties": {
+            "shared": { "type": "number" },
+            "traitProp": { "type": "string" }
+          }
+        }
+        """;
+    var fatherSharedInteger =
+        """
+        {
+          "type": "object",
+          "properties": {
+            "shared": { "type": "integer" },
+            "fatherProp": { "type": "string" }
+          }
+        }
+        """;
+    var childOwn =
+        """
+        {
+          "type": "object",
+          "properties": {
+            "childProp": { "type": "string" }
+          }
+        }
+        """;
+
+    // Case 1: trait overrides father.
+    // Child extends Father with Trait -> linearization [Child, Trait, Father], so the trait's
+    // "shared" (number) wins over the father's "shared" (integer).
+    traitService.create("LinTrait", Optional.of(traitSharedNumber), Optional.empty());
+    entityTypeService.create("LinFather", List.of(), Optional.empty(), fatherSharedInteger);
+    var child =
+        entityTypeService.create(
+            "LinChild", List.of("LinTrait"), Optional.of("LinFather"), childOwn);
+
+    JsonNode childProps = child.getSchema().get("properties");
+    Assertions.assertEquals("number", childProps.get("shared").get("type").asText());
+    Assertions.assertTrue(childProps.has("fatherProp"));
+    Assertions.assertTrue(childProps.has("traitProp"));
+    Assertions.assertTrue(childProps.has("childProp"));
+
+    // Case 2: a later mixin overrides an earlier one.
+    // MixType with traits [LinT1, LinT2] -> linearization [MixType, LinT2, LinT1], so LinT2's
+    // "shared" (boolean) wins over LinT1's "shared" (string).
+    var t1SharedString =
+        """
+        {
+          "type": "object",
+          "properties": { "shared": { "type": "string" } }
+        }
+        """;
+    var t2SharedBoolean =
+        """
+        {
+          "type": "object",
+          "properties": { "shared": { "type": "boolean" } }
+        }
+        """;
+    var mixOwn =
+        """
+        {
+          "type": "object",
+          "properties": {}
+        }
+        """;
+    traitService.create("LinT1", Optional.of(t1SharedString), Optional.empty());
+    traitService.create("LinT2", Optional.of(t2SharedBoolean), Optional.empty());
+    var mixType =
+        entityTypeService.create("LinMix", List.of("LinT1", "LinT2"), Optional.empty(), mixOwn);
+
+    Assertions.assertEquals(
+        "boolean", mixType.getSchema().get("properties").get("shared").get("type").asText());
+
+    // Clean up: entity types first (they reference father and traits), then the traits.
+    entityTypeService.delete("LinChild");
+    entityTypeService.delete("LinFather");
+    entityTypeService.delete("LinMix");
+    traitService.delete("LinTrait");
+    traitService.delete("LinT1");
+    traitService.delete("LinT2");
   }
 
   @Test
