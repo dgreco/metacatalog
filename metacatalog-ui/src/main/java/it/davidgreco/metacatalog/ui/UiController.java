@@ -73,14 +73,16 @@ public class UiController {
   }
 
   /**
-   * Handles a bulk model upload. Accepts either an uploaded YAML file or pasted YAML text and feeds
-   * it to {@link BulkLoaderService#bulkModelCreation}, which creates the traits, entity types,
-   * relationships and mappings described in the document.
+   * Handles a bulk upload. Accepts either an uploaded YAML file or pasted YAML text and, depending
+   * on {@code kind}, feeds it to {@link BulkLoaderService#bulkModelCreation} (traits, entity types,
+   * relationships and mappings) or {@link BulkLoaderService#bulkAggregateCreation} (aggregates /
+   * entities).
    */
   @PostMapping("/bulk")
   public String bulkUpload(
       @RequestParam(value = "file", required = false) MultipartFile file,
       @RequestParam(value = "yamlText", required = false) String yamlText,
+      @RequestParam(value = "kind", required = false, defaultValue = "model") String kind,
       Model model,
       RedirectAttributes redirectAttributes) {
     try (InputStream in = resolveBulkInput(file, yamlText)) {
@@ -88,8 +90,13 @@ public class UiController {
         model.addAttribute("error", "Provide a YAML file or paste YAML text.");
         return "bulk-form";
       }
-      bulkLoaderService.bulkModelCreation(in);
-      redirectAttributes.addFlashAttribute("message", "Bulk model uploaded successfully.");
+      if ("aggregates".equals(kind)) {
+        var ids = bulkLoaderService.bulkAggregateCreation(in);
+        redirectAttributes.addFlashAttribute("message", ids.size() + " aggregate(s) created.");
+      } else {
+        bulkLoaderService.bulkModelCreation(in);
+        redirectAttributes.addFlashAttribute("message", "Bulk model uploaded successfully.");
+      }
       return "redirect:/ui";
     } catch (ServiceError | RuntimeException | IOException e) {
       model.addAttribute("error", e.getMessage());
@@ -145,8 +152,7 @@ public class UiController {
       traitService.delete(name);
       redirectAttributes.addFlashAttribute("message", "Trait '" + name + "' deleted.");
     } catch (ServiceError | RuntimeException e) {
-      redirectAttributes.addFlashAttribute(
-          "error", "Could not delete trait '" + name + "': " + e.getMessage());
+      redirectAttributes.addFlashAttribute("error", deleteError("Trait", name, e));
     }
     return "redirect:/ui";
   }
@@ -192,8 +198,7 @@ public class UiController {
       entityTypeService.delete(name);
       redirectAttributes.addFlashAttribute("message", "Entity type '" + name + "' deleted.");
     } catch (ServiceError | RuntimeException e) {
-      redirectAttributes.addFlashAttribute(
-          "error", "Could not delete entity type '" + name + "': " + e.getMessage());
+      redirectAttributes.addFlashAttribute("error", deleteError("Entity type", name, e));
     }
     return "redirect:/ui";
   }
@@ -293,5 +298,22 @@ public class UiController {
   /** Treats blank strings as absent, so an empty father / schema field becomes {@code empty()}. */
   private static Optional<String> optional(String value) {
     return (value == null || value.isBlank()) ? Optional.empty() : Optional.of(value);
+  }
+
+  /**
+   * Turns a delete failure into a user-friendly message: a missing target reads as "not found",
+   * anything else (a foreign-key / integrity violation) reads as "still in use" rather than leaking
+   * the raw database error.
+   */
+  private static String deleteError(String kind, String name, Exception e) {
+    var message = e.getMessage() == null ? "" : e.getMessage();
+    if (message.contains("not found")) {
+      return kind + " '" + name + "' was not found.";
+    }
+    return "Could not delete "
+        + kind.toLowerCase(java.util.Locale.ROOT)
+        + " '"
+        + name
+        + "': it is still in use (referenced by another type, a relationship, or an entity).";
   }
 }

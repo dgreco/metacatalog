@@ -17,9 +17,17 @@
 
     <form method="post" th:action="@{/ui/bulk}" enctype="multipart/form-data" id="bulk-form">
         <p class="hint">
-            Upload a YAML document (one or more <code>---</code> separated documents) describing
-            traits, entity types, relationships and mappings. Provide a file, or paste the YAML below.
+            Upload a YAML document (one or more <code>---</code> separated documents). Provide a file,
+            or paste the YAML below.
         </p>
+
+        <label>
+            What are you uploading?
+            <select name="kind">
+                <option value="model" selected>Model — traits, entity types, relationships, mappings</option>
+                <option value="aggregates">Aggregates — entities and their parts</option>
+            </select>
+        </label>
 
         <label>
             YAML file
