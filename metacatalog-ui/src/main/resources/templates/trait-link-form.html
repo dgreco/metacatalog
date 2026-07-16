@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Trait Relationship — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>New Trait Relationship</h1>
+    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <p class="empty" th:if="${traits.size() < 2}">
+        You need at least two traits before you can relate them.
+    </p>
+
+    <form method="post" th:action="@{/ui/trait-links}" th:object="${traitLinkForm}"
+          id="trait-link-form" th:if="${traits.size() >= 2}">
+
+        <label>
+            Source trait
+            <select th:field="*{sourceTrait}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="trait : ${traits}"
+                        th:value="${trait.name}"
+                        th:text="${trait.name}">trait</option>
+            </select>
+        </label>
+
+        <label>
+            Relationship
+            <select th:field="*{relationshipType}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="rt : ${relationTypes}"
+                        th:value="${rt}"
+                        th:text="${rt}">DEPENDS_ON</option>
+            </select>
+        </label>
+
+        <label>
+            Target trait
+            <select th:field="*{targetTrait}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="trait : ${traits}"
+                        th:value="${trait.name}"
+                        th:text="${trait.name}">trait</option>
+            </select>
+        </label>
+
+        <p class="hint">
+            The inverse relationship is created automatically. A link may not be duplicated or form a
+            loop within the same relationship type; a trait may relate to itself.
+        </p>
+
+        <div class="actions">
+            <button type="submit" class="btn primary" id="submit-link">Create relationship</button>
+            <a class="btn" th:href="@{/ui}">Cancel</a>
+        </div>
+    </form>
+
+    <section th:if="${!traitLinks.isEmpty()}">
+        <h2>Existing relationships</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Source</th>
+                <th>Relationship</th>
+                <th>Target</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="link : ${traitLinks}">
+                <td th:text="${link.source}">source</td>
+                <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
+                <td th:text="${link.target}">target</td>
+                <td>
+                    <form method="post" th:action="@{/ui/trait-links/delete}" class="inline-form">
+                        <input type="hidden" name="sourceTrait" th:value="${link.source}"/>
+                        <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
+                        <input type="hidden" name="targetTrait" th:value="${link.target}"/>
+                        <button type="submit" class="link-remove" title="Remove relationship">×</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>

@@ -54,6 +54,58 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
+  void testSelfReferentialLinkIsAllowed() throws ServiceError {
+
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("selfLinkTrait", Optional.empty(), Optional.empty());
+
+    // A trait may relate to itself (e.g. DataProductComponent IS_REQUIRED_BY DataProductComponent);
+    // this is a supported construct and must not be rejected as a loop.
+    traitService.link("selfLinkTrait", DEPENDS_ON, "selfLinkTrait");
+
+    var linked = traitService.linked("selfLinkTrait", DEPENDS_ON);
+    Assertions.assertEquals(
+        Set.of("selfLinkTrait"), linked.stream().map(Trait::getName).collect(Collectors.toSet()));
+
+    traitService.unlink("selfLinkTrait", DEPENDS_ON, "selfLinkTrait");
+    traitService.delete("selfLinkTrait");
+  }
+
+  @Test
+  void testLoopDetectionExploresAllBranches() throws ServiceError {
+
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("loopA", Optional.empty(), Optional.empty());
+    traitService.create("loopB", Optional.empty(), Optional.empty());
+    traitService.create("loopC", Optional.empty(), Optional.empty());
+    traitService.create("loopD", Optional.empty(), Optional.empty());
+
+    // loopA has two outgoing edges; the cycle runs through the second branch (loopC -> loopD).
+    traitService.link("loopA", DEPENDS_ON, "loopB");
+    traitService.link("loopA", DEPENDS_ON, "loopC");
+    traitService.link("loopC", DEPENDS_ON, "loopD");
+
+    // loopD -> loopA would close the cycle loopA -> loopC -> loopD -> loopA and must be rejected.
+    Assertions.assertThrows(
+        ServiceError.class, () -> traitService.link("loopD", DEPENDS_ON, "loopA"));
+
+    // A link that does not close a cycle is still allowed even though the graph now branches.
+    traitService.link("loopB", DEPENDS_ON, "loopD");
+
+    traitService.unlink("loopA", DEPENDS_ON, "loopB");
+    traitService.unlink("loopA", DEPENDS_ON, "loopC");
+    traitService.unlink("loopC", DEPENDS_ON, "loopD");
+    traitService.unlink("loopB", DEPENDS_ON, "loopD");
+
+    traitService.delete("loopA");
+    traitService.delete("loopB");
+    traitService.delete("loopC");
+    traitService.delete("loopD");
+  }
+
+  @Test
   void testListTraits() throws ServiceError {
 
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);

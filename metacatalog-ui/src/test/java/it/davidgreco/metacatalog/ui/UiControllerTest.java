@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
@@ -105,6 +106,75 @@ class UiControllerTest {
             eq(List.of("Timestamped")),
             eq(Optional.empty()),
             eq("{\"type\":\"object\",\"properties\":{}}"));
+  }
+
+  @Test
+  void traitLinkFormRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/trait-links/new"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("trait-link-form"))
+        .andExpect(
+            model().attributeExists("traitLinkForm", "traits", "relationTypes", "traitLinks"));
+  }
+
+  @Test
+  void createTraitLinkSubmitsToServiceAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/trait-links")
+                .param("sourceTrait", "A")
+                .param("relationshipType", "DEPENDS_ON")
+                .param("targetTrait", "B"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(traitService).link("A", RelationType.DEPENDS_ON, "B");
+  }
+
+  @Test
+  void createSelfReferentialTraitLinkIsForwardedToService() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/trait-links")
+                .param("sourceTrait", "A")
+                .param("relationshipType", "DEPENDS_ON")
+                .param("targetTrait", "A"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(traitService).link("A", RelationType.DEPENDS_ON, "A");
+  }
+
+  @Test
+  void createTraitLinkReRendersFormOnServiceError() throws Exception {
+    doThrow(new ServiceError("Loops are not allowed"))
+        .when(traitService)
+        .link(eq("A"), eq(RelationType.DEPENDS_ON), eq("B"));
+
+    mockMvc
+        .perform(
+            post("/ui/trait-links")
+                .param("sourceTrait", "A")
+                .param("relationshipType", "DEPENDS_ON")
+                .param("targetTrait", "B"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("trait-link-form"))
+        .andExpect(model().attribute("error", "Loops are not allowed"));
+  }
+
+  @Test
+  void deleteTraitLinkSubmitsToServiceAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/trait-links/delete")
+                .param("sourceTrait", "A")
+                .param("relationshipType", "HAS_PART")
+                .param("targetTrait", "B"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(traitService).unlink("A", RelationType.HAS_PART, "B");
   }
 
   @Test

@@ -12,11 +12,13 @@
     <nav>
         <a class="btn" th:href="@{/ui/traits/new}">+ New Trait</a>
         <a class="btn" th:href="@{/ui/entity-types/new}">+ New Entity Type</a>
+        <a class="btn" th:href="@{/ui/trait-links/new}">+ New Trait Relationship</a>
     </nav>
 </header>
 
 <main>
     <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
 
     <section>
         <h2>Traits</h2>
@@ -39,6 +41,39 @@
             </tbody>
         </table>
         <p class="empty" th:if="${traits.isEmpty()}">No traits yet.</p>
+    </section>
+
+    <section>
+        <div class="section-head">
+            <h2>Trait Relationships</h2>
+            <a class="btn" th:href="@{/ui/trait-links/new}">+ New</a>
+        </div>
+        <table th:if="${!traitLinks.isEmpty()}">
+            <thead>
+            <tr>
+                <th>Source</th>
+                <th>Relationship</th>
+                <th>Target</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="link : ${traitLinks}">
+                <td th:text="${link.source}">source</td>
+                <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
+                <td th:text="${link.target}">target</td>
+                <td>
+                    <form method="post" th:action="@{/ui/trait-links/delete}" class="inline-form">
+                        <input type="hidden" name="sourceTrait" th:value="${link.source}"/>
+                        <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
+                        <input type="hidden" name="targetTrait" th:value="${link.target}"/>
+                        <button type="submit" class="link-remove" title="Remove relationship">×</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <p class="empty" th:if="${traitLinks.isEmpty()}">No trait relationships yet.</p>
     </section>
 
     <section>
