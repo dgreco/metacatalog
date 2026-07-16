@@ -1,9 +1,14 @@
 package it.davidgreco.metacatalog.ui;
 
 import it.davidgreco.metacatalog.entity.RelationType;
+import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -14,15 +19,17 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
- * Server-side rendered UI for creating traits, entity types, and the relationships between traits.
+ * Server-side rendered UI for creating and deleting traits and entity types, managing the
+ * relationships between traits, and bulk-loading a model from a YAML document.
  *
  * <p>The pages are served by the main application (same origin, port 8080), so the controller calls
- * the domain services ({@link TraitService}, {@link EntityTypeService}) directly rather than going
- * through the REST API. Each creation form embeds a client-side JSON Schema builder that assembles
- * the schema document posted in the {@code schema} field.
+ * the domain services ({@link TraitService}, {@link EntityTypeService}, {@link BulkLoaderService})
+ * directly rather than going through the REST API. Each creation form embeds a client-side JSON
+ * Schema builder that assembles the schema document posted in the {@code schema} field.
  */
 @Controller
 @RequestMapping("/ui")
@@ -39,10 +46,15 @@ public class UiController {
 
   private final TraitService traitService;
   private final EntityTypeService entityTypeService;
+  private final BulkLoaderService bulkLoaderService;
 
-  public UiController(TraitService traitService, EntityTypeService entityTypeService) {
+  public UiController(
+      TraitService traitService,
+      EntityTypeService entityTypeService,
+      BulkLoaderService bulkLoaderService) {
     this.traitService = traitService;
     this.entityTypeService = entityTypeService;
+    this.bulkLoaderService = bulkLoaderService;
   }
 
   /** Dashboard listing the existing traits, entity types, and trait relationships. */
@@ -52,6 +64,51 @@ public class UiController {
     model.addAttribute("entityTypes", entityTypeService.list());
     model.addAttribute("traitLinks", traitLinks());
     return "index";
+  }
+
+  /** Renders the bulk YAML upload form. */
+  @GetMapping("/bulk")
+  public String bulkForm() {
+    return "bulk-form";
+  }
+
+  /**
+   * Handles a bulk model upload. Accepts either an uploaded YAML file or pasted YAML text and feeds
+   * it to {@link BulkLoaderService#bulkModelCreation}, which creates the traits, entity types,
+   * relationships and mappings described in the document.
+   */
+  @PostMapping("/bulk")
+  public String bulkUpload(
+      @RequestParam(value = "file", required = false) MultipartFile file,
+      @RequestParam(value = "yamlText", required = false) String yamlText,
+      Model model,
+      RedirectAttributes redirectAttributes) {
+    try (InputStream in = resolveBulkInput(file, yamlText)) {
+      if (in == null) {
+        model.addAttribute("error", "Provide a YAML file or paste YAML text.");
+        return "bulk-form";
+      }
+      bulkLoaderService.bulkModelCreation(in);
+      redirectAttributes.addFlashAttribute("message", "Bulk model uploaded successfully.");
+      return "redirect:/ui";
+    } catch (ServiceError | RuntimeException | IOException e) {
+      model.addAttribute("error", e.getMessage());
+      return "bulk-form";
+    }
+  }
+
+  /**
+   * Returns the YAML source: the uploaded file if present, otherwise the pasted text, else null.
+   */
+  private static InputStream resolveBulkInput(MultipartFile file, String yamlText)
+      throws IOException {
+    if (file != null && !file.isEmpty()) {
+      return file.getInputStream();
+    }
+    if (yamlText != null && !yamlText.isBlank()) {
+      return new ByteArrayInputStream(yamlText.getBytes(StandardCharsets.UTF_8));
+    }
+    return null;
   }
 
   /** Renders the trait creation form. */
@@ -79,6 +136,19 @@ public class UiController {
       model.addAttribute("traits", traitService.list());
       return "trait-form";
     }
+  }
+
+  /** Deletes a trait. Fails if the trait is still referenced (child, relationship, entity type). */
+  @PostMapping("/traits/delete")
+  public String deleteTrait(@RequestParam String name, RedirectAttributes redirectAttributes) {
+    try {
+      traitService.delete(name);
+      redirectAttributes.addFlashAttribute("message", "Trait '" + name + "' deleted.");
+    } catch (ServiceError | RuntimeException e) {
+      redirectAttributes.addFlashAttribute(
+          "error", "Could not delete trait '" + name + "': " + e.getMessage());
+    }
+    return "redirect:/ui";
   }
 
   /** Renders the entity type creation form. */
@@ -113,6 +183,19 @@ public class UiController {
       model.addAttribute("traits", traitService.list());
       return "entity-type-form";
     }
+  }
+
+  /** Deletes an entity type. Fails if it is still referenced (child type or existing entities). */
+  @PostMapping("/entity-types/delete")
+  public String deleteEntityType(@RequestParam String name, RedirectAttributes redirectAttributes) {
+    try {
+      entityTypeService.delete(name);
+      redirectAttributes.addFlashAttribute("message", "Entity type '" + name + "' deleted.");
+    } catch (ServiceError | RuntimeException e) {
+      redirectAttributes.addFlashAttribute(
+          "error", "Could not delete entity type '" + name + "': " + e.getMessage());
+    }
+    return "redirect:/ui";
   }
 
   /** Renders the trait relationship creation form. */

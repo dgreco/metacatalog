@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Bulk Upload — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>Bulk Upload</h1>
+    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <form method="post" th:action="@{/ui/bulk}" enctype="multipart/form-data" id="bulk-form">
+        <p class="hint">
+            Upload a YAML document (one or more <code>---</code> separated documents) describing
+            traits, entity types, relationships and mappings. Provide a file, or paste the YAML below.
+        </p>
+
+        <label>
+            YAML file
+            <input type="file" name="file" accept=".yaml,.yml,text/yaml,application/x-yaml"/>
+        </label>
+
+        <label>
+            …or paste YAML
+            <textarea name="yamlText" class="raw-schema" rows="18" spellcheck="false"
+                      placeholder="Traits:&#10;  - name: WithName&#10;    schema:&#10;      type: object"></textarea>
+        </label>
+
+        <div class="actions">
+            <button type="submit" class="btn primary">Upload</button>
+            <a class="btn" th:href="@{/ui}">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>
