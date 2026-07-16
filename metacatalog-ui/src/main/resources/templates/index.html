@@ -13,6 +13,7 @@
         <a class="btn" th:href="@{/ui/traits/new}">+ New Trait</a>
         <a class="btn" th:href="@{/ui/entity-types/new}">+ New Entity Type</a>
         <a class="btn" th:href="@{/ui/trait-links/new}">+ New Trait Relationship</a>
+        <a class="btn" th:href="@{/ui/bulk}">↥ Upload YAML</a>
     </nav>
 </header>
 
@@ -28,6 +29,7 @@
                 <th>Name</th>
                 <th>Father</th>
                 <th>Schema</th>
+                <th></th>
             </tr>
             </thead>
             <tbody>
@@ -36,6 +38,13 @@
                 <td th:text="${trait.father != null ? trait.father.name : '—'}">father</td>
                 <td>
                     <pre class="schema" th:text="${trait.schema}">{}</pre>
+                </td>
+                <td>
+                    <form method="post" th:action="@{/ui/traits/delete}" class="inline-form"
+                          data-confirm="Delete this trait? It must not be in use.">
+                        <input type="hidden" name="name" th:value="${trait.name}"/>
+                        <button type="submit" class="link-remove" title="Delete trait">×</button>
+                    </form>
                 </td>
             </tr>
             </tbody>
@@ -85,6 +94,7 @@
                 <th>Father</th>
                 <th>Traits</th>
                 <th>Schema</th>
+                <th></th>
             </tr>
             </thead>
             <tbody>
@@ -98,11 +108,29 @@
                 <td>
                     <pre class="schema" th:text="${et.schema}">{}</pre>
                 </td>
+                <td>
+                    <form method="post" th:action="@{/ui/entity-types/delete}" class="inline-form"
+                          data-confirm="Delete this entity type? It must have no entities or child types.">
+                        <input type="hidden" name="name" th:value="${et.name}"/>
+                        <button type="submit" class="link-remove" title="Delete entity type">×</button>
+                    </form>
+                </td>
             </tr>
             </tbody>
         </table>
         <p class="empty" th:if="${entityTypes.isEmpty()}">No entity types yet.</p>
     </section>
 </main>
+
+<script>
+    // Confirm destructive submits (forms carrying a data-confirm message).
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm(form.getAttribute('data-confirm'))) {
+                e.preventDefault();
+            }
+        });
+    });
+</script>
 </body>
 </html>
