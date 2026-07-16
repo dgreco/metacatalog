@@ -16,6 +16,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
+- **Web UI**: Server-side rendered pages for creating traits and entity types, with an interactive JSON Schema builder
 
 ## Technology Stack
 
@@ -37,29 +38,37 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ### Option 1: Docker Compose (Recommended)
 
-The easiest way to run the application with all dependencies:
+Run the whole stack locally with a single command — the application is built from
+source inside Docker (via the root `Dockerfile`), so no local Maven build or
+pre-published image is required:
 
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd metacatalog
 
-# Build the Docker image using Spring Boot buildpacks
-mvn clean package -DskipTests
-mvn spring-boot:build-image -pl metacatalog-application -DskipTests
-
-# Start the application with Docker Compose
-docker compose up -d
+# Build the application image from source and start everything
+docker compose up --build
 ```
 
 This starts:
 - **PostgreSQL 18.1** on port 5432
-- **Meta Catalog Application** on port 8080
+- **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 
-To stop:
+Once up, the app is available at:
+- **Web UI**: http://localhost:8080/ui
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+
+> The first build downloads the Maven dependencies inside the image (a few minutes);
+> later builds reuse the cached dependency layer unless a `pom.xml` changes. The image
+> build skips tests (they require a Docker daemon for Testcontainers) — run `mvn verify`
+> on the host for the full test suite.
+
+To run detached, or to stop:
 ```bash
-docker compose down      # Keep data
-docker compose down -v   # Remove data volumes
+docker compose up --build -d   # start in the background
+docker compose down            # stop (keep data)
+docker compose down -v         # stop and remove data volumes
 ```
 
 ### Option 2: Local Development
@@ -103,8 +112,14 @@ metacatalog/
 ├── metacatalog-core/           # Core domain, repositories, and services
 ├── metacatalog-functions/      # Custom PostgreSQL functions
 ├── metacatalog-openapi/        # OpenAPI specs and generated code
-└── metacatalog-application/    # Spring Boot application
+├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for creating traits and entity types
+└── metacatalog-application/    # Spring Boot application (aggregates all modules)
 ```
+
+The UI module is a library that is served by `metacatalog-application` on the same
+port (8080); it calls the core domain services directly. The trait / entity-type
+creation forms include a client-side JSON Schema builder that assembles the schema
+document submitted to the services.
 
 ## Development
 
@@ -203,6 +218,7 @@ ontop bootstrap \
 
 When the application is running, access the documentation:
 
+- **Web UI**: http://localhost:8080/ui
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **OpenAPI Spec**: http://localhost:8080/api/interface-specification.yaml
 - **Javadoc**: http://localhost:8080/javadoc/index.html
@@ -210,6 +226,7 @@ When the application is running, access the documentation:
 ## Key Libraries & Frameworks
 
 - **Spring Boot**: Web, JPA, Cache, Actuator, Validation
+- **Thymeleaf**: Server-side rendering for the web UI
 - **Vavr**: Functional programming utilities
 - **JGraphT**: Graph algorithms for relationship traversal
 - **JSON Schema Validator**: Schema validation for entity attributes
