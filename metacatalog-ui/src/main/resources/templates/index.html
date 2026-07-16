@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>Meta Catalog</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/traits/new}">+ New Trait</a>
+        <a class="btn" th:href="@{/ui/entity-types/new}">+ New Entity Type</a>
+    </nav>
+</header>
+
+<main>
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+
+    <section>
+        <h2>Traits</h2>
+        <table th:if="${!traits.isEmpty()}">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Father</th>
+                <th>Schema</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="trait : ${traits}">
+                <td th:text="${trait.name}">name</td>
+                <td th:text="${trait.father != null ? trait.father.name : '—'}">father</td>
+                <td>
+                    <pre class="schema" th:text="${trait.schema}">{}</pre>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <p class="empty" th:if="${traits.isEmpty()}">No traits yet.</p>
+    </section>
+
+    <section>
+        <h2>Entity Types</h2>
+        <table th:if="${!entityTypes.isEmpty()}">
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Father</th>
+                <th>Traits</th>
+                <th>Schema</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="et : ${entityTypes}">
+                <td th:text="${et.name}">name</td>
+                <td th:text="${et.father != null ? et.father.name : '—'}">father</td>
+                <td>
+                    <span th:if="${et.traits.isEmpty()}">—</span>
+                    <span class="tag" th:each="t : ${et.traits}" th:text="${t.name}">trait</span>
+                </td>
+                <td>
+                    <pre class="schema" th:text="${et.schema}">{}</pre>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <p class="empty" th:if="${entityTypes.isEmpty()}">No entity types yet.</p>
+    </section>
+</main>
+</body>
+</html>
