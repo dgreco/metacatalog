@@ -32,19 +32,23 @@
         </label>
 
         <fieldset id="schema-builder" th:attr="data-initial-schema=*{schema}">
-            <legend>Schema properties</legend>
-            <table class="builder">
-                <thead>
-                <tr>
-                    <th>Property name</th>
-                    <th>Type</th>
-                    <th>Required</th>
-                    <th></th>
-                </tr>
-                </thead>
-                <tbody id="prop-rows"></tbody>
-            </table>
-            <button type="button" id="add-prop" class="btn">+ Add property</button>
+            <legend>Schema</legend>
+
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="builder">Builder</button>
+                <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder">
+                <div id="prop-root" class="prop-list"></div>
+                <button type="button" id="add-prop" class="btn">+ Add property</button>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="raw">
+                <textarea id="raw-schema" class="raw-schema" rows="16" spellcheck="false"></textarea>
+            </div>
+
+            <div id="schema-validation" class="validation"></div>
 
             <details class="preview-wrap">
                 <summary>Generated JSON schema</summary>

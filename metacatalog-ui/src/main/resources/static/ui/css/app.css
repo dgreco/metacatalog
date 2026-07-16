@@ -134,18 +134,78 @@ fieldset {
 
 legend { font-weight: 600; padding: 0 0.4rem; }
 
-.traits-picker .check {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-right: 1rem;
+select[multiple].traits-select {
+    padding: 0.3rem;
+    min-height: 6.5rem;
     font-weight: 400;
 }
 
-table.builder { border: none; }
-table.builder th { background: transparent; border: none; padding-bottom: 0.25rem; }
-table.builder td { border: none; padding: 0.25rem 0.4rem 0.25rem 0; }
-table.builder input[type="text"] { width: 100%; }
+/* --- schema editor: tabs --- */
+.tabs { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
+.tab {
+    padding: 0.35rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px 6px 0 0;
+    background: #eef1f5;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.tab.active { background: var(--panel); border-bottom-color: var(--panel); font-weight: 600; }
+.tab-panel.hidden { display: none; }
+
+/* --- schema editor: nested property rows --- */
+.prop-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.field {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    background: #fbfcfe;
+}
+
+.field-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.field-head .f-name { flex: 1 1 12rem; }
+.field-head .f-type { flex: 0 0 auto; }
+.f-required-wrap { display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 400; font-size: 0.85rem; }
+
+.field-constraints {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+    margin-top: 0.4rem;
+}
+.field-constraints:empty { margin-top: 0; }
+.constraint { display: inline-flex; flex-direction: column; gap: 0.15rem; font-size: 0.72rem; color: var(--muted); font-weight: 400; }
+.constraint input, .constraint select { padding: 0.25rem 0.35rem; font-size: 0.82rem; }
+.constraint input[type="number"] { width: 6.5rem; }
+
+.field-children { margin-top: 0.5rem; }
+.field-children:empty { margin-top: 0; }
+.field-children .prop-list { padding-left: 1rem; border-left: 1px dashed var(--border); }
+.add-nested { margin-top: 0.5rem; font-size: 0.8rem; padding: 0.2rem 0.6rem; }
+
+.item-editor { padding-left: 1rem; border-left: 1px dashed var(--border); }
+.item-label { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
+
+/* --- schema editor: raw + validation --- */
+.raw-schema {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+    padding: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+}
+.validation { margin-top: 0.6rem; font-size: 0.82rem; min-height: 1.1rem; }
+.validation.ok { color: var(--ok-text); }
+.validation.err { color: var(--error-text); }
 
 .preview-wrap { margin-top: 0.75rem; }
 #schema-preview {
