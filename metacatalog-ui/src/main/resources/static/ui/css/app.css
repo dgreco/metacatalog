@@ -224,6 +224,37 @@ select[multiple].traits-select {
 .link-remove { color: var(--error-text); background: none; border: none; cursor: pointer; font-size: 1.1rem; line-height: 1; }
 
 .hint { color: var(--muted); font-size: 0.82rem; margin: 0; }
+
+/* --- mapping-values editor --- */
+.mapping-values { display: flex; flex-direction: column; gap: 0.3rem; }
+.mv-title { font-weight: 600; font-size: 0.9rem; }
+.mv-editor {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.mv-group {
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    background: #fbfcfe;
+}
+.mv-key { font-weight: 600; font-size: 0.88rem; }
+.mv-children { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; padding-left: 1rem; border-left: 1px dashed var(--border); }
+.mv-leaf { display: flex; flex-direction: column; }
+.mv-leaf-label { display: flex; flex-direction: column; gap: 0.25rem; font-weight: 600; font-size: 0.85rem; }
+.mv-input {
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 400;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.mv-required { margin-left: 0.4rem; font-size: 0.7rem; font-weight: 500; color: var(--error-text); text-transform: uppercase; letter-spacing: 0.03em; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }

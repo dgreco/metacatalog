@@ -42,15 +42,19 @@
             </select>
         </label>
 
-        <label>
-            Mapping values (JSON)
-            <textarea th:field="*{mappingValues}" class="raw-schema" rows="10" required
-                      placeholder='{ "name": "#source.name", "size": "#other.size" }'></textarea>
-        </label>
-        <p class="hint">
-            Each leaf value is a SpEL expression evaluated against the source entity (<code>#source</code>)
-            and any aliases declared below. The result is validated against the target type's schema.
-        </p>
+        <div class="mapping-values">
+            <span class="mv-title">Mapping values</span>
+            <p class="hint">
+                The document below is built from the target type's schema: every leaf is a SpEL
+                expression evaluated against the source entity (<code>#source</code>) and any aliases
+                declared below. Fill the leaves you want to map — the structure is fixed and can't be
+                changed. Required leaves must be filled; blank optional leaves are omitted.
+            </p>
+            <div id="mapping-values-editor" class="mv-editor">
+                <p class="empty">Select a target entity type to build the mapping document.</p>
+            </div>
+            <input type="hidden" th:field="*{mappingValues}" id="mappingValues"/>
+        </div>
 
         <fieldset>
             <legend>Path references</legend>
@@ -118,5 +122,6 @@
         });
     }
 </script>
+<script th:src="@{/ui/js/mapping-values-editor.js}"></script>
 </body>
 </html>
