@@ -268,6 +268,16 @@ select[multiple].traits-select {
 .sv .sv-expr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--accent); background: #eef2fb; padding: 0.02rem 0.3rem; border-radius: 4px; }
 .sv .sv-note { margin: 0; font-size: 0.8rem; }
 .sv .field-children { margin-top: 0.35rem; }
+/* foldable schema: collapsed-by-default wrapper + per-branch disclosure */
+.sv details { border: none; }
+.sv summary { cursor: pointer; display: flex; align-items: center; gap: 0.35rem; list-style: none; }
+.sv summary::-webkit-details-marker { display: none; }
+.sv summary::before { content: "\25B8"; font-size: 0.7rem; color: var(--muted); flex: 0 0 auto; }
+.sv details[open] > summary::before { content: "\25BE"; }
+.sv-fold > summary.sv-summary { color: var(--muted); font-size: 0.8rem; font-style: italic; }
+.sv details.sv-node { padding: 0; background: none; }
+.sv details.sv-node > summary { padding: 0.35rem 0.5rem; background: #f8f9fb; border: 1px solid var(--border); border-radius: 6px; }
+.sv details.sv-node > .field-children { padding-left: 1rem; border-left: 1px dashed var(--border); margin-left: 0.4rem; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }

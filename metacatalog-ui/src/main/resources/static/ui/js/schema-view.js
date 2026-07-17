@@ -49,40 +49,63 @@
       var prop = props[key] || {};
       var type = typeLabel(prop);
 
-      var field = el("div", "field");
-      var head = el("div", "field-head");
-      head.appendChild(el("span", "f-name", key));
-      head.appendChild(badge(type));
-      if (requiredList.indexOf(key) !== -1) head.appendChild(badge("required", "req"));
-      if (prop.format) head.appendChild(badge(prop.format, "muted"));
-      if (Array.isArray(prop.enum)) head.appendChild(badge("enum: " + prop.enum.join(", "), "muted"));
-      field.appendChild(head);
-
       var childSchema = null;
       if (type === "object" && prop.properties) {
         childSchema = prop;
-      } else if (type === "array" && prop.items) {
-        head.appendChild(badge("items: " + typeLabel(prop.items), "muted"));
-        if (prop.items.type === "object" && prop.items.properties) childSchema = prop.items;
-      }
-      if (childSchema) {
-        var children = el("div", "field-children");
-        children.appendChild(schemaPropList(childSchema));
-        field.appendChild(children);
+      } else if (type === "array" && prop.items && prop.items.type === "object" && prop.items.properties) {
+        childSchema = prop.items;
       }
 
-      list.appendChild(field);
+      // The badges shown for the property, shared by leaf and foldable rows.
+      function fillHead(head) {
+        head.appendChild(el("span", "f-name", key));
+        head.appendChild(badge(type));
+        if (requiredList.indexOf(key) !== -1) head.appendChild(badge("required", "req"));
+        if (prop.format) head.appendChild(badge(prop.format, "muted"));
+        if (Array.isArray(prop.enum)) head.appendChild(badge("enum: " + prop.enum.join(", "), "muted"));
+        if (type === "array" && prop.items) head.appendChild(badge("items: " + typeLabel(prop.items), "muted"));
+      }
+
+      if (childSchema) {
+        // Foldable branch: a <details> whose summary is the property head. Open by default so the
+        // structure is visible once the parent schema is expanded; the user can collapse branches.
+        var details = el("details", "field sv-node");
+        details.open = true;
+        var summary = el("summary", "field-head");
+        fillHead(summary);
+        details.appendChild(summary);
+        var children = el("div", "field-children");
+        children.appendChild(schemaPropList(childSchema));
+        details.appendChild(children);
+        list.appendChild(details);
+      } else {
+        var field = el("div", "field");
+        var head = el("div", "field-head");
+        fillHead(head);
+        field.appendChild(head);
+        list.appendChild(field);
+      }
     });
 
     return list;
   }
 
   function renderSchema(container, schema) {
-    if (!schema || typeof schema !== "object" || !schema.properties || !Object.keys(schema.properties).length) {
+    var count =
+      schema && typeof schema === "object" && schema.properties
+        ? Object.keys(schema.properties).length
+        : 0;
+    if (!count) {
       container.appendChild(note("No properties."));
       return;
     }
-    container.appendChild(schemaPropList(schema));
+    // Collapse the whole schema by default to keep the dashboard uncluttered.
+    var details = el("details", "sv-fold");
+    var summary = el("summary", "sv-summary");
+    summary.appendChild(el("span", null, count + (count === 1 ? " property" : " properties")));
+    details.appendChild(summary);
+    details.appendChild(schemaPropList(schema));
+    container.appendChild(details);
   }
 
   // --- Mapping values ----------------------------------------------------------------------------
