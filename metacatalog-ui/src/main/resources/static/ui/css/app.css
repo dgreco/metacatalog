@@ -294,6 +294,33 @@ select[multiple].traits-select {
 }
 .sv-popup-title { font-weight: 600; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .sv-popup .sv { max-width: none; }
+
+/* --- catalog graph --- */
+.graph-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.25rem 0 0.75rem; }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; font-size: 0.8rem; color: var(--muted); }
+.graph-legend .lg { display: inline-flex; align-items: center; gap: 0.35rem; }
+.graph-legend .lg::before { content: ""; display: inline-block; }
+.graph-legend .lg-node::before { width: 12px; height: 12px; border-radius: 50%; }
+.graph-legend .lg-type::before { background: var(--accent); }
+.graph-legend .lg-trait::before { background: #0d9488; }
+.graph-legend .lg-edge::before { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
+.graph-legend .lg-extends::before { border-top-color: #94a3b8; }
+.graph-legend .lg-has-trait::before { border-top-color: #94a3b8; border-top-style: dashed; }
+.graph-legend .lg-rel::before { border-top-color: #7c3aed; }
+.graph-legend .lg-mapping::before { border-top-color: #2563eb; }
+.graph-hint { font-size: 0.78rem; color: var(--muted); }
+.graph-canvas { position: relative; height: calc(100vh - 190px); min-height: 420px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.graph-empty { position: absolute; top: 1rem; left: 1rem; }
+.graph-svg { display: block; cursor: grab; touch-action: none; }
+.graph-svg:active { cursor: grabbing; }
+.graph-edge { stroke-width: 1.5; }
+.graph-edge-label { font-size: 9px; fill: var(--muted); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.graph-node { cursor: grab; }
+.graph-node:active { cursor: grabbing; }
+.graph-node-dot { stroke: #ffffff; stroke-width: 1.5; }
+.graph-node-entityType .graph-node-dot { fill: var(--accent); }
+.graph-node-trait .graph-node-dot { fill: #0d9488; }
+.graph-node-label { font-size: 11px; fill: var(--text); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }

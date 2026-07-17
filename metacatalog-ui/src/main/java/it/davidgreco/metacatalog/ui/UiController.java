@@ -75,6 +75,82 @@ public class UiController {
     return "index";
   }
 
+  /** Renders the whole catalog as an interactive graph in a separate page. */
+  @GetMapping("/graph")
+  public String graph(Model model) {
+    model.addAttribute("graphJson", graphJson());
+    return "graph";
+  }
+
+  /**
+   * Assembles the catalog graph and serializes it to JSON. Nodes are traits and entity types; edges
+   * capture inheritance, trait membership, trait relationships, and entity-type mappings.
+   */
+  private String graphJson() {
+    var nodes = new ArrayList<GraphModel.Node>();
+    var edges = new ArrayList<GraphModel.Edge>();
+
+    var traits = traitService.list();
+    var types = entityTypeService.list();
+
+    for (var trait : traits) {
+      nodes.add(new GraphModel.Node("trait:" + trait.getName(), trait.getName(), "trait"));
+    }
+    for (var type : types) {
+      nodes.add(new GraphModel.Node("type:" + type.getName(), type.getName(), "entityType"));
+    }
+
+    for (var trait : traits) {
+      if (trait.getFather() != null) {
+        edges.add(
+            new GraphModel.Edge(
+                "trait:" + trait.getName(),
+                "trait:" + trait.getFather().getName(),
+                "extends",
+                "extends"));
+      }
+    }
+    for (var type : types) {
+      if (type.getFather() != null) {
+        edges.add(
+            new GraphModel.Edge(
+                "type:" + type.getName(),
+                "type:" + type.getFather().getName(),
+                "extends",
+                "extends"));
+      }
+      if (type.getTraits() != null) {
+        for (var trait : type.getTraits()) {
+          edges.add(
+              new GraphModel.Edge(
+                  "type:" + type.getName(), "trait:" + trait.getName(), "has-trait", "trait"));
+        }
+      }
+    }
+    for (var link : traitLinks()) {
+      edges.add(
+          new GraphModel.Edge(
+              "trait:" + link.source(),
+              "trait:" + link.target(),
+              link.relationType().name(),
+              link.relationType().name()));
+    }
+    for (var mapping : mappingService.list()) {
+      edges.add(
+          new GraphModel.Edge(
+              "type:" + mapping.getSource().getName(),
+              "type:" + mapping.getTarget().getName(),
+              "mapping",
+              "MAPPED_TO"));
+    }
+
+    try {
+      return jsonFactory.writeValueAsString(new GraphModel(nodes, edges));
+    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+      return "{\"nodes\":[],\"edges\":[]}";
+    }
+  }
+
   /** Renders the bulk YAML upload form. */
   @GetMapping("/bulk")
   public String bulkForm() {

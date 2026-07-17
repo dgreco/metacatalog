@@ -56,6 +56,11 @@ class UiControllerTest {
         MockMvcBuilders.standaloneSetup(
                 new UiController(
                     traitService, entityTypeService, bulkLoaderService, mappingService))
+            // A prefix/suffix resolver so view names (e.g. "graph") don't dispatch back to the
+            // request URL ("/ui/graph") and trip the standalone "circular view path" guard.
+            .setViewResolvers(
+                new org.springframework.web.servlet.view.InternalResourceViewResolver(
+                    "/WEB-INF/views/", ".jsp"))
             .build();
   }
 
@@ -122,6 +127,15 @@ class UiControllerTest {
             eq(List.of("Timestamped")),
             eq(Optional.empty()),
             eq("{\"type\":\"object\",\"properties\":{}}"));
+  }
+
+  @Test
+  void graphRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/graph"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("graph"))
+        .andExpect(model().attributeExists("graphJson"));
   }
 
   @Test
