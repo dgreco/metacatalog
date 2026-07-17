@@ -1,8 +1,13 @@
 package it.davidgreco.metacatalog.ui;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
+
+import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
+import it.davidgreco.metacatalog.service.MappingService;
+import it.davidgreco.metacatalog.service.SchemaValidationError;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
 import java.io.ByteArrayInputStream;
@@ -47,22 +52,26 @@ public class UiController {
   private final TraitService traitService;
   private final EntityTypeService entityTypeService;
   private final BulkLoaderService bulkLoaderService;
+  private final MappingService mappingService;
 
   public UiController(
       TraitService traitService,
       EntityTypeService entityTypeService,
-      BulkLoaderService bulkLoaderService) {
+      BulkLoaderService bulkLoaderService,
+      MappingService mappingService) {
     this.traitService = traitService;
     this.entityTypeService = entityTypeService;
     this.bulkLoaderService = bulkLoaderService;
+    this.mappingService = mappingService;
   }
 
-  /** Dashboard listing the existing traits, entity types, and trait relationships. */
+  /** Dashboard listing the existing traits, entity types, trait relationships, and mappings. */
   @GetMapping({"", "/"})
   public String index(Model model) {
     model.addAttribute("traits", traitService.list());
     model.addAttribute("entityTypes", entityTypeService.list());
     model.addAttribute("traitLinks", traitLinks());
+    model.addAttribute("mappings", mappings());
     return "index";
   }
 
@@ -293,6 +302,111 @@ public class UiController {
       }
     }
     return links;
+  }
+
+  /**
+   * Collects every mapping entity type relationship as a {@link MappingView}, pretty-printing the
+   * JSON fields so the template can render them verbatim.
+   */
+  private List<MappingView> mappings() {
+    var views = new ArrayList<MappingView>();
+    for (var mapping : mappingService.list()) {
+      views.add(
+          new MappingView(
+              mapping.getId(),
+              mapping.getSource().getName(),
+              mapping.getTarget().getName(),
+              mapping.getMappingValues().toPrettyString(),
+              jsonFactory.valueToTree(mapping.getEntityPathReferences()).toPrettyString()));
+    }
+    return views;
+  }
+
+  /** Renders the mapping creation form. */
+  @GetMapping("/mappings/new")
+  public String newMapping(Model model) {
+    if (!model.containsAttribute("mappingForm")) {
+      model.addAttribute("mappingForm", new MappingForm());
+    }
+    model.addAttribute("entityTypes", entityTypeService.list());
+    model.addAttribute("mappings", mappings());
+    return "mapping-form";
+  }
+
+  /**
+   * Handles submission of the mapping creation form.
+   *
+   * <p>Delegates to {@link MappingService#create}, which validates the mapping values against the
+   * target entity type's schema and rejects mappings that would introduce a loop. The alias /
+   * reference-path rows are zipped into {@link
+   * it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference}s, dropping
+   * rows where either field is blank.
+   */
+  @PostMapping("/mappings")
+  public String createMapping(
+      @ModelAttribute("mappingForm") MappingForm form,
+      Model model,
+      RedirectAttributes redirectAttributes) {
+    try {
+      mappingService.create(
+          form.getSourceEntityType(),
+          form.getTargetEntityType(),
+          form.getMappingValues(),
+          entityPathReferences(form));
+      redirectAttributes.addFlashAttribute(
+          "message",
+          "Mapping from '"
+              + form.getSourceEntityType()
+              + "' to '"
+              + form.getTargetEntityType()
+              + "' created.");
+      return "redirect:/ui";
+    } catch (SchemaValidationError e) {
+      return renderMappingError(model, String.join("; ", e.getErrors()));
+    } catch (ServiceError | RuntimeException e) {
+      return renderMappingError(model, e.getMessage());
+    }
+  }
+
+  private String renderMappingError(Model model, String message) {
+    model.addAttribute("error", message);
+    model.addAttribute("entityTypes", entityTypeService.list());
+    model.addAttribute("mappings", mappings());
+    return "mapping-form";
+  }
+
+  /**
+   * Zips the form's parallel alias / reference-path lists into entity path references, dropping any
+   * row where either the alias or the reference path is blank.
+   */
+  private static List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences(
+      MappingForm form) {
+    var aliases = form.getAliases() == null ? List.<String>of() : form.getAliases();
+    var paths = form.getReferencePaths() == null ? List.<String>of() : form.getReferencePaths();
+    var refs = new ArrayList<MappingEntityTypeRelationship.EntityPathReference>();
+    for (int i = 0; i < Math.min(aliases.size(), paths.size()); i++) {
+      var alias = aliases.get(i);
+      var path = paths.get(i);
+      if (alias != null && !alias.isBlank() && path != null && !path.isBlank()) {
+        refs.add(new MappingEntityTypeRelationship.EntityPathReference(alias.trim(), path.trim()));
+      }
+    }
+    return refs;
+  }
+
+  /**
+   * Deletes a mapping entity type relationship by id. Fails if the mapping is still referenced by
+   * mapped entities.
+   */
+  @PostMapping("/mappings/delete")
+  public String deleteMapping(@RequestParam String id, RedirectAttributes redirectAttributes) {
+    try {
+      mappingService.delete(id);
+      redirectAttributes.addFlashAttribute("message", "Mapping deleted.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", deleteError("Mapping", id, e));
+    }
+    return "redirect:/ui";
   }
 
   /** Treats blank strings as absent, so an empty father / schema field becomes {@code empty()}. */

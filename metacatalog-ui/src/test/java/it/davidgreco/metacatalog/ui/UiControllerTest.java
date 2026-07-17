@@ -16,9 +16,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
+import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
+import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
 import java.io.ByteArrayInputStream;
@@ -42,15 +44,18 @@ class UiControllerTest {
   private final TraitService traitService = mock(TraitService.class);
   private final EntityTypeService entityTypeService = mock(EntityTypeService.class);
   private final BulkLoaderService bulkLoaderService = mock(BulkLoaderService.class);
+  private final MappingService mappingService = mock(MappingService.class);
   private MockMvc mockMvc;
 
   @BeforeEach
   void setUp() {
     given(traitService.list()).willReturn(List.of());
     given(entityTypeService.list()).willReturn(List.of());
+    given(mappingService.list()).willReturn(List.of());
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                new UiController(traitService, entityTypeService, bulkLoaderService))
+                new UiController(
+                    traitService, entityTypeService, bulkLoaderService, mappingService))
             .build();
   }
 
@@ -60,7 +65,7 @@ class UiControllerTest {
         .perform(get("/ui"))
         .andExpect(status().isOk())
         .andExpect(view().name("index"))
-        .andExpect(model().attributeExists("traits", "entityTypes"));
+        .andExpect(model().attributeExists("traits", "entityTypes", "mappings"));
   }
 
   @Test
@@ -117,6 +122,70 @@ class UiControllerTest {
             eq(List.of("Timestamped")),
             eq(Optional.empty()),
             eq("{\"type\":\"object\",\"properties\":{}}"));
+  }
+
+  @Test
+  void mappingFormRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/mappings/new"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("mapping-form"))
+        .andExpect(model().attributeExists("mappingForm", "entityTypes", "mappings"));
+  }
+
+  @Test
+  void createMappingSubmitsToServiceAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/mappings")
+                .param("sourceEntityType", "Source")
+                .param("targetEntityType", "Target")
+                .param("mappingValues", "{\"n\":\"#source.n\"}")
+                .param("aliases", "a")
+                .param("referencePaths", "HAS_PART{$}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(mappingService)
+        .create(
+            "Source",
+            "Target",
+            "{\"n\":\"#source.n\"}",
+            List.of(new EntityPathReference("a", "HAS_PART{$}")));
+  }
+
+  @Test
+  void createMappingDropsBlankPathReferenceRows() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/mappings")
+                .param("sourceEntityType", "Source")
+                .param("targetEntityType", "Target")
+                .param("mappingValues", "{}")
+                .param("aliases", "a", "")
+                .param("referencePaths", "HAS_PART{$}", "DEPENDS_ON{$}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(mappingService)
+        .create("Source", "Target", "{}", List.of(new EntityPathReference("a", "HAS_PART{$}")));
+  }
+
+  @Test
+  void createMappingReRendersFormOnServiceError() throws Exception {
+    doThrow(new ServiceError("Loops are not allowed"))
+        .when(mappingService)
+        .create(eq("Source"), eq("Target"), eq("{}"), eq(List.of()));
+
+    mockMvc
+        .perform(
+            post("/ui/mappings")
+                .param("sourceEntityType", "Source")
+                .param("targetEntityType", "Target")
+                .param("mappingValues", "{}"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("mapping-form"))
+        .andExpect(model().attribute("error", "Loops are not allowed"));
   }
 
   @Test
@@ -206,6 +275,35 @@ class UiControllerTest {
         .andExpect(redirectedUrl("/ui"));
 
     verify(entityTypeService).delete("Person");
+  }
+
+  @Test
+  void deleteMappingDelegatesToServiceAndRedirects() throws Exception {
+    mockMvc
+        .perform(post("/ui/mappings/delete").param("id", "abc-123"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+
+    verify(mappingService).delete("abc-123");
+  }
+
+  @Test
+  void deleteMappingInUseShowsFriendlyError() throws Exception {
+    doThrow(new org.springframework.dao.DataIntegrityViolationException("violates foreign key"))
+        .when(mappingService)
+        .delete("abc-123");
+
+    mockMvc
+        .perform(post("/ui/mappings/delete").param("id", "abc-123"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(
+            flash()
+                .attribute(
+                    "error",
+                    org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("still in use"),
+                        org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString("foreign key")))));
   }
 
   @Test

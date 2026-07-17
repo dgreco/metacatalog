@@ -481,6 +481,87 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/mapping:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get all mappings
+      operationId: listMappings
+      responses:
+        200:
+          description: If successful, return a list of Mapping objects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Mapping'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a mapping
+      operationId: createMapping
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Mapping'
+      responses:
+        204:
+          description: Mapping created
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/mapping/{id}:
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a mapping by id
+      operationId: deleteMapping
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            description: Mapping id
+      responses:
+        204:
+          description: Mapping deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity:
     post:
       tags:
@@ -937,6 +1018,26 @@ components:
         entityType:
           type: string
         values:
+          type: string
+    Mapping:
+      required:
+        - id
+        - sourceEntityType
+        - targetEntityType
+        - mappingValues
+        - entityPathReferences
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        sourceEntityType:
+          type: string
+        targetEntityType:
+          type: string
+        mappingValues:
+          type: string
+        entityPathReferences:
           type: string
     ValidationError:
       required:

@@ -15,6 +15,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -586,5 +587,43 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     // Check that idempotency works
     mappingService.deleteMappedEntities(sourceInstance.getId());
+  }
+
+  @Test
+  void testListMappings() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+
+    entityTypeService.create(
+        "ListSourceType",
+        List.of(),
+        Optional.empty(),
+        """
+                { "type": "object", "properties": {} }""");
+
+    entityTypeService.create(
+        "ListTargetType",
+        List.of(),
+        Optional.empty(),
+        """
+                { "type": "object", "properties": {} }""");
+
+    var mapping1 = mappingService.create("ListSourceType", "ListTargetType", "{}", List.of());
+    var mapping2 = mappingService.create("ListSourceType", "ListTargetType", "{}", List.of());
+
+    var allMappings = mappingService.list();
+
+    Assertions.assertTrue(allMappings.size() >= 2);
+
+    var mappingIds =
+        allMappings.stream().map(MappingEntityTypeRelationship::getId).collect(Collectors.toSet());
+
+    Assertions.assertTrue(mappingIds.contains(mapping1.getId()));
+    Assertions.assertTrue(mappingIds.contains(mapping2.getId()));
+
+    mappingService.delete(mapping1.getId());
+    mappingService.delete(mapping2.getId());
+    entityTypeService.delete("ListSourceType");
+    entityTypeService.delete("ListTargetType");
   }
 }
