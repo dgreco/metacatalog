@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Mapping — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>New Mapping</h1>
+    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <p class="empty" th:if="${entityTypes.size() < 1}">
+        You need at least one entity type before you can create a mapping.
+    </p>
+
+    <form method="post" th:action="@{/ui/mappings}" th:object="${mappingForm}"
+          id="mapping-form" th:if="${entityTypes.size() >= 1}">
+
+        <label>
+            Source entity type
+            <select th:field="*{sourceEntityType}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}">entity type</option>
+            </select>
+        </label>
+
+        <label>
+            Target entity type
+            <select th:field="*{targetEntityType}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}">entity type</option>
+            </select>
+        </label>
+
+        <label>
+            Mapping values (JSON)
+            <textarea th:field="*{mappingValues}" class="raw-schema" rows="10" required
+                      placeholder='{ "name": "#source.name", "size": "#other.size" }'></textarea>
+        </label>
+        <p class="hint">
+            Each leaf value is a SpEL expression evaluated against the source entity (<code>#source</code>)
+            and any aliases declared below. The result is validated against the target type's schema.
+        </p>
+
+        <fieldset>
+            <legend>Path references</legend>
+            <p class="hint">
+                Optional. Each reference binds an <em>alias</em> (used as <code>#alias</code> in the
+                mapping values) to a <em>reference path</em> that navigates relationships from the
+                source entity, e.g. <code>HAS_PART{$.name=='foo'}</code>.
+            </p>
+            <div id="path-refs" class="prop-list"></div>
+            <button type="button" class="btn add-nested" id="add-path-ref">+ Add path reference</button>
+        </fieldset>
+
+        <div class="actions">
+            <button type="submit" class="btn primary" id="submit-mapping">Create mapping</button>
+            <a class="btn" th:href="@{/ui}">Cancel</a>
+        </div>
+    </form>
+
+    <section th:if="${!mappings.isEmpty()}">
+        <h2>Existing mappings</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Source</th>
+                <th>Target</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="m : ${mappings}">
+                <td th:text="${m.source}">source</td>
+                <td th:text="${m.target}">target</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+
+<template id="path-ref-row">
+    <div class="field field-head">
+        <input type="text" name="aliases" class="f-name" placeholder="alias"/>
+        <input type="text" name="referencePaths" class="f-name" placeholder="reference path"/>
+        <button type="button" class="link-remove remove-path-ref" title="Remove path reference">×</button>
+    </div>
+</template>
+
+<script>
+    // Add / remove path-reference rows. Aliases and paths post as parallel `aliases`/`referencePaths`
+    // lists; the controller zips them and drops any row with a blank field.
+    const list = document.getElementById('path-refs');
+    const rowTemplate = document.getElementById('path-ref-row');
+
+    function addRow() {
+        list.appendChild(rowTemplate.content.cloneNode(true));
+    }
+
+    const addBtn = document.getElementById('add-path-ref');
+    if (addBtn) {
+        addBtn.addEventListener('click', addRow);
+    }
+    if (list) {
+        list.addEventListener('click', function (e) {
+            if (e.target.classList.contains('remove-path-ref')) {
+                e.target.closest('.field').remove();
+            }
+        });
+    }
+</script>
+</body>
+</html>

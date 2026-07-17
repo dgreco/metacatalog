@@ -199,6 +199,23 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   }
 
   /**
+   * Retrieves all mapping entity type relationships from the repository.
+   *
+   * @return a list of all mapping entity type relationships
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public List<MappingEntityTypeRelationship> list() {
+    log.info("Listing all MappingEntityTypeRelationships");
+    try {
+      return mappingEntityTypeRelationshipRepository.findAll();
+    } finally {
+      log.info("Listed all MappingEntityTypeRelationships");
+    }
+  }
+
+  /**
    * Creates mapped entities for the given event, and then marks the event as processed.
    *
    * @param event the event to process

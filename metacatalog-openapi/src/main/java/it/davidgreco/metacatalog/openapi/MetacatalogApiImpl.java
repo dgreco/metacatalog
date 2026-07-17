@@ -52,6 +52,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
   private final BulkLoaderService bulkLoaderService;
 
+  private final MappingService mappingService;
+
   private final NativeWebRequest request;
   private final AggregateService aggregateService;
 
@@ -234,6 +236,79 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                   })
               .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(entityTypes);
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity listMappings() {
+    try {
+      var mappings =
+          mappingService.list().stream()
+              .map(
+                  m -> {
+                    Mapping mapping = new Mapping();
+                    mapping.setId(m.getId());
+                    mapping.setSourceEntityType(m.getSource().getName());
+                    mapping.setTargetEntityType(m.getTarget().getName());
+                    mapping.setMappingValues(m.getMappingValues().toPrettyString());
+                    mapping.setEntityPathReferences(
+                        jsonFactory.valueToTree(m.getEntityPathReferences()).toPrettyString());
+                    return mapping;
+                  })
+              .toList();
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(mappings);
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity createMapping(Mapping mapping) {
+    try {
+      List<it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference>
+          entityPathReferences =
+              (mapping.getEntityPathReferences() == null
+                      || mapping.getEntityPathReferences().isBlank())
+                  ? List.of()
+                  : jsonFactory.readValue(
+                      mapping.getEntityPathReferences(),
+                      new com.fasterxml.jackson.core.type.TypeReference<>() {});
+      mappingService.create(
+          mapping.getSourceEntityType(),
+          mapping.getTargetEntityType(),
+          mapping.getMappingValues(),
+          entityPathReferences);
+      return status(204).build();
+    } catch (SchemaValidationError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity deleteMapping(String id) {
+    try {
+      mappingService.delete(id);
+      return status(204).build();
+    } catch (DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
