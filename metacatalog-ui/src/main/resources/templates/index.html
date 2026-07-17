@@ -38,7 +38,7 @@
                 <td th:text="${trait.name}">name</td>
                 <td th:text="${trait.father != null ? trait.father.name : '—'}">father</td>
                 <td>
-                    <pre class="schema" th:text="${trait.schema}">{}</pre>
+                    <div class="js-schema" th:text="${trait.schema}">{}</div>
                 </td>
                 <td>
                     <form method="post" th:action="@{/ui/traits/delete}" class="inline-form"
@@ -107,7 +107,7 @@
                     <span class="tag" th:each="t : ${et.traits}" th:text="${t.name}">trait</span>
                 </td>
                 <td>
-                    <pre class="schema" th:text="${et.schema}">{}</pre>
+                    <div class="js-schema" th:text="${et.schema}">{}</div>
                 </td>
                 <td>
                     <form method="post" th:action="@{/ui/entity-types/delete}" class="inline-form"
@@ -142,10 +142,10 @@
                 <td th:text="${m.source}">source</td>
                 <td th:text="${m.target}">target</td>
                 <td>
-                    <pre class="schema" th:text="${m.mappingValues}">{}</pre>
+                    <div class="js-mapping" th:text="${m.mappingValues}">{}</div>
                 </td>
                 <td>
-                    <pre class="schema" th:text="${m.entityPathReferences}">[]</pre>
+                    <div class="js-pathrefs" th:text="${m.entityPathReferences}">[]</div>
                 </td>
                 <td>
                     <form method="post" th:action="@{/ui/mappings/delete}" class="inline-form"
@@ -171,5 +171,6 @@
         });
     });
 </script>
+<script th:src="@{/ui/js/schema-view.js}"></script>
 </body>
 </html>

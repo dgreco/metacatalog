@@ -255,6 +255,19 @@ select[multiple].traits-select {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .mv-required { margin-left: 0.4rem; font-size: 0.7rem; font-weight: 500; color: var(--error-text); text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* --- read-only schema / mapping viewers --- */
+.sv { max-width: 420px; }
+.sv .prop-list { gap: 0.35rem; }
+.sv .field { padding: 0.35rem 0.5rem; background: #f8f9fb; }
+.sv .field-head { gap: 0.35rem; font-size: 0.82rem; }
+.sv .f-name { flex: 0 0 auto; font-weight: 600; }
+.sv .tag { font-size: 0.72rem; padding: 0.02rem 0.4rem; margin: 0; }
+.sv .tag.req { color: var(--error-text); border-color: var(--error-text); }
+.sv .tag.muted { color: var(--muted); }
+.sv .sv-expr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--accent); background: #eef2fb; padding: 0.02rem 0.3rem; border-radius: 4px; }
+.sv .sv-note { margin: 0; font-size: 0.8rem; }
+.sv .field-children { margin-top: 0.35rem; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }
