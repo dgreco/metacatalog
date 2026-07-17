@@ -94,10 +94,28 @@ public class UiController {
     var types = entityTypeService.list();
 
     for (var trait : traits) {
-      nodes.add(new GraphModel.Node("trait:" + trait.getName(), trait.getName(), "trait"));
+      nodes.add(
+          new GraphModel.Node(
+              "trait:" + trait.getName(),
+              trait.getName(),
+              "trait",
+              trait.getFather() == null ? null : trait.getFather().getName(),
+              null,
+              trait.getSchema() == null ? null : trait.getSchema().toPrettyString()));
     }
     for (var type : types) {
-      nodes.add(new GraphModel.Node("type:" + type.getName(), type.getName(), "entityType"));
+      nodes.add(
+          new GraphModel.Node(
+              "type:" + type.getName(),
+              type.getName(),
+              "entityType",
+              type.getFather() == null ? null : type.getFather().getName(),
+              type.getTraits() == null
+                  ? List.of()
+                  : type.getTraits().stream()
+                      .map(it.davidgreco.metacatalog.entity.Trait::getName)
+                      .toList(),
+              type.getSchema() == null ? null : type.getSchema().toPrettyString()));
     }
 
     for (var trait : traits) {
@@ -107,7 +125,9 @@ public class UiController {
                 "trait:" + trait.getName(),
                 "trait:" + trait.getFather().getName(),
                 "extends",
-                "extends"));
+                "extends",
+                null,
+                null));
       }
     }
     for (var type : types) {
@@ -117,13 +137,20 @@ public class UiController {
                 "type:" + type.getName(),
                 "type:" + type.getFather().getName(),
                 "extends",
-                "extends"));
+                "extends",
+                null,
+                null));
       }
       if (type.getTraits() != null) {
         for (var trait : type.getTraits()) {
           edges.add(
               new GraphModel.Edge(
-                  "type:" + type.getName(), "trait:" + trait.getName(), "has-trait", "trait"));
+                  "type:" + type.getName(),
+                  "trait:" + trait.getName(),
+                  "has-trait",
+                  "trait",
+                  null,
+                  null));
         }
       }
     }
@@ -133,7 +160,9 @@ public class UiController {
               "trait:" + link.source(),
               "trait:" + link.target(),
               link.relationType().name(),
-              link.relationType().name()));
+              link.relationType().name(),
+              null,
+              null));
     }
     for (var mapping : mappingService.list()) {
       edges.add(
@@ -141,7 +170,9 @@ public class UiController {
               "type:" + mapping.getSource().getName(),
               "type:" + mapping.getTarget().getName(),
               "mapping",
-              "MAPPED_TO"));
+              "MAPPED_TO",
+              mapping.getMappingValues().toPrettyString(),
+              jsonFactory.valueToTree(mapping.getEntityPathReferences()).toPrettyString()));
     }
 
     try {

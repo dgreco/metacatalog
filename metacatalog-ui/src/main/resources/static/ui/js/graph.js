@@ -29,15 +29,130 @@
     return node;
   }
 
+  // --- Hover popups: full node / mapping detail on mouse-over ------------------------------------
+
+  var popup = null;
+  var hideTimer = null;
+
+  function hel(tag, className, text) {
+    var e = document.createElement(tag);
+    if (className) e.className = className;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function view() {
+    return window.MetacatalogView || null; // read-only tree renderers from schema-view.js
+  }
+
+  function ensurePopup() {
+    if (popup) return popup;
+    popup = hel("div", "sv sv-popup graph-popup");
+    popup.style.display = "none";
+    popup.addEventListener("mouseenter", cancelHide);
+    popup.addEventListener("mouseleave", scheduleHide);
+    document.body.appendChild(popup);
+    return popup;
+  }
+
+  function cancelHide() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  }
+
+  function scheduleHide() {
+    cancelHide();
+    hideTimer = setTimeout(function () { if (popup) popup.style.display = "none"; }, 150);
+  }
+
+  function hidePopup() {
+    cancelHide();
+    if (popup) popup.style.display = "none";
+  }
+
+  function positionAt(x, y) {
+    var p = popup, m = 8, pw = p.offsetWidth || 320, ph = p.offsetHeight || 240;
+    var left = x + 14;
+    if (left + pw > window.innerWidth - m) left = x - pw - 14;
+    if (left < m) left = m;
+    var top = y + 14;
+    if (top + ph > window.innerHeight - m) top = Math.max(m, window.innerHeight - ph - m);
+    p.style.left = left + "px";
+    p.style.top = top + "px";
+  }
+
+  function section(parent, title) {
+    parent.appendChild(hel("div", "graph-popup-h", title));
+    var body = hel("div", "sv");
+    parent.appendChild(body);
+    return body;
+  }
+
+  function tree(container, fn, raw, expanded) {
+    var v = view();
+    if (v && raw) {
+      try {
+        fn(v, container, JSON.parse(raw), expanded);
+        return;
+      } catch (e) {
+        /* fall through to placeholder */
+      }
+    }
+    container.appendChild(hel("p", "empty", "—"));
+  }
+
+  function showNodePopup(n, ev) {
+    var p = ensurePopup();
+    p.textContent = "";
+    p.appendChild(hel("div", "sv-popup-title", n.kind === "entityType" ? "Entity type" : "Trait"));
+    p.appendChild(hel("div", "graph-popup-name", n.label));
+    if (n.father) {
+      var f = hel("div", "graph-popup-row");
+      f.appendChild(hel("span", "graph-popup-k", "inherits from"));
+      f.appendChild(hel("span", null, n.father));
+      p.appendChild(f);
+    }
+    if (n.traits && n.traits.length) {
+      var tr = hel("div", "graph-popup-row");
+      tr.appendChild(hel("span", "graph-popup-k", "traits"));
+      var tags = hel("span");
+      n.traits.forEach(function (t) { tags.appendChild(hel("span", "tag", t)); });
+      tr.appendChild(tags);
+      p.appendChild(tr);
+    }
+    tree(section(p, "Schema"), function (v, c, d, x) { v.schema(c, d, x); }, n.schema, true);
+    p.style.display = "block";
+    positionAt(ev.clientX, ev.clientY);
+  }
+
+  function showMappingPopup(e, ev) {
+    var p = ensurePopup();
+    p.textContent = "";
+    p.appendChild(hel("div", "sv-popup-title", "Mapping"));
+    p.appendChild(hel("div", "graph-popup-name", e.s.label + " → " + e.t.label));
+    tree(section(p, "Mapping values"), function (v, c, d, x) { v.mapping(c, d, x); }, e.mappingValues, true);
+    tree(section(p, "Path references"), function (v, c, d) { v.pathRefs(c, d); }, e.entityPathReferences, false);
+    p.style.display = "block";
+    positionAt(ev.clientX, ev.clientY);
+  }
+
   function run(data, canvas) {
     var nodes = data.nodes.map(function (n) {
-      return { id: n.id, label: n.label, kind: n.kind, x: 0, y: 0, dx: 0, dy: 0, fixed: false };
+      return {
+        id: n.id, label: n.label, kind: n.kind,
+        father: n.father, traits: n.traits, schema: n.schema,
+        x: 0, y: 0, dx: 0, dy: 0, fixed: false,
+      };
     });
     var byId = {};
     nodes.forEach(function (n) { byId[n.id] = n; });
     var edges = data.edges
       .filter(function (e) { return byId[e.source] && byId[e.target]; })
-      .map(function (e) { return { s: byId[e.source], t: byId[e.target], kind: e.kind, label: e.label }; });
+      .map(function (e) {
+        return {
+          s: byId[e.source], t: byId[e.target], kind: e.kind, label: e.label,
+          mappingValues: e.mappingValues, entityPathReferences: e.entityPathReferences,
+        };
+      });
 
     var W = canvas.clientWidth || 800;
     var H = canvas.clientHeight || 600;
@@ -91,6 +206,13 @@
         e.text.textContent = e.label;
         labelLayer.appendChild(e.text);
       }
+      // Mapping edges get a wide invisible hit line and a hover popup with the full mapping.
+      if (e.kind === "mapping") {
+        e.hit = svg("line", { class: "graph-edge-hit" });
+        edgeLayer.appendChild(e.hit);
+        e.hit.addEventListener("mouseenter", function (ev) { cancelHide(); showMappingPopup(e, ev); });
+        e.hit.addEventListener("mouseleave", scheduleHide);
+      }
     });
 
     // Node elements
@@ -102,6 +224,8 @@
       n.g.appendChild(n.circle);
       n.g.appendChild(n.text);
       nodeLayer.appendChild(n.g);
+      n.g.addEventListener("mouseenter", function (ev) { cancelHide(); showNodePopup(n, ev); });
+      n.g.addEventListener("mouseleave", scheduleHide);
     });
 
     // --- Simulation ---
@@ -150,6 +274,12 @@
         e.line.setAttribute("y1", e.s.y);
         e.line.setAttribute("x2", e.t.x);
         e.line.setAttribute("y2", e.t.y);
+        if (e.hit) {
+          e.hit.setAttribute("x1", e.s.x);
+          e.hit.setAttribute("y1", e.s.y);
+          e.hit.setAttribute("x2", e.t.x);
+          e.hit.setAttribute("y2", e.t.y);
+        }
         if (e.text) {
           e.text.setAttribute("x", (e.s.x + e.t.x) / 2);
           e.text.setAttribute("y", (e.s.y + e.t.y) / 2);
@@ -207,6 +337,7 @@
       };
     }
     root.addEventListener("mousedown", function (ev) {
+      hidePopup();
       var target = ev.target.closest ? ev.target.closest(".graph-node") : null;
       if (target) {
         var n = nodes.find(function (x) { return x.g === target; });

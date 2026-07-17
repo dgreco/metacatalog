@@ -269,4 +269,14 @@
     process(".js-mapping", renderMapping, "Mapping values");
     process(".js-pathrefs", renderPathRefs, null);
   });
+
+  // Public API so other pages (e.g. the graph) can render the same read-only trees.
+  if (typeof window !== "undefined") {
+    window.MetacatalogView = {
+      schema: renderSchema, // (container, schemaObject, expanded)
+      mapping: renderMapping, // (container, valuesObject, expanded)
+      pathRefs: renderPathRefs, // (container, referencesArray)
+      note: note, // (text) -> muted <p>
+    };
+  }
 })();

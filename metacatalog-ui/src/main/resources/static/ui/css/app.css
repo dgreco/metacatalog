@@ -321,6 +321,14 @@ select[multiple].traits-select {
 .graph-node-entityType .graph-node-dot { fill: var(--accent); }
 .graph-node-trait .graph-node-dot { fill: #0d9488; }
 .graph-node-label { font-size: 11px; fill: var(--text); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
+.graph-edge-hit { stroke: transparent; stroke-width: 12px; pointer-events: stroke; cursor: help; }
+/* graph hover popups */
+.graph-popup { max-width: 380px; }
+.graph-popup-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.4rem; }
+.graph-popup-row { display: flex; gap: 0.4rem; align-items: baseline; font-size: 0.82rem; margin-bottom: 0.25rem; }
+.graph-popup-row .tag { margin: 0 0.2rem 0.2rem 0; }
+.graph-popup-k { color: var(--muted); flex: 0 0 auto; }
+.graph-popup-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0.55rem 0 0.3rem; font-weight: 600; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }
