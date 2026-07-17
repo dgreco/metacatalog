@@ -114,20 +114,26 @@
     var list = el("div", "prop-list");
     Object.keys(obj).forEach(function (key) {
       var value = obj[key];
-      var field = el("div", "field");
-      var head = el("div", "field-head");
-      head.appendChild(el("span", "f-name", key));
 
       if (value && typeof value === "object" && !Array.isArray(value)) {
-        field.appendChild(head);
+        // Foldable branch for a nested object, open by default.
+        var details = el("details", "field sv-node");
+        details.open = true;
+        var summary = el("summary", "field-head");
+        summary.appendChild(el("span", "f-name", key));
+        details.appendChild(summary);
         var children = el("div", "field-children");
         children.appendChild(mappingPropList(value));
-        field.appendChild(children);
+        details.appendChild(children);
+        list.appendChild(details);
       } else {
+        var field = el("div", "field");
+        var head = el("div", "field-head");
+        head.appendChild(el("span", "f-name", key));
         head.appendChild(el("code", "sv-expr", typeof value === "string" ? value : JSON.stringify(value)));
         field.appendChild(head);
+        list.appendChild(field);
       }
-      list.appendChild(field);
     });
     return list;
   }
@@ -137,7 +143,14 @@
       container.appendChild(note("Empty."));
       return;
     }
-    container.appendChild(mappingPropList(obj));
+    var count = Object.keys(obj).length;
+    // Collapse the whole document by default to keep the mappings table uncluttered.
+    var details = el("details", "sv-fold");
+    var summary = el("summary", "sv-summary");
+    summary.appendChild(el("span", null, count + (count === 1 ? " field" : " fields")));
+    details.appendChild(summary);
+    details.appendChild(mappingPropList(obj));
+    container.appendChild(details);
   }
 
   // --- Path references ---------------------------------------------------------------------------
