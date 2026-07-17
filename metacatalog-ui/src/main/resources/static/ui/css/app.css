@@ -278,6 +278,22 @@ select[multiple].traits-select {
 .sv details.sv-node { padding: 0; background: none; }
 .sv details.sv-node > summary { padding: 0.35rem 0.5rem; background: #f8f9fb; border: 1px solid var(--border); border-radius: 6px; }
 .sv details.sv-node > .field-children { padding-left: 1rem; border-left: 1px dashed var(--border); margin-left: 0.4rem; }
+/* hover popup: full expanded content on mouse-over */
+.sv-hoverable { cursor: help; }
+.sv-popup {
+    position: fixed;
+    z-index: 1000;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+    padding: 0.75rem 0.85rem;
+    max-width: 460px;
+    max-height: 70vh;
+    overflow: auto;
+}
+.sv-popup-title { font-weight: 600; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.sv-popup .sv { max-width: none; }
 .inline-form { display: inline; margin: 0; padding: 0; border: none; background: none; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }

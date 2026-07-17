@@ -90,7 +90,7 @@
     return list;
   }
 
-  function renderSchema(container, schema) {
+  function renderSchema(container, schema, expanded) {
     var count =
       schema && typeof schema === "object" && schema.properties
         ? Object.keys(schema.properties).length
@@ -101,6 +101,7 @@
     }
     // Collapse the whole schema by default to keep the dashboard uncluttered.
     var details = el("details", "sv-fold");
+    if (expanded) details.open = true;
     var summary = el("summary", "sv-summary");
     summary.appendChild(el("span", null, count + (count === 1 ? " property" : " properties")));
     details.appendChild(summary);
@@ -138,7 +139,7 @@
     return list;
   }
 
-  function renderMapping(container, obj) {
+  function renderMapping(container, obj, expanded) {
     if (!obj || typeof obj !== "object" || Array.isArray(obj) || !Object.keys(obj).length) {
       container.appendChild(note("Empty."));
       return;
@@ -146,6 +147,7 @@
     var count = Object.keys(obj).length;
     // Collapse the whole document by default to keep the mappings table uncluttered.
     var details = el("details", "sv-fold");
+    if (expanded) details.open = true;
     var summary = el("summary", "sv-summary");
     summary.appendChild(el("span", null, count + (count === 1 ? " field" : " fields")));
     details.appendChild(summary);
@@ -175,7 +177,72 @@
 
   // --- Wiring ------------------------------------------------------------------------------------
 
-  function process(selector, render) {
+  // --- Hover popup: full, fully-expanded content on mouse-over --------------------------------
+
+  var popup = null;
+  var hideTimer = null;
+
+  function ensurePopup() {
+    if (popup) return popup;
+    popup = el("div", "sv sv-popup");
+    popup.style.display = "none";
+    popup.addEventListener("mouseenter", cancelHide);
+    popup.addEventListener("mouseleave", scheduleHide);
+    document.body.appendChild(popup);
+    return popup;
+  }
+
+  function cancelHide() {
+    if (hideTimer) {
+      clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+  }
+
+  function scheduleHide() {
+    cancelHide();
+    hideTimer = setTimeout(function () {
+      if (popup) popup.style.display = "none";
+    }, 150);
+  }
+
+  function positionPopup(p, container) {
+    var rect = container.getBoundingClientRect();
+    var margin = 8;
+    var pw = p.offsetWidth || 360;
+    var ph = p.offsetHeight || 240;
+    var left = rect.right + margin;
+    if (left + pw > window.innerWidth - margin) left = rect.left - pw - margin;
+    if (left < margin) left = margin;
+    var top = rect.top;
+    if (top + ph > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - ph - margin);
+    p.style.left = left + "px";
+    p.style.top = top + "px";
+  }
+
+  function showPopup(container, render, data, label) {
+    var p = ensurePopup();
+    p.textContent = "";
+    p.appendChild(el("div", "sv-popup-title", label));
+    var body = el("div", "sv");
+    render(body, data, true); // expanded: show everything
+    p.appendChild(body);
+    p.style.display = "block";
+    positionPopup(p, container);
+  }
+
+  function attachHover(container, render, data, label) {
+    container.classList.add("sv-hoverable");
+    container.addEventListener("mouseenter", function () {
+      cancelHide();
+      showPopup(container, render, data, label);
+    });
+    container.addEventListener("mouseleave", scheduleHide);
+  }
+
+  // --- Wiring ------------------------------------------------------------------------------------
+
+  function process(selector, render, hoverLabel) {
     document.querySelectorAll(selector).forEach(function (container) {
       var raw = container.textContent.trim();
       container.textContent = "";
@@ -192,13 +259,14 @@
         container.appendChild(el("pre", "schema", raw));
         return;
       }
-      render(container, parsed);
+      render(container, parsed, false);
+      if (hoverLabel) attachHover(container, render, parsed, hoverLabel);
     });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    process(".js-schema", renderSchema);
-    process(".js-mapping", renderMapping);
-    process(".js-pathrefs", renderPathRefs);
+    process(".js-schema", renderSchema, "Schema");
+    process(".js-mapping", renderMapping, "Mapping values");
+    process(".js-pathrefs", renderPathRefs, null);
   });
 })();
