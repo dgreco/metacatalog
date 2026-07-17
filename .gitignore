@@ -49,3 +49,6 @@ buildNumber.properties
 # Kubernetes secrets (contain sensitive data)
 k8s/registry-secret.yaml
 k8s/db-secret.yaml
+
+# macOS
+.DS_Store
