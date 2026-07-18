@@ -208,16 +208,6 @@ OWASP dependency vulnerability check:
 mvn dependency-check:check
 ```
 
-### Code Quality
-
-Run SonarQube analysis:
-
-```bash
-mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-```
-
-View the [SonarQube Dashboard](http://192.168.10.182:9000/dashboard?id=dgreco_metacatalog_a1aac5ad-232a-476b-a015-53dccc79cc9c)
-
 ## Ontop Integration
 
 Meta Catalog integrates with Ontop for ontology-based data access.
@@ -280,7 +270,6 @@ The build will fail if:
 - Code is not formatted (Spotless check)
 - Critical vulnerabilities (CVSS ≥ 9) are found
 - GPL v2.0 licensed dependencies are detected
-- SonarQube quality gate fails
 - Tests fail
 
 ## Database Migrations
