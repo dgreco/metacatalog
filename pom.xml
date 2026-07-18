@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.1.0</version>
         <relativePath/>
     </parent>
 
@@ -25,37 +25,41 @@
 
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
-        <spring-boot.version>4.0.1</spring-boot.version>
+        <spring-boot.version>4.1.0</spring-boot.version>
 
         <!--   Hypersistence -->
-        <hypersistence.version>3.15.2</hypersistence.version>
+        <hypersistence.version>3.15.4</hypersistence.version>
 
         <!--   Json Schema & Json Path -->
-        <json-schema-validator.version>1.5.6</json-schema-validator.version>
+        <!--   json-schema-validator stays on the 1.x line: 3.0.x is built on Jackson 3
+             (tools.jackson.*), while this codebase still uses Jackson 2
+             (com.fasterxml.jackson.*) and passes Jackson-2 JsonNode instances to the
+             validator. Migrating to 3.x requires moving the whole codebase to Jackson 3. -->
+        <json-schema-validator.version>1.5.9</json-schema-validator.version>
         <json-path.version>3.0.0</json-path.version>
 
         <!--   Misc -->
         <lombok.version>1.18.46</lombok.version>
         <vavr.version>1.0.1</vavr.version>
         <jsqlparser.version>5.3</jsqlparser.version>
-        <spring-retry.version>2.0.12</spring-retry.version>
+        <spring-retry.version>2.0.13</spring-retry.version>
 
         <!--   OpenApi Related -->
-        <swagger-annotations.version>2.2.50</swagger-annotations.version>
-        <swagger-parser.version>2.1.42</swagger-parser.version>
+        <swagger-annotations.version>2.2.52</swagger-annotations.version>
+        <swagger-parser.version>2.1.45</swagger-parser.version>
         <springdoc.version>3.0.3</springdoc.version>
 
         <!-- JGraphT -->
         <jgrapht.version>1.5.3</jgrapht.version>
 
         <!--   Postgresql -->
-        <postgresql.version>42.7.11</postgresql.version>
+        <postgresql.version>42.7.13</postgresql.version>
 
         <!--   Flyway -->
-        <flyway.version>12.6.2</flyway.version>
+        <flyway.version>12.11.0</flyway.version>
 
         <!--   Logback -->
-        <logback.version>1.5.32</logback.version>
+        <logback.version>1.5.38</logback.version>
 
         <!--   Testing & Checking -->
         <testcontainers.version>1.21.4</testcontainers.version>
@@ -171,7 +175,7 @@
             <dependency>
                 <groupId>org.glassfish.jaxb</groupId>
                 <artifactId>jaxb-runtime</artifactId>
-                <version>4.0.8</version>
+                <version>4.0.9</version>
             </dependency>
             <!-- Old javax JAXB for backward compatibility with Swagger -->
             <dependency>
@@ -280,7 +284,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>3.5.0</version>
+                    <version>3.6.3</version>
                     <executions>
                         <execution>
                             <id>enforce-maven</id>
@@ -344,14 +348,14 @@
                 <plugin>
                     <groupId>org.openapitools</groupId>
                     <artifactId>openapi-generator-maven-plugin</artifactId>
-                    <version>7.22.0</version>
+                    <version>7.23.0</version>
                 </plugin>
 
                 <!-- JaCoCo Plugin -->
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.14</version>
+                    <version>0.8.15</version>
                     <executions>
                         <execution>
                             <goals>
@@ -372,7 +376,7 @@
                 <plugin>
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
-                    <version>3.5.1</version>
+                    <version>3.8.0</version>
                     <configuration>
                         <java>
                             <includes>
@@ -380,7 +384,7 @@
                                 <include>src/test/java/**/*.java</include>
                             </includes>
                             <googleJavaFormat>
-                                <version>1.33.0</version>
+                                <version>1.35.0</version>
                             </googleJavaFormat>
                         </java>
                     </configuration>
@@ -442,14 +446,14 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.2</version>
+                    <version>3.5.6</version>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>3.11.2</version>
+                    <version>3.12.0</version>
                     <configuration>
                         <show>public</show>
                         <nohelp>true</nohelp>

@@ -21,6 +21,13 @@ import org.springframework.transaction.PlatformTransactionManager;
  *
  * <p>This configuration sets up all core services, repositories, and infrastructure components
  * including caching, task execution, and service beans.
+ *
+ * <p>Note: JPA repositories are intentionally NOT injected into this {@code @Configuration} class
+ * constructor. Doing so creates an initialization cycle ({@code entityManagerFactoryBuilder} →
+ * {@code coreConfig} → repository → {@code jpaSharedEM_entityManagerFactory} → {@code
+ * entityManagerFactory}) that Spring Framework 7.x (Spring Boot 4.1+) rejects. Each {@code @Bean}
+ * method instead takes the repositories it needs as parameters, and {@link #mappingUpdaterService}
+ * takes its advisory-lock / lifecycle-event dependencies the same way.
  */
 @Configuration
 @EnableCaching
@@ -30,36 +37,6 @@ public class CoreConfig {
 
   /** Application configuration properties. */
   private final CoreConfigProperties applicationConfigurationProperties;
-
-  /** Repository for entity type persistence. */
-  private final EntityTypeRepository entityTypeRepository;
-
-  /** Repository for entity persistence. */
-  private final EntityRepository entityRepository;
-
-  /** Repository for trait persistence. */
-  private final TraitRepository traitRepository;
-
-  /** Repository for trait relationship persistence. */
-  private final TraitRelationshipRepository traitRelationshipRepository;
-
-  /** Repository for entity relationship persistence. */
-  private final EntityRelationshipRepository entityRelationshipRepository;
-
-  /** Repository for mapping type relationship persistence. */
-  private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
-
-  /** Repository for mapping entity relationship persistence. */
-  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
-
-  /** Repository for entity lifecycle event persistence. */
-  private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
-
-  /** Platform transaction manager for database transactions. */
-  private final PlatformTransactionManager transactionManager;
-
-  /** Manager for PostgreSQL advisory locks. */
-  private final AdvisoryLockManager advisoryLockManager;
 
   /**
    * Creates the Caffeine cache configuration with 60-minute expiration.
@@ -201,11 +178,16 @@ public class CoreConfig {
   /**
    * Creates the mapping updater service bean.
    *
+   * @param advisoryLockManager the advisory lock manager
+   * @param entityLifeCycleEventRepository the lifecycle event repository
    * @param mappingService the mapping service
    * @return the mapping updater service
    */
   @Bean
-  MappingUpdaterService mappingUpdaterService(MappingService mappingService) {
+  MappingUpdaterService mappingUpdaterService(
+      AdvisoryLockManager advisoryLockManager,
+      EntityLifeCycleEventRepository entityLifeCycleEventRepository,
+      MappingService mappingService) {
     var mus =
         new MappingUpdaterService(
             advisoryLockManager, entityLifeCycleEventRepository, mappingService);
