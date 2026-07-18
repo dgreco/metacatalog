@@ -181,6 +181,155 @@ paths:
              application/json:
                schema:
                  $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/{name}/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all versions of a trait
+      operationId: listTraitVersions
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+      responses:
+        200:
+          description: If successful, return a list of Trait objects (oldest version first, live version last)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trait'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+            description: System problem
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/SystemError'
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a new version of a trait
+      description: >
+        Snapshots the current live trait into the history table and mutates the live row with the
+        new schema and father. The version number is auto-generated as a progressive integer.
+      operationId: createTraitVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+      requestBody:
+        description: The new Trait spec for the new version
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Trait'
+        required: true
+      responses:
+        200:
+          description: If successful, return the new current (live) Trait
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/{name}/versions/{version}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a specific version of a trait
+      operationId: getTraitVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+            description: Version number
+      responses:
+        200:
+          description: If successful, return a Trait object frozen at the requested version
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/Trait'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a specific historical version of a trait
+      description: >
+        Deletes the version snapshot and relinks the version chain. The current (live) version
+        cannot be deleted through this endpoint.
+      operationId: deleteTraitVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: Trait name
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+            description: Version number
+      responses:
+        204:
+          description: Version deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/trait/link:
     post:
       tags:
@@ -475,6 +624,156 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity-type/{name}/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all versions of an entity type
+      operationId: listEntityTypeVersions
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+      responses:
+        200:
+          description: If successful, return a list of EntityType objects (oldest version first, live version last)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+            description: System problem
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/SystemError'
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Create a new version of an entity type
+      description: >
+        Snapshots the current live entity type into the history table and mutates the live row with
+        the new schema, traits, and father. The version number is auto-generated as a progressive
+        integer.
+      operationId: createEntityTypeVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+      requestBody:
+        description: The new EntityType spec for the new version
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityType'
+        required: true
+      responses:
+        200:
+          description: If successful, return the new current (live) EntityType
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityType'
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity-type/{name}/versions/{version}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a specific version of an entity type
+      operationId: getEntityTypeVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+            description: Version number
+      responses:
+        200:
+          description: If successful, return an EntityType object frozen at the requested version
+          content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/EntityType'
+        400:
+            description: Invalid input
+            content:
+              application/json:
+                schema:
+                  $ref: '#/components/schemas/ValidationError'
+        500:
+           description: System problem
+           content:
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a specific historical version of an entity type
+      description: >
+        Deletes the version snapshot and relinks the version chain. The current (live) version
+        cannot be deleted through this endpoint.
+      operationId: deleteEntityTypeVersion
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+            description: EntityType name
+        - in: path
+          name: version
+          required: true
+          schema:
+            type: integer
+            description: Version number
+      responses:
+        204:
+          description: Version deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -963,6 +1262,14 @@ components:
           type: string
         inheritsFrom:
           type: string
+        version:
+          type: integer
+          readOnly: true
+          description: The current version number of this trait (starts at 1, bumped on every new version).
+        versionGroupId:
+          type: string
+          readOnly: true
+          description: Stable identifier grouping every version of the same logical trait.
     EntityType:
       required:
         - id
@@ -983,6 +1290,14 @@ components:
             type: string
         inheritsFrom:
           type: string
+        version:
+          type: integer
+          readOnly: true
+          description: The current version number of this entity type (starts at 1, bumped on every new version).
+        versionGroupId:
+          type: string
+          readOnly: true
+          description: Stable identifier grouping every version of the same logical entity type.
     Aggregate:
       required:
         - id

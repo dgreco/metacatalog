@@ -93,8 +93,10 @@ public class CoreConfig {
    */
   @Bean
   public TraitService traitService(
-      TraitRepository traitRepository, TraitRelationshipRepository traitRelationshipRepository) {
-    return new TraitService(traitRepository, traitRelationshipRepository);
+      TraitRepository traitRepository,
+      TraitRelationshipRepository traitRelationshipRepository,
+      TraitVersionRepository traitVersionRepository) {
+    return new TraitService(traitRepository, traitRelationshipRepository, traitVersionRepository);
   }
 
   /**
@@ -102,12 +104,16 @@ public class CoreConfig {
    *
    * @param entityTypeRepository the entity type repository
    * @param traitRepository the trait repository
+   * @param entityTypeVersionRepository the entity type version repository
    * @return the entity type service
    */
   @Bean
   public EntityTypeService entityTypeService(
-      EntityTypeRepository entityTypeRepository, TraitRepository traitRepository) {
-    return new EntityTypeService(entityTypeRepository, traitRepository);
+      EntityTypeRepository entityTypeRepository,
+      TraitRepository traitRepository,
+      EntityTypeVersionRepository entityTypeVersionRepository) {
+    return new EntityTypeService(
+        entityTypeRepository, traitRepository, entityTypeVersionRepository);
   }
 
   /**

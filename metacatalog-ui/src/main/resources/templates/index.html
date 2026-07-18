@@ -29,6 +29,7 @@
             <thead>
             <tr>
                 <th>Name</th>
+                <th>Version</th>
                 <th>Father</th>
                 <th>Schema</th>
                 <th></th>
@@ -37,6 +38,11 @@
             <tbody>
             <tr th:each="trait : ${traits}">
                 <td th:text="${trait.name}">name</td>
+                <td>
+                    <a class="tag"
+                       th:href="@{/ui/traits/{name}/versions(name=${trait.name})}"
+                       th:text="'v' + ${trait.version}">v1</a>
+                </td>
                 <td th:text="${trait.father != null ? trait.father.name : '—'}">father</td>
                 <td>
                     <div class="js-schema" th:text="${trait.schema}">{}</div>
@@ -93,6 +99,7 @@
             <thead>
             <tr>
                 <th>Name</th>
+                <th>Version</th>
                 <th>Father</th>
                 <th>Traits</th>
                 <th>Schema</th>
@@ -102,6 +109,11 @@
             <tbody>
             <tr th:each="et : ${entityTypes}">
                 <td th:text="${et.name}">name</td>
+                <td>
+                    <a class="tag"
+                       th:href="@{/ui/entity-types/{name}/versions(name=${et.name})}"
+                       th:text="'v' + ${et.version}">v1</a>
+                </td>
                 <td th:text="${et.father != null ? et.father.name : '—'}">father</td>
                 <td>
                     <span th:if="${et.traits.isEmpty()}">—</span>

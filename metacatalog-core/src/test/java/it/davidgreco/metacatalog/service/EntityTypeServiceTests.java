@@ -5,6 +5,7 @@ import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.benmanes.caffeine.cache.Cache;
+import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Assertions;
@@ -321,5 +322,73 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     entityTypeService.delete("ListTestType1");
     entityTypeService.delete("ListTestType2");
     entityTypeService.delete("ListTestType3");
+  }
+
+  @Test
+  void testCreateVersionSnapshotsAndReadsHistory() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } }
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } }
+        }
+        """;
+
+    traitService.create("VersionTrait", Optional.empty(), Optional.empty());
+
+    var liveV1 =
+        entityTypeService.create(
+            "VersionedType", List.of("VersionTrait"), Optional.empty(), schemaV1);
+    Assertions.assertEquals(1, liveV1.getVersion());
+    Assertions.assertNotNull(liveV1.getVersionGroupId());
+
+    var liveV2 =
+        entityTypeService.createVersion("VersionedType", List.of(), Optional.empty(), schemaV2);
+    Assertions.assertEquals(2, liveV2.getVersion());
+    Assertions.assertEquals(liveV1.getVersionGroupId(), liveV2.getVersionGroupId());
+    Assertions.assertTrue(liveV2.getSchema().get("properties").has("value"));
+    Assertions.assertTrue(liveV2.getTraits().isEmpty());
+
+    var readLive = entityTypeService.read("VersionedType");
+    Assertions.assertEquals(2, readLive.getVersion());
+
+    var historyV1 = entityTypeService.readVersion("VersionedType", 1);
+    Assertions.assertTrue(historyV1 instanceof EntityTypeVersion);
+    var snapshot = (EntityTypeVersion) historyV1;
+    Assertions.assertEquals(1, snapshot.getVersion());
+    Assertions.assertFalse(snapshot.getSchema().get("properties").has("value"));
+
+    var snapshotTraits =
+        java.util.stream.StreamSupport.stream(snapshot.getTraits().spliterator(), false)
+            .map(JsonNode::asText)
+            .toList();
+    Assertions.assertEquals(List.of("VersionTrait"), snapshotTraits);
+
+    var versions = entityTypeService.listVersions("VersionedType");
+    Assertions.assertEquals(2, versions.size());
+    Assertions.assertTrue(versions.get(0) instanceof EntityTypeVersion);
+    Assertions.assertTrue(versions.get(1) instanceof it.davidgreco.metacatalog.entity.EntityType);
+
+    Assertions.assertThrows(
+        ServiceError.class, () -> entityTypeService.deleteVersion("VersionedType", 2));
+
+    entityTypeService.deleteVersion("VersionedType", 1);
+    Assertions.assertEquals(1, entityTypeService.listVersions("VersionedType").size());
+
+    Assertions.assertThrows(
+        ServiceError.class, () -> entityTypeService.readVersion("VersionedType", 1));
+
+    entityTypeService.delete("VersionedType");
+    traitService.delete("VersionTrait");
   }
 }
