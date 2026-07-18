@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Versions — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1><span th:text="${kind}">Type</span> versions — <span th:text="${name}">name</span></h1>
+    <nav>
+        <a class="btn" th:href="@{/ui}">← Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <div class="section-head">
+        <h2>Version history <span class="empty">(oldest first)</span></h2>
+        <div class="actions">
+            <a class="btn primary"
+               th:href="@{/ui/{resource}/{name}/versions/new(resource=${resource},name=${name})}">+ New version</a>
+            <form method="post"
+                  th:if="${versions.size() > 1}"
+                  th:action="@{/ui/{resource}/{name}/versions/delete-all(resource=${resource},name=${name})}"
+                  class="inline-form"
+                  data-confirm="Delete every historical version? The current (live) version is kept.">
+                <button type="submit" class="btn">Delete all versions</button>
+            </form>
+        </div>
+    </div>
+
+    <table th:if="${!versions.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Version</th>
+            <th>Father</th>
+            <th th:if="${showTraits}">Traits</th>
+            <th>Schema</th>
+            <th>Captured</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="v : ${versions}">
+            <td>
+                <span class="tag" th:text="'v' + ${v.version}">v1</span>
+                <span class="tag" th:if="${v.live}">current</span>
+            </td>
+            <td th:text="${v.fatherName != null ? v.fatherName : '—'}">father</td>
+            <td th:if="${showTraits}">
+                <span th:if="${v.traits.isEmpty()}">—</span>
+                <span class="tag" th:each="t : ${v.traits}" th:text="${t}">trait</span>
+            </td>
+            <td>
+                <div class="js-schema" th:text="${v.schema}">{}</div>
+            </td>
+            <td>
+                <span th:if="${v.createdAt != null}" th:text="${v.createdAt}">timestamp</span>
+                <span th:if="${v.createdAt == null}" class="empty">live</span>
+            </td>
+            <td>
+                <form method="post"
+                      th:if="${!v.live}"
+                      th:action="@{/ui/{resource}/{name}/versions/{version}/delete(resource=${resource},name=${name},version=${v.version})}"
+                      class="inline-form"
+                      th:attr="data-confirm=|Delete version ${v.version}? This cannot be undone.|">
+                    <button type="submit" class="link-remove" title="Delete version">×</button>
+                </form>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="empty" th:if="${versions.isEmpty()}">No versions recorded.</p>
+</main>
+
+<script>
+    // Confirm destructive submits (forms carrying a data-confirm message).
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            var msg = form.getAttribute('data-confirm');
+            if (!window.confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    });
+</script>
+<script th:src="@{/ui/js/schema-view.js}"></script>
+</body>
+</html>

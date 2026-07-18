@@ -1,5 +1,6 @@
 package it.davidgreco.metacatalog.service;
 
+import static it.davidgreco.metacatalog.common.JsonUtils.EMPTY_SCHEMA;
 import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
 import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
@@ -7,12 +8,17 @@ import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
+import it.davidgreco.metacatalog.entity.TraitVersion;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
+import it.davidgreco.metacatalog.repository.TraitVersionRepository;
+import java.time.Instant;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -39,6 +45,8 @@ public class TraitService implements CommonTypeService<Trait, String> {
 
   private final TraitRelationshipRepository traitRelationshipRepository;
 
+  private final TraitVersionRepository traitVersionRepository;
+
   /**
    * Creates a new Trait with the specified name, optional schema, and optional father.
    *
@@ -60,42 +68,232 @@ public class TraitService implements CommonTypeService<Trait, String> {
       throws ServiceError {
     log.info("Creating Trait: {}", name);
     try {
-      var eitherSchema =
-          stringToJsonSchema(
-              schema.orElse(
-                  """
-                    {
-                      "type": "object",
-                      "properties": {
-                      }
-                    }
-                    """));
-      if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-      var entityType = new Trait();
-      entityType.setName(name);
-      entityType.setBaseSchema(eitherSchema.get().getSchemaNode());
-      List<JsonNode> schemasToMerge = new java.util.ArrayList<>();
+      var baseSchemaNode = parseSchema(schema);
+      var trait = new Trait();
+      trait.setName(name);
+      trait.setBaseSchema(baseSchemaNode);
+      trait.setVersion(1);
+      trait.setVersionGroupId(UUID.randomUUID().toString());
       if (fatherName.isPresent()) {
         var father =
             traitRepository
                 .findByName(fatherName.get())
                 .orElseThrow(() -> new ServiceError(TRAIT + fatherName.get() + " does not exist"));
-        entityType.setFather(father);
-        schemasToMerge.addAll(List.of(father.getSchema(), eitherSchema.get().getSchemaNode()));
-        var mergedSchema = mergeSchemas(schemasToMerge);
-        if (mergedSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-        entityType.setDerivedSchema(mergedSchema.get());
-      } else {
-        schemasToMerge.add(eitherSchema.get().getSchemaNode());
-        var mergedSchema = mergeSchemas(schemasToMerge);
-        if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
-        entityType.setDerivedSchema(mergedSchema.get());
+        trait.setFather(father);
       }
-      return traitRepository.save(entityType);
+      trait.setDerivedSchema(computeDerivedSchema(trait));
+      return traitRepository.save(trait);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
       log.info("Created Trait: {}", name);
+    }
+  }
+
+  /**
+   * Creates a new version of an existing Trait by snapshotting the current live state into the
+   * history table and mutating the live row in place with the new schema and father.
+   *
+   * <p>The live row's {@code version} is bumped by one; its {@code versionGroupId} is unchanged so
+   * the new version stays linked to every previous snapshot. The snapshot is self-contained: base
+   * schema, derived schema and father name are all frozen at the moment the snapshot was taken.
+   *
+   * <p>The live row is locked with a pessimistic write lock for the duration of the transaction, so
+   * concurrent {@code createVersion} calls for the same trait are serialised.
+   *
+   * @param name the name of the Trait to version
+   * @param schema the new optional JSON schema for the new version
+   * @param fatherName the new optional father name for the new version
+   * @return the mutated (now current) live Trait
+   * @throws ServiceError if the trait does not exist, a schema validation error occurs, or a data
+   *     integrity violation occurs
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public Trait createVersion(String name, Optional<String> schema, Optional<String> fatherName)
+      throws ServiceError {
+    log.info("Creating new version of Trait: {}", name);
+    try {
+      var live =
+          traitRepository
+              .findByNameForUpdate(name)
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+
+      var snapshot = new TraitVersion();
+      snapshot.setVersionGroupId(live.getVersionGroupId());
+      snapshot.setVersion(live.getVersion());
+      snapshot.setName(live.getName());
+      snapshot.setBaseSchema(live.getBaseSchema());
+      snapshot.setDerivedSchema(live.getDerivedSchema());
+      snapshot.setFatherName(live.getFather() == null ? null : live.getFather().getName());
+      snapshot.setCreatedAt(Instant.now());
+      var latestSnapshot =
+          traitVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
+              live.getVersionGroupId());
+      snapshot.setPreviousVersionId(latestSnapshot.map(TraitVersion::getId).orElse(null));
+      traitVersionRepository.save(snapshot);
+
+      var baseSchemaNode = parseSchema(schema);
+      live.setBaseSchema(baseSchemaNode);
+      if (fatherName.isPresent()) {
+        var father =
+            traitRepository
+                .findByName(fatherName.get())
+                .orElseThrow(() -> new ServiceError(TRAIT + fatherName.get() + " does not exist"));
+        live.setFather(father);
+      } else {
+        live.setFather(null);
+      }
+      live.setDerivedSchema(computeDerivedSchema(live));
+      live.setVersion(live.getVersion() + 1);
+      return traitRepository.save(live);
+    } catch (DataIntegrityViolationException e) {
+      throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Created new version of Trait: {}", name);
+    }
+  }
+
+  /**
+   * Reads a specific version of a Trait.
+   *
+   * <p>If the requested version equals the live row's current version, the live {@link Trait} is
+   * returned. Otherwise the frozen {@link TraitVersion} snapshot is returned. The caller can
+   * distinguish the two with {@code instanceof}.
+   *
+   * @param name the name of the Trait
+   * @param version the version number to read
+   * @return the live {@link Trait} (if {@code version} is current) or the {@link TraitVersion}
+   *     snapshot
+   * @throws ServiceError if the trait does not exist or the version does not exist
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public Object readVersion(String name, int version) throws ServiceError {
+    log.info("Reading Trait: {} version: {}", name, version);
+    try {
+      var live =
+          traitRepository
+              .findByName(name)
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+      if (version == live.getVersion()) return live;
+      if (version > live.getVersion() || version < 1)
+        throw new ServiceError("Version " + version + " of " + TRAIT + name + " does not exist");
+      return traitVersionRepository
+          .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
+          .orElseThrow(
+              () ->
+                  new ServiceError(
+                      "Version " + version + " of " + TRAIT + name + " does not exist"));
+    } finally {
+      log.info("Read Trait: {} version: {}", name, version);
+    }
+  }
+
+  /**
+   * Lists every version of a Trait, oldest first. The live (current) version is included as the
+   * last element.
+   *
+   * @param name the name of the Trait
+   * @return a list of {@link TraitVersion} snapshots (oldest first) followed by the live {@link
+   *     Trait}
+   * @throws ServiceError if the trait does not exist
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public List<Object> listVersions(String name) throws ServiceError {
+    log.info("Listing versions of Trait: {}", name);
+    try {
+      var live =
+          traitRepository
+              .findByName(name)
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+      var history =
+          traitVersionRepository.findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId());
+      var result = new ArrayList<Object>(history);
+      result.add(live);
+      return result;
+    } finally {
+      log.info("Listed versions of Trait: {}", name);
+    }
+  }
+
+  /**
+   * Deletes a specific historical version of a Trait.
+   *
+   * <p>The version chain is relinked so the predecessor and successor of the deleted snapshot
+   * remain connected. Deleting the current (live) version is refused: use {@link #delete(String)}
+   * to remove the whole trait, or create a new version to revert.
+   *
+   * @param name the name of the Trait
+   * @param version the version number to delete
+   * @throws ServiceError if the trait does not exist, the version does not exist, or the version is
+   *     the current (live) version
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public void deleteVersion(String name, int version) throws ServiceError {
+    log.info("Deleting Trait: {} version: {}", name, version);
+    try {
+      var live =
+          traitRepository
+              .findByName(name)
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+      if (version == live.getVersion())
+        throw new ServiceError(
+            "Cannot delete the current version of "
+                + TRAIT
+                + name
+                + "; create a new version to revert, or delete the trait");
+      if (version > live.getVersion() || version < 1)
+        throw new ServiceError("Version " + version + " of " + TRAIT + name + " does not exist");
+      var snapshot =
+          traitVersionRepository
+              .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
+              .orElseThrow(
+                  () ->
+                      new ServiceError(
+                          "Version " + version + " of " + TRAIT + name + " does not exist"));
+      var successor = traitVersionRepository.findByPreviousVersionId(snapshot.getId());
+      successor.ifPresent(
+          s -> {
+            s.setPreviousVersionId(snapshot.getPreviousVersionId());
+            traitVersionRepository.save(s);
+          });
+      traitVersionRepository.delete(snapshot);
+    } catch (DataIntegrityViolationException e) {
+      throw new ServiceError(e.getMessage());
+    } finally {
+      log.info("Deleted Trait: {} version: {}", name, version);
+    }
+  }
+
+  /**
+   * Deletes every historical snapshot of a Trait, keeping the live row. The live row's {@code
+   * version} and {@code versionGroupId} are unchanged, so the trait continues to exist at its
+   * current version with no history behind it. To remove the trait together with all of its
+   * history, use {@link #delete(String)}.
+   *
+   * @param name the name of the Trait
+   * @throws ServiceError if the trait does not exist
+   */
+  @Transactional(
+      propagation = Propagation.REQUIRED,
+      rollbackFor = {ServiceError.class})
+  public void deleteAllVersions(String name) throws ServiceError {
+    log.info("Deleting all versions of Trait: {}", name);
+    try {
+      var live =
+          traitRepository
+              .findByName(name)
+              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+      traitVersionRepository.deleteByVersionGroupId(live.getVersionGroupId());
+    } finally {
+      log.info("Deleted all versions of Trait: {}", name);
     }
   }
 
@@ -141,6 +339,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
           traitRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+      traitVersionRepository.deleteByVersionGroupId(entityType.getVersionGroupId());
       traitRepository.delete(entityType);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
@@ -375,5 +574,22 @@ public class TraitService implements CommonTypeService<Trait, String> {
     return traitRelationshipRepository.findBySourceAndRelationType(trait, relType).stream()
         .map(rel -> rel.getTarget().getName())
         .toList();
+  }
+
+  private JsonNode parseSchema(Optional<String> schema) throws SchemaValidationError {
+    var eitherSchema = stringToJsonSchema(schema.orElse(EMPTY_SCHEMA));
+    if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
+    return eitherSchema.get().getSchemaNode();
+  }
+
+  private JsonNode computeDerivedSchema(Trait trait) throws SchemaValidationError {
+    List<JsonNode> schemasToMerge = new ArrayList<>();
+    if (trait.getFather() != null) {
+      schemasToMerge.add(trait.getFather().getSchema());
+    }
+    schemasToMerge.add(trait.getBaseSchema());
+    var mergedSchema = mergeSchemas(schemasToMerge);
+    if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
+    return mergedSchema.get();
   }
 }

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Entity Type Version — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+</head>
+<body>
+<header class="topbar">
+    <h1>New Version of <span th:text="${entityTypeVersionForm.name}">name</span></h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">↑ Versions</a>
+        <a class="btn" th:href="@{/ui}">← Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <p class="hint">
+        The current version (v<span th:text="${currentVersion}">1</span>) will be snapshotted into the
+        history table and a new live version (v<span th:text="${currentVersion + 1}">2</span>) will
+        replace it with the schema, traits, and father below.
+    </p>
+
+    <form method="post"
+          th:action="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}"
+          th:object="${entityTypeVersionForm}" id="type-form">
+        <label>
+            Name
+            <input type="text" th:field="*{name}" readonly/>
+        </label>
+
+        <label>
+            Father (optional)
+            <select th:field="*{father}">
+                <option value="">— none —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}">entity type</option>
+            </select>
+        </label>
+
+        <label>
+            Traits (optional — Ctrl/Cmd-click to select several)
+            <select th:field="*{traits}" class="traits-select" multiple size="6"
+                    th:disabled="${traits.isEmpty()}">
+                <option th:each="trait : ${traits}"
+                        th:value="${trait.name}"
+                        th:text="${trait.name}">trait</option>
+            </select>
+            <span class="empty" th:if="${traits.isEmpty()}">No traits defined yet.</span>
+        </label>
+
+        <fieldset id="schema-builder" th:attr="data-initial-schema=*{schema}">
+            <legend>Schema</legend>
+
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="builder">Builder</button>
+                <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder">
+                <div id="prop-root" class="prop-list"></div>
+                <button type="button" id="add-prop" class="btn">+ Add property</button>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="raw">
+                <textarea id="raw-schema" class="raw-schema" rows="16" spellcheck="false"></textarea>
+            </div>
+
+            <div id="schema-validation" class="validation"></div>
+
+            <details class="preview-wrap">
+                <summary>Generated JSON schema</summary>
+                <pre id="schema-preview">{}</pre>
+            </details>
+        </fieldset>
+
+        <input type="hidden" th:field="*{schema}" id="schema-input"/>
+
+        <div class="actions">
+            <button type="submit" class="btn primary">Create new version</button>
+            <a class="btn" th:href="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">Cancel</a>
+        </div>
+    </form>
+</main>
+
+<script th:src="@{/ui/js/schema-builder.js}"></script>
+</body>
+</html>

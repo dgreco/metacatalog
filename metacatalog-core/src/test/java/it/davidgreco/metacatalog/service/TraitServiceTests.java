@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 
 import it.davidgreco.metacatalog.entity.Trait;
+import it.davidgreco.metacatalog.entity.TraitVersion;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -127,5 +128,66 @@ class TraitServiceTests extends CommonServiceTestingSupport {
     traitService.delete("listTestTrait1");
     traitService.delete("listTestTrait2");
     traitService.delete("listTestTrait3");
+  }
+
+  @Test
+  void testCreateVersionSnapshotsAndReadsHistory() throws ServiceError {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "field1": { "type": "string" } }
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "field1": { "type": "string" }, "field2": { "type": "number" } }
+        }
+        """;
+
+    traitService.create("VersionedTrait", Optional.of(schemaV1), Optional.empty());
+
+    var liveV1 = traitService.read("VersionedTrait");
+    Assertions.assertEquals(1, liveV1.getVersion());
+    Assertions.assertNotNull(liveV1.getVersionGroupId());
+
+    var liveV2 =
+        traitService.createVersion("VersionedTrait", Optional.of(schemaV2), Optional.empty());
+    Assertions.assertEquals(2, liveV2.getVersion());
+    Assertions.assertEquals(liveV1.getVersionGroupId(), liveV2.getVersionGroupId());
+    Assertions.assertTrue(liveV2.getSchema().get("properties").has("field2"));
+
+    var readLive = traitService.read("VersionedTrait");
+    Assertions.assertEquals(2, readLive.getVersion());
+
+    var historyV1 = traitService.readVersion("VersionedTrait", 1);
+    Assertions.assertTrue(historyV1 instanceof TraitVersion);
+    var snapshot = (TraitVersion) historyV1;
+    Assertions.assertEquals(1, snapshot.getVersion());
+    Assertions.assertFalse(snapshot.getSchema().get("properties").has("field2"));
+
+    var historyV2 = traitService.readVersion("VersionedTrait", 2);
+    Assertions.assertTrue(historyV2 instanceof Trait);
+    Assertions.assertEquals(2, ((Trait) historyV2).getVersion());
+
+    var versions = traitService.listVersions("VersionedTrait");
+    Assertions.assertEquals(2, versions.size());
+    Assertions.assertTrue(versions.get(0) instanceof TraitVersion);
+    Assertions.assertTrue(versions.get(1) instanceof Trait);
+
+    Assertions.assertThrows(
+        ServiceError.class, () -> traitService.deleteVersion("VersionedTrait", 2));
+
+    traitService.deleteVersion("VersionedTrait", 1);
+    Assertions.assertEquals(1, traitService.listVersions("VersionedTrait").size());
+
+    Assertions.assertThrows(
+        ServiceError.class, () -> traitService.readVersion("VersionedTrait", 1));
+
+    traitService.delete("VersionedTrait");
   }
 }

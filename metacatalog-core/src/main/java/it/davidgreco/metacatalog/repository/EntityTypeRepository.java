@@ -1,11 +1,15 @@
 package it.davidgreco.metacatalog.repository;
 
 import it.davidgreco.metacatalog.entity.EntityType;
+import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -69,4 +73,12 @@ public interface EntityTypeRepository extends JpaRepository<EntityType, String> 
    * @return the number of child entity types
    */
   long countEntityTypeByFather(EntityType entityType);
+
+  /**
+   * Finds an entity type by name acquiring a pessimistic write lock, so concurrent {@code
+   * createVersion} calls for the same type are serialised. Not cached.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT e FROM EntityType e WHERE e.name = :name")
+  Optional<EntityType> findByNameForUpdate(@Param("name") String name);
 }

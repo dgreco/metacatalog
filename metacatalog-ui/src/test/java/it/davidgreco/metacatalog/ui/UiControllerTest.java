@@ -16,8 +16,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import it.davidgreco.metacatalog.entity.EntityType;
+import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference;
 import it.davidgreco.metacatalog.entity.RelationType;
+import it.davidgreco.metacatalog.entity.Trait;
+import it.davidgreco.metacatalog.entity.TraitVersion;
+import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
+import it.davidgreco.metacatalog.repository.TraitVersionRepository;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.MappingService;
@@ -25,6 +32,7 @@ import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +53,10 @@ class UiControllerTest {
   private final EntityTypeService entityTypeService = mock(EntityTypeService.class);
   private final BulkLoaderService bulkLoaderService = mock(BulkLoaderService.class);
   private final MappingService mappingService = mock(MappingService.class);
+  private final EntityTypeVersionRepository entityTypeVersionRepository =
+      mock(EntityTypeVersionRepository.class);
+  private final TraitVersionRepository traitVersionRepository = mock(TraitVersionRepository.class);
+  private final ObjectMapper mapper = new ObjectMapper();
   private MockMvc mockMvc;
 
   @BeforeEach
@@ -52,12 +64,17 @@ class UiControllerTest {
     given(traitService.list()).willReturn(List.of());
     given(entityTypeService.list()).willReturn(List.of());
     given(mappingService.list()).willReturn(List.of());
+    given(entityTypeVersionRepository.findAll()).willReturn(List.of());
+    given(traitVersionRepository.findAll()).willReturn(List.of());
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new UiController(
-                    traitService, entityTypeService, bulkLoaderService, mappingService))
-            // A prefix/suffix resolver so view names (e.g. "graph") don't dispatch back to the
-            // request URL ("/ui/graph") and trip the standalone "circular view path" guard.
+                    traitService,
+                    entityTypeService,
+                    bulkLoaderService,
+                    mappingService,
+                    entityTypeVersionRepository,
+                    traitVersionRepository))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -429,5 +446,289 @@ class UiControllerTest {
         .andExpect(status().isOk())
         .andExpect(view().name("trait-form"))
         .andExpect(model().attribute("error", "Trait already exists"));
+  }
+
+  // --- entity-type versioning -----------------------------------------------------
+
+  @Test
+  void entityTypeVersionFormRendersPreFilledFromLiveType() throws Exception {
+    var live = new EntityType();
+    live.setName("Person");
+    live.setVersion(1);
+    live.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    var father = new EntityType();
+    father.setName("Base");
+    live.setFather(father);
+    var trait = new Trait();
+    trait.setName("Timestamped");
+    live.setTraits(List.of(trait));
+    given(entityTypeService.read("Person")).willReturn(live);
+
+    mockMvc
+        .perform(get("/ui/entity-types/Person/versions/new"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("entity-type-version-form"))
+        .andExpect(model().attribute("currentVersion", 1))
+        .andExpect(model().attributeExists("entityTypeVersionForm", "entityTypes", "traits"));
+
+    verify(entityTypeService).read("Person");
+  }
+
+  @Test
+  void entityTypeVersionFormRedirectsWhenTypeMissing() throws Exception {
+    given(entityTypeService.read("Ghost"))
+        .willThrow(new ServiceError("EntityType Ghost not found"));
+
+    mockMvc
+        .perform(get("/ui/entity-types/Ghost/versions/new"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"))
+        .andExpect(flash().attribute("error", "EntityType Ghost not found"));
+  }
+
+  @Test
+  void createEntityTypeVersionSubmitsToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/entity-types/Person/versions")
+                .param("name", "Person")
+                .param("father", "")
+                .param("traits", "Timestamped")
+                .param("schema", "{\"type\":\"object\",\"properties\":{}}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/entity-types/Person/versions"));
+
+    verify(entityTypeService)
+        .createVersion(
+            eq("Person"),
+            eq(List.of("Timestamped")),
+            eq(Optional.empty()),
+            eq("{\"type\":\"object\",\"properties\":{}}"));
+  }
+
+  @Test
+  void createEntityTypeVersionReRendersFormOnServiceError() throws Exception {
+    doThrow(new ServiceError("Trait Missing does not exist"))
+        .when(entityTypeService)
+        .createVersion(eq("Person"), any(), any(), any());
+    var live = new EntityType();
+    live.setVersion(1);
+    given(entityTypeService.read("Person")).willReturn(live);
+
+    mockMvc
+        .perform(
+            post("/ui/entity-types/Person/versions").param("name", "Person").param("schema", "{}"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("entity-type-version-form"))
+        .andExpect(model().attribute("error", "Trait Missing does not exist"));
+  }
+
+  @Test
+  void entityTypeVersionsListRendersSnapshotsAndLive() throws Exception {
+    var snap = new EntityTypeVersion();
+    snap.setVersion(1);
+    snap.setName("Person");
+    snap.setFatherName("Base");
+    snap.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    snap.setTraits(mapper.readTree("[\"Timestamped\"]"));
+    snap.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
+    var live = new EntityType();
+    live.setVersion(2);
+    live.setName("Person");
+    live.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    given(entityTypeService.listVersions("Person")).willReturn(List.of(snap, live));
+
+    mockMvc
+        .perform(get("/ui/entity-types/Person/versions"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("versions"))
+        .andExpect(model().attributeExists("versions", "kind", "name", "resource", "showTraits"))
+        .andExpect(model().attribute("kind", "Entity Type"))
+        .andExpect(model().attribute("showTraits", true));
+  }
+
+  // --- trait versioning -----------------------------------------------------------
+
+  @Test
+  void traitVersionFormRendersPreFilledFromLiveTrait() throws Exception {
+    var live = new Trait();
+    live.setName("Timestamped");
+    live.setVersion(1);
+    live.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    var father = new Trait();
+    father.setName("Base");
+    live.setFather(father);
+    given(traitService.read("Timestamped")).willReturn(live);
+
+    mockMvc
+        .perform(get("/ui/traits/Timestamped/versions/new"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("trait-version-form"))
+        .andExpect(model().attribute("currentVersion", 1))
+        .andExpect(model().attributeExists("traitVersionForm", "traits"));
+
+    verify(traitService).read("Timestamped");
+  }
+
+  @Test
+  void createTraitVersionSubmitsToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/traits/Timestamped/versions")
+                .param("name", "Timestamped")
+                .param("father", "")
+                .param("schema", "{\"type\":\"object\",\"properties\":{}}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/traits/Timestamped/versions"));
+
+    verify(traitService)
+        .createVersion(
+            eq("Timestamped"),
+            eq(Optional.of("{\"type\":\"object\",\"properties\":{}}")),
+            eq(Optional.empty()));
+  }
+
+  @Test
+  void createTraitVersionReRendersFormOnServiceError() throws Exception {
+    doThrow(new ServiceError("bad schema"))
+        .when(traitService)
+        .createVersion(eq("Timestamped"), any(), any());
+    var live = new Trait();
+    live.setVersion(1);
+    given(traitService.read("Timestamped")).willReturn(live);
+
+    mockMvc
+        .perform(
+            post("/ui/traits/Timestamped/versions")
+                .param("name", "Timestamped")
+                .param("schema", "{}"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("trait-version-form"))
+        .andExpect(model().attribute("error", "bad schema"));
+  }
+
+  @Test
+  void traitVersionsListRendersSnapshotsAndLive() throws Exception {
+    var snap = new TraitVersion();
+    snap.setVersion(1);
+    snap.setName("Timestamped");
+    snap.setFatherName("Base");
+    snap.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    snap.setCreatedAt(Instant.parse("2026-01-01T00:00:00Z"));
+    var live = new Trait();
+    live.setVersion(2);
+    live.setName("Timestamped");
+    live.setBaseSchema(
+        mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
+    given(traitService.listVersions("Timestamped")).willReturn(List.of(snap, live));
+
+    mockMvc
+        .perform(get("/ui/traits/Timestamped/versions"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("versions"))
+        .andExpect(model().attributeExists("versions", "kind", "name", "resource", "showTraits"))
+        .andExpect(model().attribute("kind", "Trait"))
+        .andExpect(model().attribute("showTraits", false));
+  }
+
+  // --- version deletion ----------------------------------------------------------
+
+  @Test
+  void deleteEntityTypeVersionDelegatesToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(post("/ui/entity-types/Person/versions/1/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/entity-types/Person/versions"));
+
+    verify(entityTypeService).deleteVersion("Person", 1);
+  }
+
+  @Test
+  void deleteEntityTypeVersionRedirectsWithFlashOnServiceError() throws Exception {
+    doThrow(new ServiceError("Cannot delete the current version of EntityType Person"))
+        .when(entityTypeService)
+        .deleteVersion("Person", 2);
+
+    mockMvc
+        .perform(post("/ui/entity-types/Person/versions/2/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/entity-types/Person/versions"))
+        .andExpect(
+            flash().attribute("error", "Cannot delete the current version of EntityType Person"));
+  }
+
+  @Test
+  void deleteAllEntityTypeVersionsDelegatesToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(post("/ui/entity-types/Person/versions/delete-all"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/entity-types/Person/versions"));
+
+    verify(entityTypeService).deleteAllVersions("Person");
+  }
+
+  @Test
+  void deleteAllEntityTypeVersionsRedirectsWithFlashOnServiceError() throws Exception {
+    doThrow(new ServiceError("EntityType Ghost not found"))
+        .when(entityTypeService)
+        .deleteAllVersions("Ghost");
+
+    mockMvc
+        .perform(post("/ui/entity-types/Ghost/versions/delete-all"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/entity-types/Ghost/versions"))
+        .andExpect(flash().attribute("error", "EntityType Ghost not found"));
+  }
+
+  @Test
+  void deleteTraitVersionDelegatesToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(post("/ui/traits/Timestamped/versions/1/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/traits/Timestamped/versions"));
+
+    verify(traitService).deleteVersion("Timestamped", 1);
+  }
+
+  @Test
+  void deleteTraitVersionRedirectsWithFlashOnServiceError() throws Exception {
+    doThrow(new ServiceError("Cannot delete the current version of Trait Timestamped"))
+        .when(traitService)
+        .deleteVersion("Timestamped", 2);
+
+    mockMvc
+        .perform(post("/ui/traits/Timestamped/versions/2/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/traits/Timestamped/versions"))
+        .andExpect(
+            flash().attribute("error", "Cannot delete the current version of Trait Timestamped"));
+  }
+
+  @Test
+  void deleteAllTraitVersionsDelegatesToServiceAndRedirectsToVersionsList() throws Exception {
+    mockMvc
+        .perform(post("/ui/traits/Timestamped/versions/delete-all"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/traits/Timestamped/versions"));
+
+    verify(traitService).deleteAllVersions("Timestamped");
+  }
+
+  @Test
+  void deleteAllTraitVersionsRedirectsWithFlashOnServiceError() throws Exception {
+    doThrow(new ServiceError("Trait Ghost not found"))
+        .when(traitService)
+        .deleteAllVersions("Ghost");
+
+    mockMvc
+        .perform(post("/ui/traits/Ghost/versions/delete-all"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/traits/Ghost/versions"))
+        .andExpect(flash().attribute("error", "Trait Ghost not found"));
   }
 }

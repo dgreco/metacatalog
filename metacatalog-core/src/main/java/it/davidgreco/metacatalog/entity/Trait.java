@@ -53,6 +53,21 @@ public class Trait implements Type<Trait> {
   @OneToOne(fetch = FetchType.EAGER)
   private Trait father;
 
+  /**
+   * The monotonically increasing version number of this live trait. Starts at 1 on creation and is
+   * bumped every time a new version is created via {@code createVersion}.
+   */
+  @Column(name = "version", nullable = false)
+  @ToString.Include
+  private int version = 1;
+
+  /**
+   * Groups this live row with every snapshot of the same logical trait in {@link TraitVersion}.
+   * Stable across versions.
+   */
+  @Column(name = "version_group_id", nullable = false)
+  private String versionGroupId;
+
   /** The entity types that have this trait. */
   @ManyToMany(mappedBy = "traits", fetch = FetchType.LAZY)
   private List<EntityType> types = new ArrayList<>();

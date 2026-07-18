@@ -53,6 +53,21 @@ public class EntityType implements Type<EntityType> {
   @OneToOne(fetch = FetchType.EAGER)
   private EntityType father;
 
+  /**
+   * The monotonically increasing version number of this live type. Starts at 1 on creation and is
+   * bumped every time a new version is created via {@code createVersion}.
+   */
+  @Column(name = "version", nullable = false)
+  @ToString.Include
+  private int version = 1;
+
+  /**
+   * Groups this live row with every snapshot of the same logical type in {@link EntityTypeVersion}.
+   * Stable across versions.
+   */
+  @Column(name = "version_group_id", nullable = false)
+  private String versionGroupId;
+
   /** The traits associated with this entity type. */
   @ManyToMany(fetch = FetchType.EAGER)
   @JoinTable(

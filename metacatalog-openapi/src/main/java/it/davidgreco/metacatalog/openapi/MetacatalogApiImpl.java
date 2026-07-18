@@ -145,6 +145,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       dtoTrait.setInheritsFrom(
           Optional.ofNullable(trait.getFather())
               .map(it.davidgreco.metacatalog.entity.Trait::getName));
+      dtoTrait.setVersion(Optional.of(trait.getVersion()));
+      dtoTrait.setVersionGroupId(Optional.of(trait.getVersionGroupId()));
       return status(200).contentType(MediaType.APPLICATION_JSON).body(dtoTrait);
     } catch (ServiceError e) {
       return status(400)
@@ -203,6 +205,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                     trait.setInheritsFrom(
                         Optional.ofNullable(t.getFather())
                             .map(it.davidgreco.metacatalog.entity.Trait::getName));
+                    trait.setVersion(Optional.of(t.getVersion()));
+                    trait.setVersionGroupId(Optional.of(t.getVersionGroupId()));
                     return trait;
                   })
               .toList();
@@ -232,6 +236,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                     dtoType.setInheritsFrom(
                         Optional.ofNullable(et.getFather())
                             .map(it.davidgreco.metacatalog.entity.EntityType::getName));
+                    dtoType.setVersion(Optional.of(et.getVersion()));
+                    dtoType.setVersionGroupId(Optional.of(et.getVersionGroupId()));
                     return dtoType;
                   })
               .toList();
@@ -531,6 +537,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       dtoType.setInheritsFrom(
           Optional.ofNullable(type.getFather())
               .map(it.davidgreco.metacatalog.entity.EntityType::getName));
+      dtoType.setVersion(Optional.of(type.getVersion()));
+      dtoType.setVersionGroupId(Optional.of(type.getVersionGroupId()));
       return status(200).contentType(MediaType.APPLICATION_JSON).body(dtoType);
     } catch (ServiceError e) {
       return status(400)
@@ -763,5 +771,226 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
     }
+  }
+
+  @Override
+  public ResponseEntity createEntityTypeVersion(String name, EntityType entityType) {
+    try {
+      var created =
+          entityTypeService.createVersion(
+              name, entityType.getTraits(), entityType.getInheritsFrom(), entityType.getSchema());
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(entityTypeToDto(created));
+    } catch (SchemaValidationError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity createTraitVersion(String name, Trait trait) {
+    try {
+      var created = traitService.createVersion(name, trait.getSchema(), trait.getInheritsFrom());
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(traitToDto(created));
+    } catch (SchemaValidationError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity getEntityTypeVersion(String name, Integer version) {
+    try {
+      var result = entityTypeService.readVersion(name, version);
+      EntityType dto =
+          result instanceof it.davidgreco.metacatalog.entity.EntityType live
+              ? entityTypeToDto(live)
+              : entityTypeVersionToDto((it.davidgreco.metacatalog.entity.EntityTypeVersion) result);
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(dto);
+    } catch (ServiceError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity getTraitVersion(String name, Integer version) {
+    try {
+      var result = traitService.readVersion(name, version);
+      Trait dto =
+          result instanceof it.davidgreco.metacatalog.entity.Trait live
+              ? traitToDto(live)
+              : traitVersionToDto((it.davidgreco.metacatalog.entity.TraitVersion) result);
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(dto);
+    } catch (ServiceError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity listEntityTypeVersions(String name) {
+    try {
+      var dtos =
+          entityTypeService.listVersions(name).stream()
+              .map(
+                  obj ->
+                      obj instanceof it.davidgreco.metacatalog.entity.EntityType live
+                          ? entityTypeToDto(live)
+                          : entityTypeVersionToDto(
+                              (it.davidgreco.metacatalog.entity.EntityTypeVersion) obj))
+              .toList();
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
+    } catch (ServiceError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity listTraitVersions(String name) {
+    try {
+      var dtos =
+          traitService.listVersions(name).stream()
+              .map(
+                  obj ->
+                      obj instanceof it.davidgreco.metacatalog.entity.Trait live
+                          ? traitToDto(live)
+                          : traitVersionToDto((it.davidgreco.metacatalog.entity.TraitVersion) obj))
+              .toList();
+      return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
+    } catch (ServiceError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity deleteEntityTypeVersion(String name, Integer version) {
+    try {
+      entityTypeService.deleteVersion(name, version);
+      return status(204).build();
+    } catch (SchemaValidationError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  @Override
+  public ResponseEntity deleteTraitVersion(String name, Integer version) {
+    try {
+      traitService.deleteVersion(name, version);
+      return status(204).build();
+    } catch (SchemaValidationError e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(e.getErrors()));
+    } catch (ServiceError | DataIntegrityViolationException e) {
+      return status(400)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new ValidationError(List.of(e.getMessage())));
+    } catch (Exception e) {
+      return status(500)
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(new SystemError(e.getMessage()));
+    }
+  }
+
+  private EntityType entityTypeToDto(it.davidgreco.metacatalog.entity.EntityType et) {
+    EntityType dto = new EntityType();
+    dto.setId(et.getId());
+    dto.setName(et.getName());
+    dto.setSchema(et.getSchema().toPrettyString());
+    dto.setTraits(
+        et.getTraits().stream().map(it.davidgreco.metacatalog.entity.Trait::getName).toList());
+    dto.setInheritsFrom(
+        Optional.ofNullable(et.getFather())
+            .map(it.davidgreco.metacatalog.entity.EntityType::getName));
+    dto.setVersion(Optional.of(et.getVersion()));
+    dto.setVersionGroupId(Optional.of(et.getVersionGroupId()));
+    return dto;
+  }
+
+  private EntityType entityTypeVersionToDto(it.davidgreco.metacatalog.entity.EntityTypeVersion v) {
+    EntityType dto = new EntityType();
+    dto.setName(v.getName());
+    dto.setSchema(v.getSchema().toPrettyString());
+    var traitNames =
+        java.util.stream.StreamSupport.stream(v.getTraits().spliterator(), false)
+            .map(com.fasterxml.jackson.databind.JsonNode::asText)
+            .toList();
+    dto.setTraits(traitNames);
+    dto.setInheritsFrom(Optional.ofNullable(v.getFatherName()));
+    dto.setVersion(Optional.of(v.getVersion()));
+    dto.setVersionGroupId(Optional.of(v.getVersionGroupId()));
+    return dto;
+  }
+
+  private Trait traitToDto(it.davidgreco.metacatalog.entity.Trait t) {
+    Trait dto = new Trait();
+    dto.setId(t.getId());
+    dto.setName(t.getName());
+    dto.setSchema(Optional.of(t.getSchema().toPrettyString()));
+    dto.setInheritsFrom(
+        Optional.ofNullable(t.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
+    dto.setVersion(Optional.of(t.getVersion()));
+    dto.setVersionGroupId(Optional.of(t.getVersionGroupId()));
+    return dto;
+  }
+
+  private Trait traitVersionToDto(it.davidgreco.metacatalog.entity.TraitVersion v) {
+    Trait dto = new Trait();
+    dto.setName(v.getName());
+    dto.setSchema(Optional.of(v.getSchema().toPrettyString()));
+    dto.setInheritsFrom(Optional.ofNullable(v.getFatherName()));
+    dto.setVersion(Optional.of(v.getVersion()));
+    dto.setVersionGroupId(Optional.of(v.getVersionGroupId()));
+    return dto;
   }
 }

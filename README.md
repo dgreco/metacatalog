@@ -9,7 +9,9 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Entity Management**: CRUD operations for business entities with JSON-based attributes
 - **Entity Types**: Define and manage entity type hierarchies
 - **Traits**: Reusable characteristics applicable to entities
+- **Type Versioning**: Immutable version history for entity types and traits — every update creates a new version, old versions stay readable and deletable, and the version chain is shown on the graph
 - **Relationship Management**: Complex relationship mapping between entities
+- **Mappings**: Rule-based transformation of source entities into target entity types, evaluated automatically on source create/update (see [Mappings](#mappings))
 - **JSON Schema Validation**: Validate entity attributes against schemas
 - **Graph Operations**: Advanced relationship traversal using JGraphT
 - **Ontology Integration**: Semantic web support via Ontop
@@ -257,6 +259,226 @@ When the application is running, access the documentation:
 - **Hypersistence Utils**: Advanced Hibernate features
 - **Flyway**: Database migration management
 - **Testcontainers**: Integration testing with PostgreSQL
+
+## Type Versioning
+
+Entity types and traits are **versioned**: every change to the schema, traits, or
+inheritance of a type creates a new version instead of mutating the existing definition in
+place. The previous state is preserved as an immutable snapshot, so old versions can always
+be read back and the full history of a type is reconstructable.
+
+### Design
+
+The versioning model is **live row + append-only history table**:
+
+- The `entity_type` and `trait` tables keep **exactly one row per name** — the *current*
+  (live) version. All existing foreign keys (`entity.entity_type_id`,
+  `type_traits.trait_id`, `mapping_type_relationship.source_id`/`target_id`, `father_id`)
+  continue to point at the live row, so entities are always validated against the latest
+  schema and the rest of the system is unaffected.
+- Each live row carries a `version` counter (starts at 1) and a `version_group_id` that
+  groups every snapshot of the same logical type together.
+- When a new version is created, the current live state is copied into a history table
+  (`entity_type_version` / `trait_version`) and the live row is mutated in place with the
+  new schema / traits / father; its `version` is bumped by one.
+- History snapshots are **self-contained**: `base_schema`, `derived_schema`, `father_name`
+  and (for entity types) the `traits` list are all frozen at the moment the snapshot was
+  taken, so reading an old version always returns the schema that was effective at that
+  point — regardless of later changes to the live type or its ancestors.
+- The version chain is carried by a `previous_version_id` self-reference on each snapshot:
+  each snapshot points to the snapshot that preceded it. The UI graph view synthesises
+  `successor-of` edges from this chain (see below). No new `RelationType` is introduced,
+  so the existing relationship model is untouched.
+- Version creation is serialised per type via a `SELECT ... FOR UPDATE` pessimistic lock
+  on the live row, so concurrent `createVersion` calls for the same type produce a strictly
+  increasing version number without races.
+
+### Creating a new version
+
+A new version is created by `POST`-ing the new spec to the `.../versions` sub-resource. The
+version number is auto-generated as a progressive integer; you cannot set it yourself.
+
+```bash
+# Create a trait at version 1
+curl -X POST http://localhost:8080/metacatalog/v1/trait \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "MyTrait", "schema": "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}" }'
+
+# Create version 2: snapshot v1, mutate the live row, bump version to 2
+curl -X POST http://localhost:8080/metacatalog/v1/trait/MyTrait/versions \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "MyTrait", "schema": "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"},\"b\":{\"type\":\"number\"}}}" }'
+
+# Same for entity types
+curl -X POST http://localhost:8080/metacatalog/v1/entity-type/MyType/versions \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "MyType", "schema": "...", "traits": ["MyTrait"], "inheritsFrom": "Base" }'
+```
+
+The response is the new current (live) type, including its `version` and `versionGroupId`.
+
+### Reading versions
+
+- `GET /metacatalog/v1/trait/{name}` and `GET /metacatalog/v1/entity-type/{name}` return
+  the **current** (live) version, as before.
+- `GET /metacatalog/v1/trait/{name}/versions` and `GET /metacatalog/v1/entity-type/{name}/versions`
+  return **every** version, oldest snapshot first, with the live version as the last element.
+- `GET /metacatalog/v1/trait/{name}/versions/{version}` and
+  `GET /metacatalog/v1/entity-type/{name}/versions/{version}` return a specific version.
+  If `version` equals the current live version, the live type is returned; otherwise the
+  frozen snapshot is returned.
+
+Every type in the response carries `version` (the version number) and `versionGroupId` (the
+stable identifier shared by every version of the same logical type).
+
+### Deleting a version
+
+```bash
+# Delete a specific historical snapshot (relinks the version chain)
+curl -X DELETE http://localhost:8080/metacatalog/v1/trait/MyTrait/versions/1
+curl -X DELETE http://localhost:8080/metacatalog/v1/entity-type/MyType/versions/1
+```
+
+Deleting a version removes the history snapshot and relinks the predecessor and successor so
+the chain stays connected. **The current (live) version cannot be deleted through this
+endpoint** — the call is rejected with a `400`. To revert the live type, create a new
+version; to remove the type entirely, use the existing `DELETE /trait/{name}` /
+`DELETE /entity-type/{name}`, which also deletes every snapshot in the version group.
+
+### Graph view
+
+The interactive graph at `/ui/graph` renders one node per historical snapshot (labelled
+`Name (vN)`, kind `entityTypeVersion` / `traitVersion`) and a `successor-of` edge from each
+node to its predecessor in the version chain. The live type node is the head of the chain;
+the oldest snapshot is the tail. This makes the evolution of a type visible alongside its
+inheritance, trait membership, and mapping edges.
+
+### Constraints and behaviour
+
+- The `name` of a type remains unique across all versions; there is exactly one live row
+  per name at any time.
+- Creating a new version recomputes the `derived_schema` via the Scala-style linearization
+  (`TypeLinearization`), exactly like `create` does.
+- Deleting the live type (`DELETE /trait/{name}` / `DELETE /entity-type/{name}`) also
+  deletes every snapshot in its version group.
+- Two versions of the same type are never live simultaneously; entities always point at the
+  single current version.
+
+## Mappings
+
+A **mapping** is a rule that says how to transform entities of one entity type (the
+**source**) into entities of another entity type (the **target**). When a source entity is
+created or updated, the mapping is evaluated automatically and a target entity is created or
+updated accordingly. This lets you derive derived/projection entities from canonical source
+entities without duplicating data.
+
+Mappings live in the `mapping_type_relationship` table and are managed through
+`MappingService` / the `/metacatalog/v1/mapping` REST endpoints / the UI's "New Mapping"
+form. Each `MappingEntityTypeRelationship` has:
+
+- **source** and **target** entity types, related by `RelationType.MAPPED_TO` (the inverse
+  `IS_MAPPED_BY` is synthesised on the graph). Mapping cycles are rejected: a type cannot
+  be (transitively) mapped to itself.
+- **`mappingValues`** — a JSON document whose leaf values are [SpEL expressions][spel]
+  evaluated against the source entity and any referenced entities. The result is validated
+  against the target type's schema (with all field types coerced to `string`, via
+  `JsonUtils.convertToMappingSchema`) before the target entity is persisted.
+- **`entityPathReferences`** — a list of `{ alias, referencePath }` records. Each
+  `referencePath` is a slash-separated path of `RELATION_TYPE{jsonPath}` segments that is
+  traversed from the source entity to find an additional context entity; its `values` are
+  exposed to the SpEL context under `#alias`. The simplest path is `HAS_PART{$}` (any
+  single source of a `HAS_PART` edge). `$` matches any entity; a JSONPath like
+  `$.name=='foo'` disambiguates between candidates. Path resolution is retried with a
+  configurable backoff (`application.config.entityPathResolutionMaxAttempts`), because the
+  referenced entity may not yet be visible in the same transaction.
+
+[spel]: https://docs.spring.io/spring-framework/reference/core/expressions.html
+
+### SpEL context
+
+| Variable   | Bound value                                                |
+|------------|------------------------------------------------------------|
+| `#source`  | the source entity's `values` (as a `WrappedJsonNode`)     |
+| `#<alias>` | the `values` of each entity reached via `entityPathReferences` |
+
+So a `mappingValues` document such as
+
+```json
+{
+  "fullName": "#source.firstName + ' ' + #source.lastName",
+  "partName": "#part.name",
+  "count": "#source.items.size()"
+}
+```
+
+pulls `firstName`/`lastName`/`items` from the source entity and `name` from the entity
+reachable via a `entityPathReferences` row whose alias is `part`.
+
+### Automatic mapping (entity lifecycle events)
+
+Mapping is **not** triggered inline by the entity create/update call. Instead, creating or
+updating an entity whose type is a mapping **source** records a lifecycle event in
+`entity_lifecycle_event`:
+
+- `EntityService.create` emits a `SOURCE_CREATED` event for source types, `CREATED` otherwise.
+- `EntityService.update` emits a `SOURCE_UPDATED` event for source types, `UPDATED` otherwise.
+
+`MappingUpdaterService` is a `@Scheduled` job (gated by
+`application.config.automaticEntitiesMapping`, interval
+`application.config.updateMappedEntitiesSchedulingInterval`) that drains `PENDING`
+`SOURCE_CREATED` / `SOURCE_UPDATED` events and:
+
+- for `SOURCE_CREATED`: evaluates the mapping, persists the target entity, creates the
+  bidirectional `MappingEntityRelationship` (`MAPPED_TO` + `IS_MAPPED_BY`), and recursively
+  creates mapped entities for the new target too — so mapping chains propagate.
+- for `SOURCE_UPDATED`: re-evaluates the mapping into the existing target entity (and recurses).
+
+Each event is marked `PROCESSED` once handled. The scheduler acquires a PostgreSQL advisory
+lock (`AdvisoryLockManager`) so only one application instance runs the updater at a time.
+
+Target entity types are **read-only** through the regular entity endpoints: `EntityService.create`
+and `EntityService.update` refuse to write entities whose type is a mapping target (the only
+exception is the `ProvisionableResource` trait, used by the aggregate provisioning procedure).
+Target entities are meant to be produced by the mapping system, not authored directly.
+
+### REST endpoints
+
+```bash
+# Create a mapping from SourceType to TargetType
+curl -X POST http://localhost:8080/metacatalog/v1/mapping \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "sourceEntityType": "SourceType",
+        "targetEntityType": "TargetType",
+        "mappingValues": "{\"fullName\":\"#source.firstName + ' ' + #source.lastName\"}",
+        "entityPathReferences": "[{\"alias\":\"part\",\"referencePath\":\"HAS_PART{$}\"}]"
+      }'
+
+# List all mappings
+curl http://localhost:8080/metacatalog/v1/mapping
+
+# Delete a mapping by id
+curl -X DELETE http://localhost:8080/metacatalog/v1/mapping/{id}
+```
+
+The `mappingValues` and `entityPathReferences` fields are sent as JSON strings (they are
+parsed server-side); see the `Mapping` schema in the OpenAPI spec. The UI's "New Mapping"
+form provides a structured editor for both fields.
+
+### Configuration
+
+```yaml
+application:
+  config:
+    automaticEntitiesMapping: true                              # enable the scheduled mapping updater
+    updateMappedEntitiesSchedulingInterval: 1s                  # how often to drain pending events
+    entityLifeCycleEventCleanupSchedulingInterval: 1s          # lifecycle-event cleanup cadence
+    entityPathResolutionMaxAttempts: 3                          # retries for entity-path resolution
+```
+
+When `automaticEntitiesMapping` is `false`, source create/update still records lifecycle
+events, but no mapped entities are produced until the flag is flipped on (or until
+`MappingService.createMappedEntities` / `updateMappedEntities` are invoked directly).
 
 ## Configuration
 
