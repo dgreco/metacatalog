@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -17,13 +18,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitVersion;
+import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
+import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitVersionRepository;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
@@ -56,6 +61,11 @@ class UiControllerTest {
   private final EntityTypeVersionRepository entityTypeVersionRepository =
       mock(EntityTypeVersionRepository.class);
   private final TraitVersionRepository traitVersionRepository = mock(TraitVersionRepository.class);
+  private final EntityRepository entityRepository = mock(EntityRepository.class);
+  private final EntityRelationshipRepository entityRelationshipRepository =
+      mock(EntityRelationshipRepository.class);
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository =
+      mock(MappingEntityRelationshipRepository.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private MockMvc mockMvc;
 
@@ -66,6 +76,9 @@ class UiControllerTest {
     given(mappingService.list()).willReturn(List.of());
     given(entityTypeVersionRepository.findAll()).willReturn(List.of());
     given(traitVersionRepository.findAll()).willReturn(List.of());
+    given(entityRepository.findAll()).willReturn(List.of());
+    given(entityRelationshipRepository.findAll()).willReturn(List.of());
+    given(mappingEntityRelationshipRepository.findAll()).willReturn(List.of());
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new UiController(
@@ -74,7 +87,10 @@ class UiControllerTest {
                     bulkLoaderService,
                     mappingService,
                     entityTypeVersionRepository,
-                    traitVersionRepository))
+                    traitVersionRepository,
+                    entityRepository,
+                    entityRelationshipRepository,
+                    mappingEntityRelationshipRepository))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -152,7 +168,54 @@ class UiControllerTest {
         .perform(get("/ui/graph"))
         .andExpect(status().isOk())
         .andExpect(view().name("graph"))
-        .andExpect(model().attributeExists("graphJson"));
+        .andExpect(model().attributeExists("graphJson", "showInverses", "showEntities"));
+  }
+
+  @Test
+  void graphDataIncludesEntitiesWhenShowEntitiesTrue() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    given(entityTypeService.list()).willReturn(List.of(type));
+
+    var entity = new Entity();
+    entity.setId("ent-1");
+    entity.setEntityType(type);
+    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
+    given(entityRepository.findAll()).willReturn(List.of(entity));
+
+    mockMvc
+        .perform(get("/ui/graph/data").param("showEntities", "true"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("entity:ent-1"),
+                        org.hamcrest.Matchers.containsString("\"instance-of\""),
+                        org.hamcrest.Matchers.containsString("\"Alice\""),
+                        org.hamcrest.Matchers.containsString("type:Person"))));
+  }
+
+  @Test
+  void graphDataOmitsEntitiesByDefault() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    given(entityTypeService.list()).willReturn(List.of(type));
+
+    var entity = new Entity();
+    entity.setId("ent-1");
+    entity.setEntityType(type);
+    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
+    given(entityRepository.findAll()).willReturn(List.of(entity));
+
+    mockMvc
+        .perform(get("/ui/graph/data"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("entity:ent-1"))));
   }
 
   @Test
