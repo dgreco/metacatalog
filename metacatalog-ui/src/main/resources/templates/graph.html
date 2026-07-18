@@ -18,8 +18,10 @@
         <div class="graph-legend">
             <span class="lg lg-node lg-type">Entity type</span>
             <span class="lg lg-node lg-trait">Trait</span>
+            <span class="lg lg-node lg-entity">Entity</span>
             <span class="lg lg-edge lg-extends">extends</span>
             <span class="lg lg-edge lg-has-trait">trait</span>
+            <span class="lg lg-edge lg-instance-of">instance-of</span>
             <span class="lg lg-edge lg-rel">relationship</span>
             <span class="lg lg-edge lg-mapping">MAPPED_TO</span>
         </div>
@@ -27,6 +29,9 @@
             <button class="btn" id="graph-relayout" type="button" title="Recompute the layout to minimise overlaps">↻ Re-layout</button>
             <label class="graph-toggle" title="Show the inverse of each relationship (IS_REQUIRED_BY, IS_PART_OF, IS_MAPPED_BY)">
                 <input type="checkbox" id="graph-show-inverses" th:checked="${showInverses}"/> Show inverses
+            </label>
+            <label class="graph-toggle" title="Show entity instances and their relationships alongside the type layer">
+                <input type="checkbox" id="graph-show-entities" th:checked="${showEntities}"/> Show entities
             </label>
             <span class="graph-hint">Drag nodes to rearrange · drag the background to pan · scroll to zoom</span>
         </div>

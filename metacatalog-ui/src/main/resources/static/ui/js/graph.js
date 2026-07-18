@@ -14,6 +14,7 @@
   var EDGE_STYLE = {
     extends: { color: "#94a3b8", dash: null, label: false },
     "has-trait": { color: "#94a3b8", dash: "4 3", label: false },
+    "instance-of": { color: "#94a3b8", dash: "2 4", label: false },
     mapping: { color: "#2563eb", dash: null, label: true },
     // trait relationships (DEPENDS_ON / HAS_PART / MAPPED_TO between traits)
     _rel: { color: "#7c3aed", dash: null, label: true },
@@ -103,6 +104,20 @@
   function showNodePopup(n, ev) {
     var p = ensurePopup();
     p.textContent = "";
+    if (n.kind === "entity") {
+      p.appendChild(hel("div", "sv-popup-title", "Entity"));
+      p.appendChild(hel("div", "graph-popup-name", n.label));
+      if (n.father) {
+        var f = hel("div", "graph-popup-row");
+        f.appendChild(hel("span", "graph-popup-k", "instance of"));
+        f.appendChild(hel("span", null, n.father));
+        p.appendChild(f);
+      }
+      tree(section(p, "Values"), function (v, c, d, x) { v.mapping(c, d, x); }, n.schema, true);
+      p.style.display = "block";
+      positionAt(ev.clientX, ev.clientY);
+      return;
+    }
     p.appendChild(hel("div", "sv-popup-title", n.kind === "entityType" ? "Entity type" : "Trait"));
     p.appendChild(hel("div", "graph-popup-name", n.label));
     if (n.father) {
@@ -426,6 +441,7 @@
     var dataEl = document.getElementById("graph-data");
     var relayoutBtn = document.getElementById("graph-relayout");
     var inversesToggle = document.getElementById("graph-show-inverses");
+    var entitiesToggle = document.getElementById("graph-show-entities");
 
     var currentDestroy = null;
 
@@ -441,11 +457,21 @@
       currentDestroy = run(data, canvas);
     }
 
-    function loadAndRender(showInverses) {
-      fetch("/ui/graph/data?showInverses=" + showInverses)
+    function loadAndRender(showInverses, showEntities) {
+      fetch("/ui/graph/data?showInverses=" + showInverses + "&showEntities=" + showEntities)
         .then(function (r) { return r.json(); })
         .then(render)
         .catch(function () { /* keep the current graph on error */ });
+    }
+
+    function refreshFromToggles() {
+      var showInverses = inversesToggle ? inversesToggle.checked : true;
+      var showEntities = entitiesToggle ? entitiesToggle.checked : false;
+      var url = new URL(window.location.href);
+      url.searchParams.set("showInverses", String(showInverses));
+      url.searchParams.set("showEntities", String(showEntities));
+      window.history.replaceState({}, "", url);
+      loadAndRender(showInverses, showEntities);
     }
 
     if (relayoutBtn) {
@@ -457,14 +483,10 @@
     }
 
     if (inversesToggle) {
-      inversesToggle.addEventListener("change", function () {
-        var on = inversesToggle.checked;
-        // Make the state bookmarkable / refresh-stable.
-        var url = new URL(window.location.href);
-        url.searchParams.set("showInverses", String(on));
-        window.history.replaceState({}, "", url);
-        loadAndRender(on);
-      });
+      inversesToggle.addEventListener("change", refreshFromToggles);
+    }
+    if (entitiesToggle) {
+      entitiesToggle.addEventListener("change", refreshFromToggles);
     }
 
     if (!canvas || !dataEl) return;

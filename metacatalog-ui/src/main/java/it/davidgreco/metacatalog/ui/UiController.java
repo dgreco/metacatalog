@@ -3,13 +3,17 @@ package it.davidgreco.metacatalog.ui;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitVersion;
+import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
+import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitVersionRepository;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
@@ -73,6 +77,9 @@ public class UiController {
   private final MappingService mappingService;
   private final EntityTypeVersionRepository entityTypeVersionRepository;
   private final TraitVersionRepository traitVersionRepository;
+  private final EntityRepository entityRepository;
+  private final EntityRelationshipRepository entityRelationshipRepository;
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
   public UiController(
       TraitService traitService,
@@ -80,13 +87,19 @@ public class UiController {
       BulkLoaderService bulkLoaderService,
       MappingService mappingService,
       EntityTypeVersionRepository entityTypeVersionRepository,
-      TraitVersionRepository traitVersionRepository) {
+      TraitVersionRepository traitVersionRepository,
+      EntityRepository entityRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository) {
     this.traitService = traitService;
     this.entityTypeService = entityTypeService;
     this.bulkLoaderService = bulkLoaderService;
     this.mappingService = mappingService;
     this.entityTypeVersionRepository = entityTypeVersionRepository;
     this.traitVersionRepository = traitVersionRepository;
+    this.entityRepository = entityRepository;
+    this.entityRelationshipRepository = entityRelationshipRepository;
+    this.mappingEntityRelationshipRepository = mappingEntityRelationshipRepository;
   }
 
   /** Dashboard listing the existing traits, entity types, trait relationships, and mappings. */
@@ -101,26 +114,32 @@ public class UiController {
 
   /** Renders the whole catalog as an interactive graph in a separate page. */
   @GetMapping("/graph")
-  public String graph(@RequestParam(defaultValue = "true") boolean showInverses, Model model) {
-    model.addAttribute("graphJson", graphJson(showInverses));
+  public String graph(
+      @RequestParam(defaultValue = "true") boolean showInverses,
+      @RequestParam(defaultValue = "false") boolean showEntities,
+      Model model) {
+    model.addAttribute("graphJson", graphJson(showInverses, showEntities));
     model.addAttribute("showInverses", showInverses);
+    model.addAttribute("showEntities", showEntities);
     return "graph";
   }
 
   /**
    * Returns the catalog graph as JSON, so the page can re-fetch it when the user toggles the "show
-   * inverses" option without a full page reload.
+   * inverses" or "show entities" option without a full page reload.
    */
   @GetMapping("/graph/data")
   @ResponseBody
-  public GraphModel graphData(@RequestParam(defaultValue = "true") boolean showInverses) {
-    return buildGraphModel(showInverses);
+  public GraphModel graphData(
+      @RequestParam(defaultValue = "true") boolean showInverses,
+      @RequestParam(defaultValue = "false") boolean showEntities) {
+    return buildGraphModel(showInverses, showEntities);
   }
 
   /** Serializes the catalog graph to JSON for embedding in the page via {@code th:utext}. */
-  private String graphJson(boolean showInverses) {
+  private String graphJson(boolean showInverses, boolean showEntities) {
     try {
-      return jsonFactory.writeValueAsString(buildGraphModel(showInverses));
+      return jsonFactory.writeValueAsString(buildGraphModel(showInverses, showEntities));
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       return "{\"nodes\":[],\"edges\":[]}";
     }
@@ -128,7 +147,9 @@ public class UiController {
 
   /**
    * Assembles the catalog graph. Nodes are traits and entity types; edges capture inheritance,
-   * trait membership, trait relationships, and entity-type mappings.
+   * trait membership, trait relationships, and entity-type mappings. When {@code showEntities} is
+   * set, entity instances are added as nodes with {@code instance-of} edges to their type, plus
+   * entity-to-entity relationships and instance-level mappings.
    *
    * <p>When {@code showInverses} is set, a second edge is emitted for each trait relationship and
    * mapping, swapping source/target and labelling it with the inverse relation type ({@link
@@ -136,9 +157,11 @@ public class UiController {
    * traverses the primary direction ({@link #traitLinks()}); the inverse edge is synthesised here
    * so the graph stays a single source of truth. Mapping type relationships are stored in the
    * {@code MAPPED_TO} direction only, so the {@code IS_MAPPED_BY} inverse is synthesised the same
-   * way.
+   * way. Entity relationships and instance mappings are stored bidirectionally, so when inverses
+   * are shown the stored inverse rows are emitted directly (no synthesis needed); when hidden, only
+   * the primary direction rows are kept.
    */
-  private GraphModel buildGraphModel(boolean showInverses) {
+  private GraphModel buildGraphModel(boolean showInverses, boolean showEntities) {
     var nodes = new ArrayList<GraphModel.Node>();
     var edges = new ArrayList<GraphModel.Edge>();
 
@@ -253,7 +276,93 @@ public class UiController {
     addEntityTypeVersionNodesAndEdges(types, nodes, edges);
     addTraitVersionNodesAndEdges(traits, nodes, edges);
 
+    if (showEntities) {
+      addEntityInstanceNodesAndEdges(nodes, edges, showInverses);
+    }
+
     return new GraphModel(nodes, edges);
+  }
+
+  /**
+   * Adds entity instances to the graph. Each entity becomes a node linked to its type by an {@code
+   * instance-of} edge, entity-to-entity relationships become edges labelled with their relation
+   * type, and instance-level mappings become {@code mapping} edges carrying the type-level mapping
+   * detail in their popup.
+   *
+   * <p>Entity relationships and instance mappings are persisted bidirectionally (the inverse row is
+   * stored too), so when {@code showInverses} is set every stored row is emitted; when it is not,
+   * only the primary direction rows ({@link #PRIMARY_RELATION_TYPES}) are kept, mirroring how the
+   * type-level layer hides inverses.
+   */
+  private void addEntityInstanceNodesAndEdges(
+      List<GraphModel.Node> nodes, List<GraphModel.Edge> edges, boolean showInverses) {
+    for (var entity : entityRepository.findAll()) {
+      var type = entity.getEntityType();
+      if (type == null) continue;
+      var typeName = type.getName();
+      nodes.add(
+          new GraphModel.Node(
+              "entity:" + entity.getId(),
+              entityLabel(entity),
+              "entity",
+              typeName,
+              null,
+              entity.getValues() == null ? null : entity.getValues().toPrettyString()));
+      edges.add(
+          new GraphModel.Edge(
+              "entity:" + entity.getId(),
+              "type:" + typeName,
+              "instance-of",
+              "instance-of",
+              null,
+              null));
+    }
+
+    for (var rel : entityRelationshipRepository.findAll()) {
+      var rt = rel.getRelationType();
+      if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
+      edges.add(
+          new GraphModel.Edge(
+              "entity:" + rel.getSource().getId(),
+              "entity:" + rel.getTarget().getId(),
+              rt.name(),
+              rt.name(),
+              null,
+              null));
+    }
+
+    for (var rel : mappingEntityRelationshipRepository.findAll()) {
+      var rt = rel.getRelationType();
+      if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
+      var mtr = rel.getMappingEntityTypeRelationship();
+      var mv = mtr == null ? null : mtr.getMappingValues().toPrettyString();
+      var epr =
+          mtr == null
+              ? null
+              : jsonFactory.valueToTree(mtr.getEntityPathReferences()).toPrettyString();
+      edges.add(
+          new GraphModel.Edge(
+              "entity:" + rel.getSource().getId(),
+              "entity:" + rel.getTarget().getId(),
+              "mapping",
+              rt.name(),
+              mv,
+              epr));
+    }
+  }
+
+  /**
+   * Picks a readable label for an entity instance: the textual {@code name} field of its {@code
+   * values} JSON if present, otherwise a short hash of its id so every node is distinguishable.
+   */
+  private static String entityLabel(Entity entity) {
+    var values = entity.getValues();
+    if (values != null && values.isObject()) {
+      var name = values.get("name");
+      if (name != null && name.isTextual()) return name.asText();
+    }
+    var id = entity.getId();
+    return "#" + (id == null ? "?" : id.substring(0, Math.min(8, id.length())));
   }
 
   /**

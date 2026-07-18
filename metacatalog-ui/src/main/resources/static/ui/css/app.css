@@ -583,9 +583,11 @@ select[multiple].traits-select {
 .graph-legend .lg-node::before { width: 12px; height: 12px; border-radius: 50%; }
 .graph-legend .lg-type::before { background: var(--accent); }
 .graph-legend .lg-trait::before { background: #0d9488; }
+.graph-legend .lg-entity::before { background: #f59e0b; }
 .graph-legend .lg-edge::before { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
 .graph-legend .lg-extends::before { border-top-color: #94a3b8; }
 .graph-legend .lg-has-trait::before { border-top-color: #94a3b8; border-top-style: dashed; }
+.graph-legend .lg-instance-of::before { border-top-color: #94a3b8; border-top-style: dotted; }
 .graph-legend .lg-rel::before { border-top-color: #7c3aed; }
 .graph-legend .lg-mapping::before { border-top-color: var(--accent); }
 .graph-hint { font-size: 0.78rem; color: var(--muted); }
@@ -628,15 +630,8 @@ select[multiple].traits-select {
 .graph-node-dot { stroke: var(--panel); stroke-width: 1.5; }
 .graph-node-entityType .graph-node-dot { fill: var(--accent); }
 .graph-node-trait .graph-node-dot { fill: #0d9488; }
-.graph-node-label {
-    font-size: 11px;
-    fill: var(--text);
-    text-anchor: middle;
-    paint-order: stroke;
-    stroke: var(--panel);
-    stroke-width: 3px;
-    pointer-events: none;
-}
+.graph-node-entity .graph-node-dot { fill: #f59e0b; }
+.graph-node-label { font-size: 11px; fill: var(--text); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
 .graph-edge-hit { stroke: transparent; stroke-width: 14px; fill: none; pointer-events: stroke; cursor: help; }
 /* graph hover popups */
 .graph-popup { max-width: 380px; }
