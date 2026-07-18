@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -77,16 +78,44 @@ public class UiController {
 
   /** Renders the whole catalog as an interactive graph in a separate page. */
   @GetMapping("/graph")
-  public String graph(Model model) {
-    model.addAttribute("graphJson", graphJson());
+  public String graph(@RequestParam(defaultValue = "true") boolean showInverses, Model model) {
+    model.addAttribute("graphJson", graphJson(showInverses));
+    model.addAttribute("showInverses", showInverses);
     return "graph";
   }
 
   /**
-   * Assembles the catalog graph and serializes it to JSON. Nodes are traits and entity types; edges
-   * capture inheritance, trait membership, trait relationships, and entity-type mappings.
+   * Returns the catalog graph as JSON, so the page can re-fetch it when the user toggles the "show
+   * inverses" option without a full page reload.
    */
-  private String graphJson() {
+  @GetMapping("/graph/data")
+  @ResponseBody
+  public GraphModel graphData(@RequestParam(defaultValue = "true") boolean showInverses) {
+    return buildGraphModel(showInverses);
+  }
+
+  /** Serializes the catalog graph to JSON for embedding in the page via {@code th:utext}. */
+  private String graphJson(boolean showInverses) {
+    try {
+      return jsonFactory.writeValueAsString(buildGraphModel(showInverses));
+    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+      return "{\"nodes\":[],\"edges\":[]}";
+    }
+  }
+
+  /**
+   * Assembles the catalog graph. Nodes are traits and entity types; edges capture inheritance,
+   * trait membership, trait relationships, and entity-type mappings.
+   *
+   * <p>When {@code showInverses} is set, a second edge is emitted for each trait relationship and
+   * mapping, swapping source/target and labelling it with the inverse relation type ({@link
+   * RelationType#inverse()}). Trait relationships are persisted bidirectionally, but the graph only
+   * traverses the primary direction ({@link #traitLinks()}); the inverse edge is synthesised here
+   * so the graph stays a single source of truth. Mapping type relationships are stored in the
+   * {@code MAPPED_TO} direction only, so the {@code IS_MAPPED_BY} inverse is synthesised the same
+   * way.
+   */
+  private GraphModel buildGraphModel(boolean showInverses) {
     var nodes = new ArrayList<GraphModel.Node>();
     var edges = new ArrayList<GraphModel.Edge>();
 
@@ -163,23 +192,42 @@ public class UiController {
               link.relationType().name(),
               null,
               null));
+      if (showInverses && link.relationType().hasInverse()) {
+        var inv = link.relationType().inverse();
+        edges.add(
+            new GraphModel.Edge(
+                "trait:" + link.target(),
+                "trait:" + link.source(),
+                inv.name(),
+                inv.name(),
+                null,
+                null));
+      }
     }
     for (var mapping : mappingService.list()) {
+      var mv = mapping.getMappingValues().toPrettyString();
+      var epr = jsonFactory.valueToTree(mapping.getEntityPathReferences()).toPrettyString();
       edges.add(
           new GraphModel.Edge(
               "type:" + mapping.getSource().getName(),
               "type:" + mapping.getTarget().getName(),
               "mapping",
               "MAPPED_TO",
-              mapping.getMappingValues().toPrettyString(),
-              jsonFactory.valueToTree(mapping.getEntityPathReferences()).toPrettyString()));
+              mv,
+              epr));
+      if (showInverses) {
+        edges.add(
+            new GraphModel.Edge(
+                "type:" + mapping.getTarget().getName(),
+                "type:" + mapping.getSource().getName(),
+                "mapping",
+                "IS_MAPPED_BY",
+                mv,
+                epr));
+      }
     }
 
-    try {
-      return jsonFactory.writeValueAsString(new GraphModel(nodes, edges));
-    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-      return "{\"nodes\":[],\"edges\":[]}";
-    }
+    return new GraphModel(nodes, edges);
   }
 
   /** Renders the bulk YAML upload form. */

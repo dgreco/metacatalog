@@ -22,7 +22,13 @@
             <span class="lg lg-edge lg-rel">relationship</span>
             <span class="lg lg-edge lg-mapping">MAPPED_TO</span>
         </div>
-        <div class="graph-hint">Drag nodes to rearrange · drag the background to pan · scroll to zoom</div>
+        <div class="graph-actions">
+            <button class="btn" id="graph-relayout" type="button" title="Recompute the layout to minimise overlaps">↻ Re-layout</button>
+            <label class="graph-toggle" title="Show the inverse of each relationship (IS_REQUIRED_BY, IS_PART_OF, IS_MAPPED_BY)">
+                <input type="checkbox" id="graph-show-inverses" th:checked="${showInverses}"/> Show inverses
+            </label>
+            <span class="graph-hint">Drag nodes to rearrange · drag the background to pan · scroll to zoom</span>
+        </div>
     </div>
     <div id="graph-canvas" class="graph-canvas">
         <p class="empty graph-empty" id="graph-empty" hidden>Nothing has been created yet.</p>

@@ -136,6 +136,9 @@
   }
 
   function run(data, canvas) {
+    // Clear any previous render so re-renders (e.g. toggling inverses) start clean.
+    canvas.innerHTML = "";
+
     var nodes = data.nodes.map(function (n) {
       return {
         id: n.id, label: n.label, kind: n.kind,
@@ -160,25 +163,30 @@
     var cy = H / 2;
 
     // Seed positions on a circle (deterministic, avoids overlap at t=0).
-    var R = Math.min(W, H) / 2.5;
-    nodes.forEach(function (n, i) {
-      var a = (2 * Math.PI * i) / Math.max(1, nodes.length);
-      n.x = cx + R * Math.cos(a);
-      n.y = cy + R * Math.sin(a);
-    });
+    // `rotate` shifts the starting angle so each re-layout produces a fresh arrangement.
+    var seedR = Math.min(W, H) / 2.5;
+    function seedPositions(rotate) {
+      nodes.forEach(function (n, i) {
+        var a = rotate + (2 * Math.PI * i) / Math.max(1, nodes.length);
+        n.x = cx + seedR * Math.cos(a);
+        n.y = cy + seedR * Math.sin(a);
+      });
+    }
+    seedPositions(0);
 
     var area = W * H;
-    var k = 0.8 * Math.sqrt(area / Math.max(1, nodes.length)); // ideal edge length
+    // A larger ideal edge length spreads nodes out, which reduces label and edge overlap.
+    var k = 1.05 * Math.sqrt(area / Math.max(1, nodes.length));
     var temp = W / 10;
 
     // --- SVG scaffold ---
     var root = svg("svg", { class: "graph-svg", width: "100%", height: "100%" });
     var defs = svg("defs");
     var marker = svg("marker", {
-      id: "graph-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5",
-      markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse",
+      id: "graph-arrow", viewBox: "0 0 12 12", refX: "10", refY: "6",
+      markerWidth: "9", markerHeight: "9", orient: "auto-start-reverse",
     });
-    marker.appendChild(svg("path", { d: "M 0 0 L 10 5 L 0 10 z", fill: "context-stroke" }));
+    marker.appendChild(svg("path", { d: "M 0 0 L 12 6 L 0 12 L 3 6 z", fill: "context-stroke" }));
     defs.appendChild(marker);
     root.appendChild(defs);
 
@@ -192,23 +200,54 @@
     viewport.appendChild(nodeLayer);
     canvas.appendChild(root);
 
+    // --- Edge geometry: curved quadratic Bezier paths.
+    // Curving every edge to the left of its travel direction separates forward / inverse
+    // pairs (which travel in opposite directions and so curve to opposite sides), so both
+    // arrows stay visible instead of overlapping into one ambiguous bidirectional line.
+    var NODE_R = 9;
+    var ARROW_GAP = 4;
+    var CURVE = 26;
+    function edgeGeom(s, t) {
+      var dx = t.x - s.x, dy = t.y - s.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      var mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+      // Perpendicular unit vector, 90° CCW from the travel direction.
+      var px = -dy / len, py = dx / len;
+      var cx = mx + px * CURVE, cy = my + py * CURVE;
+      // Trim the endpoints to the node boundary + arrow gap, along the curve tangent.
+      var trim = NODE_R + ARROW_GAP;
+      var sax = s.x - cx, say = s.y - cy;
+      var sal = Math.sqrt(sax * sax + say * say) || 0.01;
+      var s2x = s.x + (sax / sal) * trim, s2y = s.y + (say / sal) * trim;
+      var tax = t.x - cx, tay = t.y - cy;
+      var tal = Math.sqrt(tax * tax + tay * tay) || 0.01;
+      var t2x = t.x - (tax / tal) * trim, t2y = t.y - (tay / tal) * trim;
+      // Label sits at the curve midpoint (t = 0.5 on the quadratic Bezier).
+      var lx = 0.25 * s.x + 0.5 * cx + 0.25 * t.x;
+      var ly = 0.25 * s.y + 0.5 * cy + 0.25 * t.y;
+      return {
+        path: "M " + s2x + " " + s2y + " Q " + cx + " " + cy + " " + t2x + " " + t2y,
+        lx: lx, ly: ly,
+      };
+    }
+
     // Edge elements
     edges.forEach(function (e) {
       var st = edgeStyle(e.kind);
-      e.line = svg("line", { class: "graph-edge", stroke: st.color, "marker-end": "url(#graph-arrow)" });
+      e.line = svg("path", { class: "graph-edge", stroke: st.color, fill: "none", "marker-end": "url(#graph-arrow)" });
       if (st.dash) e.line.setAttribute("stroke-dasharray", st.dash);
       var title = svg("title");
       title.textContent = e.s.label + " " + e.label + " " + e.t.label;
       e.line.appendChild(title);
       edgeLayer.appendChild(e.line);
       if (st.label) {
-        e.text = svg("text", { class: "graph-edge-label" });
+        e.text = svg("text", { class: "graph-edge-label", "text-anchor": "middle" });
         e.text.textContent = e.label;
         labelLayer.appendChild(e.text);
       }
-      // Mapping edges get a wide invisible hit line and a hover popup with the full mapping.
+      // Mapping edges get a wide invisible hit path and a hover popup with the full mapping.
       if (e.kind === "mapping") {
-        e.hit = svg("line", { class: "graph-edge-hit" });
+        e.hit = svg("path", { class: "graph-edge-hit", fill: "none" });
         edgeLayer.appendChild(e.hit);
         e.hit.addEventListener("mouseenter", function (ev) { cancelHide(); showMappingPopup(e, ev); });
         e.hit.addEventListener("mouseleave", scheduleHide);
@@ -265,24 +304,17 @@
         n.x += (n.dx / len) * Math.min(len, temp);
         n.y += (n.dy / len) * Math.min(len, temp);
       });
-      if (temp > 1.2) temp *= 0.985;
+      if (temp > 1.2) temp *= 0.99;
     }
 
     function draw() {
       edges.forEach(function (e) {
-        e.line.setAttribute("x1", e.s.x);
-        e.line.setAttribute("y1", e.s.y);
-        e.line.setAttribute("x2", e.t.x);
-        e.line.setAttribute("y2", e.t.y);
-        if (e.hit) {
-          e.hit.setAttribute("x1", e.s.x);
-          e.hit.setAttribute("y1", e.s.y);
-          e.hit.setAttribute("x2", e.t.x);
-          e.hit.setAttribute("y2", e.t.y);
-        }
+        var g = edgeGeom(e.s, e.t);
+        e.line.setAttribute("d", g.path);
+        if (e.hit) e.hit.setAttribute("d", g.path);
         if (e.text) {
-          e.text.setAttribute("x", (e.s.x + e.t.x) / 2);
-          e.text.setAttribute("y", (e.s.y + e.t.y) / 2);
+          e.text.setAttribute("x", g.lx);
+          e.text.setAttribute("y", g.ly);
         }
       });
       nodes.forEach(function (n) {
@@ -292,22 +324,30 @@
 
     var frames = 0;
     var raf;
+    var MAX_FRAMES = 3000;
     function loop() {
+      // Two simulation steps per frame for faster, smoother convergence.
+      step();
       step();
       draw();
       frames++;
-      if (temp > 1.2 && frames < 1200) {
+      if (temp > 1.2 && frames < MAX_FRAMES) {
         raf = requestAnimationFrame(loop);
       }
     }
     loop();
 
-    function reheat() {
-      if (temp < 6) temp = 6;
-      cancelAnimationFrame(raf);
+    // Re-run the layout from a fresh seed to minimise edge/node overlap.
+    // Unpins every node so the simulation is free to settle into a new arrangement.
+    function relayout() {
+      nodes.forEach(function (n) { n.fixed = false; });
+      seedPositions(Math.random() * 2 * Math.PI);
+      temp = W / 10;
       frames = 0;
+      cancelAnimationFrame(raf);
       loop();
     }
+    window.MetacatalogGraph = { relayout: relayout };
 
     // --- Pan / zoom ---
     var view = { x: 0, y: 0, s: 1 };
@@ -346,28 +386,87 @@
         drag = { pan: true, x0: ev.clientX - view.x, y0: ev.clientY - view.y };
       }
     });
-    window.addEventListener("mousemove", function (ev) {
+    function onMouseMove(ev) {
       if (!drag) return;
       if (drag.node) {
         var p = graphPoint(ev);
         drag.node.x = p.x;
         drag.node.y = p.y;
-        reheat();
+        // Just redraw; do not reheat. Reheating on every move made the whole
+        // graph jitter while dragging, which is what made nodes hard to place.
+        draw();
       } else if (drag.pan) {
         view.x = ev.clientX - drag.x0;
         view.y = ev.clientY - drag.y0;
         applyView();
       }
-    });
-    window.addEventListener("mouseup", function () {
-      if (drag && drag.node) drag.node.fixed = false;
+    }
+    function onMouseUp() {
+      // Leave the dragged node pinned so it stays exactly where it was dropped.
+      // "Re-layout" is the way to unpin everything and recompute positions.
       drag = null;
-    });
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+
+    // Tear down this render: cancel the animation and remove the window-level
+    // listeners so a subsequent re-render (toggling inverses) doesn't leak them.
+    // The root-level listeners die with the SVG, which canvas.innerHTML = "" removes.
+    return function destroy() {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      hidePopup();
+      canvas.innerHTML = "";
+    };
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     var canvas = document.getElementById("graph-canvas");
     var dataEl = document.getElementById("graph-data");
+    var relayoutBtn = document.getElementById("graph-relayout");
+    var inversesToggle = document.getElementById("graph-show-inverses");
+
+    var currentDestroy = null;
+
+    function render(data) {
+      var empty = document.getElementById("graph-empty");
+      if (!data.nodes || !data.nodes.length) {
+        if (currentDestroy) { currentDestroy(); currentDestroy = null; }
+        if (empty) empty.hidden = false;
+        return;
+      }
+      if (empty) empty.hidden = true;
+      if (currentDestroy) currentDestroy();
+      currentDestroy = run(data, canvas);
+    }
+
+    function loadAndRender(showInverses) {
+      fetch("/ui/graph/data?showInverses=" + showInverses)
+        .then(function (r) { return r.json(); })
+        .then(render)
+        .catch(function () { /* keep the current graph on error */ });
+    }
+
+    if (relayoutBtn) {
+      relayoutBtn.addEventListener("click", function () {
+        if (window.MetacatalogGraph && window.MetacatalogGraph.relayout) {
+          window.MetacatalogGraph.relayout();
+        }
+      });
+    }
+
+    if (inversesToggle) {
+      inversesToggle.addEventListener("change", function () {
+        var on = inversesToggle.checked;
+        // Make the state bookmarkable / refresh-stable.
+        var url = new URL(window.location.href);
+        url.searchParams.set("showInverses", String(on));
+        window.history.replaceState({}, "", url);
+        loadAndRender(on);
+      });
+    }
+
     if (!canvas || !dataEl) return;
     var data;
     try {
@@ -375,11 +474,6 @@
     } catch (e) {
       data = { nodes: [], edges: [] };
     }
-    if (!data.nodes || !data.nodes.length) {
-      var empty = document.getElementById("graph-empty");
-      if (empty) empty.hidden = false;
-      return;
-    }
-    run(data, canvas);
+    render(data);
   });
 })();

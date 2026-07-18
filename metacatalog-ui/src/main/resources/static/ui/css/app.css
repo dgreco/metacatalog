@@ -309,19 +309,23 @@ select[multiple].traits-select {
 .graph-legend .lg-rel::before { border-top-color: #7c3aed; }
 .graph-legend .lg-mapping::before { border-top-color: #2563eb; }
 .graph-hint { font-size: 0.78rem; color: var(--muted); }
+.graph-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+#graph-relayout { font-size: 0.82rem; }
+.graph-toggle { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--muted); cursor: pointer; }
+.graph-toggle input { margin: 0; cursor: pointer; }
 .graph-canvas { position: relative; height: calc(100vh - 190px); min-height: 420px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
 .graph-empty { position: absolute; top: 1rem; left: 1rem; }
 .graph-svg { display: block; cursor: grab; touch-action: none; }
 .graph-svg:active { cursor: grabbing; }
-.graph-edge { stroke-width: 1.5; }
-.graph-edge-label { font-size: 9px; fill: var(--muted); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.graph-edge { stroke-width: 2; fill: none; }
+.graph-edge-label { font-size: 9px; fill: var(--muted); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
 .graph-node { cursor: grab; }
 .graph-node:active { cursor: grabbing; }
 .graph-node-dot { stroke: #ffffff; stroke-width: 1.5; }
 .graph-node-entityType .graph-node-dot { fill: var(--accent); }
 .graph-node-trait .graph-node-dot { fill: #0d9488; }
 .graph-node-label { font-size: 11px; fill: var(--text); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
-.graph-edge-hit { stroke: transparent; stroke-width: 12px; pointer-events: stroke; cursor: help; }
+.graph-edge-hit { stroke: transparent; stroke-width: 14px; fill: none; pointer-events: stroke; cursor: help; }
 /* graph hover popups */
 .graph-popup { max-width: 380px; }
 .graph-popup-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.4rem; }
