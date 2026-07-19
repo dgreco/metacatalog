@@ -630,4 +630,99 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     entityTypeService.delete("ListSourceType");
     entityTypeService.delete("ListTargetType");
   }
+
+  /**
+   * When a target type is versioned after a mapped entity has been generated, regenerating the
+   * mapped values on source update must validate against the mapped entity's PINNED snapshot (the
+   * one it was created against), not the new live type schema. Otherwise the new live schema could
+   * reject values that the mapped expression still produces according to the old schema.
+   */
+  @Test
+  void testUpdateMappedEntitiesUsesPinnedSchemaAfterTargetVersioned() throws ServiceError {
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+
+    // Source type carries one integer "a"; target type v1 has one integer "b" (no "extra").
+    entityTypeService.create(
+        "PinSrcType",
+        List.of(),
+        Optional.empty(),
+        """
+        { "type": "object", "properties": { "a": { "type": "integer" } }, "required": ["a"] }""");
+
+    var targetTypeV1 =
+        entityTypeService.create(
+            "PinDstType",
+            List.of(),
+            Optional.empty(),
+            """
+            {
+              "type": "object",
+              "properties": { "b": { "type": "integer" } },
+              "required": ["b"],
+              "additionalProperties": false
+            }
+            """);
+
+    mappingService.create(
+        "PinSrcType", "PinDstType", "{\"b\": \"#source.getValue('$.a').intValue()\"}", List.of());
+
+    var source =
+        entityService.create(
+            "PinSrcType",
+            """
+            {"a": 5}
+            """);
+
+    mappingService.createMappedEntities(source.getId());
+
+    var mapped = entityRepository.findByEntityType(targetTypeV1).getFirst();
+    Assertions.assertNotNull(mapped.getEntityTypeVersion());
+    Assertions.assertEquals(1, mapped.getEntityTypeVersion().getVersion());
+    Assertions.assertEquals(
+        5, new WrappedJsonNode(mapped.getValues()).getValue(Integer.class, "$.b").intValue());
+
+    // Version the target type: v2 forbids "b" and requires "c" instead. The mapped entity is still
+    // pinned to v1, so its regeneration must keep producing {"b": ...} and validate against v1.
+    entityTypeService.createVersion(
+        "PinDstType",
+        List.of(),
+        Optional.empty(),
+        """
+        {
+          "type": "object",
+          "properties": { "c": { "type": "integer" } },
+          "required": ["c"],
+          "additionalProperties": false
+        }
+        """);
+
+    entityService.update(
+        source.getId(),
+        """
+        {"a": 7}
+        """);
+
+    mappingService.updateMappedEntities(source.getId());
+
+    var regenerated = entityRepository.findByEntityType(targetTypeV1).getFirst();
+    Assertions.assertEquals(
+        1, regenerated.getEntityTypeVersion().getVersion(), "mapped entity must stay pinned to v1");
+    Assertions.assertEquals(
+        7, new WrappedJsonNode(regenerated.getValues()).getValue(Integer.class, "$.b").intValue());
+    Assertions.assertFalse(
+        regenerated.getValues().has("c"), "regenerated values must follow v1 schema, not v2");
+
+    mappingService.deleteMappedEntities(source.getId());
+    var mappings =
+        mappingService.list().stream()
+            .filter(m -> m.getSource().getName().equals("PinSrcType"))
+            .toList();
+    for (var m : mappings) mappingService.delete(m.getId());
+    entityRepository.findById(source.getId()).ifPresent(entityRepository::delete);
+    entityTypeService.delete("PinSrcType");
+    entityTypeService.delete("PinDstType");
+  }
 }
