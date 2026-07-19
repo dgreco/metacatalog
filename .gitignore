@@ -52,3 +52,6 @@ k8s/db-secret.yaml
 
 # macOS
 .DS_Store
+
+# Claude
+.claude
