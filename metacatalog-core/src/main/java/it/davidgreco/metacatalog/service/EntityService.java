@@ -80,27 +80,21 @@ public class EntityService implements CommonService<Entity, String> {
             "Creating an entity for a mapping target entity type is not allowed");
 
       var currentVersion =
-          entityTypeVersionRepository
-              .findByVersionGroupIdAndVersion(
-                  entityType.getVersionGroupId(), entityType.getVersion())
-              .orElseThrow(
-                  () ->
-                      new ServiceError(
-                          "No EntityTypeVersion snapshot for "
-                              + typeName
-                              + " version "
-                              + entityType.getVersion()));
+          entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+              entityType.getVersionGroupId(), entityType.getVersion());
+      var validationSchema =
+          currentVersion.map(EntityTypeVersion::getSchema).orElse(entityType.getSchema());
 
       var valuesJsonNode = jsonFactory.readTree(values);
       var validationMessages =
-          jsonSchemaFactory.getSchema(currentVersion.getSchema()).validate(valuesJsonNode);
+          jsonSchemaFactory.getSchema(validationSchema).validate(valuesJsonNode);
       if (!validationMessages.isEmpty()) {
         var errorMessages = validationMessages.stream().map(ValidationMessage::getMessage).toList();
         throw new SchemaValidationError(errorMessages);
       }
       var typedEntity = new Entity();
       typedEntity.setEntityType(entityType);
-      typedEntity.setEntityTypeVersion(currentVersion);
+      currentVersion.ifPresent(typedEntity::setEntityTypeVersion);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
       if (CommonService.isMappingSourceEntityType(

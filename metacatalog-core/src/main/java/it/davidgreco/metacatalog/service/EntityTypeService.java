@@ -10,6 +10,7 @@ import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.Type;
 import it.davidgreco.metacatalog.entity.TypeLinearization;
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
@@ -46,7 +47,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
 
   private final EntityTypeVersionRepository entityTypeVersionRepository;
 
-  private final it.davidgreco.metacatalog.repository.EntityRepository entityRepository;
+  private final EntityRepository entityRepository;
 
   /**
    * Creates a new EntityType with the specified name, traits, optional father, and schema.
@@ -352,9 +353,14 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
               .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
               .stream()
               .filter(s -> s.getVersion() != live.getVersion())
-              .sorted(java.util.Comparator.comparingInt(EntityTypeVersion::getVersion).reversed())
               .toList();
       for (var snapshot : history) {
+        var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
+        successor.ifPresent(
+            s -> {
+              s.setPreviousVersionId(snapshot.getPreviousVersionId());
+              entityTypeVersionRepository.save(s);
+            });
         entityTypeVersionRepository.delete(snapshot);
       }
       entityTypeVersionRepository.flush();

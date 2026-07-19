@@ -339,4 +339,58 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     entityService.delete(entity.getId());
     entityTypeService.delete("PinnedDeleteType");
   }
+
+  @Test
+  void testDeleteAllVersionsPreservesCurrentSnapshot() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityTypeVersionRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"]
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"]
+        }
+        """;
+
+    entityTypeService.create("DeleteAllVersionsType", List.of(), Optional.empty(), schemaV1);
+    entityTypeService.createVersion("DeleteAllVersionsType", List.of(), Optional.empty(), schemaV2);
+
+    var live = entityTypeService.read("DeleteAllVersionsType");
+    Assertions.assertEquals(2, live.getVersion());
+
+    var entity =
+        entityService.create(
+            "DeleteAllVersionsType",
+            """
+            { "name": "alpha", "value": 1 }
+            """);
+    Assertions.assertEquals(2, entity.getEntityTypeVersion().getVersion());
+
+    entityTypeService.deleteAllVersions("DeleteAllVersionsType");
+
+    var currentSnapshot =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+            live.getVersionGroupId(), live.getVersion());
+    Assertions.assertTrue(
+        currentSnapshot.isPresent(), "current version snapshot must be preserved");
+
+    var reloaded = entityService.read(entity.getId());
+    Assertions.assertNotNull(reloaded.getEntityTypeVersion(), "entity must remain pinned");
+
+    entityService.delete(entity.getId());
+    entityTypeService.delete("DeleteAllVersionsType");
+  }
 }

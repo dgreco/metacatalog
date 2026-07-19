@@ -290,16 +290,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 entityTypeVersionRepository
                     .findByVersionGroupIdAndVersion(
                         targetEntityType.getVersionGroupId(), targetEntityType.getVersion())
-                    .orElseThrow(
-                        () ->
-                            new ServiceRuntimeError(
-                                "No EntityTypeVersion snapshot for "
-                                    + targetEntityType.getName()
-                                    + " version "
-                                    + targetEntityType.getVersion()));
+                    .orElse(null);
             var mappedEntity = new Entity();
             mappedEntity.setEntityType(targetEntityType);
-            mappedEntity.setEntityTypeVersion(targetVersion);
+            if (targetVersion != null) mappedEntity.setEntityTypeVersion(targetVersion);
             mappedEntity.setValues(mappedValues);
             entityRepository.save(mappedEntity);
             entityLifeCycleEventRepository.save(
