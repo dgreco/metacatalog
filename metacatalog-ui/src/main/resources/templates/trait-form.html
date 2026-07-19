@@ -11,6 +11,10 @@
 <header class="topbar">
     <h1>New Trait</h1>
     <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
 </header>
 
 <main>

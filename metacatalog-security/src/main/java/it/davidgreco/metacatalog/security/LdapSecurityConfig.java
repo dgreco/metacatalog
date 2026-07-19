@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.security;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -49,6 +50,7 @@ public class LdapSecurityConfig {
    * @throws Exception if the security builder cannot be configured
    */
   @Bean
+  @Order(100)
   public SecurityFilterChain securityFilterChain(
       final HttpSecurity http, final AuthenticationManager authenticationManager) throws Exception {
     customizer.customize(http);

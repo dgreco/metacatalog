@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -46,6 +47,7 @@ public class BasicAuthSecurityConfig {
    * @throws Exception if the security builder cannot be configured
    */
   @Bean
+  @Order(100)
   public SecurityFilterChain securityFilterChain(final HttpSecurity http) throws Exception {
     customizer.customize(http);
     return http.build();
