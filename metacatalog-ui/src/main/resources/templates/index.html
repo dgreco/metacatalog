@@ -18,6 +18,10 @@
         <a class="btn" th:href="@{/ui/graph}">◕ Graph</a>
         <a class="btn" th:href="@{/ui/bulk}">↥ Upload YAML</a>
     </nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
 </header>
 
 <main>

@@ -28,6 +28,12 @@
             <artifactId>metacatalog-openapi</artifactId>
         </dependency>
 
+        <!-- Security module: pluggable authentication (none / basic / oauth2 / ldap) -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-security</artifactId>
+        </dependency>
+
         <!-- UI module: server-side rendered pages for creating traits and entity types -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>

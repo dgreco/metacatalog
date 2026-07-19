@@ -46,3 +46,18 @@ application:
     updateMappedEntitiesSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
+    security:
+      # Authentication mechanism: none | basic | oauth2 | ldap
+      auth-mode: basic
+      basic:
+        users:
+          - username: admin
+            password: "{noop}admin"
+            roles: [USER, ADMIN]
+      # oauth2:
+      #   jwk-set-uri: http://keycloak:8080/realms/metacatalog/protocol/openid-connect/certs
+      #   issuer-uri: http://keycloak:8080/realms/metacatalog
+      # ldap:
+      #   url: ldap://ldap:389
+      #   base: dc=example,dc=com
+      #   user-dn-pattern: uid={0},ou=people

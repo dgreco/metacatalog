@@ -1,0 +1,121 @@
+package it.davidgreco.metacatalog.security;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+/**
+ * Verifies the form-login flow for the UI when {@code auth-mode = basic}:
+ *
+ * <ul>
+ *   <li>Unauthenticated access to {@code /ui/**} redirects to {@code /login}
+ *   <li>{@code POST /login} with valid credentials creates a session and redirects to {@code /ui}
+ *   <li>After login, {@code /ui/**} is accessible
+ *   <li>{@code POST /logout} clears the session and redirects to {@code /login?logout=true}
+ *   <li>The REST API at {@code /metacatalog/v1/**} still uses HTTP Basic (stateless)
+ * </ul>
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@TestPropertySource(
+    properties = {
+      "application.config.security.auth-mode=basic",
+      "application.config.security.basic.users[0].username=admin",
+      "application.config.security.basic.users[0].password={noop}secret",
+      "application.config.security.basic.users[0].roles[0]=USER"
+    })
+class UiFormLoginTest {
+
+  @Autowired private MockMvc mockMvc;
+
+  @Test
+  void uiWithoutSessionRedirectsToLogin() throws Exception {
+    mockMvc
+        .perform(get("/ui/test"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/login"));
+  }
+
+  @Test
+  void loginPageIsAccessible() throws Exception {
+    mockMvc.perform(get("/login")).andExpect(status().isOk());
+  }
+
+  @Test
+  void loginWithValidCredentialsRedirectsToUi() throws Exception {
+    mockMvc
+        .perform(post("/login").param("username", "admin").param("password", "secret").with(csrf()))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
+  }
+
+  @Test
+  void loginWithWrongCredentialsRedirectsBackToLoginWithError() throws Exception {
+    mockMvc
+        .perform(post("/login").param("username", "admin").param("password", "wrong").with(csrf()))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/login?error=true"));
+  }
+
+  @Test
+  void fullLoginLogoutFlow() throws Exception {
+    final var session =
+        mockMvc
+            .perform(
+                post("/login").param("username", "admin").param("password", "secret").with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/ui"))
+            .andReturn()
+            .getRequest()
+            .getSession();
+
+    assert session != null;
+
+    mockMvc
+        .perform(
+            get("/ui/test")
+                .sessionAttr(
+                    "SPRING_SECURITY_CONTEXT", session.getAttribute("SPRING_SECURITY_CONTEXT")))
+        .andExpect(status().isOk())
+        .andExpect(content().string("ui-ok"));
+
+    mockMvc
+        .perform(
+            post("/logout")
+                .sessionAttr(
+                    "SPRING_SECURITY_CONTEXT", session.getAttribute("SPRING_SECURITY_CONTEXT"))
+                .with(csrf())
+                .accept("text/html"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/login?logout=true"));
+
+    mockMvc
+        .perform(
+            get("/ui/test")
+                .sessionAttr(
+                    "SPRING_SECURITY_CONTEXT", session.getAttribute("SPRING_SECURITY_CONTEXT")))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/login"));
+  }
+
+  @Test
+  void apiStillUsesBasicAuth() throws Exception {
+    mockMvc.perform(get("/metacatalog/v1/test")).andExpect(status().isUnauthorized());
+
+    mockMvc
+        .perform(get("/metacatalog/v1/test").with(httpBasic("admin", "secret")))
+        .andExpect(status().isOk())
+        .andExpect(content().string("ok"));
+  }
+}

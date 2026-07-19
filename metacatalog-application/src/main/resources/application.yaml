@@ -55,3 +55,27 @@ application:
     updateMappedEntitiesSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
+    security:
+      # Authentication mechanism: none | basic | oauth2 | ldap
+      # - none   : security disabled (default for local dev)
+      # - basic  : HTTP Basic with users defined statically below
+      # - oauth2 : JWT resource server (e.g. Keycloak) - see application.config.security.oauth2
+      # - ldap   : LDAP bind authentication - see application.config.security.ldap
+      auth-mode: none
+      # basic:
+      #   users:
+      #     - username: admin
+      #       password: "{noop}secret"        # use {noop} for plain text, {bcrypt}... for production
+      #       roles: [USER, ADMIN]
+      # oauth2:
+      #   # Either jwk-set-uri or issuer-uri must be set.
+      #   jwk-set-uri: http://localhost:8090/realms/metacatalog/protocol/openid-connect/certs
+      #   issuer-uri: http://localhost:8090/realms/metacatalog
+      # ldap:
+      #   url: ldap://localhost:389
+      #   base: dc=example,dc=com
+      #   user-dn-pattern: uid={0},ou=people
+      #   # user-search-base: ou=people
+      #   # user-search-filter: (uid={0})
+      #   # manager-dn: cn=admin,dc=example,dc=com
+      #   # manager-password: admin

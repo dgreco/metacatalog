@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Login — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<div class="login-page">
+    <div class="login-card">
+        <h1>Meta Catalog</h1>
+        <div class="flash" th:if="${loginError}">
+            Invalid username or password.
+        </div>
+        <div class="flash flash-ok" th:if="${loggedOut}">
+            You have been logged out.
+        </div>
+        <form method="post" th:action="@{/login}" class="login-form">
+            <div class="field">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required="required"
+                       autofocus="autofocus"/>
+            </div>
+            <div class="field">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required="required"/>
+            </div>
+            <button type="submit" class="btn primary">Sign in</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

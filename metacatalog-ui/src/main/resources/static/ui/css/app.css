@@ -659,6 +659,74 @@ select[multiple].traits-select {
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .section-head h2 { margin: 0; }
 
+/* --- logout form (topbar) ------------------------------------------------- */
+.logout-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+}
+.logout-form .user {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+/* --- login page ----------------------------------------------------------- */
+.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+}
+.login-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 2rem 1.75rem 1.75rem;
+}
+.login-card h1 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin: 0 0 1.25rem;
+    text-align: center;
+}
+.login-form .field { margin-bottom: 1rem; }
+.login-form label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 550;
+    margin-bottom: 0.3rem;
+    color: var(--text-2);
+}
+.login-form input {
+    width: 100%;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    background: var(--bg);
+    color: var(--text);
+}
+.login-form input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--ring);
+}
+.login-form .btn {
+    width: 100%;
+    margin-top: 0.5rem;
+    justify-content: center;
+}
+.flash-ok {
+    background: var(--ok-bg);
+    color: var(--ok-text);
+    border-color: var(--ok-border);
+}
+
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
 }
