@@ -1,0 +1,103 @@
+Traits:
+  - name: WithName
+    schema:
+      type: object
+      properties:
+        name:
+          type: string
+  - name: DataProduct
+  - name: DataProductComponent
+  - name: OutputPort
+    inheritsFrom: DataProductComponent
+
+---
+Relationships:
+
+  - sourceTrait: DataProduct
+    relationshipType: HAS_PART
+    targetTrait: DataProductComponent
+
+  - sourceTrait: DataProductComponent
+    relationshipType: IS_REQUIRED_BY
+    targetTrait: DataProductComponent
+
+---
+EntityTypes:
+
+  - name: DataProductType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - Provisionable
+      - WithName
+
+  - name: OutputPortType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - Aggregate
+      - AggregateElement
+      - WithName
+      - OutputPort
+
+  - name: FileBasedOutputPortType
+    schema:
+        type: object
+        properties: {}
+    inheritsFrom: OutputPortType
+
+  - name: TableBasedOutputPortType
+    schema:
+      type: object
+      properties: {}
+    inheritsFrom: OutputPortType
+
+  - name: S3FolderType
+    schema:
+      type: object
+      properties:
+        bucket:
+          type: string
+        path:
+          type: string
+    traits:
+      - ProvisionableResource
+
+  - name: AthenaTableType
+    schema:
+      type: object
+      properties:
+        database:
+          type: string
+        table:
+          type: string
+        dataPath:
+          type: string
+    traits:
+      - ProvisionableResource
+
+---
+Mappings:
+
+  - sourceEntityType: FileBasedOutputPortType
+    targetEntityType: S3FolderType
+    mappingValues:
+      path: "'/root/'+ #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      bucket: "'my-bucket'"
+    entityPathReferences:
+      - alias: "dp"
+        referencePath: "HAS_PART{$}"
+
+  - sourceEntityType: TableBasedOutputPortType
+    targetEntityType: AthenaTableType
+    mappingValues:
+      database: "#dp.getValue('$.name').asText()"
+      table: "#source.getValue('$.name').asText()"
+      dataPath: "#fbo.getValue('$.path').asText()"
+    entityPathReferences:
+      - alias: "dp"
+        referencePath: "HAS_PART{$}"
+      - alias: "fbo"
+        referencePath: "IS_REQUIRED_BY{$}/MAPPED_TO{$}"

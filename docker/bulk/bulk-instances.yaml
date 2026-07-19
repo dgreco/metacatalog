@@ -1,0 +1,17 @@
+entityType: "DataProductType"
+values:
+  name: "dp1"
+
+parts:
+
+- ref: "op1"
+  entityType: "FileBasedOutputPortType"
+  values:
+    name: "op1"
+
+- ref: "op2"
+  entityType: "TableBasedOutputPortType"
+  values:
+    name: "op2"
+  dependsOn:
+     - "op1"

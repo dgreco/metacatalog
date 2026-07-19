@@ -1,0 +1,99 @@
+[PrefixDeclaration]
+rdf:		http://www.w3.org/1999/02/22-rdf-syntax-ns#
+rdfs:		http://www.w3.org/2000/01/rdf-schema#
+owl:		http://www.w3.org/2002/07/owl#
+xsd:		http://www.w3.org/2001/XMLSchema#
+obda:		https://w3id.org/obda/vocabulary#
+mt:         http://metacatalog/
+
+[MappingDeclaration] @collection [[
+
+mappingId	MAPPING-ID-TRAIT
+target		mt:Trait/{id} a mt:Trait ; mt:id {id}^^xsd:string ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:versionGroupId {version_group_id}^^xsd:string .
+source		SELECT "id", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "version", "version_group_id" FROM "trait"
+
+mappingId	MAPPING-ID-ENTITY-TYPE
+target		mt:EntityType/{id} a mt:EntityType ; mt:id {id}^^xsd:string ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:versionGroupId {version_group_id}^^xsd:string .
+source		SELECT "id", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "version", "version_group_id" FROM "entity_type"
+
+mappingId	MAPPING-ID-ENTITY
+target		mt:Entity/{id} a mt:Entity ; mt:id {id}^^xsd:string ; mt:values {values}^^xsd:string ; mt:hasEntityType mt:EntityType/{entity_type_id} ; mt:pinnedToVersion mt:EntityTypeVersion/{entity_type_version_id} .
+source		SELECT "id", CAST("values" AS TEXT) AS "values", "entity_type_id", "entity_type_version_id" FROM "entity"
+
+mappingId	MAPPING-ID-ENTITY-TYPE-VERSION
+target		mt:EntityTypeVersion/{id} a mt:EntityTypeVersion ; mt:id {id}^^xsd:string ; mt:versionGroupId {version_group_id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:fatherName {father_name}^^xsd:string ; mt:traits {traits}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime .
+source		SELECT "id", "version_group_id", "version", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "father_name", CAST("traits" AS TEXT) AS "traits", "created_at" FROM "entity_type_version"
+
+mappingId	MAPPING-ID-TRAIT-VERSION
+target		mt:TraitVersion/{id} a mt:TraitVersion ; mt:id {id}^^xsd:string ; mt:versionGroupId {version_group_id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:fatherName {father_name}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime .
+source		SELECT "id", "version_group_id", "version", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "father_name", "created_at" FROM "trait_version"
+
+mappingId	MAPPING-ID-ENTITY-TYPE-VERSION-PREVIOUS
+target		mt:EntityTypeVersion/{id} mt:hasPreviousVersion mt:EntityTypeVersion/{previous_version_id} .
+source		SELECT "id", "previous_version_id" FROM "entity_type_version" WHERE "previous_version_id" IS NOT NULL
+
+mappingId	MAPPING-ID-TRAIT-VERSION-PREVIOUS
+target		mt:TraitVersion/{id} mt:hasPreviousVersion mt:TraitVersion/{previous_version_id} .
+source		SELECT "id", "previous_version_id" FROM "trait_version" WHERE "previous_version_id" IS NOT NULL
+
+mappingId	MAPPING-ID-TYPE-HAS-TRAIT
+target		mt:EntityType/{entity_type_id} mt:hasTrait mt:Trait/{trait_id} .
+source		SELECT "entity_type_id", "trait_id" FROM "type_traits"
+
+mappingId	MAPPING-ID-TYPE-INHERITS-FROM
+target		mt:EntityType/{child_id} mt:inheritsFrom mt:EntityType/{father_id} .
+source		SELECT "child"."id" AS "child_id", "father"."id" AS "father_id" FROM "entity_type" AS "child", "entity_type" AS "father" WHERE "child"."father_id" = "father"."id"
+
+mappingId	MAPPING-ID-TRAIT-INHERITS-FROM
+target		mt:Trait/{child_id} mt:inheritsFrom mt:Trait/{father_id} .
+source		SELECT "child"."id" AS "child_id", "father"."id" AS "father_id" FROM "trait" AS "child", "trait" AS "father" WHERE "child"."father_id" = "father"."id"
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-DEPENDS-ON
+target		mt:Trait/{source_id} mt:dependsOn mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'DEPENDS_ON'
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-IS-REQUIRED-BY
+target		mt:Trait/{source_id} mt:isRequiredBy mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'IS_REQUIRED_BY'
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-HAS-PART
+target		mt:Trait/{source_id} mt:hasPart mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'HAS_PART'
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-IS-PART-OF
+target		mt:Trait/{source_id} mt:isPartOf mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'IS_PART_OF'
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-MAPPED-TO
+target		mt:Trait/{source_id} mt:mappedTo mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'MAPPED_TO'
+
+mappingId	MAPPING-ID-TRAIT-RELATIONSHIP-IS-MAPPED-BY
+target		mt:Trait/{source_id} mt:isMappedBy mt:Trait/{target_id} .
+source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relation_type" = 'IS_MAPPED_BY'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-DEPENDS-ON
+target		mt:Entity/{source_id} mt:dependsOn mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'DEPENDS_ON'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-REQUIRED-BY
+target		mt:Entity/{source_id} mt:isRequiredBy mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_REQUIRED_BY'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-HAS-PART
+target		mt:Entity/{source_id} mt:hasPart mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'HAS_PART'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-PART-OF
+target		mt:Entity/{source_id} mt:isPartOf mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_PART_OF'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-MAPPED-TO
+target		mt:Entity/{source_id} mt:mappedTo mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'MAPPED_TO'
+
+mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-MAPPED-BY
+target		mt:Entity/{source_id} mt:isMappedBy mt:Entity/{target_id} .
+source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_MAPPED_BY'
+
+]]
