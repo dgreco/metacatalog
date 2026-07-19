@@ -534,6 +534,137 @@ The build will fail if:
 - GPL v2.0 licensed dependencies are detected
 - Tests fail
 
+## Database Schema
+
+The schema is owned by Flyway (see [Database Migrations](#database-migrations)
+below) and consists of 11 tables covering entity types, traits, entities, their
+relationships, the mapping system, the entity lifecycle audit log, and the
+append-only version history for types.
+
+```mermaid
+erDiagram
+    ENTITY_TYPE {
+        varchar id PK
+        varchar name
+        jsonb base_schema
+        jsonb derived_schema
+        varchar father_id FK
+        int version
+        varchar version_group_id
+    }
+    TRAIT {
+        varchar id PK
+        varchar name
+        jsonb base_schema
+        jsonb derived_schema
+        varchar father_id FK
+        int version
+        varchar version_group_id
+    }
+    TYPE_TRAITS {
+        varchar entity_type_id FK
+        varchar trait_id FK
+    }
+    ENTITY {
+        varchar id PK
+        jsonb values
+        varchar entity_type_id FK
+        varchar entity_type_version_id FK
+    }
+    TRAIT_RELATIONSHIP {
+        varchar id PK
+        varchar source_id FK
+        varchar target_id FK
+        varchar relation_type
+    }
+    ENTITY_RELATIONSHIP {
+        varchar id PK
+        varchar source_id FK
+        varchar target_id FK
+        varchar relation_type
+    }
+    MAPPING_TYPE_RELATIONSHIP {
+        varchar id PK
+        varchar source_id FK
+        varchar target_id FK
+        varchar relation_type
+        jsonb mapping_values
+        jsonb entity_path_references
+    }
+    MAPPING_ENTITY_RELATIONSHIP {
+        varchar id PK
+        varchar source_id FK
+        varchar target_id FK
+        varchar relation_type
+        varchar mapping_entity_type_relationship_id FK
+    }
+    ENTITY_LIFECYCLE_EVENT {
+        bigint id PK
+        varchar entity_id
+        varchar entity_type_name
+        timestamp event_time
+        timestamp process_time
+        varchar event_type
+        varchar event_status
+    }
+    ENTITY_TYPE_VERSION {
+        varchar id PK
+        varchar version_group_id
+        int version
+        varchar name
+        jsonb base_schema
+        jsonb derived_schema
+        varchar father_name
+        jsonb traits
+        varchar previous_version_id FK
+        timestamp created_at
+    }
+    TRAIT_VERSION {
+        varchar id PK
+        varchar version_group_id
+        int version
+        varchar name
+        jsonb base_schema
+        jsonb derived_schema
+        varchar father_name
+        varchar previous_version_id FK
+        timestamp created_at
+    }
+
+    ENTITY_TYPE |o--o{ ENTITY_TYPE : "father (inheritance)"
+    TRAIT         |o--o{ TRAIT         : "father (inheritance)"
+    ENTITY_TYPE   ||--o{ ENTITY        : "has instances"
+    ENTITY_TYPE   ||--o{ TYPE_TRAITS   : "uses"
+    TRAIT         ||--o{ TYPE_TRAITS   : "applied to"
+    TRAIT         |o--o{ TRAIT_RELATIONSHIP : "source"
+    TRAIT         |o--o{ TRAIT_RELATIONSHIP : "target"
+    ENTITY        ||--o{ ENTITY_RELATIONSHIP : "source"
+    ENTITY        ||--o{ ENTITY_RELATIONSHIP : "target"
+    ENTITY_TYPE   ||--o{ MAPPING_TYPE_RELATIONSHIP : "source"
+    ENTITY_TYPE   ||--o{ MAPPING_TYPE_RELATIONSHIP : "target"
+    MAPPING_TYPE_RELATIONSHIP |o--o{ MAPPING_ENTITY_RELATIONSHIP : "defines"
+    ENTITY        ||--o{ MAPPING_ENTITY_RELATIONSHIP : "source"
+    ENTITY        ||--o{ MAPPING_ENTITY_RELATIONSHIP : "target"
+    ENTITY_TYPE_VERSION |o--o{ ENTITY : "pins (entity_type_version_id)"
+    ENTITY_TYPE_VERSION |o--o{ ENTITY_TYPE_VERSION : "previous_version"
+    TRAIT_VERSION        |o--o{ TRAIT_VERSION        : "previous_version"
+```
+
+Notes:
+
+- `entity_type` ↔ `entity_type_version` (and `trait` ↔ `trait_version`) are
+  linked **logically** by `version_group_id` + `version`, not by a foreign key.
+  The live row is the current version; the `*_version` tables hold the immutable
+  history snapshots (see [Type Versioning](#type-versioning)).
+- `entity_lifecycle_event.entity_id` is a logical (non-FK-enforced) reference to
+  `entity` — the migration does not create a foreign-key constraint for it.
+- Self-references model inheritance (`entity_type.father_id`, `trait.father_id`)
+  and the version chain (`entity_type_version.previous_version_id`,
+  `trait_version.previous_version_id`).
+- Relationship tables (`*_relationship`) carry a `relation_type` column holding a
+  value of the `RelationType` vocabulary (`DEPENDS_ON`/`IS_REQUIRED_BY`,
+  `HAS_PART`/`IS_PART_OF`, `MAPPED_TO`/`IS_MAPPED_BY`).
+
 ## Database Migrations
 
 Database schema is managed by Flyway. Migration scripts are located in:
