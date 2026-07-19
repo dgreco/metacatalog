@@ -272,15 +272,18 @@ be read back and the full history of a type is reconstructable.
 The versioning model is **live row + append-only history table**:
 
 - The `entity_type` and `trait` tables keep **exactly one row per name** — the *current*
-  (live) version. All existing foreign keys (`entity.entity_type_id`,
-  `type_traits.trait_id`, `mapping_type_relationship.source_id`/`target_id`, `father_id`)
-  continue to point at the live row, so entities are always validated against the latest
-  schema and the rest of the system is unaffected.
+  (live) version. The `entity.entity_type_id` foreign key still points at the live row, so
+  the type of an entity is always readable by name; an additional `entity.entity_type_version_id`
+  foreign key pins each entity to the exact version it was created against (see
+  [Entity pinning](#entity-pinning) below).
 - Each live row carries a `version` counter (starts at 1) and a `version_group_id` that
   groups every snapshot of the same logical type together.
-- When a new version is created, the current live state is copied into a history table
-  (`entity_type_version` / `trait_version`) and the live row is mutated in place with the
-  new schema / traits / father; its `version` is bumped by one.
+- When a new version is created, the live row is mutated in place with the new schema /
+  traits / father and its `version` is bumped by one; an `entity_type_version` /
+  `trait_version` snapshot is then written for the **new** current state, so every version
+  — including the current one — has a snapshot row that entities can pin to. (If the
+  previous live state had no snapshot yet, e.g. for a type created before pinning was
+  introduced, a backfill snapshot is written first so the version chain stays complete.)
 - History snapshots are **self-contained**: `base_schema`, `derived_schema`, `father_name`
   and (for entity types) the `traits` list are all frozen at the moment the snapshot was
   taken, so reading an old version always returns the schema that was effective at that
@@ -361,8 +364,45 @@ inheritance, trait membership, and mapping edges.
   (`TypeLinearization`), exactly like `create` does.
 - Deleting the live type (`DELETE /trait/{name}` / `DELETE /entity-type/{name}`) also
   deletes every snapshot in its version group.
-- Two versions of the same type are never live simultaneously; entities always point at the
-  single current version.
+- Two versions of the same type are never live simultaneously; an entity is always pinned
+  to a single version (the one it was created against), and stays there until the entity
+  itself is deleted. There is no automatic migration of entities to a newer type version.
+
+### Entity pinning
+
+Every `Entity` is **pinned** to the exact `EntityTypeVersion` snapshot it was created
+against, via the `entity_type_version_id` foreign key on the `entity` table. This means
+that creating a new version of an entity type does **not** silently migrate existing
+entities to the new schema — they keep validating against the schema they were created
+with.
+
+- On `POST /metacatalog/v1/entity`, the service resolves the current live `EntityType`,
+  looks up the `EntityTypeVersion` snapshot matching its `(versionGroupId, version)` and
+  stores its id in `entity_type_version_id`. Validation runs against that snapshot's
+  `derived_schema`.
+- On `PUT /metacatalog/v1/entity/{id}`, validation uses the schema of the snapshot the
+  entity is pinned to, **not** the live type's schema. Updating an entity never re-pins
+  it to a newer version.
+- Mapped entities (created automatically by `MappingService` from a mapping rule) are
+  pinned to the target type's current version at creation time, just like user-created
+  entities. When a mapped entity is regenerated on source update, the new values are
+  validated against the mapped entity's pinned snapshot.
+- `GET /metacatalog/v1/entity/{id}` returns the pinned version id as `entityTypeVersionId`
+  on the `Entity` DTO.
+- In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the
+  `Name (vN)` version node it is pinned to, rather than the live type node. Legacy
+  entities with no pin still point at the live type node.
+
+`entity_type_version_id` is nullable: entities created before this column was introduced
+(migration `V4__pin_entity_to_type_version.sql`) have `NULL` and continue to follow the
+live type — the service treats `NULL` as "use the live type's schema". No backfill is
+performed; existing entities only start being pinned once they are re-created or updated.
+
+Because entities now reference snapshots, deleting a version that is still referenced by
+an entity is refused with a `400` and a message reporting the number of referencing
+entities. The current (live) version's snapshot is preserved by `deleteAllVersions` for
+the same reason. Deleting the live type entirely with `DELETE /entity-type/{name}` still
+cascades to all snapshots and will fail if any entity still references the type.
 
 ## Mappings
 
