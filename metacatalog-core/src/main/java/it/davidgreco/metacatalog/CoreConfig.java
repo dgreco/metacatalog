@@ -99,7 +99,6 @@ public class CoreConfig {
    * Creates the entity service bean.
    *
    * @param entityTypeRepository the entity type repository
-   * @param entityTypeRepository the entity type repository
    * @param entityTypeVersionRepository the entity type version repository
    * @param entityRepository the entity repository
    * @param entityRelationshipRepository the entity relationship repository

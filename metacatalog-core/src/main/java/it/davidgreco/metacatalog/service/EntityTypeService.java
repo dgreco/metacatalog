@@ -335,6 +335,10 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
    * entity_type_version_id}. To remove the type together with all of its history, use {@link
    * #delete(String)}.
    *
+   * <p>If any historical snapshot is still referenced by an entity (via {@code
+   * entity_type_version_id}), the deletion is refused up-front with a friendly message instead of
+   * surfacing the raw {@link DataIntegrityViolationException}.
+   *
    * @param name the name of the EntityType
    * @throws ServiceError if the type does not exist, or a snapshot is still referenced by an entity
    */
@@ -354,6 +358,21 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
               .stream()
               .filter(s -> s.getVersion() != live.getVersion())
               .toList();
+      for (var snapshot : history) {
+        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
+        if (referencedCount > 0)
+          throw new ServiceError(
+              "Version "
+                  + snapshot.getVersion()
+                  + " of "
+                  + ENTITYTYPE
+                  + name
+                  + " is referenced by "
+                  + referencedCount
+                  + " entit"
+                  + (referencedCount == 1 ? "y" : "ies")
+                  + "; delete or migrate them first");
+      }
       for (var snapshot : history) {
         var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
         successor.ifPresent(
@@ -397,12 +416,14 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
    *
    * <p>Snapshots are deleted one by one in reverse version order so the self-referencing {@code
    * previous_version_id} FK on {@code entity_type_version} is not violated. If any snapshot is
-   * still referenced by an entity (via {@code entity_type_version_id}), the FK violation is caught
-   * and surfaced as a {@link ServiceError}.
+   * still referenced by an entity (via {@code entity_type_version_id}), the deletion is refused
+   * up-front with a friendly message instead of surfacing the raw {@link
+   * DataIntegrityViolationException}.
    *
    * @param name the name of the entity type to delete
-   * @throws ServiceError if the entity type is not found, or if a {@link
-   *     DataIntegrityViolationException} occurs while deleting the entity type
+   * @throws ServiceError if the entity type is not found, or if a snapshot is still referenced by
+   *     an entity, or if a {@link DataIntegrityViolationException} occurs while deleting the entity
+   *     type
    */
   @Transactional(
       propagation = Propagation.REQUIRED,
@@ -420,6 +441,21 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
               .stream()
               .sorted(java.util.Comparator.comparingInt(EntityTypeVersion::getVersion).reversed())
               .toList();
+      for (var snapshot : snapshots) {
+        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
+        if (referencedCount > 0)
+          throw new ServiceError(
+              "Version "
+                  + snapshot.getVersion()
+                  + " of "
+                  + ENTITYTYPE
+                  + name
+                  + " is referenced by "
+                  + referencedCount
+                  + " entit"
+                  + (referencedCount == 1 ? "y" : "ies")
+                  + "; delete or migrate them first");
+      }
       for (var snapshot : snapshots) {
         entityTypeVersionRepository.delete(snapshot);
       }
