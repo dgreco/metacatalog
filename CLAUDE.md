@@ -174,11 +174,21 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).
 
-## Ontop (optional ontology layer)
+## Ontop (embedded SPARQL endpoint)
 
-Mapping/ontology files: `metacatalog-core/src/main/resources/ontop/{mapping.obda, ontology.owl}`.
-Ontop CLI v5 exposes a SPARQL/R2RML endpoint over the same Postgres DB (see README for the exact
-`ontop endpoint` / `ontop bootstrap` invocations). Not required to build or run the core app.
+The `metacatalog-sparql` module embeds Ontop 5.5.0 as a virtual knowledge graph over the
+metacatalog Postgres DB, exposed on the same port as the application (no separate process):
+
+- `GET /sparql` — Yasgui query UI (server-side rendered Thymeleaf template, loads Yasgui from a CDN).
+- `/sparql/query` — SPARQL 1.1 Protocol endpoint (SELECT/ASK/CONSTRUCT/DESCRIBE; GET `?query=`,
+  POST `application/sparql-query`, POST `application/x-www-form-urlencoded`).
+
+Mapping/ontology files: `metacatalog-core/src/main/resources/ontop/{mapping.obda, ontology.owl}`,
+resolved from the classpath at startup. The endpoint is gated on
+`application.sparql.enabled` (default `true`) and configured under `application.sparql.*` in
+`application.yaml`. Ontop's full transitive graph is shaded into the `metacatalog-sparql` jar
+with `net.sf.jsqlparser` and `org.jgrapht` relocated to private packages; RDF4J 5.3.0 is managed
+separately and not shaded. No Ontop CLI install is needed to build or run the app.
 
 ## Conventions & gotchas
 

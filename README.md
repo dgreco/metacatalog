@@ -34,7 +34,6 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - Maven 3.9.9 or higher
 - PostgreSQL 18+
 - Docker (for testing with Testcontainers)
-- Ontop CLI v5 (optional — only needed for `ontop bootstrap` or running the endpoint as a separate process; the embedded endpoint needs no CLI)
 
 ## Quick Start
 
@@ -263,34 +262,6 @@ Ontop's transitive graph is shaded into the `metacatalog-sparql` jar with
 `jsqlparser` 4.x / `jgrapht` 0.9.x from clashing with the versions Spring
 Data JPA / metacatalog-core use at runtime. RDF4J is managed separately at
 5.3.0 and is **not** shaded.
-
-### Running the Ontop CLI instead
-
-If you need the standalone Ontop CLI (e.g. to expose the endpoint on a
-different host/port, or to run `ontop bootstrap` to generate initial mappings
-from a schema), you can still run it against the same Postgres database:
-
-```bash
-../ontop-cli-5/ontop endpoint \
-  --db-url "jdbc:postgresql://localhost:5432/metacatalog?loggerLevel=OFF" \
-  -m metacatalog-core/src/main/resources/ontop/mapping.obda \
-  -t metacatalog-core/src/main/resources/ontop/ontology.owl \
-  --db-user metacatalog \
-  --db-password metacatalog \
-  --port 8081
-```
-
-To bootstrap initial mappings from a database schema:
-
-```bash
-ontop bootstrap \
-  --db-url "jdbc:postgresql://localhost:32819/test?loggerLevel=OFF" \
-  -m mapping.obda \
-  -t ontology.owl \
-  -b http://test \
-  --db-user test \
-  --db-password test
-```
 
 ## API Documentation
 
