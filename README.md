@@ -14,7 +14,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Mappings**: Rule-based transformation of source entities into target entity types, evaluated automatically on source create/update (see [Mappings](#mappings))
 - **JSON Schema Validation**: Validate entity attributes against schemas
 - **Graph Operations**: Advanced relationship traversal using JGraphT
-- **Ontology Integration**: Semantic web support via Ontop
+- **Ontology Integration**: Semantic web support via an embedded Ontop 5.5.0 virtual knowledge graph, exposed as a SPARQL 1.1 Protocol endpoint and a Yasgui query UI
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
@@ -26,7 +26,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Spring Boot 4.0.1**
 - **PostgreSQL 42.7.5**
 - **Maven 3.9.9+**
-- **Ontop CLI v5**
+- **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 5.3.0** (SPARQL protocol + result serialisation)
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - Maven 3.9.9 or higher
 - PostgreSQL 18+
 - Docker (for testing with Testcontainers)
-- Ontop CLI v5 (optional, for ontology integration)
+- Ontop CLI v5 (optional — only needed for `ontop bootstrap` or running the endpoint as a separate process; the embedded endpoint needs no CLI)
 
 ## Quick Start
 
@@ -56,10 +56,13 @@ docker compose up --build
 This starts:
 - **PostgreSQL 18.1** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
+- **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
+  traits, entity types and entities from `docker/bulk/` once the app is healthy
 
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **SPARQL UI**: http://localhost:8080/sparql
 
 > The first build downloads the Maven dependencies inside the image (a few minutes);
 > later builds reuse the cached dependency layer unless a `pom.xml` changes. The image
@@ -146,9 +149,11 @@ The application will start on port 8080.
 ```
 metacatalog/
 ├── metacatalog-core/           # Core domain, repositories, and services
-├── metacatalog-functions/      # Custom PostgreSQL functions
-├── metacatalog-openapi/        # OpenAPI specs and generated code
+├── metacatalog-functions/      # Procedures that run over entities (e.g. provisioning)
+├── metacatalog-openapi/        # OpenAPI spec and generated controllers / client
 ├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for creating traits and entity types
+├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
+├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
 └── metacatalog-application/    # Spring Boot application (aggregates all modules)
 ```
 
@@ -210,25 +215,72 @@ OWASP dependency vulnerability check:
 mvn dependency-check:check
 ```
 
-## Ontop Integration
+## SPARQL / Ontology Access
 
-Meta Catalog integrates with Ontop for ontology-based data access.
+Meta Catalog ships with an **embedded Ontop 5.5.0** virtual knowledge graph that
+exposes the Postgres database as an RDF view over the same HTTP port as the
+application (no separate process). The mapping (`ontop/mapping.obda`) and
+ontology (`ontop/ontology.owl`) live in `metacatalog-core/src/main/resources`
+and are resolved from the classpath at startup.
 
-### Running Ontop Endpoint
+Two endpoints are mounted on the app port:
+
+- **`GET /sparql`** — a server-side rendered Yasgui query editor pre-filled with
+  a default query against the `http://metacatalog/` ontology IRI. Use it to
+  explore the data interactively (SELECT / ASK / CONSTRUCT / DESCRIBE) and
+  switch between JSON / XML / CSV / TSV / Turtle / RDF-XML / N-Triples output.
+- **`/sparql/query`** — the SPARQL 1.1 Protocol endpoint backing the UI. It
+  accepts all three query transmission forms:
+  - `GET /sparql/query?query=...` (URL-encoded query parameter),
+  - `POST /sparql/query` with `Content-Type: application/x-www-form-urlencoded`
+    (a `query=...` field), and
+  - `POST /sparql/query` with `Content-Type: application/sparql-query`
+    (the raw query is the request body).
+
+  The response content type is driven by the `Accept` header: SPARQL Results
+  JSON / XML / CSV / TSV for SELECT and ASK; Turtle / RDF-XML / N-Triples for
+  CONSTRUCT and DESCRIBE.
+
+### Configuration
+
+The embedded endpoint is gated on `application.sparql.enabled` (default `true`)
+and is configured under the `application.sparql.*` prefix in `application.yaml`:
+
+|Property|Default|Description|
+|---|---|---|
+|`application.sparql.enabled`|`true`|Mount the SPARQL endpoint and UI bean. Set to `false` to disable the endpoint without removing the module.|
+|`application.sparql.mapping`|`classpath:ontop/mapping.obda`|Location of the Ontop OBDA mapping file.|
+|`application.sparql.ontology`|`classpath:ontop/ontology.owl`|Location of the OWL ontology file.|
+|`application.sparql.endpoint`|`/sparql/query`|Path of the SPARQL Protocol endpoint (the Yasgui UI is pointed at this).|
+|`application.sparql.ontology-iri`|`http://metacatalog/`|Default IRI prefix used by the UI and the pre-filled query.|
+|`application.sparql.default-query`|`SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50`|Query pre-filled into the Yasgui editor on first load.|
+
+### Shading
+
+Ontop's transitive graph is shaded into the `metacatalog-sparql` jar with
+`net.sf.jsqlparser` and `org.jgrapht` relocated to private packages
+(`it.davidgreco.metacatalog.sparql.shaded.*`). This keeps Ontop's pinned
+`jsqlparser` 4.x / `jgrapht` 0.9.x from clashing with the versions Spring
+Data JPA / metacatalog-core use at runtime. RDF4J is managed separately at
+5.3.0 and is **not** shaded.
+
+### Running the Ontop CLI instead
+
+If you need the standalone Ontop CLI (e.g. to expose the endpoint on a
+different host/port, or to run `ontop bootstrap` to generate initial mappings
+from a schema), you can still run it against the same Postgres database:
 
 ```bash
 ../ontop-cli-5/ontop endpoint \
   --db-url "jdbc:postgresql://localhost:5432/metacatalog?loggerLevel=OFF" \
-  -m src/main/resources/ontop/mapping.obda \
-  -t src/main/resources/ontop/ontology.owl \
+  -m metacatalog-core/src/main/resources/ontop/mapping.obda \
+  -t metacatalog-core/src/main/resources/ontop/ontology.owl \
   --db-user metacatalog \
   --db-password metacatalog \
   --port 8081
 ```
 
-### Bootstrap Ontop Mappings
-
-To generate initial mappings from your database schema:
+To bootstrap initial mappings from a database schema:
 
 ```bash
 ontop bootstrap \
@@ -246,6 +298,8 @@ When the application is running, access the documentation:
 
 - **Web UI**: http://localhost:8080/ui
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **SPARQL UI**: http://localhost:8080/sparql — Yasgui query editor pointed at the protocol endpoint below
+- **SPARQL Protocol**: http://localhost:8080/sparql/query — SPARQL 1.1 endpoint (GET `?query=`, POST `application/sparql-query`, POST `application/x-www-form-urlencoded`)
 - **OpenAPI Spec**: http://localhost:8080/api/interface-specification.yaml
 - **Javadoc**: http://localhost:8080/javadoc/index.html
 
@@ -259,6 +313,9 @@ When the application is running, access the documentation:
 - **Hypersistence Utils**: Advanced Hibernate features
 - **Flyway**: Database migration management
 - **Testcontainers**: Integration testing with PostgreSQL
+- **Ontop 5.5.0**: Virtual knowledge graph (SPARQL-to-SQL over Postgres)
+- **RDF4J 5.3.0**: SPARQL protocol parsing and result serialisation
+- **Yasgui**: Browser SPARQL query editor (loaded from CDN at the `/sparql` UI)
 
 ## Type Versioning
 
