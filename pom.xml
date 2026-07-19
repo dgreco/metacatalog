@@ -89,6 +89,11 @@
             </dependency>
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-security</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-ui</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -477,6 +482,7 @@
         <module>metacatalog-functions</module>
         <module>metacatalog-openapi</module>
         <module>metacatalog-ui</module>
+        <module>metacatalog-security</module>
         <module>metacatalog-application</module>
     </modules>
 

@@ -25,6 +25,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | `metacatalog-functions` | Pluggable **procedures** that run over entities — notably the `provisioning` package that provisions aggregate entities in dependency order. Depends on core. |
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
+| `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
 
 Package root everywhere: `it.davidgreco.metacatalog`.
 
@@ -94,6 +95,31 @@ When running:
 - Spec: `http://localhost:8080/api/interface-specification.yaml`
 - Actuator: `/actuator/health`, `/actuator/info`, `/actuator/metrics`
 
+## Security (metacatalog-security)
+
+Pluggable authentication for the REST API. The active mechanism is selected via
+`application.config.security.auth-mode` and wired by `@ConditionalOnProperty` so exactly one
+`SecurityFilterChain` is registered. `metacatalog-application` depends on this module; the
+config classes live in package `it.davidgreco.metacatalog.security` and are picked up by the
+application's component scan.
+
+| `auth-mode` | What it does | Required sub-config |
+| --- | --- | --- |
+| `none` (default) | Security disabled: every request is permitted. Intended for local dev / tests. | — |
+| `basic` | HTTP Basic with users defined statically in config. Passwords use the DelegatingPasswordEncoder scheme (`{noop}secret`, `{bcrypt}$2a$...`). | `application.config.security.basic.users[]` |
+| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` |
+| `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
+
+URL authorization (shared by all non-`none` modes, see `SecurityFilterChainCustomizer`):
+- `/metacatalog/v1/**` requires authentication
+- `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`, `/javadoc/**` are public
+- Everything else (e.g. the server-side rendered UI under `/ui/**`) is public
+- CSRF is disabled and sessions are stateless (API is meant to be consumed programmatically)
+
+Only authentication is enforced at the API level — no role-based authorization. Roles configured
+under `basic.users[].roles` are still attached to the `Authentication` principal and can be used
+for finer-grained checks later.
+
 ## Configuration
 
 Custom properties bind under the `application.config` prefix into
@@ -104,7 +130,9 @@ Custom properties bind under the `application.config` prefix into
 - `entityLifeCycleEventCleanupSchedulingInterval` (Duration)
 - `entityPathResolutionMaxAttempts` (int)
 
-Defaults live in `application.yaml`; `docker` and `kubernetes` profiles override datasource wiring.
+Security properties bind under `application.config.security` into `SecurityConfigProperties`
+(see the [Security](#security-metacatalog-security) section). Defaults live in `application.yaml`;
+`docker` and `kubernetes` profiles override datasource wiring.
 The app enables `@EnableScheduling`, `@EnableTransactionManagement`, `@EnableConfigurationProperties`.
 
 ## Build & common commands

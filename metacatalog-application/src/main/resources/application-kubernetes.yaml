@@ -65,3 +65,8 @@ application:
     updateMappedEntitiesSchedulingInterval: 5s
     entityLifeCycleEventCleanupSchedulingInterval: 5s
     entityPathResolutionMaxAttempts: 3
+    security:
+      # Authentication mechanism: none | basic | oauth2 | ldap
+      # In Kubernetes prefer oauth2 (with an external IdP) or ldap. Override via env vars:
+      #   APPLICATION_CONFIG_SECURITY_AUTH_MODE, APPLICATION_CONFIG_SECURITY_OAUTH2_JWK_SET_URI, ...
+      auth-mode: none
