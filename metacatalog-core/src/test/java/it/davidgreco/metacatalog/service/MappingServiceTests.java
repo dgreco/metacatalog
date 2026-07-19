@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
-import org.springframework.dao.DataIntegrityViolationException;
 
 @SpringBootTest
 class MappingServiceTests extends CommonServiceTestingSupport {
@@ -53,8 +52,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     var mapping2 = mappingService.create("SimpleSourceType", "SimpleTargetType", "{}", List.of());
 
-    Assertions.assertThrows(
-        DataIntegrityViolationException.class, () -> entityTypeService.delete("SimpleSourceType"));
+    Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("SimpleSourceType"));
 
     mappingService.delete(mapping1.getId());
     mappingService.delete(mapping2.getId());

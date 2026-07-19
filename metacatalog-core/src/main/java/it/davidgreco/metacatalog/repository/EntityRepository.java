@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.repository;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
+import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -23,6 +24,14 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
    * @return the number of entities of the specified type
    */
   long countByEntityType(EntityType entityType);
+
+  /**
+   * Counts the number of entities pinned to a given entity type version snapshot.
+   *
+   * @param entityTypeVersion the snapshot to count instances of
+   * @return the number of entities pinned to the specified snapshot
+   */
+  long countByEntityTypeVersion(EntityTypeVersion entityTypeVersion);
 
   /**
    * Finds all entities of a given type.

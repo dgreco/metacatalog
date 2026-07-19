@@ -63,6 +63,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             var dtoEntity = new it.davidgreco.metacatalog.openapi.model.Entity();
             dtoEntity.setId(entity.getId());
             dtoEntity.setEntityType(entity.getEntityType().getName());
+            if (entity.getEntityTypeVersion() != null)
+              dtoEntity.setEntityTypeVersionId(
+                  java.util.Optional.of(entity.getEntityTypeVersion().getId()));
             dtoEntity.setValues(entity.getValues().toPrettyString());
             return dtoEntity;
           };

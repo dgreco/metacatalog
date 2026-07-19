@@ -8,6 +8,7 @@ import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
+import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.HashSet;
@@ -37,6 +38,8 @@ public class EntityService implements CommonService<Entity, String> {
 
   private final EntityTypeRepository entityTypeRepository;
 
+  private final EntityTypeVersionRepository entityTypeVersionRepository;
+
   private final EntityRepository entityRepository;
 
   private final EntityRelationshipRepository entityRelationshipRepository;
@@ -49,6 +52,10 @@ public class EntityService implements CommonService<Entity, String> {
 
   /**
    * Creates a new entity based on the given type name and JSON values.
+   *
+   * <p>The entity is pinned to the {@link EntityTypeVersion} snapshot matching the current live
+   * version of its type, so subsequent {@code createVersion} calls on the type do not silently
+   * migrate the entity to the new schema. Validation always uses that snapshot's schema.
    *
    * @param typeName the name of the entity type for the entity to create
    * @param values a JSON string containing the values for the entity
@@ -72,15 +79,28 @@ public class EntityService implements CommonService<Entity, String> {
         throw new ServiceError(
             "Creating an entity for a mapping target entity type is not allowed");
 
+      var currentVersion =
+          entityTypeVersionRepository
+              .findByVersionGroupIdAndVersion(
+                  entityType.getVersionGroupId(), entityType.getVersion())
+              .orElseThrow(
+                  () ->
+                      new ServiceError(
+                          "No EntityTypeVersion snapshot for "
+                              + typeName
+                              + " version "
+                              + entityType.getVersion()));
+
       var valuesJsonNode = jsonFactory.readTree(values);
       var validationMessages =
-          jsonSchemaFactory.getSchema(entityType.getSchema()).validate(valuesJsonNode);
+          jsonSchemaFactory.getSchema(currentVersion.getSchema()).validate(valuesJsonNode);
       if (!validationMessages.isEmpty()) {
         var errorMessages = validationMessages.stream().map(ValidationMessage::getMessage).toList();
         throw new SchemaValidationError(errorMessages);
       }
       var typedEntity = new Entity();
       typedEntity.setEntityType(entityType);
+      typedEntity.setEntityTypeVersion(currentVersion);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
       if (CommonService.isMappingSourceEntityType(
@@ -124,6 +144,10 @@ public class EntityService implements CommonService<Entity, String> {
   /**
    * Updates an existing entity with the given ID.
    *
+   * <p>Validation uses the schema of the {@link EntityTypeVersion} the entity is pinned to (set at
+   * creation time). If the entity has no pin (legacy row created before pinning was introduced),
+   * validation falls back to the live {@link EntityType#getSchema()}.
+   *
    * @param entityId the ID of the entity to update
    * @param values a JSON string containing the new values for the entity
    * @throws ServiceError if the entity with the given ID does not exist, is an instance of a target
@@ -147,8 +171,10 @@ public class EntityService implements CommonService<Entity, String> {
             ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
 
       var valuesJsonNode = jsonFactory.readTree(values);
-      var validationMessages =
-          jsonSchemaFactory.getSchema(entity.getEntityType().getSchema()).validate(valuesJsonNode);
+      var pinnedVersion = entity.getEntityTypeVersion();
+      var schema =
+          pinnedVersion != null ? pinnedVersion.getSchema() : entity.getEntityType().getSchema();
+      var validationMessages = jsonSchemaFactory.getSchema(schema).validate(valuesJsonNode);
       if (!validationMessages.isEmpty()) {
         var errorMessages = validationMessages.stream().map(ValidationMessage::getMessage).toList();
         throw new SchemaValidationError(errorMessages);
