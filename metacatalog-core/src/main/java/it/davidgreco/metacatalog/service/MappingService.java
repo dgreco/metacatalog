@@ -55,6 +55,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
   public final EntityTypeRepository entityTypeRepository;
 
+  public final EntityTypeVersionRepository entityTypeVersionRepository;
+
   public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
   public final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
@@ -284,8 +286,14 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                     additionalEntitiesValues,
                     mappingRelationship.getMappingValues(),
                     jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
+            var targetVersion =
+                entityTypeVersionRepository
+                    .findByVersionGroupIdAndVersion(
+                        targetEntityType.getVersionGroupId(), targetEntityType.getVersion())
+                    .orElse(null);
             var mappedEntity = new Entity();
             mappedEntity.setEntityType(targetEntityType);
+            if (targetVersion != null) mappedEntity.setEntityTypeVersion(targetVersion);
             mappedEntity.setValues(mappedValues);
             entityRepository.save(mappedEntity);
             entityLifeCycleEventRepository.save(
@@ -403,13 +411,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                             .orElseThrow(() -> new ServiceRuntimeError("Entity not found")));
             additionalEntitiesValues.put(as, jn.getValues());
           }
+          var mappedEntity = entityMappingRelationship.getTarget();
+          var pinnedTargetVersion = mappedEntity.getEntityTypeVersion();
+          var targetSchema =
+              pinnedTargetVersion != null
+                  ? pinnedTargetVersion.getSchema()
+                  : mappingTypeRelationship.getTarget().getSchema();
           var mappedValues =
               generateMappedValues(
                   sourceEntity.getValues(),
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
-                  jsonSchemaFactory.getSchema(mappingTypeRelationship.getTarget().getSchema()));
-          var mappedEntity = entityMappingRelationship.getTarget();
+                  jsonSchemaFactory.getSchema(targetSchema));
           mappedEntity.setValues(mappedValues);
           entityRepository.save(mappedEntity);
           entityLifeCycleEventRepository.save(

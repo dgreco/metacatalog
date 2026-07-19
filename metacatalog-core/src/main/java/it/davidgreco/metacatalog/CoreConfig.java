@@ -82,21 +82,24 @@ public class CoreConfig {
    * @param entityTypeRepository the entity type repository
    * @param traitRepository the trait repository
    * @param entityTypeVersionRepository the entity type version repository
+   * @param entityRepository the entity repository
    * @return the entity type service
    */
   @Bean
   public EntityTypeService entityTypeService(
       EntityTypeRepository entityTypeRepository,
       TraitRepository traitRepository,
-      EntityTypeVersionRepository entityTypeVersionRepository) {
+      EntityTypeVersionRepository entityTypeVersionRepository,
+      EntityRepository entityRepository) {
     return new EntityTypeService(
-        entityTypeRepository, traitRepository, entityTypeVersionRepository);
+        entityTypeRepository, traitRepository, entityTypeVersionRepository, entityRepository);
   }
 
   /**
    * Creates the entity service bean.
    *
    * @param entityTypeRepository the entity type repository
+   * @param entityTypeVersionRepository the entity type version repository
    * @param entityRepository the entity repository
    * @param entityRelationshipRepository the entity relationship repository
    * @param traitRelationshipRepository the trait relationship repository
@@ -107,6 +110,7 @@ public class CoreConfig {
   @Bean
   public EntityService entityService(
       EntityTypeRepository entityTypeRepository,
+      EntityTypeVersionRepository entityTypeVersionRepository,
       EntityRepository entityRepository,
       EntityRelationshipRepository entityRelationshipRepository,
       TraitRelationshipRepository traitRelationshipRepository,
@@ -114,6 +118,7 @@ public class CoreConfig {
       EntityLifeCycleEventRepository entityLifeCycleEventRepository) {
     return new EntityService(
         entityTypeRepository,
+        entityTypeVersionRepository,
         entityRepository,
         entityRelationshipRepository,
         traitRelationshipRepository,
@@ -127,6 +132,7 @@ public class CoreConfig {
    * @param traitRelationshipRepository the trait relationship repository
    * @param entityRepository the entity repository
    * @param entityTypeRepository the entity type repository
+   * @param entityTypeVersionRepository the entity type version repository
    * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
    * @param mappingEntityRelationshipRepository the mapping entity relationship repository
    * @param entityRelationshipRepository the entity relationship repository
@@ -140,6 +146,7 @@ public class CoreConfig {
       TraitRelationshipRepository traitRelationshipRepository,
       EntityRepository entityRepository,
       EntityTypeRepository entityTypeRepository,
+      EntityTypeVersionRepository entityTypeVersionRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
       EntityRelationshipRepository entityRelationshipRepository,
@@ -150,6 +157,7 @@ public class CoreConfig {
         traitRelationshipRepository,
         entityRepository,
         entityTypeRepository,
+        entityTypeVersionRepository,
         mappingEntityTypeRelationshipRepository,
         mappingEntityRelationshipRepository,
         entityRelationshipRepository,

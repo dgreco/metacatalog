@@ -45,6 +45,20 @@ public class Entity {
   private EntityType entityType;
 
   /**
+   * The frozen {@link EntityTypeVersion} snapshot this entity was created against.
+   *
+   * <p>When set, schema validation of {@link #values} uses this snapshot's {@code getSchema()}
+   * instead of the live {@link EntityType#getSchema()}, so the entity stays pinned to the schema it
+   * was validated against at creation time even after {@code createVersion} mutates the live type.
+   *
+   * <p>Nullable for legacy rows created before this column existed; the service layer treats null
+   * as "follow the live type".
+   */
+  @ManyToOne(fetch = FetchType.EAGER)
+  @JoinColumn(name = "entity_type_version_id")
+  private EntityTypeVersion entityTypeVersion;
+
+  /**
    * Creates a new entity with the specified type and values.
    *
    * @param entityType the type of the entity

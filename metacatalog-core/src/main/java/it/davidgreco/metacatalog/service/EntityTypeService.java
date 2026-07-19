@@ -10,6 +10,7 @@ import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.Type;
 import it.davidgreco.metacatalog.entity.TypeLinearization;
+import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
@@ -46,6 +47,8 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
 
   private final EntityTypeVersionRepository entityTypeVersionRepository;
 
+  private final EntityRepository entityRepository;
+
   /**
    * Creates a new EntityType with the specified name, traits, optional father, and schema.
    *
@@ -53,7 +56,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
    * provided schema to a JSON schema and merges it with the schemas of the traits and the optional
    * father EntityType. The resulting EntityType is stored in the repository.
    *
-   * <p>The new type starts at version 1 with a freshly generated {@code versionGroupId}.
+   * <p>The new type starts at version 1 with a freshly generated {@code versionGroupId}. An {@link
+   * EntityTypeVersion} snapshot is also created for v1, so entities created against this type have
+   * a version row to pin to.
    *
    * @param name the name for the new EntityType
    * @param traits a list of trait names to associate with the EntityType
@@ -88,7 +93,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         entityType.setFather(father);
       }
       entityType.setDerivedSchema(computeDerivedSchema(entityType));
-      return entityTypeRepository.save(entityType);
+      var saved = entityTypeRepository.save(entityType);
+      saveCurrentSnapshot(saved, null);
+      return saved;
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
@@ -97,13 +104,21 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   }
 
   /**
-   * Creates a new version of an existing EntityType by snapshotting the current live state into the
-   * history table and mutating the live row in place with the new schema, traits, and father.
+   * Creates a new version of an existing EntityType by mutating the live row in place with the new
+   * schema, traits, and father, and snapshotting the new live state into the history table.
    *
    * <p>The live row's {@code version} is bumped by one; its {@code versionGroupId} is unchanged so
-   * the new version stays linked to every previous snapshot. The snapshot is self-contained: base
-   * schema, derived schema, father name and trait names are all frozen at the moment the snapshot
-   * was taken.
+   * the new version stays linked to every previous snapshot. The new snapshot is self-contained:
+   * base schema, derived schema, father name and trait names are all frozen at the moment the
+   * snapshot was taken.
+   *
+   * <p>An {@link EntityTypeVersion} row now exists for every version, including the current live
+   * one, so entities can pin to the exact version they were created against via the {@code
+   * entity_type_version_id} FK.
+   *
+   * <p>If the previous live state somehow had no snapshot yet (e.g. the type was created before
+   * version pinning was introduced), a backfill snapshot is created for it before the live row is
+   * mutated, so the version chain stays complete.
    *
    * <p>The live row is locked with a pessimistic write lock for the duration of the transaction, so
    * concurrent {@code createVersion} calls for the same type are serialised and the version number
@@ -130,21 +145,15 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
               .findByNameForUpdate(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
 
-      var snapshot = new EntityTypeVersion();
-      snapshot.setVersionGroupId(live.getVersionGroupId());
-      snapshot.setVersion(live.getVersion());
-      snapshot.setName(live.getName());
-      snapshot.setBaseSchema(live.getBaseSchema());
-      snapshot.setDerivedSchema(live.getDerivedSchema());
-      snapshot.setFatherName(live.getFather() == null ? null : live.getFather().getName());
-      snapshot.setTraits(
-          jsonFactory.valueToTree(live.getTraits().stream().map(Trait::getName).toList()));
-      snapshot.setCreatedAt(Instant.now());
-      var latestSnapshot =
-          entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
-              live.getVersionGroupId());
-      snapshot.setPreviousVersionId(latestSnapshot.map(EntityTypeVersion::getId).orElse(null));
-      entityTypeVersionRepository.save(snapshot);
+      var existingCurrentSnapshot =
+          entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+              live.getVersionGroupId(), live.getVersion());
+      if (existingCurrentSnapshot.isEmpty()) {
+        var latestBefore =
+            entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
+                live.getVersionGroupId());
+        saveCurrentSnapshot(live, latestBefore.map(EntityTypeVersion::getId).orElse(null));
+      }
 
       List<Trait> traitsList = resolveTraits(traits);
       var baseSchemaNode = parseSchema(schema);
@@ -163,7 +172,12 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       }
       live.setDerivedSchema(computeDerivedSchema(live));
       live.setVersion(live.getVersion() + 1);
-      return entityTypeRepository.save(live);
+      var saved = entityTypeRepository.save(live);
+      var latestSnapshot =
+          entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
+              live.getVersionGroupId());
+      saveCurrentSnapshot(saved, latestSnapshot.map(EntityTypeVersion::getId).orElse(null));
+      return saved;
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
@@ -213,6 +227,11 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
    * Lists every version of an EntityType, oldest first. The live (current) version is included as
    * the last element.
    *
+   * <p>The snapshot matching the current live version is filtered out of the history list to avoid
+   * duplicating the live row in the result; it still exists in the {@code entity_type_version}
+   * table (entities pin to it via {@code entity_type_version_id}) but is represented here by the
+   * live {@link EntityType}.
+   *
    * @param name the name of the EntityType
    * @return a list of {@link EntityTypeVersion} snapshots (oldest first) followed by the live
    *     {@link EntityType}
@@ -229,8 +248,11 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
               .findByName(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
       var history =
-          entityTypeVersionRepository.findByVersionGroupIdOrderByVersionAsc(
-              live.getVersionGroupId());
+          entityTypeVersionRepository
+              .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
+              .stream()
+              .filter(s -> s.getVersion() != live.getVersion())
+              .toList();
       var result = new java.util.ArrayList<Object>(history);
       result.add(live);
       return result;
@@ -277,6 +299,19 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
                   () ->
                       new ServiceError(
                           "Version " + version + " of " + ENTITYTYPE + name + " does not exist"));
+      var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
+      if (referencedCount > 0)
+        throw new ServiceError(
+            "Version "
+                + version
+                + " of "
+                + ENTITYTYPE
+                + name
+                + " is referenced by "
+                + referencedCount
+                + " entit"
+                + (referencedCount == 1 ? "y" : "ies")
+                + "; delete or migrate them first");
       var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
       successor.ifPresent(
           s -> {
@@ -284,6 +319,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
             entityTypeVersionRepository.save(s);
           });
       entityTypeVersionRepository.delete(snapshot);
+      entityTypeVersionRepository.flush();
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
@@ -292,13 +328,19 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   }
 
   /**
-   * Deletes every historical snapshot of an EntityType, keeping the live row. The live row's {@code
-   * version} and {@code versionGroupId} are unchanged, so the type continues to exist at its
-   * current version with no history behind it. To remove the type together with all of its history,
-   * use {@link #delete(String)}.
+   * Deletes every historical snapshot of an EntityType, keeping the live row and the snapshot for
+   * the current live version. The live row's {@code version} and {@code versionGroupId} are
+   * unchanged, so the type continues to exist at its current version with no history behind it. The
+   * current version's snapshot is preserved because entities may be pinned to it via {@code
+   * entity_type_version_id}. To remove the type together with all of its history, use {@link
+   * #delete(String)}.
+   *
+   * <p>If any historical snapshot is still referenced by an entity (via {@code
+   * entity_type_version_id}), the deletion is refused up-front with a friendly message instead of
+   * surfacing the raw {@link DataIntegrityViolationException}.
    *
    * @param name the name of the EntityType
-   * @throws ServiceError if the type does not exist
+   * @throws ServiceError if the type does not exist, or a snapshot is still referenced by an entity
    */
   @Transactional(
       propagation = Propagation.REQUIRED,
@@ -310,7 +352,39 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           entityTypeRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      entityTypeVersionRepository.deleteByVersionGroupId(live.getVersionGroupId());
+      var history =
+          entityTypeVersionRepository
+              .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
+              .stream()
+              .filter(s -> s.getVersion() != live.getVersion())
+              .toList();
+      for (var snapshot : history) {
+        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
+        if (referencedCount > 0)
+          throw new ServiceError(
+              "Version "
+                  + snapshot.getVersion()
+                  + " of "
+                  + ENTITYTYPE
+                  + name
+                  + " is referenced by "
+                  + referencedCount
+                  + " entit"
+                  + (referencedCount == 1 ? "y" : "ies")
+                  + "; delete or migrate them first");
+      }
+      for (var snapshot : history) {
+        var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
+        successor.ifPresent(
+            s -> {
+              s.setPreviousVersionId(snapshot.getPreviousVersionId());
+              entityTypeVersionRepository.save(s);
+            });
+        entityTypeVersionRepository.delete(snapshot);
+      }
+      entityTypeVersionRepository.flush();
+    } catch (DataIntegrityViolationException e) {
+      throw new ServiceError(e.getMessage());
     } finally {
       log.info("Deleted all versions of EntityType: {}", name);
     }
@@ -340,9 +414,16 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   /**
    * Deletes an entity type given its name, together with all of its version history snapshots.
    *
+   * <p>Snapshots are deleted one by one in reverse version order so the self-referencing {@code
+   * previous_version_id} FK on {@code entity_type_version} is not violated. If any snapshot is
+   * still referenced by an entity (via {@code entity_type_version_id}), the deletion is refused
+   * up-front with a friendly message instead of surfacing the raw {@link
+   * DataIntegrityViolationException}.
+   *
    * @param name the name of the entity type to delete
-   * @throws ServiceError if the entity type is not found, or if a {@link
-   *     DataIntegrityViolationException} occurs while deleting the entity type
+   * @throws ServiceError if the entity type is not found, or if a snapshot is still referenced by
+   *     an entity, or if a {@link DataIntegrityViolationException} occurs while deleting the entity
+   *     type
    */
   @Transactional(
       propagation = Propagation.REQUIRED,
@@ -354,8 +435,33 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           entityTypeRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      entityTypeVersionRepository.deleteByVersionGroupId(entityType.getVersionGroupId());
+      var snapshots =
+          entityTypeVersionRepository
+              .findByVersionGroupIdOrderByVersionAsc(entityType.getVersionGroupId())
+              .stream()
+              .sorted(java.util.Comparator.comparingInt(EntityTypeVersion::getVersion).reversed())
+              .toList();
+      for (var snapshot : snapshots) {
+        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
+        if (referencedCount > 0)
+          throw new ServiceError(
+              "Version "
+                  + snapshot.getVersion()
+                  + " of "
+                  + ENTITYTYPE
+                  + name
+                  + " is referenced by "
+                  + referencedCount
+                  + " entit"
+                  + (referencedCount == 1 ? "y" : "ies")
+                  + "; delete or migrate them first");
+      }
+      for (var snapshot : snapshots) {
+        entityTypeVersionRepository.delete(snapshot);
+      }
+      entityTypeVersionRepository.flush();
       entityTypeRepository.delete(entityType);
+      entityTypeRepository.flush();
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
     } finally {
@@ -446,5 +552,26 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     var mergedSchema = mergeSchemas(schemasToMerge);
     if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
     return mergedSchema.get();
+  }
+
+  /**
+   * Captures the current live state of {@code live} into a new {@link EntityTypeVersion} snapshot
+   * and persists it. The snapshot's {@code previousVersionId} is set to {@code previousVersionId}
+   * (or null for the first version). Used by {@link #create} (for v1) and {@link #createVersion}
+   * (for the new bumped version), so an entity can pin to the exact version it was created against.
+   */
+  private EntityTypeVersion saveCurrentSnapshot(EntityType live, String previousVersionId) {
+    var snapshot = new EntityTypeVersion();
+    snapshot.setVersionGroupId(live.getVersionGroupId());
+    snapshot.setVersion(live.getVersion());
+    snapshot.setName(live.getName());
+    snapshot.setBaseSchema(live.getBaseSchema());
+    snapshot.setDerivedSchema(live.getDerivedSchema());
+    snapshot.setFatherName(live.getFather() == null ? null : live.getFather().getName());
+    snapshot.setTraits(
+        jsonFactory.valueToTree(live.getTraits().stream().map(Trait::getName).toList()));
+    snapshot.setCreatedAt(Instant.now());
+    snapshot.setPreviousVersionId(previousVersionId);
+    return entityTypeVersionRepository.save(snapshot);
   }
 }

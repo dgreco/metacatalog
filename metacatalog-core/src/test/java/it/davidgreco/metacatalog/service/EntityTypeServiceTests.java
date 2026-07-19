@@ -14,7 +14,6 @@ import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.ApplicationContext;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
@@ -167,8 +166,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
         .assertIsMatch(leafType.getSchema().toPrettyString(), inheritedSchema);
 
-    Assertions.assertThrows(
-        DataIntegrityViolationException.class, () -> entityTypeService.delete("MiddleType"));
+    Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("MiddleType"));
 
     entityTypeService.delete("LeafType");
 
@@ -390,5 +388,198 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
 
     entityTypeService.delete("VersionedType");
     traitService.delete("VersionTrait");
+  }
+
+  /**
+   * Right after {@code create} there is no historical snapshot yet, so {@code listVersions} returns
+   * exactly one element: the live type itself. The current-version snapshot still exists in the
+   * {@code entity_type_version} table (entities pin to it) but is filtered out by {@code
+   * listVersions}.
+   */
+  @Test
+  void testListVersionsRightAfterCreateReturnsOnlyLive() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityTypeVersionRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+
+    entityTypeService.create(
+        "NoHistoryType",
+        List.of(),
+        Optional.empty(),
+        """
+        { "type": "object", "properties": { "name": { "type": "string" } } }
+        """);
+
+    var versions = entityTypeService.listVersions("NoHistoryType");
+    Assertions.assertEquals(1, versions.size());
+    Assertions.assertTrue(
+        versions.getFirst() instanceof it.davidgreco.metacatalog.entity.EntityType);
+
+    var live = entityTypeService.read("NoHistoryType");
+    var currentSnapshot =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+            live.getVersionGroupId(), live.getVersion());
+    Assertions.assertTrue(currentSnapshot.isPresent(), "current-version snapshot must exist");
+
+    entityTypeService.delete("NoHistoryType");
+  }
+
+  /**
+   * {@code deleteAllVersions} must refuse with a friendly message when an entity is still pinned to
+   * a HISTORICAL snapshot, instead of surfacing the raw FK violation. The current-version snapshot
+   * is preserved anyway, but historical ones cannot be removed while referenced.
+   */
+  @Test
+  void testDeleteAllVersionsRefusesWhenEntityPinnedToHistoricalSnapshot() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityTypeVersionRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+
+    var schemaV1 =
+        """
+        { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"]
+        }
+        """;
+
+    entityTypeService.create("HistPinType", List.of(), Optional.empty(), schemaV1);
+    var entity =
+        entityService.create(
+            "HistPinType",
+            """
+            { "name": "alpha" }
+            """);
+    Assertions.assertEquals(1, entity.getEntityTypeVersion().getVersion());
+
+    entityTypeService.createVersion("HistPinType", List.of(), Optional.empty(), schemaV2);
+    var live = entityTypeService.read("HistPinType");
+    Assertions.assertEquals(2, live.getVersion());
+
+    var ex =
+        Assertions.assertThrows(
+            ServiceError.class, () -> entityTypeService.deleteAllVersions("HistPinType"));
+    Assertions.assertTrue(
+        ex.getMessage().contains("referenced by 1 entit"),
+        "expected friendly referenced-by message, got: " + ex.getMessage());
+
+    var history =
+        entityTypeVersionRepository
+            .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
+            .stream()
+            .filter(s -> s.getVersion() != live.getVersion())
+            .toList();
+    Assertions.assertEquals(1, history.size(), "historical snapshot must still exist");
+
+    entityService.delete(entity.getId());
+    entityTypeService.delete("HistPinType");
+  }
+
+  /**
+   * {@code delete} (whole type) must refuse with a friendly message when an entity is still pinned
+   * to any snapshot, instead of surfacing the raw FK violation.
+   */
+  @Test
+  void testDeleteTypeRefusesWhenEntityPinned() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    entityTypeService.create(
+        "PinnedRefType",
+        List.of(),
+        Optional.empty(),
+        """
+        { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] }
+        """);
+    var entity =
+        entityService.create(
+            "PinnedRefType",
+            """
+            { "name": "alpha" }
+            """);
+    Assertions.assertNotNull(entity.getEntityTypeVersion());
+
+    var ex =
+        Assertions.assertThrows(
+            ServiceError.class, () -> entityTypeService.delete("PinnedRefType"));
+    Assertions.assertTrue(
+        ex.getMessage().contains("referenced by 1 entit"),
+        "expected friendly referenced-by message, got: " + ex.getMessage());
+
+    Assertions.assertTrue(entityTypeService.exists("PinnedRefType"), "type must still exist");
+
+    entityService.delete(entity.getId());
+    entityTypeService.delete("PinnedRefType");
+  }
+
+  /**
+   * When a type was created before version pinning was introduced (so its current live version has
+   * no {@link EntityTypeVersion} snapshot), {@code createVersion} must backfill a snapshot for the
+   * current live version before mutating it, so the version chain stays complete and entities
+   * created against that previous live version can be pinned to it retroactively.
+   */
+  @Test
+  void testCreateVersionBackfillsMissingCurrentSnapshot()
+      throws ServiceError, com.fasterxml.jackson.core.JsonProcessingException {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityTypeRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeRepository.class);
+    var entityTypeVersionRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+
+    // Simulate a pre-V4 type: insert a live row directly via the repository, bypassing the service
+    // (which now creates a v1 snapshot on create).
+    var live = new it.davidgreco.metacatalog.entity.EntityType();
+    live.setName("BackfillType");
+    live.setBaseSchema(
+        it.davidgreco.metacatalog.common.JsonUtils.jsonFactory.readTree(
+            """
+                { "type": "object", "properties": { "name": { "type": "string" } } }
+                """));
+    live.setVersion(1);
+    live.setVersionGroupId(java.util.UUID.randomUUID().toString());
+    entityTypeRepository.save(live);
+
+    var preCheck =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+            live.getVersionGroupId(), live.getVersion());
+    Assertions.assertTrue(preCheck.isEmpty(), "fixture: no snapshot should exist yet");
+
+    entityTypeService.createVersion(
+        "BackfillType",
+        List.of(),
+        Optional.empty(),
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } }
+        }
+        """);
+
+    var nowLive = entityTypeService.read("BackfillType");
+    Assertions.assertEquals(2, nowLive.getVersion());
+
+    var v1Snapshot =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(nowLive.getVersionGroupId(), 1);
+    Assertions.assertTrue(v1Snapshot.isPresent(), "backfill snapshot for v1 must exist");
+    Assertions.assertNull(
+        v1Snapshot.get().getPreviousVersionId(), "backfilled v1 snapshot has no predecessor");
+
+    var v2Snapshot =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(nowLive.getVersionGroupId(), 2);
+    Assertions.assertTrue(v2Snapshot.isPresent(), "current-version snapshot for v2 must exist");
+    Assertions.assertEquals(v1Snapshot.get().getId(), v2Snapshot.get().getPreviousVersionId());
+
+    entityTypeService.delete("BackfillType");
   }
 }

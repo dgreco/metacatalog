@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.json.JsonAssert;
 
 @SpringBootTest
@@ -68,8 +67,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
 
     Assertions.assertEquals(1, entityRepository.countByEntityType(testType));
 
-    Assertions.assertThrows(
-        DataIntegrityViolationException.class, () -> entityTypeService.delete("TestType"));
+    Assertions.assertThrows(ServiceError.class, () -> entityTypeService.delete("TestType"));
 
     var updatedValues =
         """
@@ -210,9 +208,291 @@ class EntityServiceTests extends CommonServiceTestingSupport {
         entityService.list(
             "TestType",
             """
-                           $ ? (@.a == "b" && @.b > 1)
-                         """);
+                       $ ? (@.a == "b" && @.b > 1)
+                     """);
     Assertions.assertEquals(1, entities2.size());
     Assertions.assertEquals(e2.getId(), entities2.getFirst().getId());
+  }
+
+  @Test
+  void testEntityIsPinnedToCreationVersion() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"],
+          "additionalProperties": false
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"],
+          "additionalProperties": false
+        }
+        """;
+
+    entityTypeService.create("PinnedType", List.of(), Optional.empty(), schemaV1);
+
+    var valuesV1 =
+        """
+        { "name": "alpha" }
+        """;
+    var entity = entityService.create("PinnedType", valuesV1);
+    Assertions.assertNotNull(entity.getEntityTypeVersion());
+    Assertions.assertEquals(1, entity.getEntityTypeVersion().getVersion());
+    Assertions.assertFalse(
+        entity.getEntityTypeVersion().getSchema().get("properties").has("value"));
+
+    entityTypeService.createVersion("PinnedType", List.of(), Optional.empty(), schemaV2);
+
+    var live = entityTypeService.read("PinnedType");
+    Assertions.assertEquals(2, live.getVersion());
+
+    var reloaded = entityService.read(entity.getId());
+    Assertions.assertEquals(1, reloaded.getEntityTypeVersion().getVersion());
+    Assertions.assertFalse(
+        reloaded.getEntityTypeVersion().getSchema().get("properties").has("value"));
+
+    var valuesWithoutValue =
+        """
+        { "name": "beta" }
+        """;
+    entityService.update(entity.getId(), valuesWithoutValue);
+
+    var valuesV2 =
+        """
+        { "name": "delta", "value": 42 }
+        """;
+    SchemaValidationError extraPropertyRejected =
+        assertThrows(
+            SchemaValidationError.class, () -> entityService.update(entity.getId(), valuesV2));
+    Assertions.assertFalse(extraPropertyRejected.getErrors().isEmpty());
+
+    SchemaValidationError newEntityMissingValueRejected =
+        assertThrows(
+            SchemaValidationError.class,
+            () -> entityService.create("PinnedType", valuesWithoutValue));
+    Assertions.assertFalse(newEntityMissingValueRejected.getErrors().isEmpty());
+
+    var entityV2 = entityService.create("PinnedType", valuesV2);
+    Assertions.assertEquals(2, entityV2.getEntityTypeVersion().getVersion());
+
+    SchemaValidationError v2UpdateRejected =
+        assertThrows(
+            SchemaValidationError.class,
+            () ->
+                entityService.update(
+                    entityV2.getId(),
+                    """
+                    { "name": "epsilon" }
+                    """));
+    Assertions.assertFalse(v2UpdateRejected.getErrors().isEmpty());
+
+    entityService.delete(entity.getId());
+    entityService.delete(entityV2.getId());
+    entityTypeService.delete("PinnedType");
+  }
+
+  @Test
+  void testDeleteVersionRefusedWhenEntityPinned() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"]
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"]
+        }
+        """;
+
+    entityTypeService.create("PinnedDeleteType", List.of(), Optional.empty(), schemaV1);
+    var entity =
+        entityService.create(
+            "PinnedDeleteType",
+            """
+            { "name": "alpha" }
+            """);
+    Assertions.assertEquals(1, entity.getEntityTypeVersion().getVersion());
+
+    entityTypeService.createVersion("PinnedDeleteType", List.of(), Optional.empty(), schemaV2);
+
+    Assertions.assertThrows(
+        ServiceError.class, () -> entityTypeService.deleteVersion("PinnedDeleteType", 1));
+
+    entityService.delete(entity.getId());
+    entityTypeService.delete("PinnedDeleteType");
+  }
+
+  @Test
+  void testDeleteAllVersionsPreservesCurrentSnapshot() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityTypeVersionRepository =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"]
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"]
+        }
+        """;
+
+    entityTypeService.create("DeleteAllVersionsType", List.of(), Optional.empty(), schemaV1);
+    entityTypeService.createVersion("DeleteAllVersionsType", List.of(), Optional.empty(), schemaV2);
+
+    var live = entityTypeService.read("DeleteAllVersionsType");
+    Assertions.assertEquals(2, live.getVersion());
+
+    var entity =
+        entityService.create(
+            "DeleteAllVersionsType",
+            """
+            { "name": "alpha", "value": 1 }
+            """);
+    Assertions.assertEquals(2, entity.getEntityTypeVersion().getVersion());
+
+    entityTypeService.deleteAllVersions("DeleteAllVersionsType");
+
+    var currentSnapshot =
+        entityTypeVersionRepository.findByVersionGroupIdAndVersion(
+            live.getVersionGroupId(), live.getVersion());
+    Assertions.assertTrue(
+        currentSnapshot.isPresent(), "current version snapshot must be preserved");
+
+    var reloaded = entityService.read(entity.getId());
+    Assertions.assertNotNull(reloaded.getEntityTypeVersion(), "entity must remain pinned");
+
+    entityService.delete(entity.getId());
+    entityTypeService.delete("DeleteAllVersionsType");
+  }
+
+  /**
+   * Legacy entities (created before pinning was introduced) have a NULL {@code
+   * entity_type_version_id}. The service must fall back to the live type's schema for validation on
+   * update, instead of NPEing. After {@code createVersion} bumps the live type, the legacy entity
+   * follows the new live schema (it is NOT pinned to the old one).
+   */
+  @Test
+  void testUpdateLegacyEntityWithoutPinFallsBackToLiveTypeSchema()
+      throws ServiceError, com.fasterxml.jackson.core.JsonProcessingException {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+
+    var schemaV1 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" } },
+          "required": ["name"],
+          "additionalProperties": false
+        }
+        """;
+    var schemaV2 =
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+          "required": ["name", "value"],
+          "additionalProperties": false
+        }
+        """;
+
+    entityTypeService.create("LegacyType", List.of(), Optional.empty(), schemaV1);
+    var live = entityTypeService.read("LegacyType");
+
+    var legacyEntity = new it.davidgreco.metacatalog.entity.Entity();
+    legacyEntity.setEntityType(live);
+    legacyEntity.setValues(
+        it.davidgreco.metacatalog.common.JsonUtils.jsonFactory.readTree(
+            """
+            { "name": "alpha" }
+            """));
+    entityRepository.save(legacyEntity);
+
+    var reloaded = entityService.read(legacyEntity.getId());
+    Assertions.assertNull(reloaded.getEntityTypeVersion(), "fixture: legacy entity has no pin");
+
+    entityService.update(
+        legacyEntity.getId(),
+        """
+        { "name": "beta" }
+        """);
+    var after = entityService.read(legacyEntity.getId());
+    Assertions.assertEquals("beta", after.getValues().get("name").asText());
+    Assertions.assertNull(after.getEntityTypeVersion(), "update must not backfill a pin");
+
+    var v1Rejected =
+        assertThrows(
+            SchemaValidationError.class,
+            () ->
+                entityService.update(
+                    legacyEntity.getId(),
+                    """
+                    { "name": "gamma", "value": 1 }
+                    """));
+    Assertions.assertFalse(v1Rejected.getErrors().isEmpty(), "v1 schema rejects 'value'");
+
+    entityTypeService.createVersion("LegacyType", List.of(), Optional.empty(), schemaV2);
+    var v2 =
+        entityService.create(
+            "LegacyType",
+            """
+            { "name": "gamma", "value": 1 }
+            """);
+    Assertions.assertEquals(2, v2.getEntityTypeVersion().getVersion());
+
+    entityService.update(
+        legacyEntity.getId(),
+        """
+        { "name": "delta", "value": 1 }
+        """);
+    var afterV2 = entityService.read(legacyEntity.getId());
+    Assertions.assertEquals("delta", afterV2.getValues().get("name").asText());
+    Assertions.assertEquals(1, afterV2.getValues().get("value").asInt());
+    Assertions.assertNull(afterV2.getEntityTypeVersion(), "legacy entity stays unpinned");
+
+    var v2Rejected =
+        assertThrows(
+            SchemaValidationError.class,
+            () ->
+                entityService.update(
+                    legacyEntity.getId(),
+                    """
+                    { "name": "epsilon" }
+                    """));
+    Assertions.assertFalse(v2Rejected.getErrors().isEmpty(), "v2 schema requires 'value'");
+
+    entityService.delete(legacyEntity.getId());
+    entityService.delete(v2.getId());
+    entityTypeService.delete("LegacyType");
   }
 }

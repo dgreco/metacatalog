@@ -300,18 +300,23 @@ public class UiController {
       var type = entity.getEntityType();
       if (type == null) continue;
       var typeName = type.getName();
+      var pinnedVersion = entity.getEntityTypeVersion();
+      var instanceOfTarget =
+          pinnedVersion != null ? "type-version:" + pinnedVersion.getId() : "type:" + typeName;
+      var instanceOfLabel =
+          pinnedVersion != null ? typeName + " (v" + pinnedVersion.getVersion() + ")" : typeName;
       nodes.add(
           new GraphModel.Node(
               "entity:" + entity.getId(),
               entityLabel(entity),
               "entity",
-              typeName,
+              instanceOfLabel,
               null,
               entity.getValues() == null ? null : entity.getValues().toPrettyString()));
       edges.add(
           new GraphModel.Edge(
               "entity:" + entity.getId(),
-              "type:" + typeName,
+              instanceOfTarget,
               "instance-of",
               "instance-of",
               null,

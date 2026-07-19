@@ -276,6 +276,11 @@ class MetacatalogApiTests {
     var retrievedEntity = api.getEntity(id);
 
     Assertions.assertEquals("AnotherTestType", retrievedEntity.getEntityType());
+    Assertions.assertNotNull(
+        retrievedEntity.getEntityTypeVersionId(), "entityTypeVersionId must be populated on read");
+    Assertions.assertFalse(
+        retrievedEntity.getEntityTypeVersionId().isBlank(),
+        "entityTypeVersionId must be a non-empty id");
 
     api.existsEntity(id);
 
@@ -287,6 +292,74 @@ class MetacatalogApiTests {
             .getErrors()
             .getFirst()
             .contains("not found"));
+  }
+
+  /**
+   * Verifies the entity-pinning contract end-to-end through the REST API: an entity created against
+   * v1 of a type stays pinned to v1's snapshot (returned as {@code entityTypeVersionId}) even after
+   * a new version of the type is created, and updates still validate against the v1 schema.
+   */
+  @Test
+  void testEntityPinningEndToEnd() {
+    var api = getMetaCatalogManagerApi();
+
+    var typeV1 = new EntityType();
+    typeV1.setName("PinnedEndpointType");
+    typeV1.setSchema(
+        """
+                {
+                  "type": "object",
+                  "properties": { "name": { "type": "string" } },
+                  "required": ["name"],
+                  "additionalProperties": false
+                }
+                """);
+    api.createEntityType(typeV1);
+
+    var entity = new Entity();
+    entity.setEntityType("PinnedEndpointType");
+    entity.setValues(
+        """
+                { "name": "alpha" }
+                """);
+    var id = api.createEntity(entity);
+
+    var created = api.getEntity(id);
+    Assertions.assertNotNull(created.getEntityTypeVersionId(), "v1 entity must be pinned");
+    var pinnedV1 = created.getEntityTypeVersionId();
+
+    var typeV2 = new EntityType();
+    typeV2.setName("PinnedEndpointType");
+    typeV2.setSchema(
+        """
+                {
+                  "type": "object",
+                  "properties": { "name": { "type": "string" }, "value": { "type": "number" } },
+                  "required": ["name", "value"],
+                  "additionalProperties": false
+                }
+                """);
+    api.createEntityTypeVersion("PinnedEndpointType", typeV2);
+
+    var stillPinned = api.getEntity(id);
+    Assertions.assertEquals(
+        pinnedV1, stillPinned.getEntityTypeVersionId(), "entity must stay pinned to v1");
+
+    var v2Entity = new Entity();
+    v2Entity.setEntityType("PinnedEndpointType");
+    v2Entity.setValues(
+        """
+                { "name": "beta", "value": 1 }
+                """);
+    var v2Id = api.createEntity(v2Entity);
+    var v2Created = api.getEntity(v2Id);
+    Assertions.assertNotNull(v2Created.getEntityTypeVersionId());
+    Assertions.assertNotEquals(
+        pinnedV1, v2Created.getEntityTypeVersionId(), "v2 entity must pin to a different snapshot");
+
+    api.deleteEntity(id);
+    api.deleteEntity(v2Id);
+    api.deleteEntityType("PinnedEndpointType");
   }
 
   @Test

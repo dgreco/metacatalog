@@ -1332,6 +1332,14 @@ components:
           readOnly: true
         entityType:
           type: string
+        entityTypeVersionId:
+          type: string
+          readOnly: true
+          description: >
+            The id of the EntityTypeVersion snapshot this entity is pinned to. Set by the
+            service on create; an entity stays pinned to the schema it was validated against
+            at creation time even after a new version of the type is created. Null for legacy
+            entities created before pinning was introduced.
         values:
           type: string
     Mapping:
