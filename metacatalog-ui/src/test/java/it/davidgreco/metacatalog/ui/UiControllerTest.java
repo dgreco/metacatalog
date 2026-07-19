@@ -197,6 +197,46 @@ class UiControllerTest {
   }
 
   @Test
+  void graphDataConnectsEntityToPinnedVersionWhenPinned() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    type.setVersionGroupId("vg-1");
+    type.setVersion(1);
+    given(entityTypeService.list()).willReturn(List.of(type));
+
+    var snapshot = new EntityTypeVersion();
+    snapshot.setId("snap-1");
+    snapshot.setVersionGroupId("vg-1");
+    snapshot.setVersion(1);
+    snapshot.setName("Person");
+    given(entityTypeVersionRepository.findAll()).willReturn(List.of(snapshot));
+
+    var entity = new Entity();
+    entity.setId("ent-1");
+    entity.setEntityType(type);
+    entity.setEntityTypeVersion(snapshot);
+    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
+    given(entityRepository.findAll()).willReturn(List.of(entity));
+
+    mockMvc
+        .perform(get("/ui/graph/data").param("showEntities", "true"))
+        .andExpect(status().isOk())
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("entity:ent-1"),
+                        org.hamcrest.Matchers.containsString("type-version:snap-1"),
+                        org.hamcrest.Matchers.containsString("\"instance-of\""),
+                        org.hamcrest.Matchers.containsString("Person (v1)"))))
+        .andExpect(
+            content()
+                .string(
+                    org.hamcrest.Matchers.containsString(
+                        "\"source\":\"entity:ent-1\",\"target\":\"type-version:snap-1\"")));
+  }
+
+  @Test
   void graphDataOmitsEntitiesByDefault() throws Exception {
     var type = new EntityType();
     type.setName("Person");
