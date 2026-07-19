@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>it.davidgreco</groupId>
+        <artifactId>metacatalog</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <groupId>it.davidgreco.metacatalog</groupId>
+    <artifactId>metacatalog-sparql</artifactId>
+    <version>${project.version}</version>
+    <name>Meta Catalog SPARQL</name>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.github.jsqlparser</groupId>
+                <artifactId>jsqlparser</artifactId>
+                <version>4.4</version>
+                <scope>compile</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+
+    <dependencies>
+        <!-- Spring MVC + embedded servlet container for the SPARQL endpoint -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Thymeleaf for the server-side rendered SPARQL query UI -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+
+        <!--
+            Ontop embedding (production-recommended RDF4J Repository API binding).
+            ontop-system-sql-owlapi is the aggregate that pulls ontop-rdb (SQL
+            reformulation + OBDA/R2RML parsers); ontop-rdf4j is declared explicitly
+            so the RDF4J Repository API stays on the compile classpath even if Ontop
+            reshuffles its transitive graph later. Version and logback/slf4j exclusions
+            are managed in the parent dependencyManagement.
+
+            Compile scope: bundled into this module's jar by the maven-shade-plugin
+            (see <build> below) with net.sf.jsqlparser relocated to a private package,
+            so Ontop's jsqlparser 4.x dependency does not leak onto the application
+            classpath and clash with Spring Data JPA's jsqlparser 5.x API. This is
+            mandatory: Ontop 5.5.0 calls the jsqlparser 4.x API Select.getSelectBody(),
+            while Spring Data JPA 4.1 (metacatalog-core) calls the 5.x-only
+            Select.getPlainSelect() — the two jsqlparser lines cannot coexist on one
+            classpath. The shade plugin's dependency-reduced POM strips Ontop from the
+            transitive graph so the app only gets the shaded copy.
+        -->
+        <dependency>
+            <groupId>it.unibz.inf.ontop</groupId>
+            <artifactId>ontop-system-sql-owlapi</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>it.unibz.inf.ontop</groupId>
+            <artifactId>ontop-rdf4j</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <!--
+            jsqlparser 4.4: bundled shaded (relocated) with Ontop so Ontop's
+            Select.getSelectBody() calls resolve against the private copy. Compile
+            scope so the shade plugin includes it; the reduced POM strips it from
+            the transitive graph. Version/scope forced by this module's
+            dependencyManagement above (overriding the parent's 5.3 test pin).
+        -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <!--
+            RDF4J core API modules the sparql code references directly
+            (Repository, Query/TupleQuery/GraphQuery, TurtleWriter). Declared
+            explicitly — not transitive from the RIO writers below, and the
+            shade plugin's reduced POM strips Ontop (which would otherwise
+            bring them in transitively).
+        -->
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-repository-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-query</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-turtle</artifactId>
+        </dependency>
+        <!--
+            SPARQL query parser (QueryParserUtil / ParsedQuery) used by the
+            controller to inspect the query type before dispatching to the
+            typed prepare methods. Declared explicitly because the parent
+            excludes the whole org.eclipse.rdf4j group from the Ontop deps.
+        -->
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryparser-sparql</artifactId>
+        </dependency>
+        <!--
+            RDF4J result-format writers and serializers used by the SPARQL
+            protocol controller for content negotiation. The SPARQL Results
+            JSON/XML/CSV/TSV writers and the N-Triples / RDF/XML RIO writers
+            are NOT transitive from ontop-system-sql-owlapi — they must be
+            declared explicitly, the same way Ontop's own ontop-endpoint/pom.xml
+            does. Versions managed in the parent dependencyManagement.
+        -->
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-sparqljson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-sparqlxml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-text</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-ntriples</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-rdfxml</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing -->
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Test-only dependency on metacatalog-core: brings in the Flyway
+            migration scripts (db/migration) and the Testcontainers support
+            so the integration test can stand up the real schema and exercise
+            the Ontop bean + SPARQL controller end to end.
+        -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Enforcer Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+            </plugin>
+
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!--
+                maven-shade-plugin: bundle Ontop + ALL its transitives into the
+                sparql jar, relocating the two packages that clash with metacatalog-core.
+                createDependencyReducedPom=true strips the bundled artifacts from the
+                published POM so the app gets them only from this (shaded) jar.
+
+                Two relocations are mandatory:
+                  - net.sf.jsqlparser: Ontop 5.5.0 calls jsqlparser 4.x API
+                    (Select.getSelectBody()); Spring Data JPA 4.1 calls jsqlparser
+                    5.x-only API (Select.getPlainSelect()). Both lines cannot
+                    coexist. The shaded copy is relocated to a private package so
+                    net.sf.jsqlparser never appears on the app classpath, and
+                    Spring Data JPA's ClassUtils.isPresent check returns false →
+                    it falls back to the default query enhancer.
+                  - org.jgrapht: Ontop 5.5.0 depends on the ancient
+                    org.javabits.jgrapht:jgrapht-core:0.9.3 (DefaultDirectedGraph
+                    implements DirectedGraph), while metacatalog-core uses
+                    org.jgrapht:jgrapht-core:1.5.3 where DirectedGraph was removed.
+                    Both cannot coexist — bundle Ontop's 0.9.3 and relocate
+                    org.jgrapht to a private package.
+
+                We bundle the full Ontop transitive graph (minus RDF4J, which is
+                managed separately at 5.3.0) rather than cherry-picking artifacts.
+                Cherry-picking (via <artifactSet><includes>) orphaned Ontop's
+                non-bundled transitives (Guice, OWL API) under the reduced POM,
+                causing NoClassDefFoundError at runtime. Bundling everything and
+                excluding only RDF4J + Spring + Lombok + test deps keeps the
+                shaded jar self-contained.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <artifactSet>
+                                <excludes>
+                                    <!-- RDF4J managed separately at 5.3.0 -->
+                                    <exclude>org.eclipse.rdf4j:*</exclude>
+                                    <!-- Spring managed by Spring Boot parent -->
+                                    <exclude>org.springframework:*</exclude>
+                                    <exclude>org.springframework.boot:*</exclude>
+                                    <exclude>org.springframework.data:*</exclude>
+                                    <exclude>org.springframework.security:*</exclude>
+                                    <!-- Test-only deps -->
+                                    <exclude>org.junit.jupiter:*</exclude>
+                                    <exclude>org.assertj:*</exclude>
+                                    <exclude>org.mockito:*</exclude>
+                                    <exclude>org.testcontainers:*</exclude>
+                                    <exclude>org.junit.platform:*</exclude>
+                                    <!-- Lombok: annotation processor, not runtime -->
+                                    <exclude>org.projectlombok:*</exclude>
+                                    <!-- other metacatalog modules: keep them out of the sparql uber-jar.
+                                         The sparql module's own classes MUST stay — a wildcard
+                                         it.davidgreco.metacatalog:* exclude would strip them too,
+                                         leaving the shaded jar with no controllers/template. -->
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-core</exclude>
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-functions</exclude>
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-openapi</exclude>
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-ui</exclude>
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-security</exclude>
+                                    <exclude>it.davidgreco.metacatalog:metacatalog-application</exclude>
+                                </excludes>
+                            </artifactSet>
+                            <relocations>
+                                <relocation>
+                                    <pattern>net.sf.jsqlparser</pattern>
+                                    <shadedPattern>it.davidgreco.metacatalog.sparql.shaded.jsqlparser</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>org.jgrapht</pattern>
+                                    <shadedPattern>it.davidgreco.metacatalog.sparql.shaded.jgrapht</shadedPattern>
+                                </relocation>
+                            </relocations>
+                            <createDependencyReducedPom>true</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- JaCoCo Plugin -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Spotless Plugin for Code Formatting -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- licensescan Maven plugin for License check -->
+            <plugin>
+                <groupId>com.github.carlomorelli</groupId>
+                <artifactId>licensescan-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- maven-surefire-plugin to run unit tests through the command line -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

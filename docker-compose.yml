@@ -39,5 +39,20 @@ services:
       retries: 10
       start_period: 30s
 
+  bulk-loader:
+    image: curlimages/curl:8.10.1
+    container_name: metacatalog-bulk-loader
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ./docker/bulk:/bulk:ro
+    environment:
+      APP_URL: http://app:8080
+      METACATALOG_USER: admin
+      METACATALOG_PASSWORD: admin
+    entrypoint: ["/bin/sh", "/bulk/load-bulk.sh"]
+    restart: "no"
+
 volumes:
   postgres-data:

@@ -52,7 +52,7 @@ logging:
 application:
   config:
     automaticEntitiesMapping: true
-    updateMappedEntitiesSchedulingInterval: 1s
+    updateMappedEntitiesMappingSchedulingInterval: 1s
     entityLifeCycleEventCleanupSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
     security:
@@ -79,3 +79,12 @@ application:
       #   # user-search-filter: (uid={0})
       #   # manager-dn: cn=admin,dc=example,dc=com
       #   # manager-password: admin
+  sparql:
+    enabled: true
+    mapping: classpath:ontop/mapping.obda
+    ontology: classpath:ontop/ontology.owl
+    endpoint: /sparql/query
+    ontology-iri: http://metacatalog/
+    default-query: |-
+      PREFIX mt: <http://metacatalog/>
+      SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50

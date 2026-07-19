@@ -1,0 +1,69 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://metacatalog/"
+     xml:base="http://metacatalog"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#">
+
+    <owl:Ontology rdf:about="http://metacatalog"/>
+
+    <!-- ===================== Classes ===================== -->
+    <owl:Class rdf:about="http://metacatalog/Trait"/>
+    <owl:Class rdf:about="http://metacatalog/EntityType"/>
+    <owl:Class rdf:about="http://metacatalog/Entity"/>
+    <owl:Class rdf:about="http://metacatalog/EntityTypeVersion"/>
+    <owl:Class rdf:about="http://metacatalog/TraitVersion"/>
+
+    <!-- ===================== Datatype properties ===================== -->
+    <owl:DatatypeProperty rdf:about="http://metacatalog/id">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/name">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/baseSchema">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/derivedSchema">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/values">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/version">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#integer"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/versionGroupId">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/fatherName">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/traits">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
+    <owl:DatatypeProperty rdf:about="http://metacatalog/createdAt">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
+    </owl:DatatypeProperty>
+
+    <!-- ===================== Object properties ===================== -->
+    <!-- type / trait composition -->
+    <owl:ObjectProperty rdf:about="http://metacatalog/hasTrait"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/hasEntityType"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/pinnedToVersion"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/hasPreviousVersion"/>
+
+    <!-- inheritance -->
+    <owl:ObjectProperty rdf:about="http://metacatalog/inheritsFrom"/>
+
+    <!-- trait / entity relationships (the RelationType vocabulary) -->
+    <owl:ObjectProperty rdf:about="http://metacatalog/dependsOn"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/isRequiredBy"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/hasPart"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/isPartOf"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/mappedTo"/>
+    <owl:ObjectProperty rdf:about="http://metacatalog/isMappedBy"/>
+
+</rdf:RDF>

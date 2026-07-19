@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Meta Catalog — SPARQL</title>
+    <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css"/>
+    <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f8f9fa; color: #212529; }
+        header.topbar {
+            display: flex; align-items: center; gap: 1rem;
+            padding: .75rem 1.25rem; background: #212529; color: #fff;
+        }
+        header.topbar h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+        header.topbar nav a { color: #adb5bd; text-decoration: none; margin-left: .75rem; font-size: .9rem; }
+        header.topbar nav a:hover { color: #fff; }
+        main { padding: 1rem 1.25rem; }
+        .meta { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
+        .meta code { background: #e9ecef; padding: .1rem .35rem; border-radius: .2rem; }
+        #yasgui { height: calc(100vh - 110px); }
+    </style>
+</head>
+<body>
+<header class="topbar">
+    <h1>Meta Catalog — SPARQL</h1>
+    <nav>
+        <a th:href="@{/ui/}">← Back to UI</a>
+    </nav>
+</header>
+<main>
+    <div class="meta">
+        Endpoint: <code th:text="${endpoint}">/sparql/query</code>
+        &nbsp;·&nbsp;
+        Ontology IRI: <code th:text="${ontologyIri}">http://metacatalog/</code>
+    </div>
+    <div id="yasgui"></div>
+</main>
+<script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    const endpoint = /*[[${endpoint}]]*/ '/sparql/query';
+    const defaultQuery = /*[[${defaultQuery}]]*/ 'SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50';
+    const yasgui = new Yasgui(document.getElementById('yasgui'), {
+        requestConfig: { endpoint: endpoint },
+        endpointInfoOptions: { endpoint: endpoint },
+    });
+    // Pre-fill the first tab with the default query.
+    const firstTab = yasgui.getTab();
+    if (firstTab) {
+        firstTab.setQuery(defaultQuery);
+    }
+    /*]]>*/
+</script>
+</body>
+</html>

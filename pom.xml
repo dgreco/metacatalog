@@ -61,6 +61,10 @@
         <!--   Logback -->
         <logback.version>1.5.38</logback.version>
 
+        <!--   Ontop & RDF4J (metacatalog-sparql) -->
+        <ontop.version>5.5.0</ontop.version>
+        <rdf4j.version>5.3.0</rdf4j.version>
+
         <!--   Testing & Checking -->
         <testcontainers.version>1.21.4</testcontainers.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
@@ -95,6 +99,11 @@
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-ui</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-sparql</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -272,6 +281,137 @@
                 <version>${logback.version}</version>
             </dependency>
 
+        <!-- Ontop & RDF4J (metacatalog-sparql) -->
+        <!--
+            Ontop pins old logback (1.2.x), slf4j (1.7.x) and its own RDF4J
+            5.1.4 (+ the ancient 2.2.2 pulled by owlapi-rio); the metacatalog
+            parent uses logback 1.5.x / slf4j 2.x and RDF4J 5.3.0, so logback,
+            slf4j and the whole org.eclipse.rdf4j group are excluded here and
+            the parent's versions win. Ontop also depends on jsqlparser 4.x
+            (Select.getSelectBody()) and the ancient org.javabits.jgrapht 0.9.3
+            (DirectedGraph interface), both of which conflict with metacatalog-core's
+            versions (jsqlparser 5.x, org.jgrapht 1.5.3). The metacatalog-sparql
+            module shades Ontop's FULL transitive graph (minus RDF4J) with
+            net.sf.jsqlparser and org.jgrapht relocated to private packages; the
+            shade plugin's dependency-reduced POM strips the bundled artifacts so
+            only the shaded/relocated copies reach the app.
+        -->
+        <dependency>
+            <groupId>it.unibz.inf.ontop</groupId>
+            <artifactId>ontop-system-sql-owlapi</artifactId>
+            <version>${ontop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-classic</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.eclipse.rdf4j</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>it.unibz.inf.ontop</groupId>
+            <artifactId>ontop-rdf4j</artifactId>
+            <version>${ontop.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-classic</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>ch.qos.logback</groupId>
+                    <artifactId>logback-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.eclipse.rdf4j</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!--
+            RDF4J result-format writers and serializers used by the SPARQL
+            protocol controller for content negotiation. Pinned to match the
+            RDF4J version Ontop compiles against.
+        -->
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-sparqljson</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-sparqlxml</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryresultio-text</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-queryparser-sparql</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-ntriples</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-rdfxml</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+
+        <!--
+            RDF4J core API modules the sparql code references directly
+            (Repository, Query/TupleQuery/GraphQuery, TurtleWriter). Declared
+            explicitly because the shade plugin bundles Ontop (which would
+            otherwise bring these in transitively) and strips it from the
+            reduced POM — without these direct deps the app classpath would
+            miss rdf4j-repository-api / rdf4j-query.
+        -->
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-repository-api</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-query</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.rdf4j</groupId>
+            <artifactId>rdf4j-rio-turtle</artifactId>
+            <version>${rdf4j.version}</version>
+        </dependency>
+        <!--
+            Force the Guava JRE variant. Ontop 5.5.0 needs
+            ImmutableList.toImmutableList() (present in 32.0.1-jre, absent in the
+            android variant that swagger-parser pulls in transitively).
+            metacatalog does not use Guava directly, so the jre variant is safe.
+        -->
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>32.0.1-jre</version>
+        </dependency>
             <!-- Testing & Checking-->
             <dependency>
                 <groupId>org.testcontainers</groupId>
@@ -483,6 +623,7 @@
         <module>metacatalog-openapi</module>
         <module>metacatalog-ui</module>
         <module>metacatalog-security</module>
+        <module>metacatalog-sparql</module>
         <module>metacatalog-application</module>
     </modules>
 
