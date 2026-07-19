@@ -541,114 +541,11 @@ below) and consists of 11 tables covering entity types, traits, entities, their
 relationships, the mapping system, the entity lifecycle audit log, and the
 append-only version history for types.
 
-```mermaid
-erDiagram
-    ENTITY_TYPE {
-        varchar id PK
-        varchar name
-        jsonb base_schema
-        jsonb derived_schema
-        varchar father_id FK
-        int version
-        varchar version_group_id
-    }
-    TRAIT {
-        varchar id PK
-        varchar name
-        jsonb base_schema
-        jsonb derived_schema
-        varchar father_id FK
-        int version
-        varchar version_group_id
-    }
-    TYPE_TRAITS {
-        varchar entity_type_id FK
-        varchar trait_id FK
-    }
-    ENTITY {
-        varchar id PK
-        jsonb values
-        varchar entity_type_id FK
-        varchar entity_type_version_id FK
-    }
-    TRAIT_RELATIONSHIP {
-        varchar id PK
-        varchar source_id FK
-        varchar target_id FK
-        varchar relation_type
-    }
-    ENTITY_RELATIONSHIP {
-        varchar id PK
-        varchar source_id FK
-        varchar target_id FK
-        varchar relation_type
-    }
-    MAPPING_TYPE_RELATIONSHIP {
-        varchar id PK
-        varchar source_id FK
-        varchar target_id FK
-        varchar relation_type
-        jsonb mapping_values
-        jsonb entity_path_references
-    }
-    MAPPING_ENTITY_RELATIONSHIP {
-        varchar id PK
-        varchar source_id FK
-        varchar target_id FK
-        varchar relation_type
-        varchar mapping_entity_type_relationship_id FK
-    }
-    ENTITY_LIFECYCLE_EVENT {
-        bigint id PK
-        varchar entity_id
-        varchar entity_type_name
-        timestamp event_time
-        timestamp process_time
-        varchar event_type
-        varchar event_status
-    }
-    ENTITY_TYPE_VERSION {
-        varchar id PK
-        varchar version_group_id
-        int version
-        varchar name
-        jsonb base_schema
-        jsonb derived_schema
-        varchar father_name
-        jsonb traits
-        varchar previous_version_id FK
-        timestamp created_at
-    }
-    TRAIT_VERSION {
-        varchar id PK
-        varchar version_group_id
-        int version
-        varchar name
-        jsonb base_schema
-        jsonb derived_schema
-        varchar father_name
-        varchar previous_version_id FK
-        timestamp created_at
-    }
+![E/R diagram of the Meta Catalog database schema](docs/er-diagram.png)
 
-    ENTITY_TYPE |o--o{ ENTITY_TYPE : "father (inheritance)"
-    TRAIT         |o--o{ TRAIT         : "father (inheritance)"
-    ENTITY_TYPE   ||--o{ ENTITY        : "has instances"
-    ENTITY_TYPE   ||--o{ TYPE_TRAITS   : "uses"
-    TRAIT         ||--o{ TYPE_TRAITS   : "applied to"
-    TRAIT         |o--o{ TRAIT_RELATIONSHIP : "source"
-    TRAIT         |o--o{ TRAIT_RELATIONSHIP : "target"
-    ENTITY        ||--o{ ENTITY_RELATIONSHIP : "source"
-    ENTITY        ||--o{ ENTITY_RELATIONSHIP : "target"
-    ENTITY_TYPE   ||--o{ MAPPING_TYPE_RELATIONSHIP : "source"
-    ENTITY_TYPE   ||--o{ MAPPING_TYPE_RELATIONSHIP : "target"
-    MAPPING_TYPE_RELATIONSHIP |o--o{ MAPPING_ENTITY_RELATIONSHIP : "defines"
-    ENTITY        ||--o{ MAPPING_ENTITY_RELATIONSHIP : "source"
-    ENTITY        ||--o{ MAPPING_ENTITY_RELATIONSHIP : "target"
-    ENTITY_TYPE_VERSION |o--o{ ENTITY : "pins (entity_type_version_id)"
-    ENTITY_TYPE_VERSION |o--o{ ENTITY_TYPE_VERSION : "previous_version"
-    TRAIT_VERSION        |o--o{ TRAIT_VERSION        : "previous_version"
-```
+The source Graphviz file is `docs/er-diagram.dot` — regenerate the image with
+`dot -Tpng -Gdpi=150 docs/er-diagram.dot -o docs/er-diagram.png` after editing
+the schema.
 
 Notes:
 

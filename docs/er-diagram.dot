@@ -1,0 +1,167 @@
+digraph ER {
+    graph [
+        rankdir=LR,
+        fontname="Helvetica",
+        fontsize=10,
+        splines=true,
+        overlap=false,
+        pad=0.4,
+        nodesep=0.45,
+        ranksep=0.85,
+        bgcolor="white",
+        label="Meta Catalog — Database Schema (E/R)",
+        labelloc=t,
+        fontsize=16
+    ];
+    node  [shape=plaintext, fontname="Helvetica", fontsize=10];
+    edge  [color="#444444", penwidth=1.0, arrowsize=0.7, fontname="Helvetica", fontsize=9];
+
+    entity_type [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#1f77b4" COLSPAN="3"><FONT COLOR="white"><B>entity_type</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">base_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">derived_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">father_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version_group_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    trait [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#1f77b4" COLSPAN="3"><FONT COLOR="white"><B>trait</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">base_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">derived_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">father_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version_group_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    type_traits [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#7f7f7f" COLSPAN="3"><FONT COLOR="white"><B>type_traits</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">trait_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    entity [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#2ca02c" COLSPAN="3"><FONT COLOR="white"><B>entity</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">values</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    trait_relationship [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#ff7f0e" COLSPAN="3"><FONT COLOR="white"><B>trait_relationship</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">source_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">target_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">relation_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    entity_relationship [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#ff7f0e" COLSPAN="3"><FONT COLOR="white"><B>entity_relationship</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">source_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">target_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">relation_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    mapping_type_relationship [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#9467bd" COLSPAN="3"><FONT COLOR="white"><B>mapping_type_relationship</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">source_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">target_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">relation_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">mapping_values</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">entity_path_references</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+        </TABLE>
+    >];
+
+    mapping_entity_relationship [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#9467bd" COLSPAN="3"><FONT COLOR="white"><B>mapping_entity_relationship</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">source_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">target_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">relation_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">mapping_entity_type_relationship_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    entity_lifecycle_event [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#8c564b" COLSPAN="3"><FONT COLOR="white"><B>entity_lifecycle_event</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">bigint</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">entity_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">entity_type_name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">event_time</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">process_time</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">event_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">event_status</TD><TD ALIGN="LEFT">varchar</TD></TR>
+        </TABLE>
+    >];
+
+    entity_type_version [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#17becf" COLSPAN="3"><FONT COLOR="white"><B>entity_type_version</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version_group_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">base_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">derived_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">father_name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">traits</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">previous_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+        </TABLE>
+    >];
+
+    trait_version [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#17becf" COLSPAN="3"><FONT COLOR="white"><B>trait_version</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version_group_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">base_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">derived_schema</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">father_name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">previous_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+        </TABLE>
+    >];
+
+    entity_type        -> entity_type        [taillabel="father",  labeldistance=2, dir=back, arrowtail=crow];
+    trait              -> trait              [taillabel="father",  labeldistance=2, dir=back, arrowtail=crow];
+    entity_type        -> entity             [arrowhead=crow,  label="has instances"];
+    entity_type        -> type_traits        [arrowhead=crow,  label="uses"];
+    trait              -> type_traits        [arrowhead=crow,  label="applied to"];
+    trait              -> trait_relationship [arrowhead=crow,  label="source"];
+    trait              -> trait_relationship [arrowhead=crow,  label="target"];
+    entity             -> entity_relationship [arrowhead=crow, label="source"];
+    entity             -> entity_relationship [arrowhead=crow, label="target"];
+    entity_type        -> mapping_type_relationship [arrowhead=crow, label="source"];
+    entity_type        -> mapping_type_relationship [arrowhead=crow, label="target"];
+    mapping_type_relationship -> mapping_entity_relationship [arrowhead=crow, label="defines"];
+    entity             -> mapping_entity_relationship [arrowhead=crow, label="source"];
+    entity             -> mapping_entity_relationship [arrowhead=crow, label="target"];
+    entity_type_version -> entity            [arrowhead=crow,  label="pins (entity_type_version_id)"];
+    entity_type_version -> entity_type_version [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
+    trait_version      -> trait_version      [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
+}
