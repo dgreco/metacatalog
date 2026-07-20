@@ -118,4 +118,44 @@ class UiFormLoginTest {
         .andExpect(status().isOk())
         .andExpect(content().string("ok"));
   }
+
+  @Test
+  void sparqlUiAndQueryReuseUiSessionWithoutReauthentication() throws Exception {
+    // Unauthenticated: the SPARQL UI page redirects to /login (form-login chain),
+    // the protocol endpoint returns 401 (Basic entry point, no creds).
+    mockMvc
+        .perform(get("/sparql"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/login"));
+    mockMvc
+        .perform(get("/sparql/query").param("query", "ASK { ?s ?p ?o }"))
+        .andExpect(status().isUnauthorized());
+
+    // Log in via the UI form-login flow and grab the session.
+    final var session =
+        mockMvc
+            .perform(
+                post("/login").param("username", "admin").param("password", "secret").with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/ui"))
+            .andReturn()
+            .getRequest()
+            .getSession();
+    assert session != null;
+    final var securityContext = session.getAttribute("SPRING_SECURITY_CONTEXT");
+
+    // The SPARQL UI page rides the same session (no re-auth).
+    mockMvc
+        .perform(get("/sparql").sessionAttr("SPRING_SECURITY_CONTEXT", securityContext))
+        .andExpect(
+            status().isNotFound()); // no SPARQL controller in this test app → 404 = passed security
+
+    // Yasgui's XHR to the protocol endpoint rides the same session (no re-auth).
+    mockMvc
+        .perform(
+            get("/sparql/query")
+                .param("query", "ASK { ?s ?p ?o }")
+                .sessionAttr("SPRING_SECURITY_CONTEXT", securityContext))
+        .andExpect(status().isNotFound()); // no SPARQL controller here → 404 = passed security
+  }
 }

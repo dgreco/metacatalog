@@ -43,4 +43,19 @@ class OAuth2SecurityConfigTest {
         .andExpect(status().isOk())
         .andExpect(content().string("ok"));
   }
+
+  @Test
+  void sparqlQueryEndpointRequiresJwt() throws Exception {
+    // No SPARQL controller is mapped in this test context, but security fires first: a 401 proves
+    // auth is required, and a 404 (not 401) with a JWT proves the request passed security.
+    mockMvc
+        .perform(get("/sparql/query").param("query", "ASK { ?s ?p ?o }"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get("/sparql/query")
+                .param("query", "ASK { ?s ?p ?o }")
+                .with(jwt().jwt(b -> b.claim("sub", "test-user"))))
+        .andExpect(status().isNotFound());
+  }
 }

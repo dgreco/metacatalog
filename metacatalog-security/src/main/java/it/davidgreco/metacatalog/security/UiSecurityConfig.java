@@ -9,17 +9,19 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Security configuration for the server-side rendered UI (the {@code /ui/**} pages, plus the {@code
- * /login} and {@code /logout} endpoints).
+ * Security configuration for the server-side rendered UI (the {@code /ui/**} pages, the SPARQL
+ * query UI at {@code /sparql}, plus the {@code /login} and {@code /logout} endpoints).
  *
  * <p>Active only when {@code auth-mode} is {@code basic} or {@code ldap} — the two modes that have
  * a username/password to check. In {@code none} mode the UI stays open; in {@code oauth2} mode the
  * UI is not protected (JWT bearer tokens are for API clients, not browser sessions).
  *
  * <p>This chain is ordered with higher priority than the API chain so that requests to {@code
- * /ui/**} are handled here (form login + stateful sessions) instead of falling through to the API
- * chain (Basic/LDAP + stateless). Static resources under {@code /ui/css/**} and {@code /ui/js/**}
- * are permitted so the login page can be styled before the user authenticates.
+ * /ui/**} and {@code /sparql} are handled here (form login + stateful sessions) instead of falling
+ * through to the API chain (Basic/LDAP + stateless). The {@code /sparql/query} protocol endpoint is
+ * handled by a dedicated {@link SparqlSecurityConfig} chain (also stateful, so the browser session
+ * established here carries over to Yasgui's XHR). Static resources under {@code /ui/css/**} and
+ * /ui/js/**} are permitted so the login page can be styled before the user authenticates.
  *
  * <p>CSRF is left enabled (Spring Security default) because the UI uses state-changing POST forms;
  * Thymeleaf auto-injects the CSRF token into every {@code <form th:action>}.
@@ -43,7 +45,7 @@ public class UiSecurityConfig {
   @Bean
   @Order(UI_CHAIN_ORDER)
   public SecurityFilterChain uiSecurityFilterChain(final HttpSecurity http) throws Exception {
-    http.securityMatcher("/ui/**", "/login", "/logout")
+    http.securityMatcher("/ui/**", "/sparql", "/login", "/logout")
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers("/ui/css/**", "/ui/js/**")

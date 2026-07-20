@@ -111,9 +111,9 @@ application's component scan.
 | `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
 
 URL authorization (shared by all non-`none` modes, see `SecurityFilterChainCustomizer`):
-- `/metacatalog/v1/**` requires authentication
+- `/metacatalog/v1/**` and `/sparql/query` require authentication
 - `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`, `/javadoc/**` are public
-- Everything else (e.g. the server-side rendered UI under `/ui/**`) is public
+- Everything else (e.g. the server-side rendered UI under `/ui/**`, the SPARQL query UI at `/sparql`) is public
 - CSRF is disabled and sessions are stateless (API is meant to be consumed programmatically)
 
 Only authentication is enforced at the API level — no role-based authorization. Roles configured
@@ -181,7 +181,9 @@ metacatalog Postgres DB, exposed on the same port as the application (no separat
 
 - `GET /sparql` — Yasgui query UI (server-side rendered Thymeleaf template, loads Yasgui from a CDN).
 - `/sparql/query` — SPARQL 1.1 Protocol endpoint (SELECT/ASK/CONSTRUCT/DESCRIBE; GET `?query=`,
-  POST `application/sparql-query`, POST `application/x-www-form-urlencoded`).
+  POST `application/sparql-query`, POST `application/x-www-form-urlencoded`). Requires the same
+  authentication as the REST API when `auth-mode` is not `none` (Basic / JWT / LDAP); the Yasgui
+  page at `/sparql` itself stays public.
 
 Mapping/ontology files: `metacatalog-core/src/main/resources/ontop/{mapping.obda, ontology.owl}`,
 resolved from the classpath at startup. The endpoint is gated on

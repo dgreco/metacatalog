@@ -10,9 +10,11 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>Actuator endpoints, Swagger UI, API docs and Javadoc are publicly reachable.
- *   <li>The REST API at {@code /metacatalog/v1/**} requires an authenticated user.
- *   <li>Any other path (e.g. the server-side rendered UI under {@code /ui/**}) is permitted, since
- *       authentication is configured to protect the API surface only.
+ *   <li>The REST API at {@code /metacatalog/v1/**} and the SPARQL Protocol endpoint at {@code
+ *       /sparql/query} require an authenticated user.
+ *   <li>Any other path (e.g. the server-side rendered UI under {@code /ui/**}, or the SPARQL query
+ *       UI at {@code /sparql}) is permitted, since authentication is configured to protect the API
+ *       surface only.
  * </ul>
  *
  * <p>CSRF is disabled and sessions are stateless because the API is meant to be consumed
@@ -38,6 +40,16 @@ public class SecurityFilterChainCustomizer {
   static final String API_PATH = "/metacatalog/v1/**";
 
   /**
+   * The SPARQL Protocol endpoint ({@code /sparql/query}). Protected by the API chain (JWT) in
+   * {@code oauth2} mode. In {@code basic} / {@code ldap} mode a dedicated, stateful {@link
+   * SparqlSecurityConfig} chain (lower order) takes the path so that the browser session
+   * established by the UI form-login flow carries over to Yasgui's XHR; this matcher is then
+   * shadowed and never reached. The browser-rendered query UI at {@code /sparql} is handled by
+   * {@link UiSecurityConfig}.
+   */
+  static final String SPARQL_QUERY_PATH = "/sparql/query";
+
+  /**
    * Applies the common URL rules and session/CSRF settings to the given {@link HttpSecurity}.
    *
    * @param http the security builder to customize
@@ -51,7 +63,7 @@ public class SecurityFilterChainCustomizer {
             auth ->
                 auth.requestMatchers(PUBLIC_PATHS)
                     .permitAll()
-                    .requestMatchers(API_PATH)
+                    .requestMatchers(API_PATH, SPARQL_QUERY_PATH)
                     .authenticated()
                     .anyRequest()
                     .permitAll())

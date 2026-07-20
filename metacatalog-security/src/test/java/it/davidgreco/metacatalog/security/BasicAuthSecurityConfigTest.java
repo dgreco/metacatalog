@@ -55,4 +55,19 @@ class BasicAuthSecurityConfigTest {
     // the response is a 404 (not a 401), proving auth was not required.
     mockMvc.perform(get("/actuator/health")).andExpect(status().isNotFound());
   }
+
+  @Test
+  void sparqlQueryEndpointRequiresAuthentication() throws Exception {
+    // No SPARQL controller is mapped in this test context, but security fires first: a 401 proves
+    // auth is required, and a 404 (not 401) with credentials proves the request passed security.
+    mockMvc
+        .perform(get("/sparql/query").param("query", "ASK { ?s ?p ?o }"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            get("/sparql/query")
+                .param("query", "ASK { ?s ?p ?o }")
+                .with(httpBasic("admin", "secret")))
+        .andExpect(status().isNotFound());
+  }
 }
