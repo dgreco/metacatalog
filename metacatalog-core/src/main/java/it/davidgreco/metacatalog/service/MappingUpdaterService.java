@@ -69,7 +69,8 @@ public class MappingUpdaterService {
             log.debug("Processing SOURCE_CREATED event for entity {}", event.getEntityId());
             mappingService.createMappedEntities(event);
           } catch (Exception e) {
-            log.error("Error creating mapped entities", e);
+            log.error("Error creating mapped entities for event {}", event.getId(), e);
+            markFailed(event);
           }
         });
     var updatedEvents =
@@ -81,10 +82,28 @@ public class MappingUpdaterService {
             log.debug("Processing SOURCE_UPDATED event for entity {}", event.getEntityId());
             mappingService.updateMappedEntities(event);
           } catch (Exception e) {
-            log.error("Error updating mapped entities", e);
+            log.error("Error updating mapped entities for event {}", event.getId(), e);
+            markFailed(event);
           }
         });
     log.info("Update mapped entities task completed");
+  }
+
+  /**
+   * Marks an event as {@code FAILED} so that a permanently failing (poison) event is not
+   * re-selected and re-processed on every scheduling tick. Runs in the surrounding transaction; the
+   * per-event work that threw ran in its own {@code REQUIRES_NEW} transaction and has already
+   * rolled back, so this write is unaffected by that rollback.
+   *
+   * @param event the event that failed to process
+   */
+  private void markFailed(EntityLifeCycleEvent event) {
+    try {
+      event.setEventStatus("FAILED");
+      entityLifeCycleEventRepository.save(event);
+    } catch (Exception e) {
+      log.error("Failed to mark event {} as FAILED", event.getId(), e);
+    }
   }
 
   /**

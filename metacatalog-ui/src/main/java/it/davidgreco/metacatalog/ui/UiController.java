@@ -58,6 +58,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 @RequestMapping("/ui")
 public class UiController {
 
+  private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UiController.class);
+
   /**
    * The relation types offered when creating a trait relationship, and the only ones the dashboard
    * lists. Trait relationships are stored bidirectionally — {@link TraitService#link} creates the
@@ -141,6 +143,7 @@ public class UiController {
     try {
       return jsonFactory.writeValueAsString(buildGraphModel(showInverses, showEntities));
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+      log.error("Failed to serialize catalog graph to JSON; returning an empty graph", e);
       return "{\"nodes\":[],\"edges\":[]}";
     }
   }

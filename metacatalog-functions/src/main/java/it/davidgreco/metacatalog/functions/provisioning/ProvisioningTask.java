@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.EntityService;
+import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import it.davidgreco.metacatalog.service.Task;
 import lombok.Getter;
@@ -27,6 +28,11 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Getter
 public abstract class ProvisioningTask extends Task<Entity> {
+
+  private static final String PROVISIONING_STATUS = "provisioningStatus";
+  private static final String PROVISIONING_RESULT = "provisioningResult";
+  private static final String STATUS_PROVISIONED = "PROVISIONED";
+  private static final String STATUS_FAILED = "FAILED";
 
   /** Service for updating entity values after provisioning. */
   private final EntityService entityService;
@@ -57,18 +63,15 @@ public abstract class ProvisioningTask extends Task<Entity> {
             + Thread.currentThread().getName());
     try {
       var result = provision();
-      ObjectNode values = (ObjectNode) getEntity().getValues();
-      values.put("provisioningStatus", "PROVISIONED");
-      values.put("provisioningResult", result);
-      getEntityService().update(getEntity().getId(), values.toPrettyString());
+      writeProvisioningStatus(STATUS_PROVISIONED, result);
     } catch (Exception e) {
       try {
-        ObjectNode values = (ObjectNode) getEntity().getValues();
-        values.put("provisioningStatus", "FAILED");
-        values.put("provisioningResult", e.getMessage());
-        getEntityService().update(getEntity().getId(), values.toPrettyString());
-      } catch (Exception _) {
-        throw new ServiceRuntimeError(e);
+        writeProvisioningStatus(STATUS_FAILED, e.getMessage());
+      } catch (Exception statusUpdateFailure) {
+        log.error(
+            "Failed to record FAILED provisioning status for entity {}",
+            getEntity().getId(),
+            statusUpdateFailure);
       }
       throw new ServiceRuntimeError(e);
     } finally {
@@ -79,6 +82,26 @@ public abstract class ProvisioningTask extends Task<Entity> {
               + Thread.currentThread().getName());
     }
     return null;
+  }
+
+  /**
+   * Writes the provisioning status and result onto the entity's JSON values and persists them.
+   *
+   * @param status the provisioning status to record
+   * @param result the provisioning result (or error message) to record
+   * @throws ServiceRuntimeError if the entity values are not a JSON object
+   * @throws ServiceError if updating the entity fails
+   */
+  private void writeProvisioningStatus(String status, String result) throws ServiceError {
+    if (!(getEntity().getValues() instanceof ObjectNode values)) {
+      throw new ServiceRuntimeError(
+          "Entity "
+              + getEntity().getId()
+              + " values are not a JSON object; cannot record provisioning status");
+    }
+    values.put(PROVISIONING_STATUS, status);
+    values.put(PROVISIONING_RESULT, result);
+    getEntityService().update(getEntity().getId(), values.toPrettyString());
   }
 
   /**
