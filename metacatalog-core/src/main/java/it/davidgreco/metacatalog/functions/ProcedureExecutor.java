@@ -9,6 +9,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Service for executing registered entity procedures.
@@ -49,7 +50,14 @@ public class ProcedureExecutor {
    * @param procedureName the name of the procedure to execute
    * @param entityId the ID of the entity to process
    * @throws ServiceError if the procedure is not found, the entity is not found, or execution fails
+   *     <p>Runs in a transaction so the procedure body can traverse lazily-fetched associations of
+   *     the entity graph (entity type, traits, mapping rules, relationship endpoints) while
+   *     building its plan. This is the non-web execution path — there is no open-session-in-view
+   *     here — so without an ambient session those lazy loads would throw {@link
+   *     org.hibernate.LazyInitializationException}. Only the synchronous plan-building runs in this
+   *     transaction; the tasks it schedules execute on their own threads and transactions.
    */
+  @Transactional
   public void executeProcedure(String procedureName, String entityId) throws ServiceError {
     try {
       var entity = entityService.read(entityId);

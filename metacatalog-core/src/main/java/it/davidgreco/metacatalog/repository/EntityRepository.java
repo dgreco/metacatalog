@@ -4,6 +4,8 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -34,12 +36,30 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
   long countByEntityTypeVersion(EntityTypeVersion entityTypeVersion);
 
   /**
-   * Finds all entities of a given type.
+   * Finds all entities of a given type, eagerly fetching the pinned {@link EntityTypeVersion} so
+   * the DTO / graph layers that read it do not trigger a per-entity lazy load (N+1).
    *
    * @param entityType the entity type to search for
    * @return list of entities of the specified type
    */
+  @EntityGraph(
+      attributePaths = {"entityTypeVersion"},
+      type = EntityGraph.EntityGraphType.LOAD)
   List<Entity> findByEntityType(EntityType entityType);
+
+  /** {@inheritDoc} Fetches the pinned {@link EntityTypeVersion} in the same query. */
+  @Override
+  @EntityGraph(
+      attributePaths = {"entityTypeVersion"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  List<Entity> findAll();
+
+  /** {@inheritDoc} Fetches the pinned {@link EntityTypeVersion} in the same query. */
+  @Override
+  @EntityGraph(
+      attributePaths = {"entityTypeVersion"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  Optional<Entity> findById(String id);
 
   /**
    * Finds entities by type and JSON path expression.

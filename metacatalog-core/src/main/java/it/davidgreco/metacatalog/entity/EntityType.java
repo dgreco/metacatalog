@@ -53,8 +53,13 @@ public class EntityType implements Type<EntityType> {
    * The parent entity type from which this type inherits. Modelled as {@link ManyToOne}: many child
    * types may share the same father, which is also what the {@code children} {@link
    * OneToMany}(mappedBy = "father") inverse side requires.
+   *
+   * <p>Fetched lazily: eager fetch recursively pulled the whole ancestor chain on every load. The
+   * finders whose callers read the immediate father outside a transaction ({@code findAll} / {@code
+   * findByName}) fetch one hop via an {@code @EntityGraph}; the full ancestor walk (linearization,
+   * derived-schema, inheritance chain) runs inside a transaction.
    */
-  @ManyToOne(fetch = FetchType.EAGER)
+  @ManyToOne(fetch = FetchType.LAZY)
   private EntityType father;
 
   /**
@@ -72,8 +77,14 @@ public class EntityType implements Type<EntityType> {
   @Column(name = "version_group_id", nullable = false)
   private String versionGroupId;
 
-  /** The traits associated with this entity type. */
-  @ManyToMany(fetch = FetchType.EAGER)
+  /**
+   * The traits associated with this entity type. Fetched lazily: previously every entity-type load
+   * eagerly pulled the whole trait collection (and, transitively, each trait's father chain). The
+   * finders whose callers read the traits outside a transaction ({@code findAll} / {@code
+   * findByName}) pull them in via an {@code @EntityGraph}; the service paths mutate/read them
+   * inside their transaction, and the procedure path runs in a transaction.
+   */
+  @ManyToMany(fetch = FetchType.LAZY)
   @JoinTable(
       name = "type_traits",
       joinColumns = @JoinColumn(name = "entity_type_id"),

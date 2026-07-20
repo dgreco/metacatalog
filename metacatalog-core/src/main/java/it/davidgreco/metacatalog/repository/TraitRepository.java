@@ -2,10 +2,12 @@ package it.davidgreco.metacatalog.repository;
 
 import it.davidgreco.metacatalog.entity.Trait;
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -22,7 +24,8 @@ import org.springframework.stereotype.Repository;
 public interface TraitRepository extends JpaRepository<Trait, String> {
 
   /**
-   * Finds a trait by its unique name.
+   * Finds a trait by its unique name, fetching its (now lazy) immediate father so callers that read
+   * it after the transaction closes do not lazy-load it.
    *
    * @param name the name of the trait
    * @return an Optional containing the trait if found
@@ -30,7 +33,17 @@ public interface TraitRepository extends JpaRepository<Trait, String> {
   @Cacheable(
       cacheNames = {"Traits"},
       key = "#name")
+  @EntityGraph(
+      attributePaths = {"father"},
+      type = EntityGraph.EntityGraphType.LOAD)
   Optional<Trait> findByName(String name);
+
+  /** {@inheritDoc} Fetches the (now lazy) immediate father in the same query. */
+  @Override
+  @EntityGraph(
+      attributePaths = {"father"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  List<Trait> findAll();
 
   /**
    * Finds every trait whose name is in the given collection, in a single query.
