@@ -12,7 +12,7 @@ import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.CoreConfigProperties;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
-import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.*;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
@@ -215,7 +215,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     log.info("Creating mapped entities for event with ID: {}", event.getId());
     createMappedEntities(event.getEntityId());
     event.setEventStatus(EntityLifeCycleEvent.STATUS_PROCESSED);
-    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+    event.setProcessTime(Instant.now());
     entityLifeCycleEventRepository.save(event);
     log.info("Created mapped entities for event with ID: {}", event.getId());
   }
@@ -349,7 +349,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     log.info("Updating mapped entities for event with ID: {}", event.getId());
     updateMappedEntities(event.getEntityId());
     event.setEventStatus(EntityLifeCycleEvent.STATUS_PROCESSED);
-    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+    event.setProcessTime(Instant.now());
     entityLifeCycleEventRepository.save(event);
     log.info("Updated mapped entities for event with ID: {}", event.getId());
   }

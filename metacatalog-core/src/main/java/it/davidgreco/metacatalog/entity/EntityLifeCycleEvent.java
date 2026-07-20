@@ -1,7 +1,7 @@
 package it.davidgreco.metacatalog.entity;
 
 import jakarta.persistence.*;
-import java.sql.Timestamp;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -53,8 +53,20 @@ public class EntityLifeCycleEvent {
   /** Event status: the event requires no processing. */
   public static final String STATUS_NO_PROCESSING = "NO_PROCESSING";
 
-  /** The unique identifier for this event. */
-  @Id @GeneratedValue @ToString.Include private Long id;
+  /**
+   * The unique identifier for this event, generated from the {@code entity_lifecycle_event_seq}
+   * sequence created by migration {@code V1}. The strategy is stated explicitly (rather than
+   * relying on {@code GenerationType.AUTO}) so the mapping documents the exact sequence and
+   * allocation size ({@code INCREMENT BY 50}) it depends on.
+   */
+  @Id
+  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "entity_lifecycle_event_seq")
+  @SequenceGenerator(
+      name = "entity_lifecycle_event_seq",
+      sequenceName = "entity_lifecycle_event_seq",
+      allocationSize = 50)
+  @ToString.Include
+  private Long id;
 
   /** The ID of the entity that this event relates to. */
   @ToString.Include
@@ -66,15 +78,15 @@ public class EntityLifeCycleEvent {
   @ToString.Include
   private String entityTypeName;
 
-  /** The timestamp when the event occurred. */
+  /** The instant when the event occurred. */
   @Column(name = "event_time", nullable = false)
   @ToString.Include
-  private Timestamp eventTime = new Timestamp(System.currentTimeMillis());
+  private Instant eventTime = Instant.now();
 
-  /** The timestamp when the event was processed. */
+  /** The instant when the event was processed. */
   @Column(name = "process_time", nullable = false)
   @ToString.Include
-  private Timestamp processTime = new Timestamp(System.currentTimeMillis());
+  private Instant processTime = Instant.now();
 
   /** The type of event (e.g., SOURCE_CREATED, SOURCE_UPDATED). */
   @Column(name = "event_type", nullable = false)
