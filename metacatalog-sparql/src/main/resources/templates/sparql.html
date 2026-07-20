@@ -4,31 +4,34 @@
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Meta Catalog — SPARQL</title>
+    <!-- Shared theme system: app.css tokens + topbar/.btn/.logout-form, theme.js applies the
+         chosen theme before first paint and mounts the toggle into .topbar nav. -->
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <!-- Yasgui (SPARQL query editor + results visualiser) from CDN. -->
     <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css"/>
     <style>
-        body { margin: 0; font-family: system-ui, sans-serif; background: #f8f9fa; color: #212529; }
-        header.topbar {
-            display: flex; align-items: center; gap: 1rem;
-            padding: .75rem 1.25rem; background: #212529; color: #fff;
-        }
-        header.topbar h1 { font-size: 1.1rem; font-weight: 600; margin: 0; }
-        header.topbar nav a { color: #adb5bd; text-decoration: none; margin-left: .75rem; font-size: .9rem; }
-        header.topbar nav a:hover { color: #fff; }
-        main { padding: 1rem 1.25rem; }
-        .meta { font-size: .85rem; color: #6c757d; margin-bottom: .75rem; }
-        .meta code { background: #e9ecef; padding: .1rem .35rem; border-radius: .2rem; }
-        #yasgui { height: calc(100vh - 110px); }
+        /* The Yasgui editor needs the full viewport height below the topbar; app.css sizes main
+           to a 1000px column, which would clip it, so let the SPARQL page span the viewport. */
+        main.sparql-main { max-width: none; margin: 0; padding: 0.85rem 1.5rem; }
+        .sparql-meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
+        .sparql-meta code { background: var(--panel-2); padding: 0.05rem 0.32rem; border-radius: var(--radius-xs); }
+        #yasgui { height: calc(100vh - 130px); }
     </style>
 </head>
 <body>
 <header class="topbar">
     <h1>Meta Catalog — SPARQL</h1>
     <nav>
-        <a th:href="@{/ui/}">← Back to UI</a>
+        <a class="btn" th:href="@{/ui/}">← Back to UI</a>
     </nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
 </header>
-<main>
-    <div class="meta">
+<main class="sparql-main">
+    <div class="sparql-meta">
         Endpoint: <code th:text="${endpoint}">/sparql/query</code>
         &nbsp;·&nbsp;
         Ontology IRI: <code th:text="${ontologyIri}">http://metacatalog/</code>
@@ -40,7 +43,7 @@
     /*<![CDATA[*/
     const endpoint = /*[[${endpoint}]]*/ '/sparql/query';
     const defaultQuery = /*[[${defaultQuery}]]*/ 'SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50';
-    const yasgui = new Yasgui(document.getElementById('yasgui'), {
+    const yasgui = new Yasgui(document.getElementById("yasgui"), {
         requestConfig: { endpoint: endpoint },
         endpointInfoOptions: { endpoint: endpoint },
     });
