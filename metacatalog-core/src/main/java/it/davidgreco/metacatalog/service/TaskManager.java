@@ -175,7 +175,7 @@ public class TaskManager {
       tasks.addAll(tsks);
     }
 
-    public Future<Try<Void>> schedule() throws ServiceError {
+    public CompletableFuture<Try<Void>> schedule() throws ServiceError {
       Graph<Task<?>, DefaultEdge> taskGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
       tasks.forEach(
           t -> {
@@ -190,22 +190,23 @@ public class TaskManager {
       if (new CycleDetector<>(taskGraph).detectCycles())
         throw new ServiceError("Cycle detected in task graph");
 
-      Callable<Try<Void>> callable =
-          () -> {
-            tasks.forEach(
-                task -> task.getRunningTaskFuture().set(task.schedule(asyncTaskExecutor)));
-            tasks.parallelStream().forEach(Task::join);
-            // Report the first task failure so callers observing the schedule future can detect
-            // that the schedule did not fully succeed (previously this always returned success,
-            // masking every individual task failure).
-            return tasks.stream()
-                .map(Task::getResult)
-                .flatMap(Optional::stream)
-                .filter(Try::isFailure)
-                .findFirst()
-                .orElseGet(() -> Try.success(null));
-          };
-      return asyncTaskExecutor.submit(callable);
+      // Schedule every task (each recursively schedules its dependencies) and let the schedule
+      // future complete once all of them have; nothing blocks a worker thread while awaiting
+      // dependencies, so wide/deep graphs cannot starve the pool.
+      List<CompletableFuture<Try<Void>>> futures =
+          tasks.stream().map(task -> task.schedule(asyncTaskExecutor)).toList();
+      return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+          .thenApply(
+              ignored ->
+                  // Report the first task failure so callers observing the schedule future can
+                  // detect that the schedule did not fully succeed (previously this always returned
+                  // success, masking every individual task failure).
+                  tasks.stream()
+                      .map(Task::getResult)
+                      .flatMap(Optional::stream)
+                      .filter(Try::isFailure)
+                      .findFirst()
+                      .orElseGet(() -> Try.success(null)));
     }
   }
 

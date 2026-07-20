@@ -6,14 +6,11 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.task.AsyncTaskExecutor;
-import org.springframework.retry.support.RetryTemplate;
 
 /**
  * Abstract base class for asynchronous tasks that operate on entities.
@@ -28,7 +25,8 @@ import org.springframework.retry.support.RetryTemplate;
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public abstract class Task<T> {
 
-  private final AtomicReference<Future<Try<Void>>> runningTaskFuture = new AtomicReference<>();
+  private final AtomicReference<CompletableFuture<Try<Void>>> runningTaskFuture =
+      new AtomicReference<>();
   private final AtomicReference<Try<Void>> result = new AtomicReference<>();
 
   private final List<Task<T>> dependsOnTasks = new ArrayList<>();
@@ -39,32 +37,54 @@ public abstract class Task<T> {
     this.entity = entity;
   }
 
-  Future<Try<Void>> schedule(AsyncTaskExecutor asyncTaskExecutor) {
+  /**
+   * Schedules this task for asynchronous execution once all of its dependencies have completed, and
+   * returns a future for its {@link Try} result.
+   *
+   * <p>Dependencies are composed with {@link CompletableFuture#allOf} + {@code thenApplyAsync}
+   * rather than by blocking a worker thread on their completion. This is what prevents the classic
+   * thread-pool starvation deadlock: a worker thread is occupied only while a task's {@link
+   * #apply()} actually runs, never while it waits for its dependencies, so a graph deeper or wider
+   * than the pool can no longer wedge every thread in a blocking {@code join}.
+   *
+   * <p>Scheduling is idempotent: the future is claimed under {@code this} lock and cached, so a
+   * task shared by several parents (a diamond dependency graph) is submitted — and therefore
+   * executed — exactly once. The lock is held only for the (non-blocking) composition, never while
+   * awaiting a dependency.
+   *
+   * @param executor the executor used to run this task's work
+   * @return the future of this task's result
+   */
+  CompletableFuture<Try<Void>> schedule(Executor executor) {
     var existing = runningTaskFuture.get();
     if (existing != null) {
       return existing;
     }
-    // Claim scheduling of this task under a lock so that a task shared by several parents (a
-    // diamond dependency graph) is submitted — and therefore executed — exactly once. The previous
-    // check-then-act on the AtomicReference allowed two threads to both observe a null future and
-    // both submit the same task.
     synchronized (this) {
       existing = runningTaskFuture.get();
       if (existing != null) {
         return existing;
       }
-      dependsOnTasks.forEach(task -> task.schedule(asyncTaskExecutor));
-      dependsOnTasks.forEach(Task::join);
-      boolean dependsOnTasksFailed =
-          dependsOnTasks.stream()
-              .map(Task::getResult)
-              .flatMap(Optional::stream)
-              .anyMatch(Try::isFailure);
-      Future<Try<Void>> future =
-          dependsOnTasksFailed
-              ? CompletableFuture.completedFuture(
-                  Try.failure(new ServiceRuntimeError("One or more of the depending tasks failed")))
-              : asyncTaskExecutor.submit(() -> Try.of(Task.this::apply));
+      List<CompletableFuture<Try<Void>>> dependencyFutures =
+          dependsOnTasks.stream().map(task -> task.schedule(executor)).toList();
+      CompletableFuture<Try<Void>> future =
+          CompletableFuture.allOf(dependencyFutures.toArray(new CompletableFuture[0]))
+              .thenApplyAsync(
+                  ignored -> {
+                    boolean dependsOnTasksFailed =
+                        dependencyFutures.stream()
+                            .map(CompletableFuture::join)
+                            .anyMatch(Try::isFailure);
+                    Try<Void> taskResult =
+                        dependsOnTasksFailed
+                            ? Try.failure(
+                                new ServiceRuntimeError(
+                                    "One or more of the depending tasks failed"))
+                            : Try.of(Task.this::apply);
+                    result.set(taskResult);
+                    return taskResult;
+                  },
+                  executor);
       runningTaskFuture.set(future);
       return future;
     }
@@ -102,40 +122,6 @@ public abstract class Task<T> {
    */
   @EqualsAndHashCode.Include
   public abstract String getId();
-
-  /**
-   * Waits for this task and all its dependencies to complete. Uses retry logic to handle the case
-   * where the task has not yet been started.
-   */
-  public void join() {
-    RetryTemplate createRetryTemplate =
-        RetryTemplate.builder()
-            .maxAttempts(10)
-            .fixedBackoff(500)
-            .retryOn(ServiceRuntimeError.class)
-            .build();
-
-    try {
-      createRetryTemplate.execute(
-          rc -> {
-            if (runningTaskFuture.get() == null)
-              throw new ServiceRuntimeError("Task not yet started");
-            else {
-              try {
-                result.set(runningTaskFuture.get().get());
-              } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new ServiceRuntimeError(e);
-              } catch (ExecutionException e) {
-                throw new ServiceRuntimeError(e);
-              }
-            }
-            return new Object();
-          });
-    } catch (Exception e) {
-      throw new ServiceRuntimeError(e);
-    }
-  }
 
   /**
    * Gets the result of this task after completion.
