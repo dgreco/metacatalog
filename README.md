@@ -501,8 +501,9 @@ updating an entity whose type is a mapping **source** records a lifecycle event 
   creates mapped entities for the new target too — so mapping chains propagate.
 - for `SOURCE_UPDATED`: re-evaluates the mapping into the existing target entity (and recurses).
 
-Each event is marked `PROCESSED` once handled. The scheduler acquires a PostgreSQL advisory
-lock (`AdvisoryLockManager`) so only one application instance runs the updater at a time.
+Each event is marked `PROCESSED` once handled, or `FAILED` if it cannot be processed — so a
+poison event is not re-selected and retried on every tick. The scheduler acquires a PostgreSQL
+advisory lock (`AdvisoryLockManager`) so only one application instance runs the updater at a time.
 
 Target entity types are **read-only** through the regular entity endpoints: `EntityService.create`
 and `EntityService.update` refuse to write entities whose type is a mapping target (the only
