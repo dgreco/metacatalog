@@ -33,6 +33,14 @@ public interface TraitRepository extends JpaRepository<Trait, String> {
   Optional<Trait> findByName(String name);
 
   /**
+   * Finds every trait whose name is in the given collection, in a single query.
+   *
+   * @param names the trait names to look up
+   * @return the matching traits (order unspecified; the caller re-orders as needed)
+   */
+  java.util.List<Trait> findByNameIn(java.util.Collection<String> names);
+
+  /**
    * Saves a trait and updates the cache.
    *
    * @param trait the trait to save

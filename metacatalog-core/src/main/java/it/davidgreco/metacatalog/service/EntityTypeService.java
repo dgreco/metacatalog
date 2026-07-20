@@ -506,13 +506,22 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
             throw new ServiceRuntimeError("Trait " + trait + " already defined");
           else traitNamesSet.add(trait);
         });
+    // Fetch all requested traits in a single query (avoids one findByName per trait), then re-order
+    // to the requested declaration order (which is significant for trait linearization).
+    var traitsByName =
+        traitRepository.findByNameIn(traitNamesSet).stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    Trait::getName, java.util.function.Function.identity()));
     return traits.stream()
         .map(
-            trait ->
-                traitRepository
-                    .findByName(trait)
-                    .orElseThrow(
-                        () -> new ServiceRuntimeError("Trait " + trait + " does not exist")))
+            trait -> {
+              var resolved = traitsByName.get(trait);
+              if (resolved == null) {
+                throw new ServiceRuntimeError("Trait " + trait + " does not exist");
+              }
+              return resolved;
+            })
         .toList();
   }
 
