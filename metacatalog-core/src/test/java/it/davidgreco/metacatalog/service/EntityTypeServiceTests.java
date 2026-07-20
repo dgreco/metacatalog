@@ -55,6 +55,43 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
+  void resolveTraitsValidatesExistenceUniquenessAndPreservesOrder() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var schema = "{ \"type\": \"object\", \"properties\": {} }";
+
+    traitService.create("Rt_A", Optional.empty(), Optional.empty());
+    traitService.create("Rt_B", Optional.empty(), Optional.empty());
+
+    // A non-existent trait is still reported (the batch fetch must not silently drop it).
+    var missing =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () ->
+                entityTypeService.create(
+                    "RtMissing", List.of("Rt_A", "Rt_DoesNotExist"), Optional.empty(), schema));
+    Assertions.assertTrue(missing.getMessage().contains("does not exist"), missing.getMessage());
+
+    // Duplicate trait names are rejected before any lookup.
+    var duplicate =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () ->
+                entityTypeService.create(
+                    "RtDup", List.of("Rt_A", "Rt_A"), Optional.empty(), schema));
+    Assertions.assertTrue(
+        duplicate.getMessage().contains("already defined"), duplicate.getMessage());
+
+    // The resolved traits come back in the requested declaration order (significant for
+    // linearization), even though the batch query returns them in an unspecified order.
+    var type =
+        entityTypeService.create("RtOrdered", List.of("Rt_B", "Rt_A"), Optional.empty(), schema);
+    Assertions.assertEquals(
+        List.of("Rt_B", "Rt_A"),
+        type.getTraits().stream().map(it.davidgreco.metacatalog.entity.Trait::getName).toList());
+  }
+
+  @Test
   void testInheritance() throws ServiceError {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);

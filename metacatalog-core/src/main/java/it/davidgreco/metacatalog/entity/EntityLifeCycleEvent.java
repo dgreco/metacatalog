@@ -1,7 +1,7 @@
 package it.davidgreco.metacatalog.entity;
 
 import jakarta.persistence.*;
-import java.sql.Timestamp;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -53,8 +53,28 @@ public class EntityLifeCycleEvent {
   /** Event status: the event requires no processing. */
   public static final String STATUS_NO_PROCESSING = "NO_PROCESSING";
 
-  /** The unique identifier for this event. */
-  @Id @GeneratedValue @ToString.Include private Long id;
+  /**
+   * Sentinel {@link #processTime} value meaning "not yet processed". The {@code process_time}
+   * column is {@code NOT NULL}, so a not-yet-processed event cannot store a SQL {@code null};
+   * {@link Instant#EPOCH} is used as an unambiguous "unset" marker instead (see {@link
+   * #isProcessed()}).
+   */
+  public static final Instant PROCESS_TIME_UNPROCESSED = Instant.EPOCH;
+
+  /**
+   * The unique identifier for this event, generated from the {@code entity_lifecycle_event_seq}
+   * sequence created by migration {@code V1}. The strategy is stated explicitly (rather than
+   * relying on {@code GenerationType.AUTO}) so the mapping documents the exact sequence and
+   * allocation size ({@code INCREMENT BY 50}) it depends on.
+   */
+  @Id
+  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "entity_lifecycle_event_seq")
+  @SequenceGenerator(
+      name = "entity_lifecycle_event_seq",
+      sequenceName = "entity_lifecycle_event_seq",
+      allocationSize = 50)
+  @ToString.Include
+  private Long id;
 
   /** The ID of the entity that this event relates to. */
   @ToString.Include
@@ -66,15 +86,19 @@ public class EntityLifeCycleEvent {
   @ToString.Include
   private String entityTypeName;
 
-  /** The timestamp when the event occurred. */
+  /** The instant when the event occurred. */
   @Column(name = "event_time", nullable = false)
   @ToString.Include
-  private Timestamp eventTime = new Timestamp(System.currentTimeMillis());
+  private Instant eventTime = Instant.now();
 
-  /** The timestamp when the event was processed. */
+  /**
+   * The instant when the event was processed, or {@link #PROCESS_TIME_UNPROCESSED} while the event
+   * has not been processed yet. A freshly created (e.g. PENDING) event therefore no longer carries
+   * a misleading "now" process timestamp; the real instant is set only once the event is processed.
+   */
   @Column(name = "process_time", nullable = false)
   @ToString.Include
-  private Timestamp processTime = new Timestamp(System.currentTimeMillis());
+  private Instant processTime = PROCESS_TIME_UNPROCESSED;
 
   /** The type of event (e.g., SOURCE_CREATED, SOURCE_UPDATED). */
   @Column(name = "event_type", nullable = false)
@@ -104,4 +128,14 @@ public class EntityLifeCycleEvent {
 
   /** Default constructor required by JPA. */
   public EntityLifeCycleEvent() {}
+
+  /**
+   * Whether this event has been processed, i.e. its {@link #processTime} has been advanced past the
+   * {@link #PROCESS_TIME_UNPROCESSED} sentinel.
+   *
+   * @return {@code true} if the event has a real process timestamp
+   */
+  public boolean isProcessed() {
+    return processTime != null && !PROCESS_TIME_UNPROCESSED.equals(processTime);
+  }
 }
