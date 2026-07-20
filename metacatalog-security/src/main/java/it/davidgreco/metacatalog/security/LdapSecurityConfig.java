@@ -68,21 +68,22 @@ public class LdapSecurityConfig {
   @Bean
   public AuthenticationManager authenticationManager() throws Exception {
     final var ldap = properties.ldap();
-    if (ldap == null || !isSet(ldap.url())) {
+    if (ldap == null || !SecurityConfigSupport.isSet(ldap.url())) {
       throw new IllegalStateException(
           "application.config.security.ldap.url must be configured when auth-mode = ldap");
     }
     final var contextSource = new DefaultSpringSecurityContextSource(ldap.url());
-    if (isSet(ldap.managerDn())) {
+    if (SecurityConfigSupport.isSet(ldap.managerDn())) {
       contextSource.setUserDn(ldap.managerDn());
       contextSource.setPassword(ldap.managerPassword());
     }
     contextSource.afterPropertiesSet();
 
     final var bindAuthenticator = new BindAuthenticator(contextSource);
-    if (isSet(ldap.userDnPattern())) {
+    if (SecurityConfigSupport.isSet(ldap.userDnPattern())) {
       bindAuthenticator.setUserDnPatterns(new String[] {ldap.userDnPattern()});
-    } else if (isSet(ldap.userSearchBase()) && isSet(ldap.userSearchFilter())) {
+    } else if (SecurityConfigSupport.isSet(ldap.userSearchBase())
+        && SecurityConfigSupport.isSet(ldap.userSearchFilter())) {
       final var search =
           new FilterBasedLdapUserSearch(
               ldap.userSearchBase(), ldap.userSearchFilter(), contextSource);
@@ -95,9 +96,5 @@ public class LdapSecurityConfig {
 
     final var provider = new LdapAuthenticationProvider(bindAuthenticator);
     return new ProviderManager(provider);
-  }
-
-  private static boolean isSet(final String value) {
-    return value != null && !value.isBlank();
   }
 }

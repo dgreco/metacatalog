@@ -62,17 +62,13 @@ public class OAuth2SecurityConfig {
       throw new IllegalStateException(
           "application.config.security.oauth2 must be configured when auth-mode = oauth2");
     }
-    if (isSet(oauth2.jwkSetUri())) {
+    if (SecurityConfigSupport.isSet(oauth2.jwkSetUri())) {
       return NimbusJwtDecoder.withJwkSetUri(oauth2.jwkSetUri()).build();
     }
-    if (isSet(oauth2.issuerUri())) {
+    if (SecurityConfigSupport.isSet(oauth2.issuerUri())) {
       return NimbusJwtDecoder.withIssuerLocation(oauth2.issuerUri()).build();
     }
     throw new IllegalStateException(
         "Either application.config.security.oauth2.jwk-set-uri or issuer-uri must be configured");
-  }
-
-  private static boolean isSet(final String value) {
-    return value != null && !value.isBlank();
   }
 }

@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -27,9 +26,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * Thymeleaf auto-injects the CSRF token into every {@code <form th:action>}.
  */
 @Configuration
-@ConditionalOnExpression(
-    "'${application.config.security.auth-mode:}' eq 'basic'"
-        + " or '${application.config.security.auth-mode:}' eq 'ldap'")
+@ConditionalOnUiAuthMode
 public class UiSecurityConfig {
 
   /** Higher priority than the API chain (which uses the default order). */
