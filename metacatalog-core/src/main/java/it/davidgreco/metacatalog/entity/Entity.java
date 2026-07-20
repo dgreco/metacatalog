@@ -51,8 +51,12 @@ public class Entity {
    *
    * <p>Nullable for legacy rows created before this column existed; the service layer treats null
    * as "follow the live type".
+   *
+   * <p>Fetched lazily: the paths that need it (entity finders feeding the DTO / graph layers) pull
+   * it in explicitly via an {@code @EntityGraph}, and the service paths access it inside their
+   * transaction.
    */
-  @ManyToOne(fetch = FetchType.EAGER)
+  @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "entity_type_version_id")
   private EntityTypeVersion entityTypeVersion;
 
