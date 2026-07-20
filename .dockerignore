@@ -21,6 +21,10 @@
 *.md
 docs/
 
+# Kubernetes manifests (not needed to build the jar; some *.template files hold
+# secret placeholders — kept out of the image defensively).
+k8s/
+
 # Docker
 Dockerfile
 docker-compose*.yml
