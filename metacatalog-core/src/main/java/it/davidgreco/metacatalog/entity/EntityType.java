@@ -53,8 +53,13 @@ public class EntityType implements Type<EntityType> {
    * The parent entity type from which this type inherits. Modelled as {@link ManyToOne}: many child
    * types may share the same father, which is also what the {@code children} {@link
    * OneToMany}(mappedBy = "father") inverse side requires.
+   *
+   * <p>Fetched lazily: eager fetch recursively pulled the whole ancestor chain on every load. The
+   * finders whose callers read the immediate father outside a transaction ({@code findAll} / {@code
+   * findByName}) fetch one hop via an {@code @EntityGraph}; the full ancestor walk (linearization,
+   * derived-schema, inheritance chain) runs inside a transaction.
    */
-  @ManyToOne(fetch = FetchType.EAGER)
+  @ManyToOne(fetch = FetchType.LAZY)
   private EntityType father;
 
   /**

@@ -34,14 +34,14 @@ public interface EntityTypeRepository extends JpaRepository<EntityType, String> 
       cacheNames = {"EntityTypes"},
       key = "#name")
   @EntityGraph(
-      attributePaths = {"traits"},
+      attributePaths = {"traits", "father"},
       type = EntityGraph.EntityGraphType.LOAD)
   Optional<EntityType> findByName(String name);
 
   /** {@inheritDoc} Fetches the (now lazy) traits collection in the same query. */
   @Override
   @EntityGraph(
-      attributePaths = {"traits"},
+      attributePaths = {"traits", "father"},
       type = EntityGraph.EntityGraphType.LOAD)
   List<EntityType> findAll();
 

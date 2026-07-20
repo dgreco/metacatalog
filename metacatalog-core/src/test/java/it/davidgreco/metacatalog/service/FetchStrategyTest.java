@@ -97,4 +97,59 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
             + typeCount
             + " types");
   }
+
+  @Test
+  void listingEntityTypesBatchesTheFatherFetch() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var schema = "{ \"type\": \"object\", \"properties\": {} }";
+    int childCount = 5;
+
+    entityTypeService.create("FetchFatherType", List.of(), Optional.empty(), schema);
+    for (int i = 0; i < childCount; i++) {
+      entityTypeService.create(
+          "FetchChildType" + i, List.of(), Optional.of("FetchFatherType"), schema);
+    }
+
+    long statements =
+        QueryCounter.countStatements(
+            getApplicationContext(),
+            () ->
+                entityTypeService
+                    .list()
+                    .forEach(
+                        t -> {
+                          if (t.getFather() != null) {
+                            t.getFather().getName();
+                          }
+                        }));
+
+    assertTrue(
+        statements < childCount, "entity-type father fetch is N+1: " + statements + " statements");
+  }
+
+  @Test
+  void listingTraitsBatchesTheFatherFetch() throws ServiceError {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    int childCount = 5;
+
+    traitService.create("FetchFatherTrait", Optional.empty(), Optional.empty());
+    for (int i = 0; i < childCount; i++) {
+      traitService.create("FetchChildTrait" + i, Optional.empty(), Optional.of("FetchFatherTrait"));
+    }
+
+    long statements =
+        QueryCounter.countStatements(
+            getApplicationContext(),
+            () ->
+                traitService
+                    .list()
+                    .forEach(
+                        t -> {
+                          if (t.getFather() != null) {
+                            t.getFather().getName();
+                          }
+                        }));
+
+    assertTrue(statements < childCount, "trait father fetch is N+1: " + statements + " statements");
+  }
 }

@@ -52,8 +52,12 @@ public class Trait implements Type<Trait> {
   /**
    * The parent trait from which this trait inherits. Modelled as {@link ManyToOne}: many child
    * traits may share the same father.
+   *
+   * <p>Fetched lazily: eager fetch recursively pulled the whole ancestor chain. The finders whose
+   * callers read the immediate father outside a transaction ({@code findAll} / {@code findByName})
+   * fetch one hop via an {@code @EntityGraph}; the full ancestor walk runs inside a transaction.
    */
-  @ManyToOne(fetch = FetchType.EAGER)
+  @ManyToOne(fetch = FetchType.LAZY)
   private Trait father;
 
   /**
