@@ -120,9 +120,9 @@ public class AggregateService {
         return aggregate;
       }
     }
-    log.info("Creating aggregate: " + aggregate);
+    log.info("Creating aggregate: {}", aggregate);
     var result = new CreateAggregate().create(aggregate);
-    log.info("Aggregate created: " + aggregate);
+    log.info("Aggregate created: {}", aggregate);
     return result;
   }
 
