@@ -224,7 +224,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    * @throws ServiceError if an error occurs while processing the event
    */
   @Transactional(
-      propagation = Propagation.REQUIRED,
+      propagation = Propagation.REQUIRES_NEW,
       rollbackFor = {ServiceError.class})
   public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Creating mapped entities for event with ID: {}", event.getId());
@@ -247,7 +247,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
     class CreateMappedEntities {
+      private final Set<String> visited = new HashSet<>();
+
       private void createMappedEntities(String sourceEntityId) throws ServiceError {
+        if (!visited.add(sourceEntityId)) return;
         RetryTemplate createRetryTemplate =
             RetryTemplate.builder()
                 .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
@@ -359,7 +362,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    * @throws ServiceError if an error occurs while processing the event
    */
   @Transactional(
-      propagation = Propagation.REQUIRED,
+      propagation = Propagation.REQUIRES_NEW,
       rollbackFor = {ServiceError.class})
   public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Updating mapped entities for event with ID: {}", event.getId());
@@ -382,7 +385,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void updateMappedEntities(String sourceEntityId) throws ServiceError {
 
     class UpdateMappedEntities {
+      private final Set<String> visited = new HashSet<>();
+
       private void updateMappedEntities(String sourceEntityId) throws ServiceError {
+        if (!visited.add(sourceEntityId)) return;
         RetryTemplate updateRetryTemplate =
             RetryTemplate.builder()
                 .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
@@ -639,9 +645,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         for (var relationSource : relationSources) {
           var json = relationSource.getValues().toPrettyString();
           var dc = JsonPath.using(jsonPathConfiguration).parse(json);
-          var res = (ArrayNode) dc.read(pathExpression);
-          if (res.size() > 1) throw new ServiceError("Ambiguous path expression: " + segment);
-          if (res.size() == 1) {
+          Object res = dc.read(pathExpression);
+          int matchCount;
+          if (res instanceof ArrayNode arr) {
+            matchCount = arr.size();
+          } else if (res == null
+              || (res instanceof JsonNode node && (node.isMissingNode() || node.isNull()))) {
+            matchCount = 0;
+          } else {
+            matchCount = 1;
+          }
+          if (matchCount > 1) throw new ServiceError("Ambiguous path expression: " + segment);
+          if (matchCount == 1) {
             currentEntity = relationSource;
             found = true;
             break;
@@ -708,42 +723,41 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
           ObjectNode objectNode = (ObjectNode) mappingValues;
           objectNode
               .properties()
-              .iterator()
-              .forEachRemaining(
+              .forEach(
                   entry -> {
-                    String fieldName = entry.getKey();
                     JsonNode childNode = entry.getValue();
-                    if (childNode.isObject()) evaluateMappingValues(childNode, context);
-                    else if (mappingValues.isArray()) {
-                      ArrayNode arrayNode = (ArrayNode) mappingValues;
-                      for (int i = 0; i < arrayNode.size(); i++) {
-                        evaluateMappingValues(arrayNode.get(i), context);
-                      }
+                    if (childNode.isContainerNode()) {
+                      evaluateMappingValues(childNode, context);
                     } else {
-                      var val = mappingValues.get(fieldName);
-                      Expression exp = parser.parseExpression(val.asText());
-                      var result = exp.getValue(context);
-
-                      switch (result) {
-                        case Boolean b ->
-                            ((ObjectNode) mappingValues).set(fieldName, BooleanNode.valueOf(b));
-                        case Integer i ->
-                            ((ObjectNode) mappingValues).set(fieldName, IntNode.valueOf(i));
-                        case Long l ->
-                            ((ObjectNode) mappingValues).set(fieldName, LongNode.valueOf(l));
-                        case String s ->
-                            ((ObjectNode) mappingValues).set(fieldName, TextNode.valueOf(s));
-                        case Float f ->
-                            ((ObjectNode) mappingValues).set(fieldName, FloatNode.valueOf(f));
-                        case Double d ->
-                            ((ObjectNode) mappingValues).set(fieldName, DoubleNode.valueOf(d));
-                        case null, default ->
-                            throw new ServiceRuntimeError(
-                                "Error while evaluating expression: " + val.asText());
-                      }
+                      objectNode.set(entry.getKey(), evaluateLeaf(childNode, context));
                     }
                   });
+        } else if (mappingValues.isArray()) {
+          ArrayNode arrayNode = (ArrayNode) mappingValues;
+          for (int i = 0; i < arrayNode.size(); i++) {
+            JsonNode childNode = arrayNode.get(i);
+            if (childNode.isContainerNode()) {
+              evaluateMappingValues(childNode, context);
+            } else {
+              arrayNode.set(i, evaluateLeaf(childNode, context));
+            }
+          }
         }
+      }
+
+      private static JsonNode evaluateLeaf(JsonNode leaf, StandardEvaluationContext context) {
+        Expression exp = parser.parseExpression(leaf.asText());
+        var result = exp.getValue(context);
+        return switch (result) {
+          case Boolean b -> BooleanNode.valueOf(b);
+          case Integer i -> IntNode.valueOf(i);
+          case Long l -> LongNode.valueOf(l);
+          case String s -> TextNode.valueOf(s);
+          case Float f -> FloatNode.valueOf(f);
+          case Double d -> DoubleNode.valueOf(d);
+          case null, default ->
+              throw new ServiceRuntimeError("Error while evaluating expression: " + leaf.asText());
+        };
       }
     }
 

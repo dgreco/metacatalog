@@ -3,9 +3,6 @@ package it.davidgreco.metacatalog.common;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonPathConfiguration;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.BooleanNode;
-import com.fasterxml.jackson.databind.node.NumericNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import com.jayway.jsonpath.JsonPath;
 
 /**
@@ -44,12 +41,46 @@ public record WrappedJsonNode(JsonNode node) {
     var dc = JsonPath.using(jsonPathConfiguration).parse(node);
     var obj = dc.read(pathExpression);
 
-    if (clazz == String.class) return clazz.cast(((TextNode) obj).asText());
-    else if (clazz == Integer.class) return clazz.cast(((NumericNode) obj).asInt());
-    else if (clazz == Long.class) return clazz.cast(((NumericNode) obj).asLong());
-    else if (clazz == Float.class) return clazz.cast(((NumericNode) obj).asDouble());
-    else if (clazz == Double.class) return clazz.cast(((NumericNode) obj).asDouble());
-    else if (clazz == Boolean.class) return clazz.cast(((BooleanNode) obj).booleanValue());
+    if (!(obj instanceof JsonNode jsonNode) || jsonNode.isMissingNode() || jsonNode.isNull()) {
+      throw new IllegalArgumentException(
+          "Path '" + pathExpression + "' did not resolve to a value");
+    }
+
+    if (clazz == String.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isTextual, pathExpression, "a string").asText());
+    else if (clazz == Integer.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asInt());
+    else if (clazz == Long.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asLong());
+    else if (clazz == Float.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").floatValue());
+    else if (clazz == Double.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asDouble());
+    else if (clazz == Boolean.class)
+      return clazz.cast(
+          requireType(jsonNode, JsonNode::isBoolean, pathExpression, "a boolean").booleanValue());
     else return clazz.cast(obj);
+  }
+
+  private static JsonNode requireType(
+      JsonNode node,
+      java.util.function.Predicate<JsonNode> test,
+      String pathExpression,
+      String expected) {
+    if (!test.test(node)) {
+      throw new IllegalArgumentException(
+          "Path '"
+              + pathExpression
+              + "' did not resolve to "
+              + expected
+              + " but to "
+              + node.getNodeType());
+    }
+    return node;
   }
 }

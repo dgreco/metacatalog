@@ -6,7 +6,6 @@ import static it.davidgreco.metacatalog.service.CommonService.hasTrait;
 import io.vavr.Tuple2;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
-import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import it.davidgreco.metacatalog.service.*;
 import java.util.ArrayList;
@@ -44,11 +43,6 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   private static final String PROVISIONING_FAILED = "Provisioning failed: ";
   private static final String PROVISIONABLE_RESOURCE = "ProvisionableResource";
-
-  static {
-    ProcedureExecutor.getProcedureRegistry()
-        .put("ProvisioningProcedure", ProvisioningProcedure.class);
-  }
 
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
   private final MappingService mappingService;

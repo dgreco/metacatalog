@@ -3,44 +3,45 @@ package it.davidgreco.metacatalog.functions;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 /**
- * Service for executing registered entity procedures and functions.
+ * Service for executing registered entity procedures.
  *
- * <p>This executor maintains registries of named procedures and functions that can be invoked on
- * entities. Procedures are obtained from the Spring application context, allowing them to be
- * Spring-managed beans with dependency injection.
+ * <p>Procedures are discovered from the Spring application context: every {@link EntityProcedure}
+ * bean is registered under its {@link EntityProcedure#name()}. This removes the previous reliance
+ * on a process-global static registry populated from a class-loading-dependent static initializer,
+ * which could silently miss lazily-created procedure beans and leaked state across tests.
  *
  * @see EntityProcedure
- * @see EntityFunction
  */
 @Slf4j
-@RequiredArgsConstructor
 @Service
 public class ProcedureExecutor {
 
-  /** Registry mapping procedure names to their implementation classes. */
-  @Getter
-  private static final Map<String, Class<? extends EntityProcedure>> procedureRegistry =
-      new ConcurrentHashMap<>();
-
-  /** Registry mapping function names to their implementation classes. */
-  @Getter
-  private static final Map<String, Class<? extends EntityFunction>> functionRegistry =
-      new ConcurrentHashMap<>();
-
-  /** Spring application context for obtaining procedure beans. */
-  private final ApplicationContext applicationContext;
+  /** Registry mapping procedure names to their (Spring-managed) implementations. */
+  private final Map<String, EntityProcedure> procedureRegistry;
 
   /** Entity service for reading entities by ID. */
   private final EntityService entityService;
+
+  /**
+   * Builds the procedure registry from all {@link EntityProcedure} beans in the context.
+   *
+   * @param procedures every procedure bean, injected by Spring
+   * @param entityService entity service for reading entities by ID
+   */
+  public ProcedureExecutor(List<EntityProcedure> procedures, EntityService entityService) {
+    this.procedureRegistry =
+        procedures.stream()
+            .collect(Collectors.toUnmodifiableMap(EntityProcedure::name, Function.identity()));
+    this.entityService = entityService;
+  }
 
   /**
    * Executes a registered procedure on an entity.
@@ -52,12 +53,11 @@ public class ProcedureExecutor {
   public void executeProcedure(String procedureName, String entityId) throws ServiceError {
     try {
       var entity = entityService.read(entityId);
-      if (!procedureRegistry.containsKey(procedureName)) {
-        throw new ServiceError("Procedure/Function not found: " + procedureName);
+      var procedure = procedureRegistry.get(procedureName);
+      if (procedure == null) {
+        throw new ServiceError("Procedure not found: " + procedureName);
       }
-      var provisioningProcedure =
-          (EntityProcedure) applicationContext.getBean(procedureRegistry.get(procedureName));
-      provisioningProcedure.accept(entity);
+      procedure.accept(entity);
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;

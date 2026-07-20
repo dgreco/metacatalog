@@ -13,4 +13,15 @@ import java.util.function.Consumer;
  * @see AbstractEntityProcedure
  * @see ProcedureExecutor
  */
-public interface EntityProcedure extends Consumer<Entity> {}
+public interface EntityProcedure extends Consumer<Entity> {
+
+  /**
+   * The unique name this procedure is registered and invoked under. Defaults to the
+   * implementation's simple class name.
+   *
+   * @return the procedure name
+   */
+  default String name() {
+    return getClass().getSimpleName();
+  }
+}
