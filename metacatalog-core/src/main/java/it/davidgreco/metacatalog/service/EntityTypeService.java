@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.EntityType;
@@ -208,16 +207,13 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           entityTypeRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      if (version == live.getVersion()) return live;
-      if (version > live.getVersion() || version < 1)
-        throw new ServiceError(
-            "Version " + version + " of " + ENTITYTYPE + name + " does not exist");
-      return entityTypeVersionRepository
-          .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
-          .orElseThrow(
-              () ->
-                  new ServiceError(
-                      "Version " + version + " of " + ENTITYTYPE + name + " does not exist"));
+      return TypeServiceSupport.resolveVersion(
+          live,
+          live.getVersion(),
+          live.getVersionGroupId(),
+          version,
+          "Version " + version + " of " + ENTITYTYPE + name + " does not exist",
+          entityTypeVersionRepository::findByVersionGroupIdAndVersion);
     } finally {
       log.info("Read EntityType: {} version: {}", name, version);
     }
@@ -540,9 +536,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   }
 
   private JsonNode parseSchema(String schema) throws SchemaValidationError {
-    var eitherSchema = stringToJsonSchema(schema);
-    if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-    return eitherSchema.get().getSchemaNode();
+    return TypeServiceSupport.parseSchema(schema);
   }
 
   private JsonNode computeDerivedSchema(EntityType entityType) throws SchemaValidationError {
