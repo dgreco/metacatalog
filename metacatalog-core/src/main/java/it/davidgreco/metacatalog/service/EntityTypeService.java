@@ -19,9 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,8 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Service class for managing {@link EntityType} entities. */
 @Slf4j
 @Service
-@Getter
-@Setter
 @RequiredArgsConstructor
 @EnableCaching
 public class EntityTypeService implements CommonTypeService<EntityType, String> {

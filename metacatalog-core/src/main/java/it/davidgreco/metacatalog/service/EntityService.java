@@ -13,9 +13,7 @@ import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.HashSet;
 import java.util.List;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -25,8 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Service class for managing {@link Entity} entities. */
 @Slf4j
 @Service
-@Getter
-@Setter
 @RequiredArgsConstructor
 public class EntityService implements CommonService<Entity, String> {
 

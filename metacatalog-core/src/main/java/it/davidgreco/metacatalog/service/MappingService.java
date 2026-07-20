@@ -49,17 +49,17 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
   private static final String ENTITY = "Entity ";
 
-  public final TraitRelationshipRepository traitRelationshipRepository;
+  private final TraitRelationshipRepository traitRelationshipRepository;
 
-  public final EntityRepository entityRepository;
+  private final EntityRepository entityRepository;
 
-  public final EntityTypeRepository entityTypeRepository;
+  private final EntityTypeRepository entityTypeRepository;
 
-  public final EntityTypeVersionRepository entityTypeVersionRepository;
+  private final EntityTypeVersionRepository entityTypeVersionRepository;
 
-  public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+  private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
-  public final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
   private final EntityRelationshipRepository entityRelationshipRepository;
 
