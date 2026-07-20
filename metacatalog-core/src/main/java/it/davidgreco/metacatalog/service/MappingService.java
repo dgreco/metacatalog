@@ -8,11 +8,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
 import com.jayway.jsonpath.JsonPath;
-import com.networknt.schema.InputFormat;
-import com.networknt.schema.JsonSchema;
 import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.CoreConfigProperties;
-import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import java.sql.Timestamp;
@@ -23,10 +20,6 @@ import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.expression.Expression;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -284,7 +277,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
               additionalEntitiesValues.put(as, jn.getValues());
             }
             var mappedValues =
-                generateMappedValues(
+                MappingValueEvaluator.generateMappedValues(
                     sourceEntity.getValues(),
                     additionalEntitiesValues,
                     mappingRelationship.getMappingValues(),
@@ -424,7 +417,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                   ? pinnedTargetVersion.getSchema()
                   : mappingTypeRelationship.getTarget().getSchema();
           var mappedValues =
-              generateMappedValues(
+              MappingValueEvaluator.generateMappedValues(
                   sourceEntity.getValues(),
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
@@ -671,108 +664,5 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     if (currentEntity.getId().equals(startEntityId)) return Optional.empty();
     else return Optional.of(currentEntity);
-  }
-
-  /**
-   * Generates mapped values by evaluating Spring Expression Language (SpEL) expressions in the
-   * mapping values.
-   *
-   * <p>The mapping values can reference source entity values using "#source" and additional entity
-   * values using their aliases (e.g., "#alias"). SpEL expressions are evaluated and the resulting
-   * values are validated against the target schema.
-   *
-   * @param sourceValues the JSON values of the source entity
-   * @param externalValues a map of alias to JSON values for additional entities referenced in the
-   *     mapping
-   * @param mappingValues the JSON mapping definition containing SpEL expressions
-   * @param targetSchema the JSON schema to validate the generated values against
-   * @return the generated JSON values
-   * @throws ServiceError if expression evaluation fails or schema validation fails
-   */
-  public static JsonNode generateMappedValues(
-      JsonNode sourceValues,
-      Map<String, JsonNode> externalValues,
-      JsonNode mappingValues,
-      JsonSchema targetSchema)
-      throws ServiceError {
-
-    StandardEvaluationContext context = new StandardEvaluationContext();
-    context.setVariable("source", new WrappedJsonNode(sourceValues));
-    externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
-
-    class GenerateValues {
-
-      private GenerateValues() {}
-
-      private static final ExpressionParser parser = new SpelExpressionParser();
-
-      private static JsonNode getMappedValues(
-          JsonNode mappingValues, StandardEvaluationContext context) throws ServiceError {
-        var mappedValues = mappingValues.deepCopy();
-        try {
-          evaluateMappingValues(mappedValues, context);
-          return mappedValues;
-        } catch (ServiceRuntimeError e) {
-          throw new ServiceError("Error while evaluating mapping values: " + e.getMessage());
-        }
-      }
-
-      private static void evaluateMappingValues(
-          JsonNode mappingValues, StandardEvaluationContext context) {
-        if (mappingValues.isObject()) {
-          ObjectNode objectNode = (ObjectNode) mappingValues;
-          objectNode
-              .properties()
-              .forEach(
-                  entry -> {
-                    JsonNode childNode = entry.getValue();
-                    if (childNode.isContainerNode()) {
-                      evaluateMappingValues(childNode, context);
-                    } else {
-                      objectNode.set(entry.getKey(), evaluateLeaf(childNode, context));
-                    }
-                  });
-        } else if (mappingValues.isArray()) {
-          ArrayNode arrayNode = (ArrayNode) mappingValues;
-          for (int i = 0; i < arrayNode.size(); i++) {
-            JsonNode childNode = arrayNode.get(i);
-            if (childNode.isContainerNode()) {
-              evaluateMappingValues(childNode, context);
-            } else {
-              arrayNode.set(i, evaluateLeaf(childNode, context));
-            }
-          }
-        }
-      }
-
-      private static JsonNode evaluateLeaf(JsonNode leaf, StandardEvaluationContext context) {
-        Expression exp = parser.parseExpression(leaf.asText());
-        var result = exp.getValue(context);
-        return switch (result) {
-          case Boolean b -> BooleanNode.valueOf(b);
-          case Integer i -> IntNode.valueOf(i);
-          case Long l -> LongNode.valueOf(l);
-          case String s -> TextNode.valueOf(s);
-          case Float f -> FloatNode.valueOf(f);
-          case Double d -> DoubleNode.valueOf(d);
-          case null, default ->
-              throw new ServiceRuntimeError("Error while evaluating expression: " + leaf.asText());
-        };
-      }
-    }
-
-    var mappedValues = GenerateValues.getMappedValues(mappingValues, context);
-
-    var res =
-        targetSchema.validate(
-            mappedValues.toPrettyString(),
-            InputFormat.JSON,
-            executionContext ->
-                executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
-    if (res.isEmpty()) return mappedValues;
-    else {
-      List<String> errors = new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
-      throw new SchemaValidationError(errors);
-    }
   }
 }
