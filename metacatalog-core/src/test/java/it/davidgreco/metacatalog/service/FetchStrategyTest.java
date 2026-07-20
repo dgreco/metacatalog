@@ -68,4 +68,33 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
             + ENTITY_COUNT
             + " entities");
   }
+
+  @Test
+  void listingEntityTypesBatchesTheTraitsFetch() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var schema = "{ \"type\": \"object\", \"properties\": {} }";
+    int typeCount = 5;
+
+    traitService.create("FetchTrait", Optional.empty(), Optional.empty());
+    for (int i = 0; i < typeCount; i++) {
+      entityTypeService.create(
+          "FetchTraitType" + i, List.of("FetchTrait"), Optional.empty(), schema);
+    }
+
+    // list() -> findAll uses @EntityGraph(traits); reading the (now lazy) traits collection on each
+    // detached type must not issue a query per type.
+    long statements =
+        QueryCounter.countStatements(
+            getApplicationContext(),
+            () -> entityTypeService.list().forEach(t -> t.getTraits().size()));
+
+    assertTrue(
+        statements < typeCount,
+        "entity-type traits fetch is N+1: "
+            + statements
+            + " statements for at least "
+            + typeCount
+            + " types");
+  }
 }

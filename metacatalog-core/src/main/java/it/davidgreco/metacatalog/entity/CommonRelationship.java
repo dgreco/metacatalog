@@ -27,7 +27,13 @@ public class CommonRelationship<T> {
   @ToString.Include
   private String id;
 
-  /** The source entity of this relationship (the "from" side of the directed relationship). */
+  /**
+   * The source entity of this relationship (the "from" side of the directed relationship). Kept
+   * EAGER deliberately: an eager {@code @ManyToOne} is already fetched via a join in the finder
+   * query (not an N+1), and relationship endpoints are almost always read by callers — often after
+   * the fetching transaction has closed — so making it lazy would only trade the join for a fleet
+   * of {@code @EntityGraph}s (and LazyInitializationException risk) with no net benefit.
+   */
   @ManyToOne(fetch = FetchType.EAGER)
   @JoinColumn(name = "source_id", nullable = false)
   @ToString.Include
