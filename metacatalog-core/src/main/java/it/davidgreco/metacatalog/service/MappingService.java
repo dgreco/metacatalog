@@ -214,7 +214,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Creating mapped entities for event with ID: {}", event.getId());
     createMappedEntities(event.getEntityId());
-    event.setEventStatus("PROCESSED");
+    event.setEventStatus(EntityLifeCycleEvent.STATUS_PROCESSED);
     event.setProcessTime(new Timestamp(System.currentTimeMillis()));
     entityLifeCycleEventRepository.save(event);
     log.info("Created mapped entities for event with ID: {}", event.getId());
@@ -285,8 +285,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                 new EntityLifeCycleEvent(
                     mappedEntity.getId(),
                     mappedEntity.getEntityType().getName(),
-                    "CREATED",
-                    "NO_PROCESSING"));
+                    EntityLifeCycleEvent.ENTITY_CREATED,
+                    EntityLifeCycleEvent.STATUS_NO_PROCESSING));
             var mappingEntityRelationship = new MappingEntityRelationship();
             mappingEntityRelationship.setSource(sourceEntity);
             mappingEntityRelationship.setTarget(mappedEntity);
@@ -348,7 +348,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Updating mapped entities for event with ID: {}", event.getId());
     updateMappedEntities(event.getEntityId());
-    event.setEventStatus("PROCESSED");
+    event.setEventStatus(EntityLifeCycleEvent.STATUS_PROCESSED);
     event.setProcessTime(new Timestamp(System.currentTimeMillis()));
     entityLifeCycleEventRepository.save(event);
     log.info("Updated mapped entities for event with ID: {}", event.getId());
@@ -413,8 +413,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
               new EntityLifeCycleEvent(
                   mappedEntity.getId(),
                   mappedEntity.getEntityType().getName(),
-                  "UPDATED",
-                  "NO_PROCESSING"));
+                  EntityLifeCycleEvent.ENTITY_UPDATED,
+                  EntityLifeCycleEvent.STATUS_NO_PROCESSING));
           updateMappedEntities(mappedEntity.getId());
         }
       }

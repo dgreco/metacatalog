@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
 
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
@@ -140,8 +141,8 @@ public class AggregateService {
     class ReadAggregate {
       private AggregatePart readAggregatePart(Entity entity) throws ServiceError {
         try {
-          if (implementsTrait(entity.getEntityType(), "AggregateElement")
-              && !implementsTrait(entity.getEntityType(), "Aggregate")) {
+          if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE_ELEMENT)
+              && !implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
             var dependencies =
                 entityRelationshipRepository
                     .findBySourceAndRelationType(entity, DEPENDS_ON)
@@ -149,7 +150,7 @@ public class AggregateService {
                     .map(EntityRelationship::getTarget)
                     .toList();
             return new AggregateElement(entity, dependencies);
-          } else if (implementsTrait(entity.getEntityType(), "Aggregate")) {
+          } else if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
             var linkedEntities = entityService.linked(entity.getId(), HAS_PART);
             var elements =
                 linkedEntities.stream()

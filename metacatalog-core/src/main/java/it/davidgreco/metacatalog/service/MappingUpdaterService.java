@@ -61,7 +61,8 @@ public class MappingUpdaterService {
       return;
     }
     var createdEvents =
-        entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING");
+        entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
+            EntityLifeCycleEvent.ENTITY_SOURCE_CREATED, EntityLifeCycleEvent.STATUS_PENDING);
     log.debug("Found {} SOURCE_CREATED PENDING events", createdEvents.size());
     createdEvents.forEach(
         event -> {
@@ -74,7 +75,8 @@ public class MappingUpdaterService {
           }
         });
     var updatedEvents =
-        entityLifeCycleEventRepository.findByEventTypeAndEventStatus("SOURCE_UPDATED", "PENDING");
+        entityLifeCycleEventRepository.findByEventTypeAndEventStatus(
+            EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED, EntityLifeCycleEvent.STATUS_PENDING);
     log.debug("Found {} SOURCE_UPDATED PENDING events", updatedEvents.size());
     updatedEvents.forEach(
         event -> {
@@ -99,7 +101,7 @@ public class MappingUpdaterService {
    */
   private void markFailed(EntityLifeCycleEvent event) {
     try {
-      event.setEventStatus("FAILED");
+      event.setEventStatus(EntityLifeCycleEvent.STATUS_FAILED);
       entityLifeCycleEventRepository.save(event);
     } catch (Exception e) {
       log.error("Failed to mark event {} as FAILED", event.getId(), e);

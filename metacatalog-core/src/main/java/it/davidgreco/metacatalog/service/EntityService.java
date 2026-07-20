@@ -5,6 +5,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
@@ -30,7 +31,7 @@ public class EntityService implements CommonService<Entity, String> {
 
   private static final String NOT_FOUND = " not found";
 
-  private static final String NO_PROCESSING = "NO_PROCESSING";
+  private static final String NO_PROCESSING = EntityLifeCycleEvent.STATUS_NO_PROCESSING;
 
   private final EntityTypeRepository entityTypeRepository;
 
@@ -97,11 +98,17 @@ public class EntityService implements CommonService<Entity, String> {
           mappingEntityTypeRelationshipRepository, entityType))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                en.getId(), en.getEntityType().getName(), "SOURCE_CREATED", "PENDING"));
+                en.getId(),
+                en.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+                EntityLifeCycleEvent.STATUS_PENDING));
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                en.getId(), en.getEntityType().getName(), "CREATED", NO_PROCESSING));
+                en.getId(),
+                en.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_CREATED,
+                NO_PROCESSING));
       log.info("Created entity of type {}: {}", typeName, values);
       return en;
     } catch (JsonProcessingException e) {
@@ -152,7 +159,8 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
-      if (!CommonService.implementsTrait(entity.getEntityType(), "ProvisionableResource")
+      if (!CommonService.implementsTrait(
+              entity.getEntityType(), BuiltInTraits.PROVISIONABLE_RESOURCE)
           && CommonService.isMappingTargetEntityType(
               mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
@@ -173,11 +181,17 @@ public class EntityService implements CommonService<Entity, String> {
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                entity.getId(), entity.getEntityType().getName(), "SOURCE_UPDATED", "PENDING"));
+                entity.getId(),
+                entity.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED,
+                EntityLifeCycleEvent.STATUS_PENDING));
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                entity.getId(), entity.getEntityType().getName(), "UPDATED", NO_PROCESSING));
+                entity.getId(),
+                entity.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_UPDATED,
+                NO_PROCESSING));
       log.info("Updated entity with id {}: {}", entityId, values);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
@@ -218,7 +232,10 @@ public class EntityService implements CommonService<Entity, String> {
       entityRepository.delete(entity);
       entityLifeCycleEventRepository.save(
           new EntityLifeCycleEvent(
-              entity.getId(), entity.getEntityType().getName(), "DELETED", NO_PROCESSING));
+              entity.getId(),
+              entity.getEntityType().getName(),
+              EntityLifeCycleEvent.ENTITY_DELETED,
+              NO_PROCESSING));
       log.info("Deleted entity with id {}", entityId);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
