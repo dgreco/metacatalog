@@ -6,6 +6,7 @@ import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
@@ -16,6 +17,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 public interface MappingEntityRelationshipRepository
     extends JpaRepository<MappingEntityRelationship, String> {
+
+  /**
+   * {@inheritDoc} Fetches the (now lazy) type-level mapping rule in the same query, so the graph
+   * layer that walks every instance mapping does not lazy-load it per row.
+   */
+  @Override
+  @EntityGraph(
+      attributePaths = {"mappingEntityTypeRelationship"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  List<MappingEntityRelationship> findAll();
 
   /**
    * Finds all mapping relationships to a target entity with the specified relationship type.

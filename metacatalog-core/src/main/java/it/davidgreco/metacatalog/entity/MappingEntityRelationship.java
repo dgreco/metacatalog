@@ -35,7 +35,11 @@ import lombok.ToString;
     })
 public class MappingEntityRelationship extends CommonRelationship<Entity> {
 
-  /** The type-level mapping rule that this entity mapping is based on. */
-  @OneToOne(fetch = FetchType.EAGER)
+  /**
+   * The type-level mapping rule that this entity mapping is based on. Fetched lazily; the graph
+   * layer that walks all instance mappings pulls it in explicitly via an {@code @EntityGraph}, and
+   * the service paths access it inside their transaction.
+   */
+  @OneToOne(fetch = FetchType.LAZY)
   private MappingEntityTypeRelationship mappingEntityTypeRelationship;
 }
