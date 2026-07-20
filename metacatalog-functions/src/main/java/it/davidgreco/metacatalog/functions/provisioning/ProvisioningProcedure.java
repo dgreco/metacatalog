@@ -4,6 +4,7 @@ import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 import static it.davidgreco.metacatalog.service.CommonService.hasTrait;
 
 import io.vavr.Tuple2;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
@@ -42,7 +43,7 @@ import org.springframework.stereotype.Service;
 public class ProvisioningProcedure extends AbstractEntityProcedure {
 
   private static final String PROVISIONING_FAILED = "Provisioning failed: ";
-  private static final String PROVISIONABLE_RESOURCE = "ProvisionableResource";
+  private static final String PROVISIONABLE_RESOURCE = BuiltInTraits.PROVISIONABLE_RESOURCE;
 
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
   private final MappingService mappingService;
@@ -183,7 +184,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
    */
   @Override
   protected void checkInputType(Entity entity) throws ServiceError {
-    if (!hasTrait(entity, "Provisionable"))
+    if (!hasTrait(entity, BuiltInTraits.PROVISIONABLE))
       throw new ServiceError(
           "Entity type: " + entity.getEntityType().getName() + " has not a trait Provisionable");
   }

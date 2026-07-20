@@ -5,6 +5,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.networknt.schema.ValidationMessage;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
@@ -30,7 +31,7 @@ public class EntityService implements CommonService<Entity, String> {
 
   private static final String NOT_FOUND = " not found";
 
-  private static final String NO_PROCESSING = "NO_PROCESSING";
+  private static final String NO_PROCESSING = EntityLifeCycleEvent.STATUS_NO_PROCESSING;
 
   private final EntityTypeRepository entityTypeRepository;
 
@@ -97,16 +98,21 @@ public class EntityService implements CommonService<Entity, String> {
           mappingEntityTypeRelationshipRepository, entityType))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                en.getId(), en.getEntityType().getName(), "SOURCE_CREATED", "PENDING"));
+                en.getId(),
+                en.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+                EntityLifeCycleEvent.STATUS_PENDING));
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                en.getId(), en.getEntityType().getName(), "CREATED", NO_PROCESSING));
+                en.getId(),
+                en.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_CREATED,
+                NO_PROCESSING));
+      log.info("Created entity of type {}: {}", typeName, values);
       return en;
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Created entity of type {}: {}", typeName, values);
     }
   }
 
@@ -122,13 +128,12 @@ public class EntityService implements CommonService<Entity, String> {
       rollbackFor = {ServiceError.class})
   public Entity read(String entityId) throws ServiceError {
     log.info("Reading entity with id {}", entityId);
-    try {
-      return entityRepository
-          .findById(entityId)
-          .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
-    } finally {
-      log.info("Read entity with id {}", entityId);
-    }
+    var entity =
+        entityRepository
+            .findById(entityId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    log.info("Read entity with id {}", entityId);
+    return entity;
   }
 
   /**
@@ -154,7 +159,8 @@ public class EntityService implements CommonService<Entity, String> {
               .findById(entityId)
               .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
-      if (!CommonService.implementsTrait(entity.getEntityType(), "ProvisionableResource")
+      if (!CommonService.implementsTrait(
+              entity.getEntityType(), BuiltInTraits.PROVISIONABLE_RESOURCE)
           && CommonService.isMappingTargetEntityType(
               mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
@@ -175,15 +181,20 @@ public class EntityService implements CommonService<Entity, String> {
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                entity.getId(), entity.getEntityType().getName(), "SOURCE_UPDATED", "PENDING"));
+                entity.getId(),
+                entity.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED,
+                EntityLifeCycleEvent.STATUS_PENDING));
       else
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
-                entity.getId(), entity.getEntityType().getName(), "UPDATED", NO_PROCESSING));
+                entity.getId(),
+                entity.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_UPDATED,
+                NO_PROCESSING));
+      log.info("Updated entity with id {}: {}", entityId, values);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Updated entity with id {}: {}", entityId, values);
     }
   }
 
@@ -221,11 +232,13 @@ public class EntityService implements CommonService<Entity, String> {
       entityRepository.delete(entity);
       entityLifeCycleEventRepository.save(
           new EntityLifeCycleEvent(
-              entity.getId(), entity.getEntityType().getName(), "DELETED", NO_PROCESSING));
+              entity.getId(),
+              entity.getEntityType().getName(),
+              EntityLifeCycleEvent.ENTITY_DELETED,
+              NO_PROCESSING));
+      log.info("Deleted entity with id {}", entityId);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted entity with id {}", entityId);
     }
   }
 
@@ -238,11 +251,9 @@ public class EntityService implements CommonService<Entity, String> {
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String entityId) {
     log.info("Checking if entity with id {} exists", entityId);
-    try {
-      return entityRepository.existsById(entityId);
-    } finally {
-      log.info("Checked if entity with id {} exists", entityId);
-    }
+    var exists = entityRepository.existsById(entityId);
+    log.info("Checked if entity with id {} exists", entityId);
+    return exists;
   }
 
   /**
@@ -265,12 +276,17 @@ public class EntityService implements CommonService<Entity, String> {
               .findByName(typeName)
               .orElseThrow(() -> new ServiceError("Entity type " + typeName + NOT_FOUND));
       var qp = queryPath.trim();
-      if (qp.isEmpty()) return entityRepository.findByEntityType(entityType);
-      else return entityRepository.findByEntityTypeIdAndJsonPath(entityType.getId(), queryPath);
+      if (qp.isEmpty()) {
+        var result = entityRepository.findByEntityType(entityType);
+        log.info("Listed entities with query path {}", queryPath);
+        return result;
+      } else {
+        var result = entityRepository.findByEntityTypeIdAndJsonPath(entityType.getId(), queryPath);
+        log.info("Listed entities with query path {}", queryPath);
+        return result;
+      }
     } catch (com.jayway.jsonpath.InvalidPathException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Listed entities with query path {}", queryPath);
     }
   }
 
@@ -287,37 +303,34 @@ public class EntityService implements CommonService<Entity, String> {
       rollbackFor = {ServiceError.class})
   public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
     log.info("Linking entity with id {} with entity with id {}", sourceId, targetId);
-    try {
-      // Check loops
-      if (CommonService.checkLoops(
-          entityRepository,
-          entityRelationshipRepository,
-          targetId,
-          new HashSet<>(),
-          sourceId,
-          relType)) throw new ServiceError("Loops are not allowed");
+    // Check loops
+    if (CommonService.checkLoops(
+        entityRepository,
+        entityRelationshipRepository,
+        targetId,
+        new HashSet<>(),
+        sourceId,
+        relType)) throw new ServiceError("Loops are not allowed");
 
-      // Check if the relationship is legit
-      if (!CommonService.checkRelIsLegit(
-          entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
-        throw new ServiceError("Relationship is not legit");
+    // Check if the relationship is legit
+    if (!CommonService.checkRelIsLegit(
+        entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
+      throw new ServiceError("Relationship is not legit");
 
-      var source =
-          entityRepository
-              .findById(sourceId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-      var target =
-          entityRepository
-              .findById(targetId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+    var source =
+        entityRepository
+            .findById(sourceId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+    var target =
+        entityRepository
+            .findById(targetId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
-      checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
-      if (relType.hasInverse()) {
-        checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
-      }
-    } finally {
-      log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
+    checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
+    if (relType.hasInverse()) {
+      checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
     }
+    log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
   }
 
   private void checkRelationshipExistenceAndSave(
@@ -354,48 +367,45 @@ public class EntityService implements CommonService<Entity, String> {
       rollbackFor = {ServiceError.class})
   public void unlink(String sourceId, RelationType relType, String targetId) throws ServiceError {
     log.info("Unlinking entity with id {} from entity with id {}", sourceId, targetId);
-    try {
-      var source =
-          entityRepository
-              .findById(sourceId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-      var target =
-          entityRepository
-              .findById(targetId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
-      var directRel =
+    var source =
+        entityRepository
+            .findById(sourceId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+    var target =
+        entityRepository
+            .findById(targetId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+    var directRel =
+        entityRelationshipRepository
+            .findBySourceAndRelationTypeAndTarget(source, relType, target)
+            .orElseThrow(
+                () ->
+                    new ServiceError(
+                        ENTITY_WITH_ID
+                            + source.getId()
+                            + " does not have a relationship "
+                            + relType
+                            + " with entity with id "
+                            + target.getId()));
+    entityRelationshipRepository.delete(directRel);
+    if (relType.hasInverse()) {
+      var inverseRelType = relType.inverse();
+      var inverseRel =
           entityRelationshipRepository
-              .findBySourceAndRelationTypeAndTarget(source, relType, target)
+              .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)
               .orElseThrow(
                   () ->
                       new ServiceError(
                           ENTITY_WITH_ID
-                              + source.getId()
+                              + target.getId()
                               + " does not have a relationship "
-                              + relType
+                              + inverseRelType
                               + " with entity with id "
-                              + target.getId()));
-      entityRelationshipRepository.delete(directRel);
-      if (relType.hasInverse()) {
-        var inverseRelType = relType.inverse();
-        var inverseRel =
-            entityRelationshipRepository
-                .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)
-                .orElseThrow(
-                    () ->
-                        new ServiceError(
-                            ENTITY_WITH_ID
-                                + target.getId()
-                                + " does not have a relationship "
-                                + inverseRelType
-                                + " with entity with id "
-                                + source.getId()));
-        entityRelationshipRepository.delete(inverseRel);
-      }
-
-    } finally {
-      log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
+                              + source.getId()));
+      entityRelationshipRepository.delete(inverseRel);
     }
+
+    log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
   }
 
   /**
@@ -413,17 +423,16 @@ public class EntityService implements CommonService<Entity, String> {
   public List<Entity> linked(String sourceId, RelationType relType) throws ServiceError {
     log.info(
         "Listing entities linked to entity with id {} with relation type {}", sourceId, relType);
-    try {
-      var source =
-          entityRepository
-              .findById(sourceId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-      return entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
-          .map(EntityRelationship::getTarget)
-          .toList();
-    } finally {
-      log.info(
-          "Listed entities linked to entity with id {} with relation type {}", sourceId, relType);
-    }
+    var source =
+        entityRepository
+            .findById(sourceId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+    var linkedEntities =
+        entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
+            .map(EntityRelationship::getTarget)
+            .toList();
+    log.info(
+        "Listed entities linked to entity with id {} with relation type {}", sourceId, relType);
+    return linkedEntities;
   }
 }

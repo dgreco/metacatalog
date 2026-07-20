@@ -77,11 +77,11 @@ public class TraitService implements CommonTypeService<Trait, String> {
         trait.setFather(father);
       }
       trait.setDerivedSchema(computeDerivedSchema(trait));
-      return traitRepository.save(trait);
+      var saved = traitRepository.save(trait);
+      log.info("Created Trait: {}", name);
+      return saved;
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Created Trait: {}", name);
     }
   }
 
@@ -142,11 +142,11 @@ public class TraitService implements CommonTypeService<Trait, String> {
       }
       live.setDerivedSchema(computeDerivedSchema(live));
       live.setVersion(live.getVersion() + 1);
-      return traitRepository.save(live);
+      var saved = traitRepository.save(live);
+      log.info("Created new version of Trait: {}", name);
+      return saved;
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Created new version of Trait: {}", name);
     }
   }
 
@@ -168,21 +168,20 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public Object readVersion(String name, int version) throws ServiceError {
     log.info("Reading Trait: {} version: {}", name, version);
-    try {
-      var live =
-          traitRepository
-              .findByName(name)
-              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
-      return TypeServiceSupport.resolveVersion(
-          live,
-          live.getVersion(),
-          live.getVersionGroupId(),
-          version,
-          "Version " + version + " of " + TRAIT + name + " does not exist",
-          traitVersionRepository::findByVersionGroupIdAndVersion);
-    } finally {
-      log.info("Read Trait: {} version: {}", name, version);
-    }
+    var live =
+        traitRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    var result =
+        TypeServiceSupport.resolveVersion(
+            live,
+            live.getVersion(),
+            live.getVersionGroupId(),
+            version,
+            "Version " + version + " of " + TRAIT + name + " does not exist",
+            traitVersionRepository::findByVersionGroupIdAndVersion);
+    log.info("Read Trait: {} version: {}", name, version);
+    return result;
   }
 
   /**
@@ -199,19 +198,16 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public List<Object> listVersions(String name) throws ServiceError {
     log.info("Listing versions of Trait: {}", name);
-    try {
-      var live =
-          traitRepository
-              .findByName(name)
-              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
-      var history =
-          traitVersionRepository.findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId());
-      var result = new ArrayList<Object>(history);
-      result.add(live);
-      return result;
-    } finally {
-      log.info("Listed versions of Trait: {}", name);
-    }
+    var live =
+        traitRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    var history =
+        traitVersionRepository.findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId());
+    var result = new ArrayList<Object>(history);
+    result.add(live);
+    log.info("Listed versions of Trait: {}", name);
+    return result;
   }
 
   /**
@@ -258,10 +254,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
             traitVersionRepository.save(s);
           });
       traitVersionRepository.delete(snapshot);
+      log.info("Deleted Trait: {} version: {}", name, version);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted Trait: {} version: {}", name, version);
     }
   }
 
@@ -279,15 +274,12 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public void deleteAllVersions(String name) throws ServiceError {
     log.info("Deleting all versions of Trait: {}", name);
-    try {
-      var live =
-          traitRepository
-              .findByName(name)
-              .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
-      traitVersionRepository.deleteByVersionGroupId(live.getVersionGroupId());
-    } finally {
-      log.info("Deleted all versions of Trait: {}", name);
-    }
+    var live =
+        traitRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    traitVersionRepository.deleteByVersionGroupId(live.getVersionGroupId());
+    log.info("Deleted all versions of Trait: {}", name);
   }
 
   /**
@@ -302,13 +294,12 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public Trait read(String name) throws ServiceError {
     log.info("Reading Trait: {}", name);
-    try {
-      return traitRepository
-          .findByName(name)
-          .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
-    } finally {
-      log.info("Read Trait: {}", name);
-    }
+    var trait =
+        traitRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
+    log.info("Read Trait: {}", name);
+    return trait;
   }
 
   /**
@@ -334,10 +325,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
               .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
       traitVersionRepository.deleteByVersionGroupId(entityType.getVersionGroupId());
       traitRepository.delete(entityType);
+      log.info("Deleted Trait: {}", name);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted Trait: {}", name);
     }
   }
 
@@ -352,11 +342,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public boolean exists(String name) {
     log.info("Checking if Trait exists: {}", name);
-    try {
-      return traitRepository.existsByName(name);
-    } finally {
-      log.info("Checked if Trait exists: {}", name);
-    }
+    var exists = traitRepository.existsByName(name);
+    log.info("Checked if Trait exists: {}", name);
+    return exists;
   }
 
   /**
@@ -369,11 +357,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public List<Trait> list() {
     log.info("Listing all Traits");
-    try {
-      return traitRepository.findAll();
-    } finally {
-      log.info("Listed all Traits");
-    }
+    var traits = traitRepository.findAll();
+    log.info("Listed all Traits");
+    return traits;
   }
 
   /**
@@ -419,10 +405,9 @@ public class TraitService implements CommonTypeService<Trait, String> {
         inverseRel.setRelationType(relType.inverse());
         traitRelationshipRepository.save(inverseRel);
       }
+      log.info("Linked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Linked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     }
   }
 
@@ -444,46 +429,43 @@ public class TraitService implements CommonTypeService<Trait, String> {
   public void unlink(String sourceTraitName, RelationType relType, String targetTraitName)
       throws ServiceError {
     log.info("Unlinking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
-    try {
-      var sourceTrait =
-          traitRepository
-              .findByName(sourceTraitName)
-              .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
-      var targetTrait =
-          traitRepository
-              .findByName(targetTraitName)
-              .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
-      var rel =
+    var sourceTrait =
+        traitRepository
+            .findByName(sourceTraitName)
+            .orElseThrow(() -> new ServiceError(TRAIT + sourceTraitName + NOT_FOUND));
+    var targetTrait =
+        traitRepository
+            .findByName(targetTraitName)
+            .orElseThrow(() -> new ServiceError(TRAIT + targetTraitName + NOT_FOUND));
+    var rel =
+        traitRelationshipRepository
+            .findBySourceAndRelationTypeAndTarget(sourceTrait, relType, targetTrait)
+            .orElseThrow(
+                () ->
+                    new ServiceError(
+                        TRAIT
+                            + sourceTraitName
+                            + " does not have a relationship "
+                            + relType
+                            + " with "
+                            + targetTraitName));
+    traitRelationshipRepository.delete(rel);
+    if (relType.hasInverse()) {
+      var inverseRel =
           traitRelationshipRepository
-              .findBySourceAndRelationTypeAndTarget(sourceTrait, relType, targetTrait)
+              .findBySourceAndRelationTypeAndTarget(targetTrait, relType.inverse(), sourceTrait)
               .orElseThrow(
                   () ->
                       new ServiceError(
                           TRAIT
-                              + sourceTraitName
+                              + targetTraitName
                               + " does not have a relationship "
                               + relType
                               + " with "
-                              + targetTraitName));
-      traitRelationshipRepository.delete(rel);
-      if (relType.hasInverse()) {
-        var inverseRel =
-            traitRelationshipRepository
-                .findBySourceAndRelationTypeAndTarget(targetTrait, relType.inverse(), sourceTrait)
-                .orElseThrow(
-                    () ->
-                        new ServiceError(
-                            TRAIT
-                                + targetTraitName
-                                + " does not have a relationship "
-                                + relType
-                                + " with "
-                                + sourceTraitName));
-        traitRelationshipRepository.delete(inverseRel);
-      }
-    } finally {
-      log.info("Unlinked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
+                              + sourceTraitName));
+      traitRelationshipRepository.delete(inverseRel);
     }
+    log.info("Unlinked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
   }
 
   /**
@@ -499,17 +481,16 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public List<Trait> linked(String traitName1, RelationType relType) throws ServiceError {
     log.info("Linked Trait: {}", traitName1);
-    try {
-      var trait1 =
-          traitRepository
-              .findByName(traitName1)
-              .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
-      return traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
-          .map(TraitRelationship::getTarget)
-          .toList();
-    } finally {
-      log.info("Linked Trait: {}", traitName1);
-    }
+    var trait1 =
+        traitRepository
+            .findByName(traitName1)
+            .orElseThrow(() -> new ServiceError(TRAIT + traitName1 + NOT_FOUND));
+    var linkedTraits =
+        traitRelationshipRepository.findBySourceAndRelationType(trait1, relType).stream()
+            .map(TraitRelationship::getTarget)
+            .toList();
+    log.info("Linked Trait: {}", traitName1);
+    return linkedTraits;
   }
 
   /**
@@ -523,11 +504,10 @@ public class TraitService implements CommonTypeService<Trait, String> {
       rollbackFor = {ServiceError.class})
   public long countTraitChildren(String name) {
     log.info("Counting children of Trait: {}", name);
-    try {
-      return traitRepository.findByName(name).map(traitRepository::countTraitByFather).orElse(0L);
-    } finally {
-      log.info("Counting children of Trait: {}", name);
-    }
+    var count =
+        traitRepository.findByName(name).map(traitRepository::countTraitByFather).orElse(0L);
+    log.info("Counting children of Trait: {}", name);
+    return count;
   }
 
   /**

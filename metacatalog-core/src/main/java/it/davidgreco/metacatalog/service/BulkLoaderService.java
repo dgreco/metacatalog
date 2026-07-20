@@ -202,13 +202,12 @@ public class BulkLoaderService {
                       }
                     });
               });
+      log.info("Bulk model creation completed");
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
     } catch (IOException _) {
       throw new ServiceError("Error parsing YAML file");
-    } finally {
-      log.info("Bulk model creation completed");
     }
   }
 
@@ -290,14 +289,13 @@ public class BulkLoaderService {
               throw new ServiceRuntimeError(e);
             }
           });
+      log.info("Bulk aggregate creation completed");
       return ids;
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
     } catch (IOException | ClassCastException _) {
       throw new ServiceError("Error parsing YAML file");
-    } finally {
-      log.info("Bulk aggregate creation completed");
     }
   }
 }

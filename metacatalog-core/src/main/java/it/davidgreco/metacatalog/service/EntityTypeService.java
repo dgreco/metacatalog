@@ -90,11 +90,10 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityType.setDerivedSchema(computeDerivedSchema(entityType));
       var saved = entityTypeRepository.save(entityType);
       saveCurrentSnapshot(saved, null);
+      log.info("Created EntityType: {}", name);
       return saved;
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Created EntityType: {}", name);
     }
   }
 
@@ -172,11 +171,10 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
               live.getVersionGroupId());
       saveCurrentSnapshot(saved, latestSnapshot.map(EntityTypeVersion::getId).orElse(null));
+      log.info("Created new version of EntityType: {}", name);
       return saved;
     } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Created new version of EntityType: {}", name);
     }
   }
 
@@ -198,21 +196,20 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       rollbackFor = {ServiceError.class})
   public Object readVersion(String name, int version) throws ServiceError {
     log.info("Reading EntityType: {} version: {}", name, version);
-    try {
-      var live =
-          entityTypeRepository
-              .findByName(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      return TypeServiceSupport.resolveVersion(
-          live,
-          live.getVersion(),
-          live.getVersionGroupId(),
-          version,
-          "Version " + version + " of " + ENTITYTYPE + name + " does not exist",
-          entityTypeVersionRepository::findByVersionGroupIdAndVersion);
-    } finally {
-      log.info("Read EntityType: {} version: {}", name, version);
-    }
+    var live =
+        entityTypeRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+    var result =
+        TypeServiceSupport.resolveVersion(
+            live,
+            live.getVersion(),
+            live.getVersionGroupId(),
+            version,
+            "Version " + version + " of " + ENTITYTYPE + name + " does not exist",
+            entityTypeVersionRepository::findByVersionGroupIdAndVersion);
+    log.info("Read EntityType: {} version: {}", name, version);
+    return result;
   }
 
   /**
@@ -234,23 +231,20 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       rollbackFor = {ServiceError.class})
   public List<Object> listVersions(String name) throws ServiceError {
     log.info("Listing versions of EntityType: {}", name);
-    try {
-      var live =
-          entityTypeRepository
-              .findByName(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      var history =
-          entityTypeVersionRepository
-              .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
-              .stream()
-              .filter(s -> s.getVersion() != live.getVersion())
-              .toList();
-      var result = new java.util.ArrayList<Object>(history);
-      result.add(live);
-      return result;
-    } finally {
-      log.info("Listed versions of EntityType: {}", name);
-    }
+    var live =
+        entityTypeRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+    var history =
+        entityTypeVersionRepository
+            .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
+            .stream()
+            .filter(s -> s.getVersion() != live.getVersion())
+            .toList();
+    var result = new java.util.ArrayList<Object>(history);
+    result.add(live);
+    log.info("Listed versions of EntityType: {}", name);
+    return result;
   }
 
   /**
@@ -312,10 +306,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           });
       entityTypeVersionRepository.delete(snapshot);
       entityTypeVersionRepository.flush();
+      log.info("Deleted EntityType: {} version: {}", name, version);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted EntityType: {} version: {}", name, version);
     }
   }
 
@@ -375,10 +368,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
         entityTypeVersionRepository.delete(snapshot);
       }
       entityTypeVersionRepository.flush();
+      log.info("Deleted all versions of EntityType: {}", name);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted all versions of EntityType: {}", name);
     }
   }
 
@@ -394,13 +386,12 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       rollbackFor = {ServiceError.class})
   public EntityType read(String name) throws ServiceError {
     log.info("Reading EntityType: {}", name);
-    try {
-      return entityTypeRepository
-          .findByName(name)
-          .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-    } finally {
-      log.info("Read EntityType: {}", name);
-    }
+    var entityType =
+        entityTypeRepository
+            .findByName(name)
+            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+    log.info("Read EntityType: {}", name);
+    return entityType;
   }
 
   /**
@@ -454,10 +445,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityTypeVersionRepository.flush();
       entityTypeRepository.delete(entityType);
       entityTypeRepository.flush();
+      log.info("Deleted EntityType: {}", name);
     } catch (DataIntegrityViolationException e) {
       throw new ServiceError(e.getMessage());
-    } finally {
-      log.info("Deleted EntityType: {}", name);
     }
   }
 
@@ -470,11 +460,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String name) {
     log.info("Checking if EntityType exists: {}", name);
-    try {
-      return entityTypeRepository.existsByName(name);
-    } finally {
-      log.info("Checked if EntityType exists: {}", name);
-    }
+    var exists = entityTypeRepository.existsByName(name);
+    log.info("Checked if EntityType exists: {}", name);
+    return exists;
   }
 
   /**
@@ -487,11 +475,9 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       rollbackFor = {ServiceError.class})
   public List<EntityType> list() {
     log.info("Listing all EntityTypes");
-    try {
-      return entityTypeRepository.findAll();
-    } finally {
-      log.info("Listed all EntityTypes");
-    }
+    var entityTypes = entityTypeRepository.findAll();
+    log.info("Listed all EntityTypes");
+    return entityTypes;
   }
 
   /**
@@ -503,14 +489,13 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   @Transactional(propagation = Propagation.REQUIRED)
   public long countEntityTypeChildren(String name) {
     log.info("Counting children of EntityType: {}", name);
-    try {
-      return entityTypeRepository
-          .findByName(name)
-          .map(entityTypeRepository::countEntityTypeByFather)
-          .orElse(0L);
-    } finally {
-      log.info("Counted children of EntityType: {}", name);
-    }
+    var count =
+        entityTypeRepository
+            .findByName(name)
+            .map(entityTypeRepository::countEntityTypeByFather)
+            .orElse(0L);
+    log.info("Counted children of EntityType: {}", name);
+    return count;
   }
 
   private List<Trait> resolveTraits(List<String> traits) throws ServiceError {

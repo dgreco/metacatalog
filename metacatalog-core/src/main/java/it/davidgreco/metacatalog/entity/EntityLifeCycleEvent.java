@@ -26,6 +26,33 @@ import lombok.ToString;
     })
 public class EntityLifeCycleEvent {
 
+  /** Event type: a source entity was created and its mappings still need processing. */
+  public static final String ENTITY_SOURCE_CREATED = "SOURCE_CREATED";
+
+  /** Event type: a source entity was updated and its mappings still need processing. */
+  public static final String ENTITY_SOURCE_UPDATED = "SOURCE_UPDATED";
+
+  /** Event type: an entity was created (no further mapping processing required). */
+  public static final String ENTITY_CREATED = "CREATED";
+
+  /** Event type: an entity was updated (no further mapping processing required). */
+  public static final String ENTITY_UPDATED = "UPDATED";
+
+  /** Event type: an entity was deleted (no further mapping processing required). */
+  public static final String ENTITY_DELETED = "DELETED";
+
+  /** Event status: awaiting processing by the mapping updater. */
+  public static final String STATUS_PENDING = "PENDING";
+
+  /** Event status: successfully processed by the mapping updater. */
+  public static final String STATUS_PROCESSED = "PROCESSED";
+
+  /** Event status: processing failed permanently; will not be retried. */
+  public static final String STATUS_FAILED = "FAILED";
+
+  /** Event status: the event requires no processing. */
+  public static final String STATUS_NO_PROCESSING = "NO_PROCESSING";
+
   /** The unique identifier for this event. */
   @Id @GeneratedValue @ToString.Include private Long id;
 

@@ -6,9 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vavr.control.Try;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /**
  * Unit tests for the task engine's scheduling contract — cycle detection and failure propagation —
@@ -87,6 +92,44 @@ class TaskEngineTest {
     var future = taskManager.getRunningScheduleFuture(id).orElseThrow();
     assertFalse(future.get().isSuccess(), "a failing task must make the schedule future fail");
     assertTrue(taskManager.getScheduleResults(id).stream().anyMatch(Try::isFailure));
+  }
+
+  @Test
+  @Timeout(30)
+  void deepDependencyChainDoesNotStarveABoundedPool() throws Exception {
+    // Regression for the thread-pool starvation deadlock: with the previous design each task
+    // blocked a worker thread in join() while awaiting its dependencies, so a chain longer than the
+    // pool wedged every thread. Here the pool has only 2 threads and a tiny queue, and the chain is
+    // far longer — the composed (non-blocking) design must still complete.
+    var pool = new ThreadPoolTaskExecutor();
+    pool.setCorePoolSize(2);
+    pool.setMaxPoolSize(2);
+    pool.setQueueCapacity(4);
+    pool.initialize();
+    try {
+      var boundedTaskManager = new TaskManager(pool);
+      var order = new ConcurrentLinkedQueue<Integer>();
+      var schedule = boundedTaskManager.createSchedule();
+      SimpleTask previous = null;
+      for (int i = 0; i < 40; i++) {
+        int idx = i;
+        var task = new SimpleTask("t" + i, () -> order.add(idx));
+        if (previous != null) {
+          task.dependsOn(previous);
+        }
+        schedule.addTask(task);
+        previous = task;
+      }
+
+      var id = boundedTaskManager.schedule(schedule);
+      // A deadlock would hang here; the timeout turns it into a failure instead.
+      boundedTaskManager.getRunningScheduleFuture(id).orElseThrow().get(25, TimeUnit.SECONDS);
+
+      assertEquals(40, order.size());
+      assertEquals(IntStream.range(0, 40).boxed().toList(), order.stream().toList());
+    } finally {
+      pool.shutdown();
+    }
   }
 
   @Test
