@@ -47,18 +47,25 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
     entityService.create("UpdSource", "{}");
 
     var updater = updater();
+    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
     updater.setAutomaticEntitiesMapping(true);
     try {
       // A direct call runs the scheduled body: had the advisory lock not been acquired inside a
       // transaction (Propagation.MANDATORY), this would throw instead of processing the event.
       updater.updateMappedEntities();
     } finally {
-      updater.setAutomaticEntitiesMapping(false);
+      updater.setAutomaticEntitiesMapping(originalMappingFlag);
     }
 
     var mappedTargets = entityService.list("UpdTarget", "");
     assertEquals(1, mappedTargets.size(), "a mapped target entity should have been created");
     assertTrue(events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING").isEmpty());
+
+    var processed = events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PROCESSED");
+    assertEquals(1, processed.size());
+    assertTrue(
+        processed.getFirst().isProcessed(),
+        "a processed event must carry a real process timestamp, not the unprocessed sentinel");
   }
 
   @Test
@@ -85,11 +92,12 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
     entityService.create("PoisonSource", "{}");
 
     var updater = updater();
+    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
     updater.setAutomaticEntitiesMapping(true);
     try {
       updater.updateMappedEntities();
     } finally {
-      updater.setAutomaticEntitiesMapping(false);
+      updater.setAutomaticEntitiesMapping(originalMappingFlag);
     }
 
     assertTrue(

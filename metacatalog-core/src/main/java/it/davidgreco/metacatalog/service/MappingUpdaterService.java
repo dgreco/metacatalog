@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.service;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
+import java.time.Instant;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -102,6 +103,7 @@ public class MappingUpdaterService {
   private void markFailed(EntityLifeCycleEvent event) {
     try {
       event.setEventStatus(EntityLifeCycleEvent.STATUS_FAILED);
+      event.setProcessTime(Instant.now());
       entityLifeCycleEventRepository.save(event);
     } catch (Exception e) {
       log.error("Failed to mark event {} as FAILED", event.getId(), e);
