@@ -79,6 +79,16 @@ class UiControllerTest {
     given(entityRepository.findAll()).willReturn(List.of());
     given(entityRelationshipRepository.findAll()).willReturn(List.of());
     given(mappingEntityRelationshipRepository.findAll()).willReturn(List.of());
+    var catalogGraphService =
+        new CatalogGraphService(
+            traitService,
+            entityTypeService,
+            mappingService,
+            entityTypeVersionRepository,
+            traitVersionRepository,
+            entityRepository,
+            entityRelationshipRepository,
+            mappingEntityRelationshipRepository);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new UiController(
@@ -86,11 +96,7 @@ class UiControllerTest {
                     entityTypeService,
                     bulkLoaderService,
                     mappingService,
-                    entityTypeVersionRepository,
-                    traitVersionRepository,
-                    entityRepository,
-                    entityRelationshipRepository,
-                    mappingEntityRelationshipRepository))
+                    catalogGraphService))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
