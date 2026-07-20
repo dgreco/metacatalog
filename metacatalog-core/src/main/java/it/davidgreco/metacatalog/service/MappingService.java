@@ -130,14 +130,14 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       }
       mapping.setMappingValues(jsonFactory.readTree(mappingValues));
       mapping.setEntityPathReferences(entityPathReferences);
-      return mappingEntityTypeRelationshipRepository.save(mapping);
-    } catch (JsonProcessingException e) {
-      throw new ServiceError(e.getMessage());
-    } finally {
+      var saved = mappingEntityTypeRelationshipRepository.save(mapping);
       log.info(
           "Created MappingEntityTypeRelationship from {} to {}",
           sourceEntityTypeName,
           targetEntityTypeName);
+      return saved;
+    } catch (JsonProcessingException e) {
+      throw new ServiceError(e.getMessage());
     }
   }
 
@@ -149,11 +149,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   @Transactional(propagation = Propagation.REQUIRED)
   public void delete(String mappingId) {
     log.info("Deleting MappingEntityTypeRelationship with id: {}", mappingId);
-    try {
-      mappingEntityTypeRelationshipRepository.deleteById(mappingId);
-    } finally {
-      log.info("Deleted MappingEntityTypeRelationship with id: {}", mappingId);
-    }
+    mappingEntityTypeRelationshipRepository.deleteById(mappingId);
+    log.info("Deleted MappingEntityTypeRelationship with id: {}", mappingId);
   }
 
   /**
@@ -168,13 +165,12 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       rollbackFor = {ServiceError.class})
   public MappingEntityTypeRelationship read(String mappingId) throws ServiceError {
     log.info("Reading MappingEntityTypeRelationship with id: {}", mappingId);
-    try {
-      return mappingEntityTypeRelationshipRepository
-          .findById(mappingId)
-          .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
-    } finally {
-      log.info("Read MappingEntityTypeRelationship with id: {}", mappingId);
-    }
+    var mapping =
+        mappingEntityTypeRelationshipRepository
+            .findById(mappingId)
+            .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
+    log.info("Read MappingEntityTypeRelationship with id: {}", mappingId);
+    return mapping;
   }
 
   /**
@@ -186,11 +182,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String mappingId) {
     log.info("Checking if MappingEntityTypeRelationship with id: {}", mappingId);
-    try {
-      return mappingEntityTypeRelationshipRepository.existsById(mappingId);
-    } finally {
-      log.info("Checked if MappingEntityTypeRelationship with id: {}", mappingId);
-    }
+    var exists = mappingEntityTypeRelationshipRepository.existsById(mappingId);
+    log.info("Checked if MappingEntityTypeRelationship with id: {}", mappingId);
+    return exists;
   }
 
   /**
@@ -203,11 +197,9 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       rollbackFor = {ServiceError.class})
   public List<MappingEntityTypeRelationship> list() {
     log.info("Listing all MappingEntityTypeRelationships");
-    try {
-      return mappingEntityTypeRelationshipRepository.findAll();
-    } finally {
-      log.info("Listed all MappingEntityTypeRelationships");
-    }
+    var mappings = mappingEntityTypeRelationshipRepository.findAll();
+    log.info("Listed all MappingEntityTypeRelationships");
+    return mappings;
   }
 
   /**
@@ -221,14 +213,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       rollbackFor = {ServiceError.class})
   public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Creating mapped entities for event with ID: {}", event.getId());
-    try {
-      createMappedEntities(event.getEntityId());
-      event.setEventStatus("PROCESSED");
-      event.setProcessTime(new Timestamp(System.currentTimeMillis()));
-      entityLifeCycleEventRepository.save(event);
-    } finally {
-      log.info("Created mapped entities for event with ID: {}", event.getId());
-    }
+    createMappedEntities(event.getEntityId());
+    event.setEventStatus("PROCESSED");
+    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+    entityLifeCycleEventRepository.save(event);
+    log.info("Created mapped entities for event with ID: {}", event.getId());
   }
 
   /**
@@ -340,11 +329,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                   throw new RuntimeException(e);
                 }
               });
+      log.info("Created mapped entities for source entity with ID: {}", sourceEntityId);
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } finally {
-      log.info("Created mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 
@@ -359,14 +347,11 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
       rollbackFor = {ServiceError.class})
   public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Updating mapped entities for event with ID: {}", event.getId());
-    try {
-      updateMappedEntities(event.getEntityId());
-      event.setEventStatus("PROCESSED");
-      event.setProcessTime(new Timestamp(System.currentTimeMillis()));
-      entityLifeCycleEventRepository.save(event);
-    } finally {
-      log.info("Updated mapped entities for event with ID: {}", event.getId());
-    }
+    updateMappedEntities(event.getEntityId());
+    event.setEventStatus("PROCESSED");
+    event.setProcessTime(new Timestamp(System.currentTimeMillis()));
+    entityLifeCycleEventRepository.save(event);
+    log.info("Updated mapped entities for event with ID: {}", event.getId());
   }
 
   /**
@@ -457,11 +442,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                   throw new RuntimeException(e);
                 }
               });
+      log.info("Updated mapped entities for source entity with ID: {}", sourceEntityId);
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } finally {
-      log.info("Updated mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 
@@ -540,11 +524,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                   throw new RuntimeException(e);
                 }
               });
+      log.info("Deleted mapped entities for source entity with ID: {}", sourceEntityId);
     } catch (RuntimeException e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } finally {
-      log.info("Deleted mapped entities for source entity with ID: {}", sourceEntityId);
     }
   }
 
