@@ -49,8 +49,11 @@ public class Trait implements Type<Trait> {
   @ToString.Include
   private JsonNode derivedSchema;
 
-  /** The parent trait from which this trait inherits. */
-  @OneToOne(fetch = FetchType.EAGER)
+  /**
+   * The parent trait from which this trait inherits. Modelled as {@link ManyToOne}: many child
+   * traits may share the same father.
+   */
+  @ManyToOne(fetch = FetchType.EAGER)
   private Trait father;
 
   /**

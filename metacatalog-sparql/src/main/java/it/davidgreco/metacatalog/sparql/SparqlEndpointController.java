@@ -153,11 +153,11 @@ public class SparqlEndpointController {
           HttpServletResponse.SC_BAD_REQUEST,
           "Malformed SPARQL query: " + e.getMessage());
     } catch (Exception e) {
+      // Log the full exception server-side, but do not leak internal details (Ontop/JDBC messages
+      // routinely embed SQL fragments, table/column names and connection details) to the client.
       LOG.error("SPARQL query execution failed", e);
       respondError(
-          response,
-          HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-          "Query execution failed: " + e.getMessage());
+          response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Query execution failed");
     }
     LOG.debug(
         "SPARQL query executed in {}ms: {}",

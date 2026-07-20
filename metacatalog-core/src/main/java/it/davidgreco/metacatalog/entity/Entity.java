@@ -3,7 +3,7 @@ package it.davidgreco.metacatalog.entity;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.*;
-import lombok.EqualsAndHashCode;
+import java.util.Objects;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -17,7 +17,6 @@ import org.hibernate.annotations.Type;
  */
 @Getter
 @Setter
-@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(onlyExplicitlyIncluded = true)
 @jakarta.persistence.Entity
 @Table(
@@ -30,7 +29,6 @@ public class Entity {
   @GeneratedValue(strategy = GenerationType.UUID)
   @Column(name = "id", nullable = false)
   @ToString.Include
-  @EqualsAndHashCode.Include
   private String id;
 
   /** The attribute values of this entity, stored as a JSON object. */
@@ -71,4 +69,27 @@ public class Entity {
 
   /** Default constructor required by JPA. */
   public Entity() {}
+
+  /**
+   * Two entities are equal only once they have been persisted and share the same generated id.
+   * Transient entities (id still {@code null}) fall back to identity equality, avoiding the JPA
+   * trap where every unsaved instance would otherwise compare equal and collide in hash-based
+   * collections.
+   */
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof Entity other)) {
+      return false;
+    }
+    return id != null && Objects.equals(id, other.id);
+  }
+
+  @Override
+  public int hashCode() {
+    // Constant so hashCode stays stable across the transient -> persistent transition.
+    return getClass().hashCode();
+  }
 }

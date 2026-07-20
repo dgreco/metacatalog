@@ -127,14 +127,11 @@ public class TaskManager {
    * @return a list of task results (success or failure)
    */
   public List<Try<Void>> getScheduleResults(String id) {
-    if (runningSchedules.getIfPresent(id) == null) {
+    var schedule = runningSchedules.getIfPresent(id);
+    if (schedule == null) {
       return List.of();
     }
-    return runningSchedules.getIfPresent(id).getTasks().stream()
-        .map(Task::getResult)
-        .filter(Optional::isPresent)
-        .map(Optional::get)
-        .toList();
+    return schedule.getTasks().stream().map(Task::getResult).flatMap(Optional::stream).toList();
   }
 
   /**
@@ -198,7 +195,15 @@ public class TaskManager {
             tasks.forEach(
                 task -> task.getRunningTaskFuture().set(task.schedule(asyncTaskExecutor)));
             tasks.parallelStream().forEach(Task::join);
-            return Try.of(() -> null);
+            // Report the first task failure so callers observing the schedule future can detect
+            // that the schedule did not fully succeed (previously this always returned success,
+            // masking every individual task failure).
+            return tasks.stream()
+                .map(Task::getResult)
+                .flatMap(Optional::stream)
+                .filter(Try::isFailure)
+                .findFirst()
+                .orElseGet(() -> Try.success(null));
           };
       return asyncTaskExecutor.submit(callable);
     }

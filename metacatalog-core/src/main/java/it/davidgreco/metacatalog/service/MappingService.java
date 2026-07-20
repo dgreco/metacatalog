@@ -8,11 +8,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
 import com.jayway.jsonpath.JsonPath;
-import com.networknt.schema.InputFormat;
-import com.networknt.schema.JsonSchema;
 import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.CoreConfigProperties;
-import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
 import java.sql.Timestamp;
@@ -23,10 +20,6 @@ import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.expression.Expression;
-import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -49,17 +42,17 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
   private static final String ENTITY = "Entity ";
 
-  public final TraitRelationshipRepository traitRelationshipRepository;
+  private final TraitRelationshipRepository traitRelationshipRepository;
 
-  public final EntityRepository entityRepository;
+  private final EntityRepository entityRepository;
 
-  public final EntityTypeRepository entityTypeRepository;
+  private final EntityTypeRepository entityTypeRepository;
 
-  public final EntityTypeVersionRepository entityTypeVersionRepository;
+  private final EntityTypeVersionRepository entityTypeVersionRepository;
 
-  public final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+  private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
-  public final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
   private final EntityRelationshipRepository entityRelationshipRepository;
 
@@ -224,7 +217,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    * @throws ServiceError if an error occurs while processing the event
    */
   @Transactional(
-      propagation = Propagation.REQUIRED,
+      propagation = Propagation.REQUIRES_NEW,
       rollbackFor = {ServiceError.class})
   public void createMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Creating mapped entities for event with ID: {}", event.getId());
@@ -247,7 +240,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void createMappedEntities(String sourceEntityId) throws ServiceError {
 
     class CreateMappedEntities {
+      private final Set<String> visited = new HashSet<>();
+
       private void createMappedEntities(String sourceEntityId) throws ServiceError {
+        if (!visited.add(sourceEntityId)) return;
         RetryTemplate createRetryTemplate =
             RetryTemplate.builder()
                 .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
@@ -281,7 +277,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
               additionalEntitiesValues.put(as, jn.getValues());
             }
             var mappedValues =
-                generateMappedValues(
+                MappingValueEvaluator.generateMappedValues(
                     sourceEntity.getValues(),
                     additionalEntitiesValues,
                     mappingRelationship.getMappingValues(),
@@ -359,7 +355,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
    * @throws ServiceError if an error occurs while processing the event
    */
   @Transactional(
-      propagation = Propagation.REQUIRED,
+      propagation = Propagation.REQUIRES_NEW,
       rollbackFor = {ServiceError.class})
   public void updateMappedEntities(EntityLifeCycleEvent event) throws ServiceError {
     log.info("Updating mapped entities for event with ID: {}", event.getId());
@@ -382,7 +378,10 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
   public void updateMappedEntities(String sourceEntityId) throws ServiceError {
 
     class UpdateMappedEntities {
+      private final Set<String> visited = new HashSet<>();
+
       private void updateMappedEntities(String sourceEntityId) throws ServiceError {
+        if (!visited.add(sourceEntityId)) return;
         RetryTemplate updateRetryTemplate =
             RetryTemplate.builder()
                 .maxAttempts(coreConfigProperties.entityPathResolutionMaxAttempts())
@@ -418,7 +417,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                   ? pinnedTargetVersion.getSchema()
                   : mappingTypeRelationship.getTarget().getSchema();
           var mappedValues =
-              generateMappedValues(
+              MappingValueEvaluator.generateMappedValues(
                   sourceEntity.getValues(),
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
@@ -639,9 +638,18 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         for (var relationSource : relationSources) {
           var json = relationSource.getValues().toPrettyString();
           var dc = JsonPath.using(jsonPathConfiguration).parse(json);
-          var res = (ArrayNode) dc.read(pathExpression);
-          if (res.size() > 1) throw new ServiceError("Ambiguous path expression: " + segment);
-          if (res.size() == 1) {
+          Object res = dc.read(pathExpression);
+          int matchCount;
+          if (res instanceof ArrayNode arr) {
+            matchCount = arr.size();
+          } else if (res == null
+              || (res instanceof JsonNode node && (node.isMissingNode() || node.isNull()))) {
+            matchCount = 0;
+          } else {
+            matchCount = 1;
+          }
+          if (matchCount > 1) throw new ServiceError("Ambiguous path expression: " + segment);
+          if (matchCount == 1) {
             currentEntity = relationSource;
             found = true;
             break;
@@ -656,109 +664,5 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
 
     if (currentEntity.getId().equals(startEntityId)) return Optional.empty();
     else return Optional.of(currentEntity);
-  }
-
-  /**
-   * Generates mapped values by evaluating Spring Expression Language (SpEL) expressions in the
-   * mapping values.
-   *
-   * <p>The mapping values can reference source entity values using "#source" and additional entity
-   * values using their aliases (e.g., "#alias"). SpEL expressions are evaluated and the resulting
-   * values are validated against the target schema.
-   *
-   * @param sourceValues the JSON values of the source entity
-   * @param externalValues a map of alias to JSON values for additional entities referenced in the
-   *     mapping
-   * @param mappingValues the JSON mapping definition containing SpEL expressions
-   * @param targetSchema the JSON schema to validate the generated values against
-   * @return the generated JSON values
-   * @throws ServiceError if expression evaluation fails or schema validation fails
-   */
-  public static JsonNode generateMappedValues(
-      JsonNode sourceValues,
-      Map<String, JsonNode> externalValues,
-      JsonNode mappingValues,
-      JsonSchema targetSchema)
-      throws ServiceError {
-
-    StandardEvaluationContext context = new StandardEvaluationContext();
-    context.setVariable("source", new WrappedJsonNode(sourceValues));
-    externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
-
-    class GenerateValues {
-
-      private GenerateValues() {}
-
-      private static final ExpressionParser parser = new SpelExpressionParser();
-
-      private static JsonNode getMappedValues(
-          JsonNode mappingValues, StandardEvaluationContext context) throws ServiceError {
-        var mappedValues = mappingValues.deepCopy();
-        try {
-          evaluateMappingValues(mappedValues, context);
-          return mappedValues;
-        } catch (ServiceRuntimeError e) {
-          throw new ServiceError("Error while evaluating mapping values: " + e.getMessage());
-        }
-      }
-
-      private static void evaluateMappingValues(
-          JsonNode mappingValues, StandardEvaluationContext context) {
-        if (mappingValues.isObject()) {
-          ObjectNode objectNode = (ObjectNode) mappingValues;
-          objectNode
-              .properties()
-              .iterator()
-              .forEachRemaining(
-                  entry -> {
-                    String fieldName = entry.getKey();
-                    JsonNode childNode = entry.getValue();
-                    if (childNode.isObject()) evaluateMappingValues(childNode, context);
-                    else if (mappingValues.isArray()) {
-                      ArrayNode arrayNode = (ArrayNode) mappingValues;
-                      for (int i = 0; i < arrayNode.size(); i++) {
-                        evaluateMappingValues(arrayNode.get(i), context);
-                      }
-                    } else {
-                      var val = mappingValues.get(fieldName);
-                      Expression exp = parser.parseExpression(val.asText());
-                      var result = exp.getValue(context);
-
-                      switch (result) {
-                        case Boolean b ->
-                            ((ObjectNode) mappingValues).set(fieldName, BooleanNode.valueOf(b));
-                        case Integer i ->
-                            ((ObjectNode) mappingValues).set(fieldName, IntNode.valueOf(i));
-                        case Long l ->
-                            ((ObjectNode) mappingValues).set(fieldName, LongNode.valueOf(l));
-                        case String s ->
-                            ((ObjectNode) mappingValues).set(fieldName, TextNode.valueOf(s));
-                        case Float f ->
-                            ((ObjectNode) mappingValues).set(fieldName, FloatNode.valueOf(f));
-                        case Double d ->
-                            ((ObjectNode) mappingValues).set(fieldName, DoubleNode.valueOf(d));
-                        case null, default ->
-                            throw new ServiceRuntimeError(
-                                "Error while evaluating expression: " + val.asText());
-                      }
-                    }
-                  });
-        }
-      }
-    }
-
-    var mappedValues = GenerateValues.getMappedValues(mappingValues, context);
-
-    var res =
-        targetSchema.validate(
-            mappedValues.toPrettyString(),
-            InputFormat.JSON,
-            executionContext ->
-                executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
-    if (res.isEmpty()) return mappedValues;
-    else {
-      List<String> errors = new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
-      throw new SchemaValidationError(errors);
-    }
   }
 }

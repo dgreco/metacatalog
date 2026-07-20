@@ -191,7 +191,10 @@ public class AggregateService {
             throw new ServiceError("Invalid entity type for aggregate part");
           }
         } catch (ServiceRuntimeError ex) {
-          throw (ServiceError) ex.getCause();
+          if (ex.getCause() instanceof ServiceError serviceError) {
+            throw serviceError;
+          }
+          throw new ServiceError(ex.getMessage(), ex);
         }
       }
     }

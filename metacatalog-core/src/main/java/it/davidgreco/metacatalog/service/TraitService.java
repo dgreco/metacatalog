@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.EMPTY_SCHEMA;
 import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.RelationType;
@@ -19,9 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,8 +29,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Service class for managing {@link Trait} entities. */
 @Slf4j
 @Service
-@Getter
-@Setter
 @RequiredArgsConstructor
 @EnableCaching
 public class TraitService implements CommonTypeService<Trait, String> {
@@ -178,15 +173,13 @@ public class TraitService implements CommonTypeService<Trait, String> {
           traitRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(TRAIT + name + NOT_FOUND));
-      if (version == live.getVersion()) return live;
-      if (version > live.getVersion() || version < 1)
-        throw new ServiceError("Version " + version + " of " + TRAIT + name + " does not exist");
-      return traitVersionRepository
-          .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
-          .orElseThrow(
-              () ->
-                  new ServiceError(
-                      "Version " + version + " of " + TRAIT + name + " does not exist"));
+      return TypeServiceSupport.resolveVersion(
+          live,
+          live.getVersion(),
+          live.getVersionGroupId(),
+          version,
+          "Version " + version + " of " + TRAIT + name + " does not exist",
+          traitVersionRepository::findByVersionGroupIdAndVersion);
     } finally {
       log.info("Read Trait: {} version: {}", name, version);
     }
@@ -577,9 +570,7 @@ public class TraitService implements CommonTypeService<Trait, String> {
   }
 
   private JsonNode parseSchema(Optional<String> schema) throws SchemaValidationError {
-    var eitherSchema = stringToJsonSchema(schema.orElse(EMPTY_SCHEMA));
-    if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-    return eitherSchema.get().getSchemaNode();
+    return TypeServiceSupport.parseSchema(schema.orElse(EMPTY_SCHEMA));
   }
 
   private JsonNode computeDerivedSchema(Trait trait) throws SchemaValidationError {

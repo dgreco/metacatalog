@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -35,9 +34,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * token.
  */
 @Configuration
-@ConditionalOnExpression(
-    "'${application.config.security.auth-mode:}' eq 'basic'"
-        + " or '${application.config.security.auth-mode:}' eq 'ldap'")
+@ConditionalOnUiAuthMode
 public class SparqlSecurityConfig {
 
   /** Between the UI chain (0) and the API chain (100). */
@@ -53,7 +50,7 @@ public class SparqlSecurityConfig {
   @Bean
   @Order(SPARQL_CHAIN_ORDER)
   public SecurityFilterChain sparqlSecurityFilterChain(final HttpSecurity http) throws Exception {
-    http.securityMatcher("/sparql/query")
+    http.securityMatcher(SecurityFilterChainCustomizer.SPARQL_QUERY_PATH)
         .csrf(csrf -> csrf.disable())
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))

@@ -54,7 +54,9 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
   @Query(
       value =
           """
-               SELECT *, jsonb_path_query(values, CAST(:jsonPath AS jsonpath)) FROM entity WHERE entity_type_id = :entityTypeId
+               SELECT * FROM entity
+               WHERE entity_type_id = :entityTypeId
+                 AND jsonb_path_exists(values, CAST(:jsonPath AS jsonpath))
                """,
       nativeQuery = true)
   List<Entity> findByEntityTypeIdAndJsonPath(String entityTypeId, String jsonPath);

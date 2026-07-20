@@ -5,11 +5,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -42,29 +40,33 @@ public abstract class Task<T> {
   }
 
   Future<Try<Void>> schedule(AsyncTaskExecutor asyncTaskExecutor) {
-    Callable<Try<Void>> callable =
-        () -> {
-          dependsOnTasks.forEach(
-              task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
-          dependsOnTasks.forEach(Task::join);
-          return Try.of(Task.this::apply);
-        };
-    if (runningTaskFuture.get() == null) {
-      dependsOnTasks.forEach(task -> task.runningTaskFuture.set(task.schedule(asyncTaskExecutor)));
+    var existing = runningTaskFuture.get();
+    if (existing != null) {
+      return existing;
+    }
+    // Claim scheduling of this task under a lock so that a task shared by several parents (a
+    // diamond dependency graph) is submitted — and therefore executed — exactly once. The previous
+    // check-then-act on the AtomicReference allowed two threads to both observe a null future and
+    // both submit the same task.
+    synchronized (this) {
+      existing = runningTaskFuture.get();
+      if (existing != null) {
+        return existing;
+      }
+      dependsOnTasks.forEach(task -> task.schedule(asyncTaskExecutor));
       dependsOnTasks.forEach(Task::join);
-      AtomicBoolean dependsOnTasksFailed = new AtomicBoolean(false);
-      dependsOnTasks.forEach(
-          task -> {
-            if (task.result.get().isFailure()) {
-              dependsOnTasksFailed.set(true);
-            }
-          });
-      if (dependsOnTasksFailed.get())
-        return CompletableFuture.completedFuture(
-            Try.failure(new ServiceRuntimeError("One or more of the depending tasks failed")));
-      else return asyncTaskExecutor.submit(callable);
-    } else {
-      return runningTaskFuture.get();
+      boolean dependsOnTasksFailed =
+          dependsOnTasks.stream()
+              .map(Task::getResult)
+              .flatMap(Optional::stream)
+              .anyMatch(Try::isFailure);
+      Future<Try<Void>> future =
+          dependsOnTasksFailed
+              ? CompletableFuture.completedFuture(
+                  Try.failure(new ServiceRuntimeError("One or more of the depending tasks failed")))
+              : asyncTaskExecutor.submit(() -> Try.of(Task.this::apply));
+      runningTaskFuture.set(future);
+      return future;
     }
   }
 

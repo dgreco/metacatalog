@@ -1,10 +1,11 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.service.CommonTypeService.genericTraitService;
-import static it.davidgreco.metacatalog.service.CommonTypeService.genericTypeService;
+import static it.davidgreco.metacatalog.service.CommonTypeService.loadInheritanceChain;
 
 import it.davidgreco.metacatalog.entity.*;
 import it.davidgreco.metacatalog.repository.*;
+import java.util.ArrayDeque;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -50,11 +51,10 @@ public interface CommonService<T, K> {
    */
   static boolean implementsTrait(EntityType entityType, String traitName) {
     var allTheTraitsForTheType =
-        genericTypeService.loadInheritanceChain(entityType).stream()
+        loadInheritanceChain(entityType).stream()
             .flatMap(
                 et ->
-                    et.getTraits().stream()
-                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
+                    et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
             .map(Trait::getName)
             .collect(Collectors.toSet());
     return allTheTraitsForTheType.contains(traitName);
@@ -91,19 +91,19 @@ public interface CommonService<T, K> {
     var targetEntityType = targetEntity.getEntityType();
 
     var allTheTraitsForTheSourceType =
-        genericTypeService.loadInheritanceChain(sourceEntityType).stream()
+        loadInheritanceChain(sourceEntityType).stream()
             .flatMap(
                 entityType ->
                     entityType.getTraits().stream()
-                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
+                        .flatMap(trait -> loadInheritanceChain(trait).stream()))
             .toList();
 
     var allTheTraitsNamesForTheTargetType =
-        genericTypeService.loadInheritanceChain(targetEntityType).stream()
+        loadInheritanceChain(targetEntityType).stream()
             .flatMap(
                 entityType ->
                     entityType.getTraits().stream()
-                        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream()))
+                        .flatMap(trait -> loadInheritanceChain(trait).stream()))
             .map(Trait::getName)
             .collect(Collectors.toSet());
 
@@ -164,6 +164,10 @@ public interface CommonService<T, K> {
    * @param relationType the type of relationship
    * @return true if a loop would be created, false otherwise
    * @throws ServiceError if an entity is not found
+   *     <p>Performs an iterative depth-first search seeded with the neighbours of {@code
+   *     sourceEntityId} so that every outgoing edge of every visited entity is explored (a visited
+   *     set prevents re-traversal and guards against runaway recursion). If {@code targetEntityId}
+   *     is reachable, adding the edge would close a cycle.
    */
   static boolean checkLoops(
       EntityRepository entityRepository,
@@ -173,29 +177,39 @@ public interface CommonService<T, K> {
       String targetEntityId,
       RelationType relationType)
       throws ServiceError {
-    var sourceEntity =
-        entityRepository
-            .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceEntityId + NOT_FOUND));
-    var mappings =
-        entityRelationshipRepository.findBySourceAndRelationType(sourceEntity, relationType);
-
-    var targetIds =
-        mappings.stream().map(EntityRelationship::getTarget).map(Entity::getId).toList();
-    for (var targetId : targetIds) {
-      if (entityIdsVisited.contains(targetEntityId)) return true;
-      else {
-        entityIdsVisited.add(targetId);
-        return checkLoops(
-            entityRepository,
-            entityRelationshipRepository,
-            targetId,
-            entityIdsVisited,
-            targetEntityId,
-            relationType);
+    var toVisit =
+        new ArrayDeque<>(
+            entityNeighbours(
+                entityRepository, entityRelationshipRepository, sourceEntityId, relationType));
+    while (!toVisit.isEmpty()) {
+      var current = toVisit.pop();
+      if (current.equals(targetEntityId)) {
+        return true;
       }
+      if (!entityIdsVisited.add(current)) {
+        continue;
+      }
+      toVisit.addAll(
+          entityNeighbours(entityRepository, entityRelationshipRepository, current, relationType));
     }
-    return entityIdsVisited.contains(targetEntityId);
+    return false;
+  }
+
+  /** Returns the ids of the entities reachable from {@code entityId} via a single relType edge. */
+  private static List<String> entityNeighbours(
+      EntityRepository entityRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      String entityId,
+      RelationType relationType)
+      throws ServiceError {
+    var entity =
+        entityRepository
+            .findById(entityId)
+            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    return entityRelationshipRepository.findBySourceAndRelationType(entity, relationType).stream()
+        .map(EntityRelationship::getTarget)
+        .map(Entity::getId)
+        .toList();
   }
 
   /**
@@ -208,6 +222,10 @@ public interface CommonService<T, K> {
    * @param targetEntityTypeName the name of the target entity type being checked
    * @return true if a loop would be created, false otherwise
    * @throws ServiceError if an entity type is not found
+   *     <p>Performs an iterative depth-first search seeded with the neighbours of {@code
+   *     sourceEntityTypeName} so that every outgoing mapping edge of every visited entity type is
+   *     explored (a visited set prevents re-traversal and guards against runaway recursion). If
+   *     {@code targetEntityTypeName} is reachable, adding the mapping would close a cycle.
    */
   static boolean checkMappingLoops(
       EntityTypeRepository entityTypeRepository,
@@ -216,28 +234,46 @@ public interface CommonService<T, K> {
       Set<String> entityTypeNamesVisited,
       String targetEntityTypeName)
       throws ServiceError {
-    var sourceEntityType =
-        entityTypeRepository
-            .findByName(sourceEntityTypeName)
-            .orElseThrow(() -> new ServiceError("Entity type " + targetEntityTypeName + NOT_FOUND));
-    var mappings =
-        mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
-            sourceEntityType);
-
-    var targetTypes = mappings.stream().map(MappingEntityTypeRelationship::getTarget).toList();
-    for (var targetType : targetTypes) {
-      if (entityTypeNamesVisited.contains(targetEntityTypeName)) return true;
-      else {
-        entityTypeNamesVisited.add(targetType.getName());
-        return checkMappingLoops(
-            entityTypeRepository,
-            mappingEntityTypeRelationshipRepository,
-            targetType.getName(),
-            entityTypeNamesVisited,
-            targetEntityTypeName);
+    var toVisit =
+        new ArrayDeque<>(
+            mappingNeighbours(
+                entityTypeRepository,
+                mappingEntityTypeRelationshipRepository,
+                sourceEntityTypeName));
+    while (!toVisit.isEmpty()) {
+      var current = toVisit.pop();
+      if (current.equals(targetEntityTypeName)) {
+        return true;
       }
+      if (!entityTypeNamesVisited.add(current)) {
+        continue;
+      }
+      toVisit.addAll(
+          mappingNeighbours(
+              entityTypeRepository, mappingEntityTypeRelationshipRepository, current));
     }
-    return entityTypeNamesVisited.contains(targetEntityTypeName);
+    return false;
+  }
+
+  /**
+   * Returns the names of the entity types reachable from {@code entityTypeName} via a single
+   * mapping edge.
+   */
+  private static List<String> mappingNeighbours(
+      EntityTypeRepository entityTypeRepository,
+      MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      String entityTypeName)
+      throws ServiceError {
+    var entityType =
+        entityTypeRepository
+            .findByName(entityTypeName)
+            .orElseThrow(() -> new ServiceError("Entity type " + entityTypeName + NOT_FOUND));
+    return mappingEntityTypeRelationshipRepository
+        .findMappingEntityTypeRelationshipBySource(entityType)
+        .stream()
+        .map(MappingEntityTypeRelationship::getTarget)
+        .map(EntityType::getName)
+        .toList();
   }
 
   /**
@@ -249,7 +285,7 @@ public interface CommonService<T, K> {
    */
   static boolean hasTrait(Entity entity, String traitName) {
     return entity.getEntityType().getTraits().stream()
-        .flatMap(trait -> genericTraitService.loadInheritanceChain(trait).stream())
+        .flatMap(trait -> loadInheritanceChain(trait).stream())
         .map(Trait::getName)
         .collect(Collectors.toSet())
         .contains(traitName);

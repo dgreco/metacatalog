@@ -3,7 +3,7 @@ package it.davidgreco.metacatalog.service;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
-import static it.davidgreco.metacatalog.service.MappingService.generateMappedValues;
+import static it.davidgreco.metacatalog.service.MappingValueEvaluator.generateMappedValues;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.core.JsonProcessingException;

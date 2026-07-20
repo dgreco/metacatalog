@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
@@ -40,6 +41,7 @@ import org.springframework.web.context.request.NativeWebRequest;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
   private static final String INVALID_RELATIONSHIP_TYPE = "Invalid relationship type";
@@ -132,6 +134,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -156,6 +159,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -176,6 +180,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -188,6 +193,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (traitService.exists(name)) return status(204).build();
       else return status(404).build();
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -215,6 +221,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
               .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(traits);
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -246,6 +253,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
               .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(entityTypes);
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -271,6 +279,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
               .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(mappings);
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -303,6 +312,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -319,6 +329,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -345,6 +356,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -372,6 +384,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -393,7 +406,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
                         Optional.ofNullable(t.getFather())
                             .map(it.davidgreco.metacatalog.entity.Trait::getName));
                     return trait;
-                  });
+                  })
+              .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(traits);
     } catch (IllegalArgumentException _) {
       return status(400)
@@ -408,6 +422,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -435,6 +450,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -466,6 +482,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -490,6 +507,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -510,6 +528,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -522,6 +541,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (entityTypeService.exists(name)) return status(204).build();
       else return status(404).build();
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -548,6 +568,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -568,6 +589,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -588,6 +610,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -600,6 +623,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       if (entityService.exists(id)) return status(204).build();
       else return status(404).build();
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -618,6 +642,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -638,6 +663,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -655,6 +681,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -682,6 +709,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -694,7 +722,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
       var relType = RelationType.valueOf(relationshipTypeName);
       var entities =
           entityService.linked(sourceEntityId, relType).stream()
-              .map(t -> entityToDtoEntity.apply(t));
+              .map(t -> entityToDtoEntity.apply(t))
+              .toList();
       return status(200).contentType(MediaType.APPLICATION_JSON).body(entities);
     } catch (IllegalArgumentException _) {
       return status(400)
@@ -709,6 +738,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -728,6 +758,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -750,6 +781,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -770,6 +802,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -792,6 +825,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -812,6 +846,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -832,6 +867,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -852,6 +888,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -876,6 +913,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -899,6 +937,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -919,6 +958,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));
@@ -939,6 +979,7 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
           .contentType(MediaType.APPLICATION_JSON)
           .body(new ValidationError(List.of(e.getMessage())));
     } catch (Exception e) {
+      log.error("Unexpected error handling API request", e);
       return status(500)
           .contentType(MediaType.APPLICATION_JSON)
           .body(new SystemError(e.getMessage()));

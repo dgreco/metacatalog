@@ -54,7 +54,9 @@ public class OntopRepositoryConfig {
    * @param jdbcPassword JDBC password
    * @return the initialised {@link OntopVirtualRepository} singleton
    */
-  @Bean(destroyMethod = "shutDown")
+  // Shutdown is handled by the @PreDestroy method below; do not also register a bean
+  // destroyMethod, otherwise repository.shutDown() would be invoked twice on context close.
+  @Bean
   public OntopVirtualRepository ontopVirtualRepository(
       @Value("${application.sparql.mapping:classpath:ontop/mapping.obda}") String mappingFile,
       @Value("${application.sparql.ontology:classpath:ontop/ontology.owl}") String ontologyFile,

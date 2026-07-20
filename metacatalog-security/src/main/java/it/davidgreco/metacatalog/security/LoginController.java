@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,9 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * oauth2}).
  */
 @Controller
-@ConditionalOnExpression(
-    "'${application.config.security.auth-mode:}' eq 'basic'"
-        + " or '${application.config.security.auth-mode:}' eq 'ldap'")
+@ConditionalOnUiAuthMode
 public class LoginController {
 
   /** View name for the Thymeleaf login template. */

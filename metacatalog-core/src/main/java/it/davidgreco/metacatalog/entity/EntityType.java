@@ -49,8 +49,12 @@ public class EntityType implements Type<EntityType> {
   @ToString.Include
   private JsonNode derivedSchema;
 
-  /** The parent entity type from which this type inherits. */
-  @OneToOne(fetch = FetchType.EAGER)
+  /**
+   * The parent entity type from which this type inherits. Modelled as {@link ManyToOne}: many child
+   * types may share the same father, which is also what the {@code children} {@link
+   * OneToMany}(mappedBy = "father") inverse side requires.
+   */
+  @ManyToOne(fetch = FetchType.EAGER)
   private EntityType father;
 
   /**

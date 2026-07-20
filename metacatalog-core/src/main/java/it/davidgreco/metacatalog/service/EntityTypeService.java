@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.EntityType;
@@ -20,9 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -33,8 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Service class for managing {@link EntityType} entities. */
 @Slf4j
 @Service
-@Getter
-@Setter
 @RequiredArgsConstructor
 @EnableCaching
 public class EntityTypeService implements CommonTypeService<EntityType, String> {
@@ -208,16 +203,13 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
           entityTypeRepository
               .findByName(name)
               .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
-      if (version == live.getVersion()) return live;
-      if (version > live.getVersion() || version < 1)
-        throw new ServiceError(
-            "Version " + version + " of " + ENTITYTYPE + name + " does not exist");
-      return entityTypeVersionRepository
-          .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
-          .orElseThrow(
-              () ->
-                  new ServiceError(
-                      "Version " + version + " of " + ENTITYTYPE + name + " does not exist"));
+      return TypeServiceSupport.resolveVersion(
+          live,
+          live.getVersion(),
+          live.getVersionGroupId(),
+          version,
+          "Version " + version + " of " + ENTITYTYPE + name + " does not exist",
+          entityTypeVersionRepository::findByVersionGroupIdAndVersion);
     } finally {
       log.info("Read EntityType: {} version: {}", name, version);
     }
@@ -540,9 +532,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
   }
 
   private JsonNode parseSchema(String schema) throws SchemaValidationError {
-    var eitherSchema = stringToJsonSchema(schema);
-    if (eitherSchema.isLeft()) throw new SchemaValidationError(eitherSchema.getLeft());
-    return eitherSchema.get().getSchemaNode();
+    return TypeServiceSupport.parseSchema(schema);
   }
 
   private JsonNode computeDerivedSchema(EntityType entityType) throws SchemaValidationError {

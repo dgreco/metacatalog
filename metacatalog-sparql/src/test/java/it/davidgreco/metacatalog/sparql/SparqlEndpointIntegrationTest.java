@@ -108,4 +108,29 @@ class SparqlEndpointIntegrationTest {
                 .accept("application/sparql-results+json"))
         .andExpect(status().isOk());
   }
+
+  @Test
+  void missingQueryParameterReturns400() throws Exception {
+    mockMvc
+        .perform(get("/sparql/query"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Missing 'query'")));
+  }
+
+  @Test
+  void malformedQueryReturns400() throws Exception {
+    mockMvc
+        .perform(get("/sparql/query").param("query", "this is not sparql"))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            content().string(org.hamcrest.Matchers.containsString("Malformed SPARQL query")));
+  }
+
+  @Test
+  void emptyPostBodyReturns400() throws Exception {
+    mockMvc
+        .perform(post("/sparql/query").contentType("application/sparql-query").content(""))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Empty SPARQL query")));
+  }
 }

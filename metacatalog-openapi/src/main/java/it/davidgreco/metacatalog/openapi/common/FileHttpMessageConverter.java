@@ -82,9 +82,13 @@ public class FileHttpMessageConverter extends AbstractGenericHttpMessageConverte
   public File read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
       throws IOException, HttpMessageNotReadableException {
     var file = Files.createTempFile("temp", ".tmp");
+    var result = file.toFile();
+    // Ensure the temporary file does not leak: without this every upload leaves a stale temp file
+    // behind for the lifetime of the JVM.
+    result.deleteOnExit();
     try (OutputStream fos = Files.newOutputStream(file)) {
       inputMessage.getBody().transferTo(fos);
     }
-    return file.toFile();
+    return result;
   }
 }
