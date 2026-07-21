@@ -65,8 +65,9 @@ public abstract class ProvisioningTask extends Task<Entity> {
       var result = provision();
       writeProvisioningStatus(STATUS_PROVISIONED, result);
     } catch (Exception e) {
+      log.error("Provisioning failed for entity {}", getEntity().getId(), e);
       try {
-        writeProvisioningStatus(STATUS_FAILED, e.getMessage());
+        writeProvisioningStatus(STATUS_FAILED, "Provisioning failed");
       } catch (Exception statusUpdateFailure) {
         log.error(
             "Failed to record FAILED provisioning status for entity {}",

@@ -219,7 +219,7 @@ mvn dependency-check:check
 Meta Catalog ships with an **embedded Ontop 5.5.0** virtual knowledge graph that
 exposes the Postgres database as an RDF view over the same HTTP port as the
 application (no separate process). The mapping (`ontop/mapping.obda`) and
-ontology (`ontop/ontology.owl`) live in `metacatalog-core/src/main/resources`
+ontology (`ontop/ontology.owl`) live in `metacatalog-sparql/src/main/resources`
 and are resolved from the classpath at startup.
 
 Two endpoints are mounted on the app port:
@@ -541,7 +541,6 @@ application:
   config:
     automaticEntitiesMapping: true                              # enable the scheduled mapping updater
     updateMappedEntitiesSchedulingInterval: 1s                  # how often to drain pending events
-    entityLifeCycleEventCleanupSchedulingInterval: 1s          # lifecycle-event cleanup cadence
     entityPathResolutionMaxAttempts: 3                          # retries for entity-path resolution
 ```
 

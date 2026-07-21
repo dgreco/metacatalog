@@ -632,6 +632,44 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   /**
+   * Verifies that the mapping values JSON passed to {@code MappingService.create} are actually
+   * persisted and can be read back unchanged from {@code MappingService.read}.
+   *
+   * <p>The mapping values document holds the SpEL expressions that drive value generation for
+   * mapped entities. A round-trip test guards against any code path that silently drops or
+   * overwrites these values (for example by defaulting to an empty object on write, or by failing
+   * to deserialize the column on read). The test creates a mapping with a non-trivial expression,
+   * reads it back, and asserts the parsed JSON tree is equal to the one supplied.
+   */
+  @Test
+  void createPersistsMappingValuesForRoundTrip() throws ServiceError, JsonProcessingException {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+
+    entityTypeService.create(
+        "RoundTripSrc",
+        List.of(),
+        Optional.empty(),
+        "{ \"type\": \"object\", \"properties\": {} }");
+    entityTypeService.create(
+        "RoundTripDst",
+        List.of(),
+        Optional.empty(),
+        "{ \"type\": \"object\", \"properties\": { \"b\": { \"type\": \"integer\" } } }");
+
+    var mappingValues = "{\"b\": \"#source.getValue('$.a').intValue()\"}";
+    var created = mappingService.create("RoundTripSrc", "RoundTripDst", mappingValues, List.of());
+
+    var readBack = mappingService.read(created.getId());
+    var expectedNode = jsonFactory.readTree(mappingValues);
+    Assertions.assertEquals(expectedNode, readBack.getMappingValues());
+
+    mappingService.delete(created.getId());
+    entityTypeService.delete("RoundTripSrc");
+    entityTypeService.delete("RoundTripDst");
+  }
+
+  /**
    * When a target type is versioned after a mapped entity has been generated, regenerating the
    * mapped values on source update must validate against the mapped entity's PINNED snapshot (the
    * one it was created against), not the new live type schema. Otherwise the new live schema could
@@ -724,5 +762,51 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     entityRepository.findById(source.getId()).ifPresent(entityRepository::delete);
     entityTypeService.delete("PinSrcType");
     entityTypeService.delete("PinDstType");
+  }
+
+  /**
+   * Verifies that {@link MappingService#read(String)} throws {@link NotFoundException} (mapped to
+   * HTTP 404) and not a generic {@link ServiceError} (mapped to HTTP 400) when the mapping ID does
+   * not exist. This ensures the API layer can distinguish "resource not found" from "invalid input"
+   * for mapping reads.
+   */
+  @Test
+  void readThrowsNotFoundExceptionForMissingMapping() {
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var ex =
+        Assertions.assertThrows(
+            NotFoundException.class, () -> mappingService.read("nonexistent-mapping-id"));
+    Assertions.assertTrue(ex.getMessage().contains("nonexistent-mapping-id"));
+  }
+
+  /**
+   * Verifies that {@link MappingService#create(String, String, String, List)} throws {@link
+   * NotFoundException} when the source entity type does not exist. This is consistent with the
+   * other services ({@link EntityService}, {@link EntityTypeService}, {@link TraitService}) which
+   * all throw {@link NotFoundException} for missing referenced resources, so the API layer returns
+   * 404 instead of 400.
+   */
+  @Test
+  void createThrowsNotFoundExceptionForMissingSourceType() throws ServiceError {
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+
+    // The target type must exist so the failure is attributable to the missing source type.
+    entityTypeService.create(
+        "ExistingTargetForNotFoundTest",
+        List.of(),
+        Optional.empty(),
+        "{ \"type\": \"object\", \"properties\": {} }");
+    try {
+      var ex =
+          Assertions.assertThrows(
+              NotFoundException.class,
+              () ->
+                  mappingService.create(
+                      "NonExistentSource", "ExistingTargetForNotFoundTest", "{}", List.of()));
+      Assertions.assertTrue(ex.getMessage().contains("NonExistentSource"));
+    } finally {
+      entityTypeService.delete("ExistingTargetForNotFoundTest");
+    }
   }
 }

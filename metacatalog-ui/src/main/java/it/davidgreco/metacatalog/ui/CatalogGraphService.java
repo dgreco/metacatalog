@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog.ui;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
@@ -51,6 +50,7 @@ public class CatalogGraphService {
   private final EntityRepository entityRepository;
   private final EntityRelationshipRepository entityRelationshipRepository;
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+  private final HtmlSafeJsonSerializer jsonSerializer;
 
   public CatalogGraphService(
       TraitService traitService,
@@ -60,7 +60,8 @@ public class CatalogGraphService {
       TraitVersionRepository traitVersionRepository,
       EntityRepository entityRepository,
       EntityRelationshipRepository entityRelationshipRepository,
-      MappingEntityRelationshipRepository mappingEntityRelationshipRepository) {
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
+      HtmlSafeJsonSerializer jsonSerializer) {
     this.traitService = traitService;
     this.entityTypeService = entityTypeService;
     this.mappingService = mappingService;
@@ -69,6 +70,7 @@ public class CatalogGraphService {
     this.entityRepository = entityRepository;
     this.entityRelationshipRepository = entityRelationshipRepository;
     this.mappingEntityRelationshipRepository = mappingEntityRelationshipRepository;
+    this.jsonSerializer = jsonSerializer;
   }
 
   /**
@@ -87,20 +89,26 @@ public class CatalogGraphService {
           }
         } catch (ServiceError e) {
           // Trait vanished between listing and traversal; skip it.
+          log.debug(
+              "Skipping trait '{}' during link traversal: {}", trait.getName(), e.getMessage());
         }
       }
     }
     return links;
   }
 
-  /** Serializes the catalog graph to JSON for embedding in the page via {@code th:utext}. */
+  /**
+   * Serializes the catalog graph to JSON for embedding in the page via {@code th:utext}.
+   *
+   * <p>Delegates to {@link HtmlSafeJsonSerializer}, which escapes {@code <}, {@code >} and {@code
+   * &} as Unicode escape sequences so the JSON is safe to embed inside an HTML {@code <script>}
+   * block. This prevents a stored-XSS attack where an entity value containing {@code </script><img
+   * src=x onerror=...>} breaks out of the {@code <script type="application/json">} block in {@code
+   * graph.html}.
+   */
   public String graphJson(boolean showInverses, boolean showEntities) {
-    try {
-      return jsonFactory.writeValueAsString(buildGraphModel(showInverses, showEntities));
-    } catch (JsonProcessingException e) {
-      log.error("Failed to serialize catalog graph to JSON; returning an empty graph", e);
-      return "{\"nodes\":[],\"edges\":[]}";
-    }
+    return jsonSerializer.write(
+        buildGraphModel(showInverses, showEntities), "{\"nodes\":[],\"edges\":[]}");
   }
 
   /**

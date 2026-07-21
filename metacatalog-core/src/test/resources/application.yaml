@@ -17,5 +17,4 @@ application:
   config:
     automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 1s
-    entityLifeCycleEventCleanupSchedulingInterval: 1d
     entityPathResolutionMaxAttempts: 3

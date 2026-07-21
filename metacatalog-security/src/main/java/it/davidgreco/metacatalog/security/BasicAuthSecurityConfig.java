@@ -21,7 +21,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * DelegatingPasswordEncoder scheme (e.g. {@code {noop}secret} or {@code {bcrypt}$2a$...}).
  */
 @Configuration
-@ConditionalOnProperty(name = "application.config.security.auth-mode", havingValue = "basic")
+@ConditionalOnProperty(name = SecurityConfigProperties.AUTH_MODE_PROPERTY, havingValue = "basic")
 public class BasicAuthSecurityConfig {
 
   private final SecurityConfigProperties properties;
@@ -50,6 +50,7 @@ public class BasicAuthSecurityConfig {
   @Order(100)
   public SecurityFilterChain securityFilterChain(final HttpSecurity http) throws Exception {
     customizer.customize(http);
+    http.httpBasic(org.springframework.security.config.Customizer.withDefaults());
     return http.build();
   }
 

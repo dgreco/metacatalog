@@ -13,7 +13,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jgrapht.Graph;
@@ -42,7 +41,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProvisioningProcedure extends AbstractEntityProcedure {
 
-  private static final String PROVISIONING_FAILED = "Provisioning failed: ";
   private static final String PROVISIONABLE_RESOURCE = BuiltInTraits.PROVISIONABLE_RESOURCE;
 
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
@@ -102,78 +100,86 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
   /**
    * Executes the provisioning logic for the given entity.
    *
+   * <p>This method builds the provisioning plan (aggregate read, dependency graph, task creation)
+   * and submits it to the {@link TaskManager}. It returns the schedule ID so the caller ({@link
+   * it.davidgreco.metacatalog.functions.ProcedureExecutor}) can join the schedule after the
+   * plan-building transaction has committed. Previously this method called {@code
+   * taskManager.joinSchedule(...)} inline, which blocked the transaction thread (and held its DB
+   * connection) for the entire async execution — risking pool exhaustion / deadlock since the async
+   * tasks themselves need connections from the same pool.
+   *
    * @param entity the aggregate entity to provision
+   * @return the schedule ID to join after the transaction commits
    * @throws ServiceError if provisioning fails or cycles are detected
    */
   @Override
-  protected void execute(Entity entity) throws ServiceError {
-    Optional<TaskManager.Schedule> schedule;
+  protected Optional<String> execute(Entity entity) throws ServiceError {
     try {
-      Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
       var aggregate = aggregateService.read(entity.getId(), true);
-      var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
-      physicalResourceSequence.stream()
-          .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
-          .toList()
-          .forEach(
-              t -> {
-                if (!provisioningGraph.containsVertex(t._1)) provisioningGraph.addVertex(t._1);
-                t._2.forEach(
-                    e -> {
-                      if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
-                      provisioningGraph.addEdge(t._1, e);
-                    });
-              });
-
-      if (new CycleDetector<>(provisioningGraph).detectCycles())
-        throw new ServiceError("Cycle detected in provisioning graph");
-
-      var tasks = new HashMap<String, ProvisioningTask>();
-      provisioningGraph
-          .vertexSet()
-          .forEach(
-              e -> {
-                try {
-                  tasks.put(
-                      e.getId(),
-                      (ProvisioningTask) taskManager.createTask(e, e.getEntityType().getName()));
-                } catch (ServiceError ex) {
-                  throw new ServiceRuntimeError(ex);
-                }
-              });
-      tasks
-          .values()
-          .forEach(
-              task -> {
-                var dependsOnTasks =
-                    provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
-                        .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
-                        .toList();
-                dependsOnTasks.forEach(task::dependsOn);
-              });
-
-      schedule = Optional.of(taskManager.createSchedule());
+      var provisioningGraph = buildProvisioningGraph(aggregate);
+      var tasks = createTasksForVertices(provisioningGraph);
+      wireDependencies(provisioningGraph, tasks);
+      var schedule = taskManager.createSchedule();
       for (var task : tasks.values()) {
-        schedule.get().addTask(task);
+        schedule.addTask(task);
       }
-      taskManager.schedule(schedule.get());
-      taskManager.joinSchedule(schedule.get().getId());
-      var runningScheduleFuture = taskManager.getRunningScheduleFuture(schedule.get().getId());
-      if (runningScheduleFuture.isPresent()) {
-        var res = runningScheduleFuture.get().get();
-        if (res.isFailure()) {
-          throw new ServiceError(PROVISIONING_FAILED + res.getCause().getMessage());
-        }
-      }
+      taskManager.schedule(schedule);
+      return Optional.of(schedule.getId());
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
-    } catch (ExecutionException e) {
-      throw new ServiceError(PROVISIONING_FAILED + e.getMessage());
     }
+  }
+
+  private Graph<Entity, DefaultEdge> buildProvisioningGraph(
+      AggregateService.AggregatePart aggregate) throws ServiceError {
+    Graph<Entity, DefaultEdge> provisioningGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
+    var physicalResourceSequence = getPhysicalResourceSequence(aggregate);
+    physicalResourceSequence.stream()
+        .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
+        .toList()
+        .forEach(
+            t -> {
+              if (!provisioningGraph.containsVertex(t._1)) provisioningGraph.addVertex(t._1);
+              t._2.forEach(
+                  e -> {
+                    if (!provisioningGraph.containsVertex(e)) provisioningGraph.addVertex(e);
+                    provisioningGraph.addEdge(t._1, e);
+                  });
+            });
+    if (new CycleDetector<>(provisioningGraph).detectCycles())
+      throw new ServiceError("Cycle detected in provisioning graph");
+    return provisioningGraph;
+  }
+
+  private HashMap<String, Task<Entity>> createTasksForVertices(
+      Graph<Entity, DefaultEdge> provisioningGraph) {
+    var tasks = new HashMap<String, Task<Entity>>();
+    provisioningGraph
+        .vertexSet()
+        .forEach(
+            e -> {
+              try {
+                tasks.put(e.getId(), taskManager.createTask(e, e.getEntityType().getName()));
+              } catch (ServiceError ex) {
+                throw new ServiceRuntimeError(ex);
+              }
+            });
+    return tasks;
+  }
+
+  private void wireDependencies(
+      Graph<Entity, DefaultEdge> provisioningGraph, HashMap<String, Task<Entity>> tasks) {
+    tasks
+        .values()
+        .forEach(
+            task -> {
+              var dependsOnTasks =
+                  provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
+                      .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
+                      .toList();
+              dependsOnTasks.forEach(task::dependsOn);
+            });
   }
 
   /**

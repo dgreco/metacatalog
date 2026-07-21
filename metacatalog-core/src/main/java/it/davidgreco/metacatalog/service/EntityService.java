@@ -64,12 +64,12 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public Entity create(String typeName, String values) throws ServiceError {
-    log.info("Creating entity of type {}: {}", typeName, values);
+    log.info("Creating entity of type {}", typeName);
     try {
       var entityType =
           entityTypeRepository
               .findByName(typeName)
-              .orElseThrow(() -> new ServiceError("Entity type " + typeName + NOT_FOUND));
+              .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entityType))
@@ -109,7 +109,7 @@ public class EntityService implements CommonService<Entity, String> {
                 en.getEntityType().getName(),
                 EntityLifeCycleEvent.ENTITY_CREATED,
                 NO_PROCESSING));
-      log.info("Created entity of type {}: {}", typeName, values);
+      log.info("Created entity of type {}", typeName);
       return en;
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
@@ -131,7 +131,7 @@ public class EntityService implements CommonService<Entity, String> {
     var entity =
         entityRepository
             .findById(entityId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
     log.info("Read entity with id {}", entityId);
     return entity;
   }
@@ -152,12 +152,12 @@ public class EntityService implements CommonService<Entity, String> {
       propagation = Propagation.REQUIRED,
       rollbackFor = {ServiceError.class})
   public void update(String entityId, String values) throws ServiceError {
-    log.info("Updating entity with id {}: {}", entityId, values);
+    log.info("Updating entity with id {}", entityId);
     try {
       var entity =
           entityRepository
               .findById(entityId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
       if (!CommonService.implementsTrait(
               entity.getEntityType(), BuiltInTraits.PROVISIONABLE_RESOURCE)
@@ -192,7 +192,7 @@ public class EntityService implements CommonService<Entity, String> {
                 entity.getEntityType().getName(),
                 EntityLifeCycleEvent.ENTITY_UPDATED,
                 NO_PROCESSING));
-      log.info("Updated entity with id {}: {}", entityId, values);
+      log.info("Updated entity with id {}", entityId);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
     }
@@ -217,7 +217,7 @@ public class EntityService implements CommonService<Entity, String> {
       var entity =
           entityRepository
               .findById(entityId)
-              .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
       if (CommonService.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
@@ -238,7 +238,7 @@ public class EntityService implements CommonService<Entity, String> {
               NO_PROCESSING));
       log.info("Deleted entity with id {}", entityId);
     } catch (DataIntegrityViolationException e) {
-      throw new ServiceError(e.getMessage());
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 
@@ -274,7 +274,7 @@ public class EntityService implements CommonService<Entity, String> {
       var entityType =
           entityTypeRepository
               .findByName(typeName)
-              .orElseThrow(() -> new ServiceError("Entity type " + typeName + NOT_FOUND));
+              .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
       var qp = queryPath.trim();
       if (qp.isEmpty()) {
         var result = entityRepository.findByEntityType(entityType);
@@ -320,11 +320,11 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     var target =
         entityRepository
             .findById(targetId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
     checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
     if (relType.hasInverse()) {
@@ -370,11 +370,11 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     var target =
         entityRepository
             .findById(targetId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
     var directRel =
         entityRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(source, relType, target)
@@ -426,7 +426,7 @@ public class EntityService implements CommonService<Entity, String> {
     var source =
         entityRepository
             .findById(sourceId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
     var linkedEntities =
         entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
             .map(EntityRelationship::getTarget)

@@ -54,7 +54,7 @@ public class JsonUtils {
   /** JSON Schema validator for validating JSON Schema documents themselves. */
   public static final JsonSchema jsonSchemaSchema =
       jsonSchemaFactory.getSchema(
-          SchemaLocation.of(SchemaId.V201909), SchemaValidatorsConfig.builder().build());
+          SchemaLocation.of(SchemaId.V202012), SchemaValidatorsConfig.builder().build());
 
   /** Configuration for JSON Path operations using Jackson as the JSON provider. */
   public static final Configuration jsonPathConfiguration =
@@ -112,6 +112,10 @@ public class JsonUtils {
    * Converts the field types of a JSON node to "string" if they are not already "string" or
    * "object". This method recursively traverses through the JSON node and its nested objects or
    * arrays, ensuring that all non-object, non-string types are set to "string".
+   *
+   * <p><b>Mutates its input.</b> The caller is responsible for passing a defensive {@code deepCopy}
+   * if it needs to preserve the original node. The sole caller ({@link #convertToMappingSchema})
+   * already does this.
    *
    * @param node the JSON node whose field types are to be converted
    */
@@ -187,6 +191,8 @@ public class JsonUtils {
     Map<String, Tuple2<JsonNode, Boolean>> propertiesToMerge = new HashMap<>();
     List<String> propertiesNamesToMerge = new LinkedList<>();
     for (JsonNode node : schemas) {
+      if (!node.has(PROPERTIES))
+        return Either.left(List.of("The schema must have a properties field"));
       var requiredProperties = new HashSet<String>();
       var maybeRequired = Optional.<JsonNode>empty();
       if (node.has(REQUIRED)) maybeRequired = Optional.of(node.get(REQUIRED));
@@ -199,8 +205,6 @@ public class JsonUtils {
                       requiredElement -> requiredProperties.add(requiredElement.asText()));
             }
           });
-      if (!node.has(PROPERTIES))
-        return Either.left(List.of("The schema must have a properties field"));
 
       node.get(PROPERTIES)
           .properties()
@@ -249,13 +253,23 @@ public class JsonUtils {
    * Converts aggregate values stored as strings into proper JSON nodes.
    *
    * <p>This method recursively processes a JSON structure, converting any "values" fields that are
-   * stored as YAML/JSON strings into parsed JSON nodes.
+   * stored as YAML/JSON strings into parsed JSON nodes, and removing empty "parts" arrays.
+   *
+   * <p>Returns a <em>deep copy</em> of the input — the original node is not mutated. Previously
+   * this method mutated the input in place, which silently corrupted the caller's tree.
    *
    * @param jsonNode the JSON node to process
-   * @return the processed JSON node with converted values
+   * @return a new JSON node with converted values; the input is left untouched
    * @throws JsonProcessingException if the string values cannot be parsed as JSON
    */
   public static JsonNode convertAggregateValuesIntoJsonNodes(JsonNode jsonNode)
+      throws JsonProcessingException {
+    var copy = jsonNode.deepCopy();
+    convertAggregateValuesIntoJsonNodesInPlace(copy);
+    return copy;
+  }
+
+  private static void convertAggregateValuesIntoJsonNodesInPlace(JsonNode jsonNode)
       throws JsonProcessingException {
     if (jsonNode.has(VALUES)) {
       var values = jsonNode.get(VALUES).asText();
@@ -268,10 +282,9 @@ public class JsonUtils {
         ((ObjectNode) jsonNode).remove(PARTS);
       } else {
         for (JsonNode part : parts) {
-          convertAggregateValuesIntoJsonNodes(part);
+          convertAggregateValuesIntoJsonNodesInPlace(part);
         }
       }
     }
-    return jsonNode;
   }
 }

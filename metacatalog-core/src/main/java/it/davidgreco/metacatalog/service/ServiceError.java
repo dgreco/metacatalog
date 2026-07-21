@@ -8,6 +8,10 @@ package it.davidgreco.metacatalog.service;
  */
 public class ServiceError extends Exception {
 
+  /** Generic, non-leaking message used whenever a database constraint is violated. */
+  public static final String DATA_INTEGRITY_VIOLATION =
+      "A resource with the same key already exists or a database constraint was violated";
+
   /**
    * Creates a new service error with the specified message.
    *
@@ -25,5 +29,18 @@ public class ServiceError extends Exception {
    */
   public ServiceError(String message, Throwable cause) {
     super(message, cause);
+  }
+
+  /**
+   * Builds a {@link ServiceError} for a {@link
+   * org.springframework.dao.DataIntegrityViolationException} without leaking the raw database
+   * message (constraint name, table/column names, duplicate-key details) to the API client. The
+   * original exception is preserved as the cause for server-side diagnostics.
+   *
+   * @param cause the data integrity violation raised by the data access layer
+   * @return a {@link ServiceError} carrying a generic, client-safe message
+   */
+  public static ServiceError forDataIntegrity(Throwable cause) {
+    return new ServiceError(DATA_INTEGRITY_VIOLATION, cause);
   }
 }

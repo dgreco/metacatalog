@@ -189,16 +189,22 @@ public class CoreConfig {
    * @param advisoryLockManager the advisory lock manager
    * @param entityLifeCycleEventRepository the lifecycle event repository
    * @param mappingService the mapping service
+   * @param transactionManager the transaction manager (used for the {@code markFailed} {@code
+   *     REQUIRES_NEW} transaction)
    * @return the mapping updater service
    */
   @Bean
   MappingUpdaterService mappingUpdaterService(
       AdvisoryLockManager advisoryLockManager,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
-      MappingService mappingService) {
+      MappingService mappingService,
+      PlatformTransactionManager transactionManager) {
     var mus =
         new MappingUpdaterService(
-            advisoryLockManager, entityLifeCycleEventRepository, mappingService);
+            advisoryLockManager,
+            entityLifeCycleEventRepository,
+            mappingService,
+            transactionManager);
     mus.setAutomaticEntitiesMapping(applicationConfigurationProperties.automaticEntitiesMapping());
     return mus;
   }
@@ -238,16 +244,5 @@ public class CoreConfig {
     executor.setAwaitTerminationSeconds(60);
     executor.initialize();
     return executor;
-  }
-
-  /**
-   * Creates the task manager for managing asynchronous tasks.
-   *
-   * @param asyncTaskExecutor the task executor
-   * @return the task manager
-   */
-  @Bean()
-  public TaskManager taskManager(AsyncTaskExecutor asyncTaskExecutor) {
-    return new TaskManager(asyncTaskExecutor);
   }
 }

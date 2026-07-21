@@ -20,13 +20,11 @@ import java.util.function.Function;
 import java.util.stream.StreamSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Service class for bulk loading entities, traits, and relationships from a YAML file. */
 @Slf4j
-@Service
 @RequiredArgsConstructor
 public class BulkLoaderService {
 
@@ -53,7 +51,7 @@ public class BulkLoaderService {
 
   private JsonNode getNamedNode(JsonNode node, String name) throws ServiceError {
     if (node.has(name)) return node.get(name);
-    throw new ServiceError("Node " + name + " not found");
+    throw new NotFoundException("Node " + name + " not found");
   }
 
   /**
@@ -89,126 +87,147 @@ public class BulkLoaderService {
       try (var yamlParser = yamlFactory.createParser(is)) {
         docs = yamlFactory.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
       }
-
-      // Traits creation
-      docs.stream()
-          .filter(doc -> doc.has("Traits"))
-          .findFirst()
-          .ifPresent(
-              jsonTraits -> {
-                if (!(jsonTraits.get("Traits") instanceof ArrayNode jsonTraitArray)) return;
-                jsonTraitArray.forEach(
-                    jsonTrait -> {
-                      try {
-                        traitService.create(
-                            getNamedNode(jsonTrait, "name").asText(),
-                            Optional.of(
-                                jsonTrait.has(SCHEMA)
-                                    ? jsonTrait.get(SCHEMA).toPrettyString()
-                                    : EMPTY_SCHEMA),
-                            jsonTrait.has(INHERITS_FROM)
-                                ? Optional.of(jsonTrait.get(INHERITS_FROM).asText())
-                                : Optional.empty());
-                      } catch (ServiceError e) {
-                        throw new ServiceRuntimeError(e);
-                      }
-                    });
-              });
-
-      // TraitRelationships creation
-      docs.stream()
-          .filter(doc -> doc.has("Relationships"))
-          .findFirst()
-          .ifPresent(
-              jsonRelationships -> {
-                if (!(jsonRelationships.get("Relationships")
-                    instanceof ArrayNode jsonRelationshipsArray)) return;
-                jsonRelationshipsArray.forEach(
-                    jsonRelationship -> {
-                      try {
-                        traitService.link(
-                            getNamedNode(jsonRelationship, "sourceTrait").asText(),
-                            RelationType.valueOf(
-                                getNamedNode(jsonRelationship, "relationshipType").asText()),
-                            getNamedNode(jsonRelationship, "targetTrait").asText());
-                      } catch (ServiceError e) {
-                        throw new ServiceRuntimeError(e);
-                      } catch (IllegalArgumentException _) {
-                        throw new ServiceRuntimeError(
-                            new ServiceError("Invalid relationship type"));
-                      }
-                    });
-              });
-
-      // EntityTypes creation
-      docs.stream()
-          .filter(doc -> doc.has("EntityTypes"))
-          .findFirst()
-          .ifPresent(
-              jsonTypes -> {
-                if (!(jsonTypes.get("EntityTypes") instanceof ArrayNode jsonTypesArray)) return;
-                jsonTypesArray.forEach(
-                    jsonType -> {
-                      try {
-                        entityTypeService.create(
-                            getNamedNode(jsonType, "name").asText(),
-                            jsonType.has("traits")
-                                ? StreamSupport.stream(jsonType.get("traits").spliterator(), false)
-                                    .map(JsonNode::asText)
-                                    .toList()
-                                : List.of(),
-                            jsonType.has(INHERITS_FROM)
-                                ? Optional.of(jsonType.get(INHERITS_FROM).asText())
-                                : Optional.empty(),
-                            getNamedNode(jsonType, SCHEMA).toPrettyString());
-                      } catch (ServiceError e) {
-                        throw new ServiceRuntimeError(e);
-                      }
-                    });
-              });
-
-      // Mappings creation
-      docs.stream()
-          .filter(doc -> doc.has("Mappings"))
-          .findFirst()
-          .ifPresent(
-              jsonEntities -> {
-                if (!(jsonEntities.get("Mappings") instanceof ArrayNode jsonEntitiesArray)) return;
-                jsonEntitiesArray.forEach(
-                    jsonEntity -> {
-                      try {
-                        var sourceEntityType =
-                            getNamedNode(jsonEntity, "sourceEntityType").asText();
-                        var targetEntityType =
-                            getNamedNode(jsonEntity, "targetEntityType").asText();
-                        var mappingValue =
-                            getNamedNode(jsonEntity, "mappingValues").toPrettyString();
-                        var referencesNode =
-                            (ArrayNode) getNamedNode(jsonEntity, "entityPathReferences");
-                        var references =
-                            StreamSupport.stream(referencesNode.spliterator(), false)
-                                .map(
-                                    refNode -> {
-                                      var alias = refNode.get("alias").asText();
-                                      var path = refNode.get("referencePath").asText();
-                                      return new MappingEntityTypeRelationship.EntityPathReference(
-                                          alias, path);
-                                    })
-                                .toList();
-                        mappingService.create(
-                            sourceEntityType, targetEntityType, mappingValue, references);
-                      } catch (ServiceError e) {
-                        throw new ServiceRuntimeError(e);
-                      }
-                    });
-              });
+      createTraits(docs);
+      createTraitRelationships(docs);
+      createEntityTypes(docs);
+      createMappings(docs);
       log.info("Bulk model creation completed");
     } catch (ServiceRuntimeError e) {
       if (e.getCause() instanceof ServiceError se) throw se;
       else throw e;
     } catch (IOException _) {
       throw new ServiceError("Error parsing YAML file");
+    } catch (NullPointerException | ClassCastException e) {
+      throw new ServiceError("Malformed YAML input: " + e.getMessage());
     }
+  }
+
+  private void createTraits(List<ObjectNode> docs) {
+    docs.stream()
+        .filter(doc -> doc.has("Traits"))
+        .findFirst()
+        .ifPresent(
+            jsonTraits -> {
+              var node = jsonTraits.get("Traits");
+              if (node == null) return;
+              if (!(node instanceof ArrayNode jsonTraitArray))
+                throw new ServiceRuntimeError(
+                    new ServiceError("Section 'Traits' must be a YAML array"));
+              jsonTraitArray.forEach(
+                  jsonTrait -> {
+                    try {
+                      traitService.create(
+                          getNamedNode(jsonTrait, "name").asText(),
+                          Optional.of(
+                              jsonTrait.has(SCHEMA)
+                                  ? jsonTrait.get(SCHEMA).toPrettyString()
+                                  : EMPTY_SCHEMA),
+                          jsonTrait.has(INHERITS_FROM)
+                              ? Optional.of(jsonTrait.get(INHERITS_FROM).asText())
+                              : Optional.empty());
+                    } catch (ServiceError e) {
+                      throw new ServiceRuntimeError(e);
+                    }
+                  });
+            });
+  }
+
+  private void createTraitRelationships(List<ObjectNode> docs) {
+    docs.stream()
+        .filter(doc -> doc.has("Relationships"))
+        .findFirst()
+        .ifPresent(
+            jsonRelationships -> {
+              var node = jsonRelationships.get("Relationships");
+              if (node == null) return;
+              if (!(node instanceof ArrayNode jsonRelationshipsArray))
+                throw new ServiceRuntimeError(
+                    new ServiceError("Section 'Relationships' must be a YAML array"));
+              jsonRelationshipsArray.forEach(
+                  jsonRelationship -> {
+                    try {
+                      traitService.link(
+                          getNamedNode(jsonRelationship, "sourceTrait").asText(),
+                          RelationType.valueOf(
+                              getNamedNode(jsonRelationship, "relationshipType").asText()),
+                          getNamedNode(jsonRelationship, "targetTrait").asText());
+                    } catch (ServiceError e) {
+                      throw new ServiceRuntimeError(e);
+                    } catch (IllegalArgumentException _) {
+                      throw new ServiceRuntimeError(new ServiceError("Invalid relationship type"));
+                    }
+                  });
+            });
+  }
+
+  private void createEntityTypes(List<ObjectNode> docs) {
+    docs.stream()
+        .filter(doc -> doc.has("EntityTypes"))
+        .findFirst()
+        .ifPresent(
+            jsonTypes -> {
+              var node = jsonTypes.get("EntityTypes");
+              if (node == null) return;
+              if (!(node instanceof ArrayNode jsonTypesArray))
+                throw new ServiceRuntimeError(
+                    new ServiceError("Section 'EntityTypes' must be a YAML array"));
+              jsonTypesArray.forEach(
+                  jsonType -> {
+                    try {
+                      entityTypeService.create(
+                          getNamedNode(jsonType, "name").asText(),
+                          jsonType.has("traits")
+                              ? StreamSupport.stream(jsonType.get("traits").spliterator(), false)
+                                  .map(JsonNode::asText)
+                                  .toList()
+                              : List.of(),
+                          jsonType.has(INHERITS_FROM)
+                              ? Optional.of(jsonType.get(INHERITS_FROM).asText())
+                              : Optional.empty(),
+                          getNamedNode(jsonType, SCHEMA).toPrettyString());
+                    } catch (ServiceError e) {
+                      throw new ServiceRuntimeError(e);
+                    }
+                  });
+            });
+  }
+
+  private void createMappings(List<ObjectNode> docs) {
+    docs.stream()
+        .filter(doc -> doc.has("Mappings"))
+        .findFirst()
+        .ifPresent(
+            jsonEntities -> {
+              var node = jsonEntities.get("Mappings");
+              if (node == null) return;
+              if (!(node instanceof ArrayNode jsonEntitiesArray))
+                throw new ServiceRuntimeError(
+                    new ServiceError("Section 'Mappings' must be a YAML array"));
+              jsonEntitiesArray.forEach(
+                  jsonEntity -> {
+                    try {
+                      var sourceEntityType = getNamedNode(jsonEntity, "sourceEntityType").asText();
+                      var targetEntityType = getNamedNode(jsonEntity, "targetEntityType").asText();
+                      var mappingValue = getNamedNode(jsonEntity, "mappingValues").toPrettyString();
+                      var referencesNode =
+                          (ArrayNode) getNamedNode(jsonEntity, "entityPathReferences");
+                      var references =
+                          StreamSupport.stream(referencesNode.spliterator(), false)
+                              .map(
+                                  refNode -> {
+                                    var alias = refNode.get("alias").asText();
+                                    var path = refNode.get("referencePath").asText();
+                                    return new MappingEntityTypeRelationship.EntityPathReference(
+                                        alias, path);
+                                  })
+                              .toList();
+                      mappingService.create(
+                          sourceEntityType, targetEntityType, mappingValue, references);
+                    } catch (ServiceError e) {
+                      throw new ServiceRuntimeError(e);
+                    }
+                  });
+            });
   }
 
   /**
@@ -284,7 +303,16 @@ public class BulkLoaderService {
       depends.forEach(
           (entity, dependsOnId) -> {
             try {
-              entityService.link(entity, DEPENDS_ON, refs.get(dependsOnId).getId());
+              var dependency = refs.get(dependsOnId);
+              if (dependency == null) {
+                throw new ServiceError(
+                    "Aggregate with ref '"
+                        + dependsOnId
+                        + "' is referenced by aggregate '"
+                        + entity
+                        + "' but was never declared in the bulk file");
+              }
+              entityService.link(entity, DEPENDS_ON, dependency.getId());
             } catch (ServiceError e) {
               throw new ServiceRuntimeError(e);
             }
@@ -296,6 +324,9 @@ public class BulkLoaderService {
       else throw e;
     } catch (IOException | ClassCastException _) {
       throw new ServiceError("Error parsing YAML file");
+    } catch (NullPointerException e) {
+      throw new ServiceError(
+          "Malformed aggregate YAML: missing required field 'entityType' or 'values'");
     }
   }
 }

@@ -110,6 +110,59 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
         entityService.list("PoisonTarget", "").isEmpty(), "no invalid target entity should exist");
   }
 
+  /**
+   * Verifies that an <em>unexpected</em> {@link RuntimeException} (not a {@link ServiceError} or
+   * {@link ServiceRuntimeError}) during mapped entity creation marks the event as FAILED and lets
+   * the scheduler continue processing other events in the same tick.
+   *
+   * <p>The failure is triggered by a mapping expression that references an undefined SpEL variable
+   * ({@code #undefined}). The SpEL evaluator throws a {@link
+   * org.springframework.expression.spel.SpelEvaluationException} (a {@link RuntimeException}),
+   * which is not caught by the {@code ServiceError | ServiceRuntimeError} catch in the scheduler.
+   * Without the outer {@code catch (RuntimeException)} the exception would propagate out of the
+   * {@code forEach}, roll back the surrounding transaction, and undo every {@code markFailed} from
+   * earlier events in the same tick — a poison-message head-of-line blocking bug.
+   */
+  @Test
+  void marksEventAsFailedOnUnexpectedRuntimeException() throws ServiceError {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    entityTypeService.create(
+        "RceSource", List.of(), Optional.empty(), "{ \"type\": \"object\", \"properties\": {} }");
+    entityTypeService.create(
+        "RceTarget",
+        List.of(),
+        Optional.empty(),
+        "{ \"type\": \"object\", \"properties\": { \"greeting\": { \"type\": \"string\" } } }");
+    // The mapping references #undefined, a SpEL variable that does not exist. At create time the
+    // mapping values are stored as-is (no evaluation); at event-processing time the SpEL evaluator
+    // throws SpelEvaluationException, which is a RuntimeException — not a ServiceError.
+    mappingService.create("RceSource", "RceTarget", "{ \"greeting\": \"#undefined\" }", List.of());
+
+    entityService.create("RceSource", "{}");
+
+    var updater = updater();
+    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
+    updater.setAutomaticEntitiesMapping(true);
+    try {
+      updater.updateMappedEntities();
+    } finally {
+      updater.setAutomaticEntitiesMapping(originalMappingFlag);
+    }
+
+    assertTrue(
+        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING").isEmpty(),
+        "the event must no longer be PENDING after the scheduler tick");
+    assertFalse(
+        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "FAILED").isEmpty(),
+        "the event must be marked FAILED despite the unexpected RuntimeException");
+    assertTrue(
+        entityService.list("RceTarget", "").isEmpty(),
+        "no target entity should have been created from the failing mapping");
+  }
+
   private EntityLifeCycleEventRepository events() {
     return getApplicationContext().getBean(EntityLifeCycleEventRepository.class);
   }
