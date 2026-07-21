@@ -32,9 +32,9 @@
 </header>
 <main class="sparql-main">
     <div class="sparql-meta">
-        Endpoint: <code th:text="${endpoint}">/sparql/query</code>
+        Endpoint: <code><a th:href="${endpoint}" th:text="${endpoint}">/sparql/query</a></code>
         &nbsp;·&nbsp;
-        Ontology IRI: <code th:text="${ontologyIri}">http://metacatalog/</code>
+        Ontology IRI: <code><a th:href="${ontologyIri}" target="_blank" rel="noopener noreferrer" th:text="${ontologyIri}">http://metacatalog/</a></code>
     </div>
     <div id="yasgui"></div>
 </main>
@@ -52,6 +52,19 @@
     if (firstTab) {
         firstTab.setQuery(defaultQuery);
     }
+    // IRIs in the result table are virtual RDF identifiers (e.g. http://metacatalog/Trait/{id})
+    // from the Ontop mapping — they are not real HTTP URLs. Intercept clicks on result IRIs and
+    // run a DESCRIBE query in a new Yasgui tab so the user sees all triples about that resource
+    // instead of a browser "cannot connect" error.
+    document.getElementById("yasgui").addEventListener("click", function (e) {
+        const a = e.target.closest("a.iri");
+        if (!a) return;
+        e.preventDefault();
+        const iri = a.getAttribute("href");
+        const tab = yasgui.addTab(true, { requestConfig: { endpoint: endpoint } });
+        tab.setQuery("DESCRIBE <" + iri + ">");
+        tab.query();
+    });
     /*]]>*/
 </script>
 </body>
