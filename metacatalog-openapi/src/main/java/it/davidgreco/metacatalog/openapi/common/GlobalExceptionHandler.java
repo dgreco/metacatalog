@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Translates exceptions thrown during request handling into the OpenAPI contract's {@link
@@ -34,9 +35,10 @@ import org.springframework.web.servlet.NoHandlerFoundException;
  *       MethodArgumentNotValidException}), malformed JSON bodies ({@link
  *       HttpMessageNotReadableException}), bad path/query params ({@link
  *       MethodArgumentTypeMismatchException}), missing required params ({@link
- *       MissingServletRequestParameterException}), unknown URLs ({@link NoHandlerFoundException}),
- *       wrong HTTP methods ({@link HttpRequestMethodNotSupportedException}), and unsupported
- *       content types ({@link HttpMediaTypeNotSupportedException}).
+ *       MissingServletRequestParameterException}), unknown URLs ({@link NoHandlerFoundException},
+ *       {@link NoResourceFoundException}), wrong HTTP methods ({@link
+ *       HttpRequestMethodNotSupportedException}), and unsupported content types ({@link
+ *       HttpMediaTypeNotSupportedException}).
  *   <li><b>Business exceptions</b> — {@link SchemaValidationError} (400 with the validation error
  *       list), {@link NotFoundException} (404), {@link ServiceError} (400), {@link
  *       DataIntegrityViolationException} (400 with a generic non-leaking message), {@link
@@ -98,6 +100,17 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ValidationError> handleNoHandler(NoHandlerFoundException e) {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
         .body(new ValidationError(List.of("Resource not found: " + e.getRequestURL())));
+  }
+
+  @ExceptionHandler(NoResourceFoundException.class)
+  public ResponseEntity<ValidationError> handleNoResource(NoResourceFoundException e) {
+    // Thrown by the static-resource handler when no controller maps the URL (e.g. API paths
+    // like /metacatalog/v1/traits that fall through, or stale service-worker registrations).
+    // Without this handler the exception hits the catch-all, logging a full stack trace at
+    // ERROR for what is a routine client 404.
+    log.debug("No static resource for {} {}", e.getHttpMethod(), e.getResourcePath());
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(new ValidationError(List.of("Resource not found: " + e.getResourcePath())));
   }
 
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

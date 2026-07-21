@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.test.web.servlet.MockMvc;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Standalone MockMvc tests for {@link GlobalExceptionHandler}. No Spring context or database is
@@ -66,6 +68,15 @@ class GlobalExceptionHandlerTest {
         .andExpect(jsonPath("$.errors[0]").exists());
   }
 
+  @Test
+  void noResourceFoundReturns404ValidationError() throws Exception {
+    mvc.perform(get("/test/missing"))
+        .andExpect(status().isNotFound())
+        .andExpect(
+            jsonPath("$.errors[0]")
+                .value(org.hamcrest.Matchers.containsString("Resource not found")));
+  }
+
   /** Minimal controller exercising the exception paths the advice handles. */
   @Controller
   static class TestController {
@@ -85,6 +96,12 @@ class GlobalExceptionHandlerTest {
     @org.springframework.web.bind.annotation.ResponseBody
     public String echo(@RequestBody java.util.Map<String, Object> body) {
       return body.toString();
+    }
+
+    @GetMapping("/test/missing")
+    @org.springframework.web.bind.annotation.ResponseBody
+    public String missing() throws NoResourceFoundException {
+      throw new NoResourceFoundException(HttpMethod.GET, "/test/missing", "missing");
     }
   }
 }
