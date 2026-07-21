@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.vavr.control.Try;
+import it.davidgreco.metacatalog.CoreConfigProperties;
+import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,7 +23,12 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
  */
 class TaskEngineTest {
 
-  private final TaskManager taskManager = new TaskManager(new SimpleAsyncTaskExecutor());
+  private static CoreConfigProperties testConfigProperties() {
+    return new CoreConfigProperties(false, Duration.ofSeconds(1), 3, 100, Duration.ofHours(1));
+  }
+
+  private final TaskManager taskManager =
+      new TaskManager(new SimpleAsyncTaskExecutor(), testConfigProperties());
 
   /** A minimal concrete {@link Task} that runs an arbitrary action. */
   private static final class SimpleTask extends Task<String> {
@@ -107,7 +114,7 @@ class TaskEngineTest {
     pool.setQueueCapacity(4);
     pool.initialize();
     try {
-      var boundedTaskManager = new TaskManager(pool);
+      var boundedTaskManager = new TaskManager(pool, testConfigProperties());
       var order = new ConcurrentLinkedQueue<Integer>();
       var schedule = boundedTaskManager.createSchedule();
       SimpleTask previous = null;
@@ -146,5 +153,95 @@ class TaskEngineTest {
     taskManager.joinSchedule(id);
 
     assertTrue(order.indexOf("dep") < order.indexOf("main"), "dependency must run first");
+  }
+
+  /**
+   * Verifies that when the {@link AsyncTaskExecutor} rejects a task (here via a saturated pool with
+   * an {@code AbortPolicy}), the schedule still records a result for that task instead of leaving
+   * it absent.
+   *
+   * <p>The task engine decorates every scheduled task with a {@code .handle()} stage that must
+   * populate the per-task result slot whether the task succeeded, failed, or was never accepted by
+   * the executor. If the handle stage is skipped on rejection, the result for the rejected task is
+   * silently dropped and {@code getScheduleResults} returns a shorter list than the number of
+   * submitted tasks, which in turn breaks any caller that joins results by index. This test forces
+   * a rejection by sizing the pool (1) and queue (1) so the third submitted task cannot be
+   * accepted, then asserts that all three tasks have an entry in the results and that at least one
+   * entry is a failure.
+   */
+  @Test
+  void executorRejectionStillSetsResult() throws Exception {
+    var pool = new ThreadPoolTaskExecutor();
+    pool.setCorePoolSize(1);
+    pool.setMaxPoolSize(1);
+    pool.setQueueCapacity(1);
+    pool.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    pool.initialize();
+    try {
+      var boundedTaskManager = new TaskManager(pool, testConfigProperties());
+      var schedule = boundedTaskManager.createSchedule();
+      // Fill the pool (1 running) + queue (1 queued) = 2 tasks. The third must be rejected.
+      var latch = new java.util.concurrent.CountDownLatch(1);
+      schedule.addTask(
+          new SimpleTask(
+              "blocker",
+              () -> {
+                try {
+                  latch.await();
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+              }));
+      schedule.addTask(new SimpleTask("queued1", () -> {}));
+      schedule.addTask(new SimpleTask("rejected", () -> {}));
+
+      var id = boundedTaskManager.schedule(schedule);
+      // Release the blocker so the pool can drain.
+      latch.countDown();
+      boundedTaskManager.joinSchedule(id);
+
+      // The rejected task's result must be present (Try.failure), not Optional.empty().
+      var results = boundedTaskManager.getScheduleResults(id);
+      assertEquals(
+          3, results.size(), "all three task results must be present, even the rejected one");
+      assertTrue(
+          results.stream().anyMatch(Try::isFailure),
+          "at least the rejected task must report a failure");
+    } finally {
+      pool.shutdown();
+    }
+  }
+
+  /**
+   * Verifies that the schedule-result cache is bounded by the configured TTL and maximum size.
+   *
+   * <p>{@link TaskManager} keeps completed schedules in a Caffeine cache so that callers can read
+   * results and the running future shortly after a schedule finishes. The cache must not grow
+   * unboundedly, so its expiry-after-write and maximum size are taken from {@link
+   * CoreConfigProperties}. This test builds a {@link TaskManager} with a 100 ms TTL, schedules a
+   * trivial task, waits for the cache entry to expire, and asserts that both {@code
+   * getScheduleResults} and {@code getRunningScheduleFuture} return empty for the expired schedule
+   * id. This guards against accidental hard-coding of the cache policy.
+   */
+  @Test
+  void evictedScheduleReturnsEmptyResults() throws Exception {
+    var tinyConfig =
+        new CoreConfigProperties(false, Duration.ofSeconds(1), 3, 1, Duration.ofMillis(100));
+    var tinyTaskManager = new TaskManager(new SimpleAsyncTaskExecutor(), tinyConfig);
+    var schedule = tinyTaskManager.createSchedule();
+    schedule.addTask(new SimpleTask("t1", () -> {}));
+
+    var id = tinyTaskManager.schedule(schedule);
+    tinyTaskManager.joinSchedule(id);
+
+    // Wait for the cache entry to expire.
+    Thread.sleep(300);
+
+    assertTrue(
+        tinyTaskManager.getScheduleResults(id).isEmpty(),
+        "evicted schedule must return an empty result list");
+    assertTrue(
+        tinyTaskManager.getRunningScheduleFuture(id).isEmpty(),
+        "evicted schedule must not have a running future");
   }
 }

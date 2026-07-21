@@ -215,9 +215,12 @@ public class SparqlEndpointController {
 
   private static void respondError(HttpServletResponse response, int status, String message)
       throws java.io.IOException {
-    if (!response.isCommitted()) {
-      response.reset();
+    if (response.isCommitted()) {
+      LOG.warn(
+          "SPARQL response already committed; cannot report error ({} {}): {}", status, message);
+      return;
     }
+    response.reset();
     response.setStatus(status);
     response.setContentType("text/plain;charset=UTF-8");
     response.getOutputStream().write(message.getBytes(java.nio.charset.StandardCharsets.UTF_8));

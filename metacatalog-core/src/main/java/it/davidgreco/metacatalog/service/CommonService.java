@@ -82,11 +82,11 @@ public interface CommonService<T, K> {
     var sourceEntity =
         entityRepository
             .findById(sourceEntityId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + sourceEntityId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceEntityId + NOT_FOUND));
     var targetEntity =
         entityRepository
             .findById(targetEntityId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + targetEntityId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetEntityId + NOT_FOUND));
     var sourceEntityType = sourceEntity.getEntityType();
     var targetEntityType = targetEntity.getEntityType();
 
@@ -205,7 +205,7 @@ public interface CommonService<T, K> {
     var entity =
         entityRepository
             .findById(entityId)
-            .orElseThrow(() -> new ServiceError(ENTITY_WITH_ID + entityId + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
     return entityRelationshipRepository.findBySourceAndRelationType(entity, relationType).stream()
         .map(EntityRelationship::getTarget)
         .map(Entity::getId)
@@ -267,7 +267,7 @@ public interface CommonService<T, K> {
     var entityType =
         entityTypeRepository
             .findByName(entityTypeName)
-            .orElseThrow(() -> new ServiceError("Entity type " + entityTypeName + NOT_FOUND));
+            .orElseThrow(() -> new NotFoundException("Entity type " + entityTypeName + NOT_FOUND));
     return mappingEntityTypeRelationshipRepository
         .findMappingEntityTypeRelationshipBySource(entityType)
         .stream()

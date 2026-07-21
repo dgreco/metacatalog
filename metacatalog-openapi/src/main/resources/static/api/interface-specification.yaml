@@ -119,12 +119,18 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
              application/json:
                schema:
-                 $ref: '#/components/schemas/SystemError'
+                  $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -146,12 +152,18 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
              application/json:
                schema:
-                 $ref: '#/components/schemas/SystemError'
+                  $ref: '#/components/schemas/SystemError'
     head:
       tags:
         - Meta Catalog Manager
@@ -209,6 +221,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
             description: System problem
             content:
@@ -288,6 +306,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait or version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -320,6 +344,12 @@ paths:
           description: Version deleted
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait not found
           content:
             application/json:
               schema:
@@ -363,6 +393,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source or target trait not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
           description: System problem, details of the error are provided
           content:
@@ -399,6 +435,12 @@ paths:
           description: Link deleted
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source or target trait not found
           content:
             application/json:
               schema:
@@ -478,6 +520,12 @@ paths:
                   $ref: '#/components/schemas/Trait'
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source trait not found
           content:
             application/json:
               schema:
@@ -568,6 +616,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -595,6 +649,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -658,6 +718,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
             description: System problem
             content:
@@ -738,6 +804,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType or version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -770,6 +842,12 @@ paths:
           description: Version deleted
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
           content:
             application/json:
               schema:
@@ -823,6 +901,12 @@ paths:
           description: Mapping created
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source or target EntityType not found
           content:
             application/json:
               schema:
@@ -917,11 +1001,17 @@ paths:
           content:
              application/json:
                schema:
-                 type: array
-                 items:
-                   $ref: '#/components/schemas/Entity'
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Entity'
         400:
           description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
           content:
             application/json:
               schema:
@@ -958,6 +1048,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -985,6 +1081,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -1053,6 +1155,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source or target entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
           description: System problem, details of the error are provided
           content:
@@ -1093,6 +1201,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source or target entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
           description: System problem
           content:
@@ -1129,6 +1243,12 @@ paths:
                   $ref: '#/components/schemas/Entity'
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Source entity not found
           content:
             application/json:
               schema:
@@ -1200,6 +1320,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:
@@ -1239,6 +1365,12 @@ paths:
               application/json:
                 schema:
                   $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
            description: System problem
            content:

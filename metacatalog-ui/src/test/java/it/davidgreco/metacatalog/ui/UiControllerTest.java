@@ -88,7 +88,8 @@ class UiControllerTest {
             traitVersionRepository,
             entityRepository,
             entityRelationshipRepository,
-            mappingEntityRelationshipRepository);
+            mappingEntityRelationshipRepository,
+            new HtmlSafeJsonSerializer());
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new UiController(

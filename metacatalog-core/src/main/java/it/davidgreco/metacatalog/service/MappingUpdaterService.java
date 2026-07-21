@@ -5,26 +5,22 @@ import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
 import java.time.Instant;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Service class for updating mapped entities. */
 @Slf4j
-@Service
-@RequiredArgsConstructor
 @Getter
 @Setter
 public class MappingUpdaterService {
 
   /** Advisory lock id serializing the mapped-entities update task across instances. */
   private static final int UPDATE_MAPPING_LOCK_ID = 1;
-
-  /** Advisory lock id serializing the lifecycle-event cleanup task across instances. */
-  private static final int CLEANUP_LOCK_ID = 2;
 
   private boolean automaticEntitiesMapping;
 
@@ -33,6 +29,20 @@ public class MappingUpdaterService {
   private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
   public final MappingService mappingService;
+
+  private final TransactionTemplate markFailedTx;
+
+  public MappingUpdaterService(
+      AdvisoryLockManager advisoryLockManager,
+      EntityLifeCycleEventRepository entityLifeCycleEventRepository,
+      MappingService mappingService,
+      PlatformTransactionManager transactionManager) {
+    this.advisoryLockManager = advisoryLockManager;
+    this.entityLifeCycleEventRepository = entityLifeCycleEventRepository;
+    this.mappingService = mappingService;
+    this.markFailedTx = new TransactionTemplate(transactionManager);
+    this.markFailedTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+  }
 
   /**
    * Scheduled task that checks for new {@link EntityLifeCycleEvent}s that are source created or
@@ -44,6 +54,13 @@ public class MappingUpdaterService {
    * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is
    * also synchronized using an advisory lock, so that only one instance of this task can run at the
    * same time.
+   *
+   * <p>The {@code @Transactional} annotation is required because {@link
+   * AdvisoryLockManager#acquireLock} uses {@code pg_try_advisory_xact_lock} with {@code MANDATORY}
+   * propagation — the transaction-scoped lock would be released immediately without an active
+   * transaction. Each event's create/update work runs in its own {@code REQUIRES_NEW} transaction
+   * (see {@link MappingService}), and {@link #markFailed} runs in a separate {@code REQUIRES_NEW}
+   * transaction so the failure marker persists even if the surrounding transaction is compromised.
    */
   @Scheduled(
       initialDelay = 100,
@@ -51,7 +68,7 @@ public class MappingUpdaterService {
           "#{@coreConfig.getApplicationConfigurationProperties().updateMappedEntitiesSchedulingInterval}")
   @Transactional
   public void updateMappedEntities() {
-    log.info(
+    log.debug(
         "Update mapped entities task started with automaticEntitiesMapping={}",
         automaticEntitiesMapping);
     if (!automaticEntitiesMapping) {
@@ -70,8 +87,20 @@ public class MappingUpdaterService {
           try {
             log.debug("Processing SOURCE_CREATED event for entity {}", event.getEntityId());
             mappingService.createMappedEntities(event);
-          } catch (Exception e) {
-            log.error("Error creating mapped entities for event {}", event.getId(), e);
+          } catch (ServiceError | ServiceRuntimeError e) {
+            log.error(
+                "Error creating mapped entities for event {} (entity {})",
+                event.getId(),
+                event.getEntityId(),
+                e);
+            markFailed(event);
+          } catch (RuntimeException e) {
+            log.error(
+                "Unexpected error creating mapped entities for event {} (entity {});"
+                    + " marking as FAILED to avoid poison-message head-of-line blocking",
+                event.getId(),
+                event.getEntityId(),
+                e);
             markFailed(event);
           }
         });
@@ -84,55 +113,49 @@ public class MappingUpdaterService {
           try {
             log.debug("Processing SOURCE_UPDATED event for entity {}", event.getEntityId());
             mappingService.updateMappedEntities(event);
-          } catch (Exception e) {
-            log.error("Error updating mapped entities for event {}", event.getId(), e);
+          } catch (ServiceError | ServiceRuntimeError e) {
+            log.error(
+                "Error updating mapped entities for event {} (entity {})",
+                event.getId(),
+                event.getEntityId(),
+                e);
+            markFailed(event);
+          } catch (RuntimeException e) {
+            log.error(
+                "Unexpected error updating mapped entities for event {} (entity {});"
+                    + " marking as FAILED to avoid poison-message head-of-line blocking",
+                event.getId(),
+                event.getEntityId(),
+                e);
             markFailed(event);
           }
         });
-    log.info("Update mapped entities task completed");
+    log.debug("Update mapped entities task completed");
   }
 
   /**
    * Marks an event as {@code FAILED} so that a permanently failing (poison) event is not
-   * re-selected and re-processed on every scheduling tick. Runs in the surrounding transaction; the
-   * per-event work that threw ran in its own {@code REQUIRES_NEW} transaction and has already
-   * rolled back, so this write is unaffected by that rollback.
+   * re-selected and re-processed on every scheduling tick. Runs in a dedicated {@code REQUIRES_NEW}
+   * transaction so the failure marker persists regardless of the state of the surrounding
+   * scheduled-method transaction. The event is re-fetched by id inside the new transaction to avoid
+   * merging a stale detached instance.
    *
    * @param event the event that failed to process
    */
   private void markFailed(EntityLifeCycleEvent event) {
     try {
-      event.setEventStatus(EntityLifeCycleEvent.STATUS_FAILED);
-      event.setProcessTime(Instant.now());
-      entityLifeCycleEventRepository.save(event);
-    } catch (Exception e) {
+      markFailedTx.executeWithoutResult(
+          status ->
+              entityLifeCycleEventRepository
+                  .findById(event.getId())
+                  .ifPresent(
+                      e -> {
+                        e.setEventStatus(EntityLifeCycleEvent.STATUS_FAILED);
+                        e.setProcessTime(Instant.now());
+                        entityLifeCycleEventRepository.save(e);
+                      }));
+    } catch (RuntimeException e) {
       log.error("Failed to mark event {} as FAILED", event.getId(), e);
     }
-  }
-
-  /**
-   * Scheduled task that cleans up entity life cycle events.
-   *
-   * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is
-   * also synchronized using an advisory lock, so that only one instance of this task can run at the
-   * same time.
-   *
-   * <p>The task logs a message indicating that cleanup is being performed, but does not actually
-   * perform any cleanup. This is a placeholder for future cleanup tasks.
-   */
-  @Scheduled(
-      initialDelay = 5000,
-      fixedRateString =
-          "#{@coreConfig.getApplicationConfigurationProperties().entityLifeCycleEventCleanupSchedulingInterval}")
-  @Transactional
-  public void entityLifeCycleEventCleanup() {
-    if (!automaticEntitiesMapping) {
-      return;
-    }
-    if (!advisoryLockManager.acquireLock(CLEANUP_LOCK_ID)) {
-      log.debug("Advisory lock not acquired, another instance is running; skipping");
-      return;
-    }
-    log.info("Cleaning up entity life cycle events");
   }
 }

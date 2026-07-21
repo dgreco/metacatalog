@@ -1,11 +1,11 @@
 package it.davidgreco.metacatalog.service;
 
 import io.vavr.control.Try;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.EqualsAndHashCode;
@@ -29,7 +29,11 @@ public abstract class Task<T> {
       new AtomicReference<>();
   private final AtomicReference<Try<Void>> result = new AtomicReference<>();
 
-  private final List<Task<T>> dependsOnTasks = new ArrayList<>();
+  // CopyOnWriteArrayList: dependencies are typically declared during graph construction and then
+  // read during schedule(); COW gives safe publication without extra synchronisation on the read
+  // path. dependsOn() may be called concurrently with schedule() in principle, and the previous
+  // plain ArrayList was not safe for that.
+  private final List<Task<T>> dependsOnTasks = new CopyOnWriteArrayList<>();
 
   private final T entity;
 
@@ -51,6 +55,14 @@ public abstract class Task<T> {
    * task shared by several parents (a diamond dependency graph) is submitted — and therefore
    * executed — exactly once. The lock is held only for the (non-blocking) composition, never while
    * awaiting a dependency.
+   *
+   * <p>The returned future always completes with a {@link Try} — never exceptionally. A {@code
+   * handle} stage ensures {@link #getResult()} is populated even when the {@code thenApplyAsync}
+   * stage is never run (e.g. the executor rejects the task, or a dependency future completes
+   * exceptionally and {@code allOf} short-circuits). Previously, on such paths {@code result} was
+   * never set and {@link #getResult()} silently returned {@code Optional.empty()}, which caused
+   * {@code TaskManager.getScheduleResults} to skip the failed task and the schedule to report
+   * success.
    *
    * @param executor the executor used to run this task's work
    * @return the future of this task's result
@@ -75,16 +87,19 @@ public abstract class Task<T> {
                         dependencyFutures.stream()
                             .map(CompletableFuture::join)
                             .anyMatch(Try::isFailure);
-                    Try<Void> taskResult =
-                        dependsOnTasksFailed
-                            ? Try.failure(
-                                new ServiceRuntimeError(
-                                    "One or more of the depending tasks failed"))
-                            : Try.of(Task.this::apply);
-                    result.set(taskResult);
-                    return taskResult;
+                    return dependsOnTasksFailed
+                        ? Try.<Void>failure(
+                            new ServiceRuntimeError("One or more of the depending tasks failed"))
+                        : Try.of(Task.this::apply);
                   },
-                  executor);
+                  executor)
+              .handle(
+                  (taskResult, ex) -> {
+                    Try<Void> finalResult =
+                        taskResult != null ? taskResult : Try.failure(new ServiceRuntimeError(ex));
+                    result.set(finalResult);
+                    return finalResult;
+                  });
       runningTaskFuture.set(future);
       return future;
     }

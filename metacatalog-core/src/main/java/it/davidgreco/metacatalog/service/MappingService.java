@@ -105,30 +105,31 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
           entityTypeRepository
               .findByName(sourceEntityTypeName)
               .orElseThrow(
-                  () -> new ServiceError("EntityType " + sourceEntityTypeName + DOES_NOT_EXIST));
+                  () ->
+                      new NotFoundException("EntityType " + sourceEntityTypeName + DOES_NOT_EXIST));
 
       var targetEntityType =
           entityTypeRepository
               .findByName(targetEntityTypeName)
               .orElseThrow(
-                  () -> new ServiceError("EntityType " + targetEntityTypeName + DOES_NOT_EXIST));
+                  () ->
+                      new NotFoundException("EntityType " + targetEntityTypeName + DOES_NOT_EXIST));
 
       mapping.setSource(sourceEntityType);
       mapping.setRelationType(MAPPED_TO);
       mapping.setTarget(targetEntityType);
-      mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+      var mappingValuesNode = jsonFactory.readTree(mappingValues);
       var validatingSchemaEither =
           convertToMappingSchema(jsonSchemaFactory.getSchema(targetEntityType.getSchema()));
       if (validatingSchemaEither.isLeft())
         throw new SchemaValidationError(validatingSchemaEither.getLeft());
-      var mappingValuesNode = jsonFactory.readTree(mappingValues);
       var validatingSchema = validatingSchemaEither.get();
       var validationErrors = validatingSchema.validate(mappingValuesNode);
       if (!validationErrors.isEmpty()) {
         var errorMessages = validationErrors.stream().map(ValidationMessage::getMessage).toList();
         throw new SchemaValidationError(errorMessages);
       }
-      mapping.setMappingValues(jsonFactory.readTree(mappingValues));
+      mapping.setMappingValues(mappingValuesNode);
       mapping.setEntityPathReferences(entityPathReferences);
       var saved = mappingEntityTypeRelationshipRepository.save(mapping);
       log.info(
@@ -168,7 +169,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     var mapping =
         mappingEntityTypeRelationshipRepository
             .findById(mappingId)
-            .orElseThrow(() -> new ServiceError("Mapping " + mappingId + DOES_NOT_EXIST));
+            .orElseThrow(() -> new NotFoundException("Mapping " + mappingId + DOES_NOT_EXIST));
     log.info("Read MappingEntityTypeRelationship with id: {}", mappingId);
     return mapping;
   }
@@ -243,7 +244,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var sourceEntityType = sourceEntity.getEntityType();
         var mappingRelationships =
             mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipBySource(
@@ -317,7 +318,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                              () ->
+                                  new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -377,7 +379,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySourceAndRelationType(
                 sourceEntity, MAPPED_TO);
@@ -430,7 +432,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                              () ->
+                                  new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -467,7 +470,7 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
         var sourceEntity =
             entityRepository
                 .findById(sourceEntityId)
-                .orElseThrow(() -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                .orElseThrow(() -> new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
         var entityMappingRelationships =
             mappingEntityRelationshipRepository.findBySourceAndRelationType(
                 sourceEntity, MAPPED_TO);
@@ -475,12 +478,6 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
           var mappedEntity = entityMappingRelationship.getTarget();
           retrievedEntitiesIds.push(mappedEntity.getId());
           mappingEntityRelationshipRepository.delete(entityMappingRelationship);
-          mappingEntityRelationshipRepository
-              .findBySourceAndRelationTypeAndTarget(
-                  entityMappingRelationship.getSource(),
-                  MAPPED_TO,
-                  entityMappingRelationship.getTarget())
-              .ifPresent(mappingEntityRelationshipRepository::delete);
           mappingEntityRelationshipRepository
               .findBySourceAndRelationTypeAndTarget(
                   entityMappingRelationship.getTarget(),
@@ -512,7 +509,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
                       entityRepository
                           .findById(sourceEntityId)
                           .orElseThrow(
-                              () -> new ServiceError(ENTITY + sourceEntityId + DOES_NOT_EXIST));
+                              () ->
+                                  new NotFoundException(ENTITY + sourceEntityId + DOES_NOT_EXIST));
                   var sourceEntityType = sourceEntity.getEntityType();
                   if (isTargetEntityType(sourceEntityType))
                     throw new ServiceError(
@@ -579,7 +577,8 @@ public class MappingService implements CommonService<MappingEntityTypeRelationsh
     Entity currentEntity =
         entityRepository
             .findById(startEntityId)
-            .orElseThrow(() -> new ServiceError("Entity with id " + startEntityId + " not found"));
+            .orElseThrow(
+                () -> new NotFoundException("Entity with id " + startEntityId + " not found"));
     for (var segment : pathSegments) {
       var pathExpressions =
           pathExpressionPattern.matcher(segment).results().map(MatchResult::group).toList();

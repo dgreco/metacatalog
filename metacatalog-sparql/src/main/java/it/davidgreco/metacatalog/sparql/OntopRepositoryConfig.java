@@ -43,6 +43,8 @@ public class OntopRepositoryConfig {
   private static final Logger LOG = LoggerFactory.getLogger(OntopRepositoryConfig.class);
 
   private OntopVirtualRepository repository;
+  private final java.util.List<java.io.File> tempFiles =
+      new java.util.concurrent.CopyOnWriteArrayList<>();
 
   /**
    * Eagerly constructs and initialises the Ontop repository.
@@ -87,6 +89,11 @@ public class OntopRepositoryConfig {
       LOG.info("Shutting down Ontop repository");
       repository.shutDown();
     }
+    for (java.io.File tmp : tempFiles) {
+      if (!tmp.delete()) {
+        LOG.warn("Could not delete temporary file: {}", tmp.getAbsolutePath());
+      }
+    }
   }
 
   /**
@@ -96,7 +103,7 @@ public class OntopRepositoryConfig {
    * classpath:} prefix, so we unpack the resource to a temporary file on disk and hand back the
    * absolute path.
    */
-  private static String resolveClasspath(String spec) {
+  private String resolveClasspath(String spec) {
     if (spec == null || spec.isBlank()) {
       return spec;
     }
@@ -110,7 +117,7 @@ public class OntopRepositoryConfig {
       }
       var suffix = resourcePath.substring(resourcePath.lastIndexOf('.'));
       var tmp = java.io.File.createTempFile("ontop-resource-", suffix);
-      tmp.deleteOnExit();
+      tempFiles.add(tmp);
       try (var out = new java.io.FileOutputStream(tmp)) {
         in.transferTo(out);
       }

@@ -33,15 +33,17 @@ management:
   endpoints:
     web:
       exposure:
-        include: beans, caches, health, info, flyway, metrics, env, configprops, loggers
+        # env, configprops, beans, loggers intentionally excluded: they leak DB passwords, basic-auth
+        # hashes and other secrets. Enable them only behind an authenticated management port.
+        include: health, info, flyway, metrics, caches
   info:
     git:
       enabled: true
-      mode: full        # expose the full commit details at /actuator/info
+      mode: simple       # expose only the short commit id; 'full' leaks branch, build time, etc.
     build:
-      enabled: true     # expose build.version / build.time at /actuator/info
+      enabled: true      # expose build.version / build.time at /actuator/info
     java:
-      enabled: true
+      enabled: false
 logging:
   level:
     root: ERROR                                # General logging level for the application
@@ -52,9 +54,10 @@ logging:
 application:
   config:
     automaticEntitiesMapping: true
-    updateMappedEntitiesMappingSchedulingInterval: 1s
-    entityLifeCycleEventCleanupSchedulingInterval: 1s
+    updateMappedEntitiesSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
+    # taskScheduleCacheMaxSize: 100            # TaskManager schedule-result cache capacity
+    # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
     security:
       # Authentication mechanism: none | basic | oauth2 | ldap
       # - none   : security disabled (default for local dev)

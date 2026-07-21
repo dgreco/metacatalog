@@ -23,7 +23,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * SecurityConfigProperties.Ldap#userSearchFilter()}).
  */
 @Configuration
-@ConditionalOnProperty(name = "application.config.security.auth-mode", havingValue = "ldap")
+@ConditionalOnProperty(name = SecurityConfigProperties.AUTH_MODE_PROPERTY, havingValue = "ldap")
 public class LdapSecurityConfig {
 
   private final SecurityConfigProperties properties;
@@ -54,7 +54,8 @@ public class LdapSecurityConfig {
   public SecurityFilterChain securityFilterChain(
       final HttpSecurity http, final AuthenticationManager authenticationManager) throws Exception {
     customizer.customize(http);
-    http.authenticationManager(authenticationManager);
+    http.httpBasic(org.springframework.security.config.Customizer.withDefaults())
+        .authenticationManager(authenticationManager);
     return http.build();
   }
 

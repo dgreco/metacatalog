@@ -18,7 +18,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * metadata via the issuer URI ({@link SecurityConfigProperties.Oauth2#issuerUri()}).
  */
 @Configuration
-@ConditionalOnProperty(name = "application.config.security.auth-mode", havingValue = "oauth2")
+@ConditionalOnProperty(name = SecurityConfigProperties.AUTH_MODE_PROPERTY, havingValue = "oauth2")
 public class OAuth2SecurityConfig {
 
   private final SecurityConfigProperties properties;
@@ -61,6 +61,12 @@ public class OAuth2SecurityConfig {
     if (oauth2 == null) {
       throw new IllegalStateException(
           "application.config.security.oauth2 must be configured when auth-mode = oauth2");
+    }
+    if (SecurityConfigSupport.isSet(oauth2.jwkSetUri())
+        && SecurityConfigSupport.isSet(oauth2.issuerUri())) {
+      throw new IllegalStateException(
+          "Exactly one of application.config.security.oauth2.jwk-set-uri and issuer-uri must be"
+              + " configured, not both");
     }
     if (SecurityConfigSupport.isSet(oauth2.jwkSetUri())) {
       return NimbusJwtDecoder.withJwkSetUri(oauth2.jwkSetUri()).build();

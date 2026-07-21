@@ -1,5 +1,6 @@
 package it.davidgreco.metacatalog.security;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -8,7 +9,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -19,6 +27,12 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>The {@link org.springframework.security.oauth2.jwt.JwtDecoder} bean is created with a fake JWK
  * set URI; the actual decoder is never invoked because {@code jwt()} mocks the decoded JWT
  * directly.
+ *
+ * <p>A {@link UserDetailsService} and {@link PasswordEncoder} are provided via {@link
+ * BasicAuthProbeConfig} so that the test can verify Basic auth credentials are <em>not</em>
+ * accepted in OAuth2 mode. If the shared {@link SecurityFilterChainCustomizer} ever re-adds {@code
+ * .httpBasic(...)} unconditionally, the Basic credentials would be validated against this user
+ * store and the request would succeed (200); the test asserts it still returns 401.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -57,5 +71,42 @@ class OAuth2SecurityConfigTest {
                 .param("query", "ASK { ?s ?p ?o }")
                 .with(jwt().jwt(b -> b.claim("sub", "test-user"))))
         .andExpect(status().isNotFound());
+  }
+
+  /**
+   * Verifies that Basic auth credentials are rejected in OAuth2 mode even when a {@link
+   * UserDetailsService} is available. The {@link SecurityFilterChainCustomizer} must not wire
+   * {@code .httpBasic(...)} in OAuth2 mode; only JWT bearer tokens should be accepted. If the
+   * customizer re-introduces unconditional {@code httpBasic}, the Basic credentials would be
+   * validated against the {@link BasicAuthProbeConfig#userDetailsService() in-memory user store}
+   * and the request would return 200 instead of 401.
+   */
+  @Test
+  void basicAuthCredentialsAreRejectedEvenWithUserDetailsServiceAvailable() throws Exception {
+    mockMvc
+        .perform(get("/metacatalog/v1/test").with(httpBasic("admin", "secret")))
+        .andExpect(status().isUnauthorized());
+  }
+
+  /**
+   * Provides a minimal in-memory {@link UserDetailsService} and {@link PasswordEncoder} so that the
+   * test can detect a regression where {@code .httpBasic(...)} is unconditionally applied by the
+   * shared {@link SecurityFilterChainCustomizer}. Without this config, Basic auth would fail with
+   * 401 regardless of whether the filter is wired (no user store to validate against), making the
+   * test unable to distinguish the fixed and broken states.
+   */
+  @TestConfiguration
+  static class BasicAuthProbeConfig {
+    @Bean
+    UserDetailsService userDetailsService() {
+      var manager = new InMemoryUserDetailsManager();
+      manager.createUser(User.withUsername("admin").password("{noop}secret").roles("USER").build());
+      return manager;
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+      return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    }
   }
 }

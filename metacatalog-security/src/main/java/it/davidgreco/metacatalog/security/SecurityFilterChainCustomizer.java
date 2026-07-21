@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.stereotype.Component;
@@ -20,6 +19,12 @@ import org.springframework.stereotype.Component;
  * <p>CSRF is disabled and sessions are stateless because the API is meant to be consumed
  * programmatically (Basic credentials, JWT bearer tokens or LDAP-backed Basic credentials are sent
  * on every request).
+ *
+ * <p>This customizer does <strong>not</strong> configure a specific authentication mechanism. Each
+ * mode-specific {@code *SecurityConfig} class is responsible for adding its own authentication
+ * (e.g. {@code .httpBasic(...)} for {@link AuthMode#BASIC} and {@link AuthMode#LDAP}, or {@code
+ * .oauth2ResourceServer(...)} for {@link AuthMode#OAUTH2}) after calling {@link #customize}. This
+ * prevents a mode from accidentally inheriting an authentication mechanism it was not designed for.
  */
 @Component
 public class SecurityFilterChainCustomizer {
@@ -52,6 +57,9 @@ public class SecurityFilterChainCustomizer {
   /**
    * Applies the common URL rules and session/CSRF settings to the given {@link HttpSecurity}.
    *
+   * <p>The caller is responsible for adding the mode-specific authentication mechanism (e.g. {@code
+   * .httpBasic(...)} or {@code .oauth2ResourceServer(...)}) after this method returns.
+   *
    * @param http the security builder to customize
    * @throws Exception if the security builder cannot be configured
    */
@@ -66,7 +74,6 @@ public class SecurityFilterChainCustomizer {
                     .requestMatchers(API_PATH, SPARQL_QUERY_PATH)
                     .authenticated()
                     .anyRequest()
-                    .permitAll())
-        .httpBasic(Customizer.withDefaults());
+                    .permitAll());
   }
 }

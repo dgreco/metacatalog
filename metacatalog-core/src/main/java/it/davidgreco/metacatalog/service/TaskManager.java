@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.service;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.vavr.control.Try;
+import it.davidgreco.metacatalog.CoreConfigProperties;
 import java.util.*;
 import java.util.concurrent.*;
 import lombok.Getter;
@@ -21,23 +22,39 @@ import org.springframework.stereotype.Service;
  * <p>This service provides functionality for registering task factories, creating tasks, and
  * scheduling groups of tasks with dependency management. Tasks can be organized into schedules that
  * respect dependency ordering and detect cycles.
+ *
+ * <p>The schedule-result cache size and TTL are configurable via {@link CoreConfigProperties}
+ * ({@code taskScheduleCacheMaxSize}, {@code taskScheduleCacheExpireAfterWrite}). A single cache
+ * holds {@link RunningSchedule} entries that pair each {@link Schedule} with its {@link Future}, so
+ * the two are always evicted together — previously they lived in two separate caches that could
+ * evict independently, producing an inconsistent view where one was present and the other missing.
+ * When an entry is evicted, {@link #joinSchedule} and {@link #getScheduleResults} return empty
+ * results — callers should not assume a schedule is cached indefinitely.
  */
 @Slf4j
 @Getter
-@RequiredArgsConstructor
 @Service
 public class TaskManager {
 
   private final ConcurrentMap<String, TypedTaskFactory<?>> taskFactories =
       new ConcurrentHashMap<>();
 
-  private final Cache<String, Future<Try<Void>>> runningScheduleFutures =
-      Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(100).build();
-
-  private final Cache<String, Schedule> runningSchedules =
-      Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(100).build();
+  private final Cache<String, RunningSchedule> runningSchedules;
 
   private final AsyncTaskExecutor asyncTaskExecutor;
+
+  private final CoreConfigProperties coreConfigProperties;
+
+  public TaskManager(
+      AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
+    this.asyncTaskExecutor = asyncTaskExecutor;
+    this.coreConfigProperties = coreConfigProperties;
+    this.runningSchedules =
+        Caffeine.newBuilder()
+            .maximumSize(coreConfigProperties.taskScheduleCacheMaxSize())
+            .expireAfterWrite(coreConfigProperties.taskScheduleCacheExpireAfterWrite())
+            .build();
+  }
 
   /**
    * Registers a task factory for creating tasks of a specific type.
@@ -96,8 +113,7 @@ public class TaskManager {
    * @throws ServiceError if the schedule contains cycles
    */
   public String schedule(Schedule schedule) throws ServiceError {
-    runningScheduleFutures.put(schedule.getId(), schedule.schedule());
-    runningSchedules.put(schedule.getId(), schedule);
+    runningSchedules.put(schedule.getId(), new RunningSchedule(schedule, schedule.schedule()));
     return schedule.id;
   }
 
@@ -107,10 +123,10 @@ public class TaskManager {
    * @param id the ID of the schedule to wait for
    */
   public void joinSchedule(String id) {
-    var fut = runningScheduleFutures.getIfPresent(id);
-    if (fut != null) {
+    var rs = runningSchedules.getIfPresent(id);
+    if (rs != null) {
       try {
-        fut.get();
+        rs.future().get();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
         throw new ServiceRuntimeError(e);
@@ -127,11 +143,14 @@ public class TaskManager {
    * @return a list of task results (success or failure)
    */
   public List<Try<Void>> getScheduleResults(String id) {
-    var schedule = runningSchedules.getIfPresent(id);
-    if (schedule == null) {
+    var rs = runningSchedules.getIfPresent(id);
+    if (rs == null) {
       return List.of();
     }
-    return schedule.getTasks().stream().map(Task::getResult).flatMap(Optional::stream).toList();
+    return rs.schedule().getTasks().stream()
+        .map(Task::getResult)
+        .flatMap(Optional::stream)
+        .toList();
   }
 
   /**
@@ -141,7 +160,7 @@ public class TaskManager {
    * @return an Optional containing the Future if the schedule exists, empty otherwise
    */
   public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
-    return Optional.ofNullable(runningScheduleFutures.getIfPresent(id));
+    return Optional.ofNullable(runningSchedules.getIfPresent(id)).map(RunningSchedule::future);
   }
 
   /**
@@ -151,7 +170,7 @@ public class TaskManager {
    * @return an Optional containing the schedule if it exists, empty otherwise
    */
   public Optional<Schedule> getRunningSchedule(String id) {
-    return Optional.ofNullable(runningSchedules.getIfPresent(id));
+    return Optional.ofNullable(runningSchedules.getIfPresent(id)).map(RunningSchedule::schedule);
   }
 
   /**
@@ -211,4 +230,6 @@ public class TaskManager {
   }
 
   private record TypedTaskFactory<T>(Class<T> type, TaskFactory<T> factory) {}
+
+  private record RunningSchedule(Schedule schedule, Future<Try<Void>> future) {}
 }

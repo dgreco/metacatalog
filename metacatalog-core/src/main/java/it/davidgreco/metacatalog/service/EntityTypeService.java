@@ -92,8 +92,10 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       saveCurrentSnapshot(saved, null);
       log.info("Created EntityType: {}", name);
       return saved;
-    } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
+    } catch (ServiceRuntimeError e) {
       throw new ServiceError(e.getMessage());
+    } catch (DataIntegrityViolationException e) {
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 
@@ -137,7 +139,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       var live =
           entityTypeRepository
               .findByNameForUpdate(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
 
       var existingCurrentSnapshot =
           entityTypeVersionRepository.findByVersionGroupIdAndVersion(
@@ -173,8 +175,10 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       saveCurrentSnapshot(saved, latestSnapshot.map(EntityTypeVersion::getId).orElse(null));
       log.info("Created new version of EntityType: {}", name);
       return saved;
-    } catch (ServiceRuntimeError | DataIntegrityViolationException e) {
+    } catch (ServiceRuntimeError e) {
       throw new ServiceError(e.getMessage());
+    } catch (DataIntegrityViolationException e) {
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 
@@ -199,7 +203,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     var live =
         entityTypeRepository
             .findByName(name)
-            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
     var result =
         TypeServiceSupport.resolveVersion(
             live,
@@ -234,7 +238,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     var live =
         entityTypeRepository
             .findByName(name)
-            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
     var history =
         entityTypeVersionRepository
             .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
@@ -268,7 +272,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       var live =
           entityTypeRepository
               .findByName(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
       if (version == live.getVersion())
         throw new ServiceError(
             "Cannot delete the current version of "
@@ -308,7 +312,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityTypeVersionRepository.flush();
       log.info("Deleted EntityType: {} version: {}", name, version);
     } catch (DataIntegrityViolationException e) {
-      throw new ServiceError(e.getMessage());
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 
@@ -336,7 +340,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       var live =
           entityTypeRepository
               .findByName(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
       var history =
           entityTypeVersionRepository
               .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
@@ -370,7 +374,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityTypeVersionRepository.flush();
       log.info("Deleted all versions of EntityType: {}", name);
     } catch (DataIntegrityViolationException e) {
-      throw new ServiceError(e.getMessage());
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 
@@ -389,7 +393,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
     var entityType =
         entityTypeRepository
             .findByName(name)
-            .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
     log.info("Read EntityType: {}", name);
     return entityType;
   }
@@ -417,7 +421,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       var entityType =
           entityTypeRepository
               .findByName(name)
-              .orElseThrow(() -> new ServiceError(ENTITYTYPE + name + " not found"));
+              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
       var snapshots =
           entityTypeVersionRepository
               .findByVersionGroupIdOrderByVersionAsc(entityType.getVersionGroupId())
@@ -447,7 +451,7 @@ public class EntityTypeService implements CommonTypeService<EntityType, String> 
       entityTypeRepository.flush();
       log.info("Deleted EntityType: {}", name);
     } catch (DataIntegrityViolationException e) {
-      throw new ServiceError(e.getMessage());
+      throw ServiceError.forDataIntegrity(e);
     }
   }
 

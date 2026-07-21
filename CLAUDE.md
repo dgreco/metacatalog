@@ -127,8 +127,9 @@ Custom properties bind under the `application.config` prefix into
 
 - `automaticEntitiesMapping` (boolean) — enable the scheduled mapping updater
 - `updateMappedEntitiesSchedulingInterval` (Duration)
-- `entityLifeCycleEventCleanupSchedulingInterval` (Duration)
 - `entityPathResolutionMaxAttempts` (int)
+- `taskScheduleCacheMaxSize` (int, default 100) — `TaskManager` schedule-result cache capacity
+- `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — `TaskManager` schedule-result cache TTL
 
 Security properties bind under `application.config.security` into `SecurityConfigProperties`
 (see the [Security](#security-metacatalog-security) section). Defaults live in `application.yaml`;
@@ -185,7 +186,7 @@ metacatalog Postgres DB, exposed on the same port as the application (no separat
   authentication as the REST API when `auth-mode` is not `none` (Basic / JWT / LDAP); the Yasgui
   page at `/sparql` itself stays public.
 
-Mapping/ontology files: `metacatalog-core/src/main/resources/ontop/{mapping.obda, ontology.owl}`,
+Mapping/ontology files: `metacatalog-sparql/src/main/resources/ontop/{mapping.obda, ontology.owl}`,
 resolved from the classpath at startup. The endpoint is gated on
 `application.sparql.enabled` (default `true`) and configured under `application.sparql.*` in
 `application.yaml`. Ontop's full transitive graph is shaded into the `metacatalog-sparql` jar

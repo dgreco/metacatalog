@@ -3,12 +3,15 @@ package it.davidgreco.metacatalog.functions;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.ServiceRuntimeError;
+import java.util.Optional;
 
 /**
  * Abstract base class for entity procedures that provides type checking and error handling.
  *
  * <p>Subclasses must implement {@link #checkInputType(Entity)} to validate that the entity is of
- * the expected type, and {@link #execute(Entity)} to perform the actual procedure logic.
+ * the expected type, and {@link #execute(Entity)} to perform the actual procedure logic. The {@link
+ * #execute(Entity)} method returns an optional schedule ID so the {@link ProcedureExecutor} can
+ * join any scheduled async work after the plan-building transaction commits.
  *
  * @see EntityProcedure
  * @see ProcedureExecutor
@@ -19,13 +22,15 @@ public abstract class AbstractEntityProcedure implements EntityProcedure {
    * Accepts an entity for processing, performing type checking before execution.
    *
    * @param entity the entity to process
+   * @return the schedule ID to join after the transaction commits, or empty if no async work was
+   *     scheduled
    * @throws ServiceRuntimeError if type checking fails or execution throws a ServiceError
    */
   @Override
-  public void accept(Entity entity) {
+  public Optional<String> accept(Entity entity) {
     try {
       checkInputType(entity);
-      execute(entity);
+      return execute(entity);
     } catch (ServiceError e) {
       throw new ServiceRuntimeError(e);
     }
@@ -43,7 +48,9 @@ public abstract class AbstractEntityProcedure implements EntityProcedure {
    * Executes the procedure logic on the validated entity.
    *
    * @param entity the entity to process
+   * @return the schedule ID to join after the transaction commits, or empty if no async work was
+   *     scheduled
    * @throws ServiceError if an error occurs during execution
    */
-  protected abstract void execute(Entity entity) throws ServiceError;
+  protected abstract Optional<String> execute(Entity entity) throws ServiceError;
 }

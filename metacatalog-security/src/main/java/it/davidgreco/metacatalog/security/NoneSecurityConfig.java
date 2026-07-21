@@ -15,7 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 @ConditionalOnProperty(
-    name = "application.config.security.auth-mode",
+    name = SecurityConfigProperties.AUTH_MODE_PROPERTY,
     havingValue = "none",
     matchIfMissing = true)
 public class NoneSecurityConfig {
