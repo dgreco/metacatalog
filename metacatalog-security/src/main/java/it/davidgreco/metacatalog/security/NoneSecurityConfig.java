@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -14,10 +13,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * (e.g. an API gateway).
  */
 @Configuration
-@ConditionalOnProperty(
-    name = SecurityConfigProperties.AUTH_MODE_PROPERTY,
-    havingValue = "none",
-    matchIfMissing = true)
+@ConditionalOnAuthMode(AuthMode.NONE)
 public class NoneSecurityConfig {
 
   /**

@@ -25,11 +25,15 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
-  @Value("${INGRESS_URL:}")
-  private String ingressUrl;
+  private final String ingressUrl;
+  private final String ingressDescription;
 
-  @Value("${INGRESS_DESCRIPTION:Metacatalog API (Ingress)}")
-  private String ingressDescription;
+  public OpenApiConfig(
+      @Value("${INGRESS_URL:}") String ingressUrl,
+      @Value("${INGRESS_DESCRIPTION:Metacatalog API (Ingress)}") String ingressDescription) {
+    this.ingressUrl = ingressUrl;
+    this.ingressDescription = ingressDescription;
+  }
 
   /**
    * GroupedOpenApi with custom server URLs.

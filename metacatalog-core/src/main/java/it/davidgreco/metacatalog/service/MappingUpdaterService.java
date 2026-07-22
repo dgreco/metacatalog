@@ -15,31 +15,29 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** Service class for updating mapped entities. */
 @Slf4j
-@Getter
-@Setter
 public class MappingUpdaterService {
 
   /** Advisory lock id serializing the mapped-entities update task across instances. */
   private static final int UPDATE_MAPPING_LOCK_ID = 1;
 
-  private boolean automaticEntitiesMapping;
+  @Getter @Setter private boolean automaticEntitiesMapping;
 
   private final AdvisoryLockManager advisoryLockManager;
 
   private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
 
-  public final MappingService mappingService;
+  private final MappedEntityService mappedEntityService;
 
   private final TransactionTemplate markFailedTx;
 
   public MappingUpdaterService(
       AdvisoryLockManager advisoryLockManager,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
-      MappingService mappingService,
+      MappedEntityService mappedEntityService,
       PlatformTransactionManager transactionManager) {
     this.advisoryLockManager = advisoryLockManager;
     this.entityLifeCycleEventRepository = entityLifeCycleEventRepository;
-    this.mappingService = mappingService;
+    this.mappedEntityService = mappedEntityService;
     this.markFailedTx = new TransactionTemplate(transactionManager);
     this.markFailedTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
@@ -47,9 +45,9 @@ public class MappingUpdaterService {
   /**
    * Scheduled task that checks for new {@link EntityLifeCycleEvent}s that are source created or
    * source updated. If the {@link EntityLifeCycleEvent} is source created, it calls {@link
-   * MappingService#createMappedEntities} to create the mapped entities. If the {@link
-   * EntityLifeCycleEvent} is source updated, it calls {@link MappingService#updateMappedEntities}
-   * to update the mapped entities.
+   * MappedEntityService#createMappedEntities} to create the mapped entities. If the {@link
+   * EntityLifeCycleEvent} is source updated, it calls {@link
+   * MappedEntityService#updateMappedEntities} to update the mapped entities.
    *
    * <p>This task is only executed if {@link #automaticEntitiesMapping} is set to true. The task is
    * also synchronized using an advisory lock, so that only one instance of this task can run at the
@@ -59,8 +57,9 @@ public class MappingUpdaterService {
    * AdvisoryLockManager#acquireLock} uses {@code pg_try_advisory_xact_lock} with {@code MANDATORY}
    * propagation — the transaction-scoped lock would be released immediately without an active
    * transaction. Each event's create/update work runs in its own {@code REQUIRES_NEW} transaction
-   * (see {@link MappingService}), and {@link #markFailed} runs in a separate {@code REQUIRES_NEW}
-   * transaction so the failure marker persists even if the surrounding transaction is compromised.
+   * (see {@link MappedEntityService}), and {@link #markFailed} runs in a separate {@code
+   * REQUIRES_NEW} transaction so the failure marker persists even if the surrounding transaction is
+   * compromised.
    */
   @Scheduled(
       initialDelay = 100,
@@ -86,8 +85,8 @@ public class MappingUpdaterService {
         event -> {
           try {
             log.debug("Processing SOURCE_CREATED event for entity {}", event.getEntityId());
-            mappingService.createMappedEntities(event);
-          } catch (ServiceError | ServiceRuntimeError e) {
+            mappedEntityService.createMappedEntities(event);
+          } catch (ServiceError e) {
             log.error(
                 "Error creating mapped entities for event {} (entity {})",
                 event.getId(),
@@ -112,8 +111,8 @@ public class MappingUpdaterService {
         event -> {
           try {
             log.debug("Processing SOURCE_UPDATED event for entity {}", event.getEntityId());
-            mappingService.updateMappedEntities(event);
-          } catch (ServiceError | ServiceRuntimeError e) {
+            mappedEntityService.updateMappedEntities(event);
+          } catch (ServiceError e) {
             log.error(
                 "Error updating mapped entities for event {} (entity {})",
                 event.getId(),

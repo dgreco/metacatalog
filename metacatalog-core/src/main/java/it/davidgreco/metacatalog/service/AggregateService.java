@@ -1,7 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.entity.RelationType.*;
-import static it.davidgreco.metacatalog.service.CommonService.implementsTrait;
+import static it.davidgreco.metacatalog.service.ServiceUtils.implementsTrait;
 
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
@@ -28,7 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class AggregateService {
 
   /** Marker interface for aggregate parts (either elements or nested aggregates). */
-  public interface AggregatePart {}
+  public sealed interface AggregatePart permits AggregateElement, Aggregate {
+    Entity entity();
+  }
 
   /**
    * Represents a leaf element in an aggregate hierarchy.
@@ -69,14 +71,11 @@ public class AggregateService {
    *
    * @param aggregate the aggregate to create
    * @return the created aggregate with the relevant IDs set
-   * @throws ServiceError if an error occurs during creation
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public AggregatePart create(AggregatePart aggregate) throws ServiceError {
+  @Transactional(propagation = Propagation.REQUIRED)
+  public AggregatePart create(AggregatePart aggregate) {
     class CreateAggregate {
-      AggregatePart create(AggregatePart aggregate) throws ServiceError {
+      AggregatePart create(AggregatePart aggregate) {
         switch (aggregate) {
           case AggregateElement(Entity entity, List<Entity> dependencies) -> {
             var aggregateElement =
@@ -100,22 +99,10 @@ public class AggregateService {
             }
             for (var childElement : elements) {
               var childAggregate = create(childElement);
-              switch (childAggregate) {
-                case AggregateElement childAggregateAggregateElement ->
-                    entityService.link(
-                        aggregateElement.getId(),
-                        HAS_PART,
-                        childAggregateAggregateElement.entity().getId());
-                case Aggregate childAggregateAggregagte ->
-                    entityService.link(
-                        aggregateElement.getId(),
-                        HAS_PART,
-                        childAggregateAggregagte.entity().getId());
-                default -> throw new ServiceError("Invalid aggregate part type");
-              }
+              entityService.link(
+                  aggregateElement.getId(), HAS_PART, childAggregate.entity().getId());
             }
           }
-          default -> throw new ServiceError("Invalid aggregate part type");
         }
         return aggregate;
       }
@@ -132,68 +119,38 @@ public class AggregateService {
    *
    * @param aggregateId the ID of the aggregate entity to read
    * @return the read aggregate
-   * @throws ServiceError if an error occurs during creation
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public Aggregate read(String aggregateId, boolean retrieveMappedInstances) throws ServiceError {
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Aggregate read(String aggregateId, boolean retrieveMappedInstances) {
     class ReadAggregate {
-      private AggregatePart readAggregatePart(Entity entity) throws ServiceError {
-        try {
-          if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE_ELEMENT)
-              && !implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
-            var dependencies =
-                entityRelationshipRepository
-                    .findBySourceAndRelationType(entity, DEPENDS_ON)
+      private AggregatePart readAggregatePart(Entity entity) {
+        if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE_ELEMENT)
+            && !implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
+          var dependencies =
+              entityRelationshipRepository.findBySourceAndRelationType(entity, DEPENDS_ON).stream()
+                  .map(EntityRelationship::getTarget)
+                  .toList();
+          return new AggregateElement(entity, dependencies);
+        } else if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
+          var linkedEntities = entityService.linked(entity.getId(), HAS_PART);
+          var elements = linkedEntities.stream().map(e -> readAggregatePart(e));
+          // Retrieve the mapped instances of the
+          if (retrieveMappedInstances) {
+            var mappedElements =
+                mappingEntityRelationshipRepository
+                    .findBySourceAndRelationType(entity, MAPPED_TO)
                     .stream()
-                    .map(EntityRelationship::getTarget)
-                    .toList();
-            return new AggregateElement(entity, dependencies);
-          } else if (implementsTrait(entity.getEntityType(), BuiltInTraits.AGGREGATE)) {
-            var linkedEntities = entityService.linked(entity.getId(), HAS_PART);
-            var elements =
-                linkedEntities.stream()
-                    .map(
-                        e -> {
-                          try {
-                            return readAggregatePart(e);
-                          } catch (ServiceError ex) {
-                            throw new ServiceRuntimeError(ex);
-                          }
-                        });
-            // Retrieve the mapped instances of the
-            if (retrieveMappedInstances) {
-              var mappedElements =
-                  mappingEntityRelationshipRepository
-                      .findBySourceAndRelationType(entity, MAPPED_TO)
-                      .stream()
-                      .map(MappingEntityRelationship::getTarget)
-                      .map(
-                          e -> {
-                            try {
-                              return readAggregatePart(e);
-                            } catch (ServiceError ex) {
-                              throw new ServiceRuntimeError(ex);
-                            }
-                          });
-              elements = Stream.concat(elements, mappedElements);
-            }
-            var dependencies =
-                entityRelationshipRepository
-                    .findBySourceAndRelationType(entity, DEPENDS_ON)
-                    .stream()
-                    .map(EntityRelationship::getTarget)
-                    .toList();
-            return new Aggregate(entity, dependencies, elements.toList());
-          } else {
-            throw new ServiceError("Invalid entity type for aggregate part");
+                    .map(MappingEntityRelationship::getTarget)
+                    .map(e -> readAggregatePart(e));
+            elements = Stream.concat(elements, mappedElements);
           }
-        } catch (ServiceRuntimeError ex) {
-          if (ex.getCause() instanceof ServiceError serviceError) {
-            throw serviceError;
-          }
-          throw new ServiceError(ex.getMessage(), ex);
+          var dependencies =
+              entityRelationshipRepository.findBySourceAndRelationType(entity, DEPENDS_ON).stream()
+                  .map(EntityRelationship::getTarget)
+                  .toList();
+          return new Aggregate(entity, dependencies, elements.toList());
+        } else {
+          throw new ServiceError("Invalid entity type for aggregate part");
         }
       }
     }

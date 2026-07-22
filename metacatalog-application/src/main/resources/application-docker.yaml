@@ -1,38 +1,11 @@
 spring:
+  config:
+    activate:
+      on-profile: docker
   datasource:
     url: jdbc:postgresql://postgres:5432/metacatalog
     username: "${SPRING_DATASOURCE_USERNAME:metacatalog}"
     password: "${SPRING_DATASOURCE_PASSWORD:metacatalog}"
-    driverClassName: org.postgresql.Driver
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
-  jpa:
-    hibernate:
-      # Use 'none' since Flyway manages the schema; validation happens at runtime through queries
-      ddl-auto: none
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-  lifecycle:
-    timeout-per-shutdown-phase: 10s
-server:
-  port: 8080
-springdoc:
-  swagger-ui:
-    path: /swagger-ui.html
-  api-docs:
-    path: /api-docs
-    enabled: true
-management:
-  endpoints:
-    web:
-      exposure:
-        # env, configprops, beans, loggers intentionally excluded: they leak DB passwords, basic-auth
-        # hashes and other secrets. Enable them only behind an authenticated management port.
-        include: health, info, flyway, metrics, caches
 logging:
   level:
     root: INFO
@@ -44,11 +17,8 @@ logging:
     org.hibernate.type.descriptor.sql: INFO
 application:
   config:
-    automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 30s
-    entityPathResolutionMaxAttempts: 3
     security:
-      # Authentication mechanism: none | basic | oauth2 | ldap
       auth-mode: basic
       basic:
         users:

@@ -9,12 +9,19 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li>Actuator endpoints, Swagger UI, API docs and Javadoc are publicly reachable.
- *   <li>The REST API at {@code /metacatalog/v1/**} and the SPARQL Protocol endpoint at {@code
- *       /sparql/query} require an authenticated user.
- *   <li>Any other path (e.g. the server-side rendered UI under {@code /ui/**}, or the SPARQL query
- *       UI at {@code /sparql}) is permitted, since authentication is configured to protect the API
- *       surface only.
+ *   <li>The REST API at {@code /metacatalog/v1/**}, the SPARQL Protocol endpoint at {@code
+ *       /sparql/query}, and the server-side rendered UI at {@code /ui/**} and {@code /sparql} all
+ *       require an authenticated user.
+ *   <li>Any other path is permitted.
  * </ul>
+ *
+ * <p>In {@code basic} and {@code ldap} mode, the dedicated {@link UiSecurityConfig} chain (order 0)
+ * and {@link SparqlSecurityConfig} chain (order 50) shadow the UI and SPARQL paths so the API
+ * chain's rules for those paths are never reached. In {@code oauth2} mode those chains are
+ * inactive, so the API chain is the only protection: requiring authentication for {@code /ui/**}
+ * prevents the management UI from being fully open when a protected profile is deployed with {@code
+ * auth-mode: oauth2}. A browser without a JWT bearer token gets a 401 — the safe default for a JWT
+ * resource-server that has no form login.
  *
  * <p>CSRF is disabled and sessions are stateless because the API is meant to be consumed
  * programmatically (Basic credentials, JWT bearer tokens or LDAP-backed Basic credentials are sent
@@ -44,6 +51,12 @@ public class SecurityFilterChainCustomizer {
   /** The REST API surface that requires authentication. */
   static final String API_PATH = "/metacatalog/v1/**";
 
+  /** The server-side rendered UI pages that require authentication. */
+  static final String UI_PATH = "/ui/**";
+
+  /** The browser-rendered SPARQL query UI (not the protocol endpoint). */
+  static final String SPARQL_UI_PATH = "/sparql";
+
   /**
    * The SPARQL Protocol endpoint ({@code /sparql/query}). Protected by the API chain (JWT) in
    * {@code oauth2} mode. In {@code basic} / {@code ldap} mode a dedicated, stateful {@link
@@ -71,7 +84,7 @@ public class SecurityFilterChainCustomizer {
             auth ->
                 auth.requestMatchers(PUBLIC_PATHS)
                     .permitAll()
-                    .requestMatchers(API_PATH, SPARQL_QUERY_PATH)
+                    .requestMatchers(API_PATH, SPARQL_QUERY_PATH, UI_PATH, SPARQL_UI_PATH)
                     .authenticated()
                     .anyRequest()
                     .permitAll());

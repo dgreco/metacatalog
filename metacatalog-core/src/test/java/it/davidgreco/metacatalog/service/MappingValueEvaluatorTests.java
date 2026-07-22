@@ -1,11 +1,13 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.service.MappingValueEvaluator.generateMappedValues;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -34,8 +36,18 @@ import org.junit.jupiter.api.Test;
  */
 class MappingValueEvaluatorTests {
 
+  private static ObjectMapper createJsonMapper() {
+    var mapper = new ObjectMapper();
+    mapper.registerModule(new Jdk8Module());
+    return mapper;
+  }
+
+  private static final ObjectMapper jsonMapper = createJsonMapper();
+  private static final JsonSchemaFactory jsonSchemaFactory =
+      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+
   private static JsonNode source(String json) throws Exception {
-    return jsonFactory.readTree(json);
+    return jsonMapper.readTree(json);
   }
 
   private static final JsonNode SOURCE_VALUES;

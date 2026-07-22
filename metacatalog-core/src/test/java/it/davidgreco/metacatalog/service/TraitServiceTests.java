@@ -21,7 +21,7 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreation() throws ServiceError {
+  void testCreation() {
 
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -55,7 +55,7 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSelfReferentialLinkIsAllowed() throws ServiceError {
+  void testSelfReferentialLinkIsAllowed() {
 
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -74,7 +74,7 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testLoopDetectionExploresAllBranches() throws ServiceError {
+  void testLoopDetectionExploresAllBranches() {
 
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -107,7 +107,7 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testListTraits() throws ServiceError {
+  void testListTraits() {
 
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -131,7 +131,7 @@ class TraitServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreateVersionSnapshotsAndReadsHistory() throws ServiceError {
+  void testCreateVersionSnapshotsAndReadsHistory() {
     final TraitService traitService = getApplicationContext().getBean(TraitService.class);
 
     var schemaV1 =
@@ -165,19 +165,20 @@ class TraitServiceTests extends CommonServiceTestingSupport {
     Assertions.assertEquals(2, readLive.getVersion());
 
     var historyV1 = traitService.readVersion("VersionedTrait", 1);
-    Assertions.assertTrue(historyV1 instanceof TraitVersion);
-    var snapshot = (TraitVersion) historyV1;
+    Assertions.assertTrue(historyV1 instanceof VersionResult.Snapshot);
+    var snapshot = (TraitVersion) ((VersionResult.Snapshot<?, ?>) historyV1).value();
     Assertions.assertEquals(1, snapshot.getVersion());
     Assertions.assertFalse(snapshot.getSchema().get("properties").has("field2"));
 
     var historyV2 = traitService.readVersion("VersionedTrait", 2);
-    Assertions.assertTrue(historyV2 instanceof Trait);
-    Assertions.assertEquals(2, ((Trait) historyV2).getVersion());
+    Assertions.assertTrue(historyV2 instanceof VersionResult.Live);
+    Assertions.assertEquals(
+        2, ((Trait) ((VersionResult.Live<?, ?>) historyV2).value()).getVersion());
 
     var versions = traitService.listVersions("VersionedTrait");
     Assertions.assertEquals(2, versions.size());
-    Assertions.assertTrue(versions.get(0) instanceof TraitVersion);
-    Assertions.assertTrue(versions.get(1) instanceof Trait);
+    Assertions.assertTrue(versions.get(0) instanceof VersionResult.Snapshot);
+    Assertions.assertTrue(versions.get(1) instanceof VersionResult.Live);
 
     Assertions.assertThrows(
         ServiceError.class, () -> traitService.deleteVersion("VersionedTrait", 2));

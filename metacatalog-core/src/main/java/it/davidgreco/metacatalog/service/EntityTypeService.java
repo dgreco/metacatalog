@@ -1,565 +1,85 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.mergeSchemas;
-
-import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
-import it.davidgreco.metacatalog.entity.Trait;
-import it.davidgreco.metacatalog.entity.Type;
-import it.davidgreco.metacatalog.entity.TypeLinearization;
-import it.davidgreco.metacatalog.repository.EntityRepository;
-import it.davidgreco.metacatalog.repository.EntityTypeRepository;
-import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
-import it.davidgreco.metacatalog.repository.TraitRepository;
-import java.time.Instant;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
-/** Service class for managing {@link EntityType} entities. */
-@Slf4j
-@Service
-@RequiredArgsConstructor
-@EnableCaching
-public class EntityTypeService implements CommonTypeService<EntityType, String> {
-
-  private static final String ENTITYTYPE = "EntityType ";
-
-  private final EntityTypeRepository entityTypeRepository;
-
-  private final TraitRepository traitRepository;
-
-  private final EntityTypeVersionRepository entityTypeVersionRepository;
-
-  private final EntityRepository entityRepository;
+/**
+ * Contract for the entity-type service: CRUD, schema versioning, and type-level queries on {@link
+ * EntityType}.
+ */
+public interface EntityTypeService extends CommonTypeService<EntityType, String> {
 
   /**
-   * Creates a new EntityType with the specified name, traits, optional father, and schema.
+   * Creates a new entity type with the specified traits, optional father, and base schema.
    *
-   * <p>This method validates that each trait in the list exists and is unique. It also converts the
-   * provided schema to a JSON schema and merges it with the schemas of the traits and the optional
-   * father EntityType. The resulting EntityType is stored in the repository.
-   *
-   * <p>The new type starts at version 1 with a freshly generated {@code versionGroupId}. An {@link
-   * EntityTypeVersion} snapshot is also created for v1, so entities created against this type have
-   * a version row to pin to.
-   *
-   * @param name the name for the new EntityType
-   * @param traits a list of trait names to associate with the EntityType
-   * @param fatherName an optional name of the father EntityType, if any
-   * @param schema the JSON schema string for the EntityType
-   * @return the newly created and persisted EntityType
-   * @throws ServiceError if a trait does not exist, a schema validation error occurs, or a data
-   *     integrity violation occurs
+   * @param name the type name
+   * @param traits trait names to associate
+   * @param fatherName optional father type name
+   * @param schema the base JSON schema string
+   * @return the created entity type
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class, DataIntegrityViolationException.class})
-  public EntityType create(
-      String name, List<String> traits, Optional<String> fatherName, String schema)
-      throws ServiceError {
-    log.info("Creating EntityType: {}", name);
-    try {
-      List<Trait> traitsList = resolveTraits(traits);
-      var baseSchemaNode = parseSchema(schema);
-      var entityType = new EntityType();
-      entityType.setTraits(traitsList);
-      entityType.setName(name);
-      entityType.setBaseSchema(baseSchemaNode);
-      entityType.setVersion(1);
-      entityType.setVersionGroupId(UUID.randomUUID().toString());
-      if (fatherName.isPresent()) {
-        var father =
-            entityTypeRepository
-                .findByName(fatherName.get())
-                .orElseThrow(
-                    () -> new ServiceError(ENTITYTYPE + fatherName.get() + " does not exist"));
-        entityType.setFather(father);
-      }
-      entityType.setDerivedSchema(computeDerivedSchema(entityType));
-      var saved = entityTypeRepository.save(entityType);
-      saveCurrentSnapshot(saved, null);
-      log.info("Created EntityType: {}", name);
-      return saved;
-    } catch (ServiceRuntimeError e) {
-      throw new ServiceError(e.getMessage());
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
+  EntityType create(String name, List<String> traits, Optional<String> fatherName, String schema);
 
   /**
-   * Creates a new version of an existing EntityType by mutating the live row in place with the new
-   * schema, traits, and father, and snapshotting the new live state into the history table.
+   * Creates a new version of an existing entity type, snapshotting the current live state.
    *
-   * <p>The live row's {@code version} is bumped by one; its {@code versionGroupId} is unchanged so
-   * the new version stays linked to every previous snapshot. The new snapshot is self-contained:
-   * base schema, derived schema, father name and trait names are all frozen at the moment the
-   * snapshot was taken.
-   *
-   * <p>An {@link EntityTypeVersion} row now exists for every version, including the current live
-   * one, so entities can pin to the exact version they were created against via the {@code
-   * entity_type_version_id} FK.
-   *
-   * <p>If the previous live state somehow had no snapshot yet (e.g. the type was created before
-   * version pinning was introduced), a backfill snapshot is created for it before the live row is
-   * mutated, so the version chain stays complete.
-   *
-   * <p>The live row is locked with a pessimistic write lock for the duration of the transaction, so
-   * concurrent {@code createVersion} calls for the same type are serialised and the version number
-   * is generated without races.
-   *
-   * @param name the name of the EntityType to version
-   * @param traits the new list of trait names for the new version
-   * @param fatherName the new optional father name for the new version
-   * @param schema the new JSON schema string for the new version
-   * @return the mutated (now current) live EntityType
-   * @throws ServiceError if the type does not exist, a trait does not exist, a schema validation
-   *     error occurs, or a data integrity violation occurs
+   * @param name the type name
+   * @param traits the new trait names
+   * @param fatherName the new optional father name
+   * @param schema the new base JSON schema string
+   * @return the mutated (now current) live entity type
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class, DataIntegrityViolationException.class})
-  public EntityType createVersion(
-      String name, List<String> traits, Optional<String> fatherName, String schema)
-      throws ServiceError {
-    log.info("Creating new version of EntityType: {}", name);
-    try {
-      var live =
-          entityTypeRepository
-              .findByNameForUpdate(name)
-              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-
-      var existingCurrentSnapshot =
-          entityTypeVersionRepository.findByVersionGroupIdAndVersion(
-              live.getVersionGroupId(), live.getVersion());
-      if (existingCurrentSnapshot.isEmpty()) {
-        var latestBefore =
-            entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
-                live.getVersionGroupId());
-        saveCurrentSnapshot(live, latestBefore.map(EntityTypeVersion::getId).orElse(null));
-      }
-
-      List<Trait> traitsList = resolveTraits(traits);
-      var baseSchemaNode = parseSchema(schema);
-      live.getTraits().clear();
-      live.getTraits().addAll(traitsList);
-      live.setBaseSchema(baseSchemaNode);
-      if (fatherName.isPresent()) {
-        var father =
-            entityTypeRepository
-                .findByName(fatherName.get())
-                .orElseThrow(
-                    () -> new ServiceError(ENTITYTYPE + fatherName.get() + " does not exist"));
-        live.setFather(father);
-      } else {
-        live.setFather(null);
-      }
-      live.setDerivedSchema(computeDerivedSchema(live));
-      live.setVersion(live.getVersion() + 1);
-      var saved = entityTypeRepository.save(live);
-      var latestSnapshot =
-          entityTypeVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
-              live.getVersionGroupId());
-      saveCurrentSnapshot(saved, latestSnapshot.map(EntityTypeVersion::getId).orElse(null));
-      log.info("Created new version of EntityType: {}", name);
-      return saved;
-    } catch (ServiceRuntimeError e) {
-      throw new ServiceError(e.getMessage());
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
+  EntityType createVersion(
+      String name, List<String> traits, Optional<String> fatherName, String schema);
 
   /**
-   * Reads a specific version of an EntityType.
+   * Reads a specific version of an entity type.
    *
-   * <p>If the requested version equals the live row's current version, the live {@link EntityType}
-   * is returned. Otherwise the frozen {@link EntityTypeVersion} snapshot is returned. The caller
-   * can distinguish the two with {@code instanceof}.
-   *
-   * @param name the name of the EntityType
-   * @param version the version number to read
-   * @return the live {@link EntityType} (if {@code version} is current) or the {@link
-   *     EntityTypeVersion} snapshot
-   * @throws ServiceError if the type does not exist or the version does not exist
+   * @param name the type name
+   * @param version the version number
+   * @return a {@link VersionResult} wrapping either the live entity type or the snapshot
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public Object readVersion(String name, int version) throws ServiceError {
-    log.info("Reading EntityType: {} version: {}", name, version);
-    var live =
-        entityTypeRepository
-            .findByName(name)
-            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-    var result =
-        TypeServiceSupport.resolveVersion(
-            live,
-            live.getVersion(),
-            live.getVersionGroupId(),
-            version,
-            "Version " + version + " of " + ENTITYTYPE + name + " does not exist",
-            entityTypeVersionRepository::findByVersionGroupIdAndVersion);
-    log.info("Read EntityType: {} version: {}", name, version);
-    return result;
-  }
+  VersionResult<EntityType, EntityTypeVersion> readVersion(String name, int version);
 
   /**
-   * Lists every version of an EntityType, oldest first. The live (current) version is included as
-   * the last element.
+   * Lists every version of an entity type, oldest first.
    *
-   * <p>The snapshot matching the current live version is filtered out of the history list to avoid
-   * duplicating the live row in the result; it still exists in the {@code entity_type_version}
-   * table (entities pin to it via {@code entity_type_version_id}) but is represented here by the
-   * live {@link EntityType}.
-   *
-   * @param name the name of the EntityType
-   * @return a list of {@link EntityTypeVersion} snapshots (oldest first) followed by the live
-   *     {@link EntityType}
-   * @throws ServiceError if the type does not exist
+   * @param name the type name
+   * @return a list of version results, snapshots first, live last
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public List<Object> listVersions(String name) throws ServiceError {
-    log.info("Listing versions of EntityType: {}", name);
-    var live =
-        entityTypeRepository
-            .findByName(name)
-            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-    var history =
-        entityTypeVersionRepository
-            .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
-            .stream()
-            .filter(s -> s.getVersion() != live.getVersion())
-            .toList();
-    var result = new java.util.ArrayList<Object>(history);
-    result.add(live);
-    log.info("Listed versions of EntityType: {}", name);
-    return result;
-  }
+  List<VersionResult<EntityType, EntityTypeVersion>> listVersions(String name);
 
   /**
-   * Deletes a specific historical version of an EntityType.
+   * Deletes a specific historical version of an entity type.
    *
-   * <p>The version chain is relinked so the predecessor and successor of the deleted snapshot
-   * remain connected. Deleting the current (live) version is refused: use {@link #delete(String)}
-   * to remove the whole type, or create a new version to revert.
-   *
-   * @param name the name of the EntityType
-   * @param version the version number to delete
-   * @throws ServiceError if the type does not exist, the version does not exist, or the version is
-   *     the current (live) version
+   * @param name the type name
+   * @param version the version number
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void deleteVersion(String name, int version) throws ServiceError {
-    log.info("Deleting EntityType: {} version: {}", name, version);
-    try {
-      var live =
-          entityTypeRepository
-              .findByName(name)
-              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-      if (version == live.getVersion())
-        throw new ServiceError(
-            "Cannot delete the current version of "
-                + ENTITYTYPE
-                + name
-                + "; create a new version to revert, or delete the type");
-      if (version > live.getVersion() || version < 1)
-        throw new ServiceError(
-            "Version " + version + " of " + ENTITYTYPE + name + " does not exist");
-      var snapshot =
-          entityTypeVersionRepository
-              .findByVersionGroupIdAndVersion(live.getVersionGroupId(), version)
-              .orElseThrow(
-                  () ->
-                      new ServiceError(
-                          "Version " + version + " of " + ENTITYTYPE + name + " does not exist"));
-      var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-      if (referencedCount > 0)
-        throw new ServiceError(
-            "Version "
-                + version
-                + " of "
-                + ENTITYTYPE
-                + name
-                + " is referenced by "
-                + referencedCount
-                + " entit"
-                + (referencedCount == 1 ? "y" : "ies")
-                + "; delete or migrate them first");
-      var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
-      successor.ifPresent(
-          s -> {
-            s.setPreviousVersionId(snapshot.getPreviousVersionId());
-            entityTypeVersionRepository.save(s);
-          });
-      entityTypeVersionRepository.delete(snapshot);
-      entityTypeVersionRepository.flush();
-      log.info("Deleted EntityType: {} version: {}", name, version);
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
+  void deleteVersion(String name, int version);
 
   /**
-   * Deletes every historical snapshot of an EntityType, keeping the live row and the snapshot for
-   * the current live version. The live row's {@code version} and {@code versionGroupId} are
-   * unchanged, so the type continues to exist at its current version with no history behind it. The
-   * current version's snapshot is preserved because entities may be pinned to it via {@code
-   * entity_type_version_id}. To remove the type together with all of its history, use {@link
-   * #delete(String)}.
+   * Deletes every historical snapshot, keeping the live row.
    *
-   * <p>If any historical snapshot is still referenced by an entity (via {@code
-   * entity_type_version_id}), the deletion is refused up-front with a friendly message instead of
-   * surfacing the raw {@link DataIntegrityViolationException}.
-   *
-   * @param name the name of the EntityType
-   * @throws ServiceError if the type does not exist, or a snapshot is still referenced by an entity
+   * @param name the type name
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void deleteAllVersions(String name) throws ServiceError {
-    log.info("Deleting all versions of EntityType: {}", name);
-    try {
-      var live =
-          entityTypeRepository
-              .findByName(name)
-              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-      var history =
-          entityTypeVersionRepository
-              .findByVersionGroupIdOrderByVersionAsc(live.getVersionGroupId())
-              .stream()
-              .filter(s -> s.getVersion() != live.getVersion())
-              .toList();
-      for (var snapshot : history) {
-        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-        if (referencedCount > 0)
-          throw new ServiceError(
-              "Version "
-                  + snapshot.getVersion()
-                  + " of "
-                  + ENTITYTYPE
-                  + name
-                  + " is referenced by "
-                  + referencedCount
-                  + " entit"
-                  + (referencedCount == 1 ? "y" : "ies")
-                  + "; delete or migrate them first");
-      }
-      for (var snapshot : history) {
-        var successor = entityTypeVersionRepository.findByPreviousVersionId(snapshot.getId());
-        successor.ifPresent(
-            s -> {
-              s.setPreviousVersionId(snapshot.getPreviousVersionId());
-              entityTypeVersionRepository.save(s);
-            });
-        entityTypeVersionRepository.delete(snapshot);
-      }
-      entityTypeVersionRepository.flush();
-      log.info("Deleted all versions of EntityType: {}", name);
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
+  void deleteAllVersions(String name);
 
   /**
-   * Reads an entity type by its name.
+   * Retrieves all entity types.
    *
-   * @param name the name of the entity type to read
-   * @return the EntityType with the given name
-   * @throws ServiceError if the entity type is not found
+   * @return all entity types
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public EntityType read(String name) throws ServiceError {
-    log.info("Reading EntityType: {}", name);
-    var entityType =
-        entityTypeRepository
-            .findByName(name)
-            .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-    log.info("Read EntityType: {}", name);
-    return entityType;
-  }
+  List<EntityType> list();
+
+  List<it.davidgreco.metacatalog.entity.EntityTypeVersion> listAllVersions();
 
   /**
-   * Deletes an entity type given its name, together with all of its version history snapshots.
+   * Counts the number of child entity types inheriting from the given type.
    *
-   * <p>Snapshots are deleted one by one in reverse version order so the self-referencing {@code
-   * previous_version_id} FK on {@code entity_type_version} is not violated. If any snapshot is
-   * still referenced by an entity (via {@code entity_type_version_id}), the deletion is refused
-   * up-front with a friendly message instead of surfacing the raw {@link
-   * DataIntegrityViolationException}.
-   *
-   * @param name the name of the entity type to delete
-   * @throws ServiceError if the entity type is not found, or if a snapshot is still referenced by
-   *     an entity, or if a {@link DataIntegrityViolationException} occurs while deleting the entity
-   *     type
+   * @param name the parent type name
+   * @return the child count
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void delete(String name) throws ServiceError {
-    log.info("Deleting EntityType: {}", name);
-    try {
-      var entityType =
-          entityTypeRepository
-              .findByName(name)
-              .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
-      var snapshots =
-          entityTypeVersionRepository
-              .findByVersionGroupIdOrderByVersionAsc(entityType.getVersionGroupId())
-              .stream()
-              .sorted(java.util.Comparator.comparingInt(EntityTypeVersion::getVersion).reversed())
-              .toList();
-      for (var snapshot : snapshots) {
-        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-        if (referencedCount > 0)
-          throw new ServiceError(
-              "Version "
-                  + snapshot.getVersion()
-                  + " of "
-                  + ENTITYTYPE
-                  + name
-                  + " is referenced by "
-                  + referencedCount
-                  + " entit"
-                  + (referencedCount == 1 ? "y" : "ies")
-                  + "; delete or migrate them first");
-      }
-      for (var snapshot : snapshots) {
-        entityTypeVersionRepository.delete(snapshot);
-      }
-      entityTypeVersionRepository.flush();
-      entityTypeRepository.delete(entityType);
-      entityTypeRepository.flush();
-      log.info("Deleted EntityType: {}", name);
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
-
-  /**
-   * Checks if an entity type with the given name exists.
-   *
-   * @param name the name of the entity type to check
-   * @return true if an entity type with the given name exists, false otherwise
-   */
-  @Transactional(propagation = Propagation.REQUIRED)
-  public boolean exists(String name) {
-    log.info("Checking if EntityType exists: {}", name);
-    var exists = entityTypeRepository.existsByName(name);
-    log.info("Checked if EntityType exists: {}", name);
-    return exists;
-  }
-
-  /**
-   * Retrieves all EntityTypes from the repository.
-   *
-   * @return a list of all EntityTypes
-   */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public List<EntityType> list() {
-    log.info("Listing all EntityTypes");
-    var entityTypes = entityTypeRepository.findAll();
-    log.info("Listed all EntityTypes");
-    return entityTypes;
-  }
-
-  /**
-   * Counts the number of child EntityTypes that inherit from the given EntityType.
-   *
-   * @param name the name of the parent EntityType
-   * @return the number of child EntityTypes, or 0 if the EntityType is not found
-   */
-  @Transactional(propagation = Propagation.REQUIRED)
-  public long countEntityTypeChildren(String name) {
-    log.info("Counting children of EntityType: {}", name);
-    var count =
-        entityTypeRepository
-            .findByName(name)
-            .map(entityTypeRepository::countEntityTypeByFather)
-            .orElse(0L);
-    log.info("Counted children of EntityType: {}", name);
-    return count;
-  }
-
-  private List<Trait> resolveTraits(List<String> traits) throws ServiceError {
-    Set<String> traitNamesSet = new HashSet<>();
-    traits.forEach(
-        trait -> {
-          if (traitNamesSet.contains(trait))
-            throw new ServiceRuntimeError("Trait " + trait + " already defined");
-          else traitNamesSet.add(trait);
-        });
-    // Fetch all requested traits in a single query (avoids one findByName per trait), then re-order
-    // to the requested declaration order (which is significant for trait linearization).
-    var traitsByName =
-        traitRepository.findByNameIn(traitNamesSet).stream()
-            .collect(
-                java.util.stream.Collectors.toMap(
-                    Trait::getName, java.util.function.Function.identity()));
-    return traits.stream()
-        .map(
-            trait -> {
-              var resolved = traitsByName.get(trait);
-              if (resolved == null) {
-                throw new ServiceRuntimeError("Trait " + trait + " does not exist");
-              }
-              return resolved;
-            })
-        .toList();
-  }
-
-  private JsonNode parseSchema(String schema) throws SchemaValidationError {
-    return TypeServiceSupport.parseSchema(schema);
-  }
-
-  private JsonNode computeDerivedSchema(EntityType entityType) throws SchemaValidationError {
-    var linearization = new java.util.ArrayList<>(TypeLinearization.linearize(entityType));
-    java.util.Collections.reverse(linearization);
-    var schemasToMerge = linearization.stream().map(Type::getBaseSchema).toList();
-    var mergedSchema = mergeSchemas(schemasToMerge);
-    if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
-    return mergedSchema.get();
-  }
-
-  /**
-   * Captures the current live state of {@code live} into a new {@link EntityTypeVersion} snapshot
-   * and persists it. The snapshot's {@code previousVersionId} is set to {@code previousVersionId}
-   * (or null for the first version). Used by {@link #create} (for v1) and {@link #createVersion}
-   * (for the new bumped version), so an entity can pin to the exact version it was created against.
-   */
-  private EntityTypeVersion saveCurrentSnapshot(EntityType live, String previousVersionId) {
-    var snapshot = new EntityTypeVersion();
-    snapshot.setVersionGroupId(live.getVersionGroupId());
-    snapshot.setVersion(live.getVersion());
-    snapshot.setName(live.getName());
-    snapshot.setBaseSchema(live.getBaseSchema());
-    snapshot.setDerivedSchema(live.getDerivedSchema());
-    snapshot.setFatherName(live.getFather() == null ? null : live.getFather().getName());
-    snapshot.setTraits(
-        jsonFactory.valueToTree(live.getTraits().stream().map(Trait::getName).toList()));
-    snapshot.setCreatedAt(Instant.now());
-    snapshot.setPreviousVersionId(previousVersionId);
-    return entityTypeVersionRepository.save(snapshot);
-  }
+  long countEntityTypeChildren(String name);
 }

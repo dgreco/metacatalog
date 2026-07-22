@@ -178,13 +178,7 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(IllegalArgumentException.class)
   public ResponseEntity<ValidationError> handleIllegalArgument(IllegalArgumentException e) {
     log.debug("Illegal argument in API request", e);
-    // IAE from RelationType.valueOf() leaks the enum class name and package ("No enum constant
-    // it.davidgreco..."). Replace those with a generic message; keep user-facing IAE messages
-    // from WrappedJsonNode (e.g. "Path '...' did not resolve to a value").
-    String message =
-        e.getMessage() != null && e.getMessage().startsWith("No enum constant")
-            ? "Unsupported parameter value"
-            : e.getMessage();
+    String message = e.getMessage() != null ? e.getMessage() : "Invalid argument";
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(new ValidationError(List.of(message)));
   }

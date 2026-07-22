@@ -1,18 +1,13 @@
 package it.davidgreco.metacatalog.ui;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitVersion;
-import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
-import it.davidgreco.metacatalog.repository.EntityRepository;
-import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
-import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
-import it.davidgreco.metacatalog.repository.TraitVersionRepository;
+import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
@@ -25,10 +20,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Builds the interactive catalog graph consumed by the UI. Owns the repositories needed to project
- * traits, entity types, their version chains, and (optionally) entity instances into a {@link
- * GraphModel}. Extracted from {@code UiController} so the controller keeps only request/response
- * wiring while this service concentrates the graph-assembly responsibility.
+ * Builds the interactive catalog graph consumed by the UI. Delegates to the service layer to
+ * project traits, entity types, their version chains, and (optionally) entity instances into a
+ * {@link GraphModel}. Extracted from {@code UiController} so the controller keeps only
+ * request/response wiring while this service concentrates the graph-assembly responsibility.
  */
 @Service
 public class CatalogGraphService {
@@ -44,33 +39,24 @@ public class CatalogGraphService {
 
   private final TraitService traitService;
   private final EntityTypeService entityTypeService;
+  private final EntityService entityService;
   private final MappingService mappingService;
-  private final EntityTypeVersionRepository entityTypeVersionRepository;
-  private final TraitVersionRepository traitVersionRepository;
-  private final EntityRepository entityRepository;
-  private final EntityRelationshipRepository entityRelationshipRepository;
-  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
   private final HtmlSafeJsonSerializer jsonSerializer;
+  private final ObjectMapper jsonMapper;
 
   public CatalogGraphService(
       TraitService traitService,
       EntityTypeService entityTypeService,
+      EntityService entityService,
       MappingService mappingService,
-      EntityTypeVersionRepository entityTypeVersionRepository,
-      TraitVersionRepository traitVersionRepository,
-      EntityRepository entityRepository,
-      EntityRelationshipRepository entityRelationshipRepository,
-      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
-      HtmlSafeJsonSerializer jsonSerializer) {
+      HtmlSafeJsonSerializer jsonSerializer,
+      ObjectMapper jsonMapper) {
     this.traitService = traitService;
     this.entityTypeService = entityTypeService;
+    this.entityService = entityService;
     this.mappingService = mappingService;
-    this.entityTypeVersionRepository = entityTypeVersionRepository;
-    this.traitVersionRepository = traitVersionRepository;
-    this.entityRepository = entityRepository;
-    this.entityRelationshipRepository = entityRelationshipRepository;
-    this.mappingEntityRelationshipRepository = mappingEntityRelationshipRepository;
     this.jsonSerializer = jsonSerializer;
+    this.jsonMapper = jsonMapper;
   }
 
   /**
@@ -220,7 +206,7 @@ public class CatalogGraphService {
     }
     for (var mapping : mappingService.list()) {
       var mv = mapping.getMappingValues().toPrettyString();
-      var epr = jsonFactory.valueToTree(mapping.getEntityPathReferences()).toPrettyString();
+      var epr = jsonMapper.valueToTree(mapping.getEntityPathReferences()).toPrettyString();
       edges.add(
           new GraphModel.Edge(
               "type:" + mapping.getSource().getName(),
@@ -253,7 +239,7 @@ public class CatalogGraphService {
 
   private void addEntityInstanceNodesAndEdges(
       List<GraphModel.Node> nodes, List<GraphModel.Edge> edges, boolean showInverses) {
-    for (var entity : entityRepository.findAll()) {
+    for (var entity : entityService.listAll()) {
       var type = entity.getEntityType();
       if (type == null) continue;
       var typeName = type.getName();
@@ -280,7 +266,7 @@ public class CatalogGraphService {
               null));
     }
 
-    for (var rel : entityRelationshipRepository.findAll()) {
+    for (var rel : entityService.listAllRelationships()) {
       var rt = rel.getRelationType();
       if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
       edges.add(
@@ -293,7 +279,7 @@ public class CatalogGraphService {
               null));
     }
 
-    for (var rel : mappingEntityRelationshipRepository.findAll()) {
+    for (var rel : mappingService.listAllEntityRelationships()) {
       var rt = rel.getRelationType();
       if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
       var mtr = rel.getMappingEntityTypeRelationship();
@@ -301,7 +287,7 @@ public class CatalogGraphService {
       var epr =
           mtr == null
               ? null
-              : jsonFactory.valueToTree(mtr.getEntityPathReferences()).toPrettyString();
+              : jsonMapper.valueToTree(mtr.getEntityPathReferences()).toPrettyString();
       edges.add(
           new GraphModel.Edge(
               "entity:" + rel.getSource().getId(),
@@ -329,79 +315,89 @@ public class CatalogGraphService {
 
   private void addEntityTypeVersionNodesAndEdges(
       List<EntityType> liveTypes, List<GraphModel.Node> nodes, List<GraphModel.Edge> edges) {
-    var snapshots = entityTypeVersionRepository.findAll();
-    for (var snap : snapshots) {
-      nodes.add(
-          new GraphModel.Node(
-              "type-version:" + snap.getId(),
-              snap.getName() + " (v" + snap.getVersion() + ")",
-              "entityTypeVersion",
-              snap.getFatherName(),
-              null,
-              snap.getSchema() == null ? null : snap.getSchema().toPrettyString()));
-    }
-    var liveByGroup =
-        liveTypes.stream().collect(Collectors.toMap(EntityType::getVersionGroupId, t -> t));
-    var snapById = snapshots.stream().collect(Collectors.toMap(EntityTypeVersion::getId, s -> s));
-    for (var snap : snapshots) {
-      var successorId = "type-version:" + snap.getId();
-      if (snap.getPreviousVersionId() != null) {
-        var pred = snapById.get(snap.getPreviousVersionId());
-        if (pred != null) {
-          edges.add(
-              new GraphModel.Edge(
-                  successorId,
-                  "type-version:" + pred.getId(),
-                  "successor-of",
-                  "successor-of",
-                  null,
-                  null));
-        }
-      }
-    }
-    for (var snap : snapshots) {
-      var isHead = snapshots.stream().noneMatch(s -> snap.getId().equals(s.getPreviousVersionId()));
-      if (isHead) {
-        var live = liveByGroup.get(snap.getVersionGroupId());
-        if (live != null) {
-          edges.add(
-              new GraphModel.Edge(
-                  "type:" + live.getName(),
-                  "type-version:" + snap.getId(),
-                  "successor-of",
-                  "successor-of",
-                  null,
-                  null));
-        }
-      }
-    }
+    addVersionNodesAndEdges(
+        liveTypes,
+        entityTypeService.listAllVersions(),
+        EntityType::getVersionGroupId,
+        EntityType::getName,
+        EntityTypeVersion::getId,
+        EntityTypeVersion::getName,
+        EntityTypeVersion::getVersion,
+        EntityTypeVersion::getPreviousVersionId,
+        EntityTypeVersion::getVersionGroupId,
+        EntityTypeVersion::getFatherName,
+        EntityTypeVersion::getSchema,
+        "type-version:",
+        "type:",
+        "entityTypeVersion",
+        nodes,
+        edges);
   }
 
   private void addTraitVersionNodesAndEdges(
       List<Trait> liveTraits, List<GraphModel.Node> nodes, List<GraphModel.Edge> edges) {
-    var snapshots = traitVersionRepository.findAll();
+    addVersionNodesAndEdges(
+        liveTraits,
+        traitService.listAllVersions(),
+        Trait::getVersionGroupId,
+        Trait::getName,
+        TraitVersion::getId,
+        TraitVersion::getName,
+        TraitVersion::getVersion,
+        TraitVersion::getPreviousVersionId,
+        TraitVersion::getVersionGroupId,
+        TraitVersion::getFatherName,
+        TraitVersion::getSchema,
+        "trait-version:",
+        "trait:",
+        "traitVersion",
+        nodes,
+        edges);
+  }
+
+  /**
+   * Generic helper that adds version-snapshot nodes and {@code successor-of} edges to the graph.
+   * Deduplicates the near-identical entity-type and trait version methods.
+   */
+  private <L, S> void addVersionNodesAndEdges(
+      List<L> live,
+      List<S> snapshots,
+      java.util.function.Function<L, String> liveVersionGroupId,
+      java.util.function.Function<L, String> liveName,
+      java.util.function.Function<S, String> snapId,
+      java.util.function.Function<S, String> snapName,
+      java.util.function.Function<S, Integer> snapVersion,
+      java.util.function.Function<S, String> snapPreviousId,
+      java.util.function.Function<S, String> snapVersionGroupId,
+      java.util.function.Function<S, String> snapFatherName,
+      java.util.function.Function<S, com.fasterxml.jackson.databind.JsonNode> snapSchema,
+      String snapPrefix,
+      String livePrefix,
+      String nodeType,
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges) {
     for (var snap : snapshots) {
       nodes.add(
           new GraphModel.Node(
-              "trait-version:" + snap.getId(),
-              snap.getName() + " (v" + snap.getVersion() + ")",
-              "traitVersion",
-              snap.getFatherName(),
+              snapPrefix + snapId.apply(snap),
+              snapName.apply(snap) + " (v" + snapVersion.apply(snap) + ")",
+              nodeType,
+              snapFatherName.apply(snap),
               null,
-              snap.getSchema() == null ? null : snap.getSchema().toPrettyString()));
+              snapSchema.apply(snap) == null ? null : snapSchema.apply(snap).toPrettyString()));
     }
-    var liveByGroup =
-        liveTraits.stream().collect(Collectors.toMap(Trait::getVersionGroupId, t -> t));
-    var snapById = snapshots.stream().collect(Collectors.toMap(TraitVersion::getId, s -> s));
+    var liveByGroup = live.stream().collect(Collectors.toMap(liveVersionGroupId, t -> t));
+    var snapById = snapshots.stream().collect(Collectors.toMap(snapId, s -> s));
     for (var snap : snapshots) {
-      var successorId = "trait-version:" + snap.getId();
-      if (snap.getPreviousVersionId() != null) {
-        var pred = snapById.get(snap.getPreviousVersionId());
+      var successorId = snapPrefix + snapId.apply(snap);
+      var prevId = snapPreviousId.apply(snap);
+      if (prevId != null) {
+        var pred = snapById.get(prevId);
         if (pred != null) {
           edges.add(
               new GraphModel.Edge(
                   successorId,
-                  "trait-version:" + pred.getId(),
+                  snapPrefix + snapId.apply(pred),
                   "successor-of",
                   "successor-of",
                   null,
@@ -410,14 +406,15 @@ public class CatalogGraphService {
       }
     }
     for (var snap : snapshots) {
-      var isHead = snapshots.stream().noneMatch(s -> snap.getId().equals(s.getPreviousVersionId()));
+      var sid = snapId.apply(snap);
+      var isHead = snapshots.stream().noneMatch(s -> sid.equals(snapPreviousId.apply(s)));
       if (isHead) {
-        var live = liveByGroup.get(snap.getVersionGroupId());
-        if (live != null) {
+        var l = liveByGroup.get(snapVersionGroupId.apply(snap));
+        if (l != null) {
           edges.add(
               new GraphModel.Edge(
-                  "trait:" + live.getName(),
-                  "trait-version:" + snap.getId(),
+                  livePrefix + liveName.apply(l),
+                  snapPrefix + sid,
                   "successor-of",
                   "successor-of",
                   null,

@@ -1,7 +1,5 @@
 package it.davidgreco.metacatalog.ui;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.SerializableString;
 import com.fasterxml.jackson.core.io.CharacterEscapes;
@@ -31,8 +29,8 @@ public class HtmlSafeJsonSerializer {
 
   private final ObjectMapper htmlSafeMapper;
 
-  public HtmlSafeJsonSerializer() {
-    ObjectMapper copy = jsonFactory.copy();
+  public HtmlSafeJsonSerializer(ObjectMapper jsonMapper) {
+    ObjectMapper copy = jsonMapper.copy();
     copy.getFactory().setCharacterEscapes(new HtmlScriptCharacterEscapes());
     this.htmlSafeMapper = copy;
   }

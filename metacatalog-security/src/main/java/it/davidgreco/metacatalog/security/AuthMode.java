@@ -19,5 +19,18 @@ public enum AuthMode {
   OAUTH2,
 
   /** LDAP bind authentication against an external directory service. */
-  LDAP
+  LDAP;
+
+  /**
+   * Indicates whether this mode supports browser-based UI login with a username and password.
+   *
+   * <p>{@link #BASIC} and {@link #LDAP} have credentials that can be checked against a browser
+   * session; {@link #NONE} disables security entirely and {@link #OAUTH2} relies on a JWT bearer
+   * token that a browser cannot obtain through a form POST.
+   *
+   * @return true if this mode has a UI login flow
+   */
+  public boolean isUiMode() {
+    return this == BASIC || this == LDAP;
+  }
 }

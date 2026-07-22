@@ -19,7 +19,7 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testBulkLoad() throws ServiceError {
+  void testBulkLoad() {
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
@@ -48,7 +48,7 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
    * feedback about which name was undeclared.
    */
   @Test
-  void bulkAggregateCreationRejectsMissingRef() throws ServiceError {
+  void bulkAggregateCreationRejectsMissingRef() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
 

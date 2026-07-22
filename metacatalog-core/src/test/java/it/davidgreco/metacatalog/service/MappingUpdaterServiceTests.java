@@ -29,7 +29,7 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void processesPendingSourceCreatedEventAndCreatesMappedEntity() throws ServiceError {
+  void processesPendingSourceCreatedEventAndCreatesMappedEntity() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
@@ -69,7 +69,7 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void marksPermanentlyFailingEventAsFailedInsteadOfLooping() throws ServiceError {
+  void marksPermanentlyFailingEventAsFailedInsteadOfLooping() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
@@ -112,19 +112,19 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
 
   /**
    * Verifies that an <em>unexpected</em> {@link RuntimeException} (not a {@link ServiceError} or
-   * {@link ServiceRuntimeError}) during mapped entity creation marks the event as FAILED and lets
-   * the scheduler continue processing other events in the same tick.
+   * {@link ServiceError}) during mapped entity creation marks the event as FAILED and lets the
+   * scheduler continue processing other events in the same tick.
    *
    * <p>The failure is triggered by a mapping expression that references an undefined SpEL variable
    * ({@code #undefined}). The SpEL evaluator throws a {@link
    * org.springframework.expression.spel.SpelEvaluationException} (a {@link RuntimeException}),
-   * which is not caught by the {@code ServiceError | ServiceRuntimeError} catch in the scheduler.
-   * Without the outer {@code catch (RuntimeException)} the exception would propagate out of the
-   * {@code forEach}, roll back the surrounding transaction, and undo every {@code markFailed} from
-   * earlier events in the same tick — a poison-message head-of-line blocking bug.
+   * which is not caught by the {@code ServiceError | ServiceError} catch in the scheduler. Without
+   * the outer {@code catch (RuntimeException)} the exception would propagate out of the {@code
+   * forEach}, roll back the surrounding transaction, and undo every {@code markFailed} from earlier
+   * events in the same tick — a poison-message head-of-line blocking bug.
    */
   @Test
-  void marksEventAsFailedOnUnexpectedRuntimeException() throws ServiceError {
+  void marksEventAsFailedOnUnexpectedRuntimeException() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);

@@ -1,438 +1,76 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.networknt.schema.ValidationMessage;
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
-import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
-import it.davidgreco.metacatalog.repository.*;
-import java.util.HashSet;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
-/** Service class for managing {@link Entity} entities. */
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class EntityService implements CommonService<Entity, String> {
-
-  private static final String ENTITY_WITH_ID = " entity with id ";
-
-  private static final String NOT_FOUND = " not found";
-
-  private static final String NO_PROCESSING = EntityLifeCycleEvent.STATUS_NO_PROCESSING;
-
-  private final EntityTypeRepository entityTypeRepository;
-
-  private final EntityTypeVersionRepository entityTypeVersionRepository;
-
-  private final EntityRepository entityRepository;
-
-  private final EntityRelationshipRepository entityRelationshipRepository;
-
-  private final TraitRelationshipRepository traitRelationshipRepository;
-
-  private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
-
-  private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+/**
+ * Contract for the entity service: CRUD, relationship linking, and list/query operations on {@link
+ * Entity} instances.
+ */
+public interface EntityService extends CommonService<Entity, String> {
 
   /**
-   * Creates a new entity based on the given type name and JSON values.
+   * Creates a new entity of the given type, validating {@code values} against the type's effective
+   * schema.
    *
-   * <p>The entity is pinned to the {@link EntityTypeVersion} snapshot matching the current live
-   * version of its type, so subsequent {@code createVersion} calls on the type do not silently
-   * migrate the entity to the new schema. Validation always uses that snapshot's schema.
-   *
-   * @param typeName the name of the entity type for the entity to create
-   * @param values a JSON string containing the values for the entity
-   * @return the created Entity
-   * @throws ServiceError if the entity type is not found, creation is not allowed, validation
-   *     fails, or a JSON processing error occurs
+   * @param typeName the name of the entity type
+   * @param values a JSON string containing the entity values
+   * @return the created entity
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public Entity create(String typeName, String values) throws ServiceError {
-    log.info("Creating entity of type {}", typeName);
-    try {
-      var entityType =
-          entityTypeRepository
-              .findByName(typeName)
-              .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
-
-      if (CommonService.isMappingTargetEntityType(
-          mappingEntityTypeRelationshipRepository, entityType))
-        throw new ServiceError(
-            "Creating an entity for a mapping target entity type is not allowed");
-
-      var currentVersion =
-          entityTypeVersionRepository.findByVersionGroupIdAndVersion(
-              entityType.getVersionGroupId(), entityType.getVersion());
-      var validationSchema =
-          currentVersion.map(EntityTypeVersion::getSchema).orElse(entityType.getSchema());
-
-      var valuesJsonNode = jsonFactory.readTree(values);
-      var validationMessages =
-          jsonSchemaFactory.getSchema(validationSchema).validate(valuesJsonNode);
-      if (!validationMessages.isEmpty()) {
-        var errorMessages = validationMessages.stream().map(ValidationMessage::getMessage).toList();
-        throw new SchemaValidationError(errorMessages);
-      }
-      var typedEntity = new Entity();
-      typedEntity.setEntityType(entityType);
-      currentVersion.ifPresent(typedEntity::setEntityTypeVersion);
-      typedEntity.setValues(valuesJsonNode);
-      var en = entityRepository.save(typedEntity);
-      if (CommonService.isMappingSourceEntityType(
-          mappingEntityTypeRelationshipRepository, entityType))
-        entityLifeCycleEventRepository.save(
-            new EntityLifeCycleEvent(
-                en.getId(),
-                en.getEntityType().getName(),
-                EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
-                EntityLifeCycleEvent.STATUS_PENDING));
-      else
-        entityLifeCycleEventRepository.save(
-            new EntityLifeCycleEvent(
-                en.getId(),
-                en.getEntityType().getName(),
-                EntityLifeCycleEvent.ENTITY_CREATED,
-                NO_PROCESSING));
-      log.info("Created entity of type {}", typeName);
-      return en;
-    } catch (JsonProcessingException e) {
-      throw new ServiceError(e.getMessage());
-    }
-  }
+  Entity create(String typeName, String values);
 
   /**
-   * Reads an entity by its ID.
+   * Updates the values of an existing entity.
    *
-   * @param entityId the ID of the entity to read
-   * @return the read entity
-   * @throws ServiceError if the entity with the given ID does not exist
+   * @param entityId the entity ID
+   * @param values a JSON string containing the new values
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public Entity read(String entityId) throws ServiceError {
-    log.info("Reading entity with id {}", entityId);
-    var entity =
-        entityRepository
-            .findById(entityId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
-    log.info("Read entity with id {}", entityId);
-    return entity;
-  }
-
-  /**
-   * Updates an existing entity with the given ID.
-   *
-   * <p>Validation uses the schema of the {@link EntityTypeVersion} the entity is pinned to (set at
-   * creation time). If the entity has no pin (legacy row created before pinning was introduced),
-   * validation falls back to the live {@link EntityType#getSchema()}.
-   *
-   * @param entityId the ID of the entity to update
-   * @param values a JSON string containing the new values for the entity
-   * @throws ServiceError if the entity with the given ID does not exist, is an instance of a target
-   *     entity type, validation fails, or a JSON processing error occurs
-   */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void update(String entityId, String values) throws ServiceError {
-    log.info("Updating entity with id {}", entityId);
-    try {
-      var entity =
-          entityRepository
-              .findById(entityId)
-              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
-
-      if (!CommonService.implementsTrait(
-              entity.getEntityType(), BuiltInTraits.PROVISIONABLE_RESOURCE)
-          && CommonService.isMappingTargetEntityType(
-              mappingEntityTypeRelationshipRepository, entity.getEntityType()))
-        throw new ServiceError(
-            ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
-
-      var valuesJsonNode = jsonFactory.readTree(values);
-      var pinnedVersion = entity.getEntityTypeVersion();
-      var schema =
-          pinnedVersion != null ? pinnedVersion.getSchema() : entity.getEntityType().getSchema();
-      var validationMessages = jsonSchemaFactory.getSchema(schema).validate(valuesJsonNode);
-      if (!validationMessages.isEmpty()) {
-        var errorMessages = validationMessages.stream().map(ValidationMessage::getMessage).toList();
-        throw new SchemaValidationError(errorMessages);
-      }
-      entity.setValues(valuesJsonNode);
-      entityRepository.save(entity);
-      if (CommonService.isMappingSourceEntityType(
-          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
-        entityLifeCycleEventRepository.save(
-            new EntityLifeCycleEvent(
-                entity.getId(),
-                entity.getEntityType().getName(),
-                EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED,
-                EntityLifeCycleEvent.STATUS_PENDING));
-      else
-        entityLifeCycleEventRepository.save(
-            new EntityLifeCycleEvent(
-                entity.getId(),
-                entity.getEntityType().getName(),
-                EntityLifeCycleEvent.ENTITY_UPDATED,
-                NO_PROCESSING));
-      log.info("Updated entity with id {}", entityId);
-    } catch (JsonProcessingException e) {
-      throw new ServiceError(e.getMessage());
-    }
-  }
-
-  /**
-   * Deletes an entity by its ID.
-   *
-   * <p>This method only deletes entities that are instances of neither source nor target entity
-   * types.
-   *
-   * @param entityId the ID of the entity to delete
-   * @throws ServiceError if the entity with the given ID does not exist, is an instance of a source
-   *     or target entity type, or a data integrity violation occurs
-   */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void delete(String entityId) throws ServiceError {
-    log.info("Deleting entity with id {}", entityId);
-    try {
-      var entity =
-          entityRepository
-              .findById(entityId)
-              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
-
-      if (CommonService.isMappingTargetEntityType(
-          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
-        throw new ServiceError(
-            ENTITY_WITH_ID + entityId + " is an instance of a target entity type");
-
-      if (CommonService.isMappingSourceEntityType(
-          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
-        throw new ServiceError(
-            ENTITY_WITH_ID + entityId + " is an instance of a source entity type");
-
-      entityRepository.delete(entity);
-      entityLifeCycleEventRepository.save(
-          new EntityLifeCycleEvent(
-              entity.getId(),
-              entity.getEntityType().getName(),
-              EntityLifeCycleEvent.ENTITY_DELETED,
-              NO_PROCESSING));
-      log.info("Deleted entity with id {}", entityId);
-    } catch (DataIntegrityViolationException e) {
-      throw ServiceError.forDataIntegrity(e);
-    }
-  }
-
-  /**
-   * Checks if an entity with the given ID exists.
-   *
-   * @param entityId the ID to check
-   * @return true if an entity with the given ID exists, false otherwise
-   */
-  @Transactional(propagation = Propagation.REQUIRED)
-  public boolean exists(String entityId) {
-    log.info("Checking if entity with id {} exists", entityId);
-    var exists = entityRepository.existsById(entityId);
-    log.info("Checked if entity with id {} exists", entityId);
-    return exists;
-  }
+  void update(String entityId, String values);
 
   /**
    * Lists entities of the specified type, optionally filtered by a JSON path query.
    *
-   * @param typeName the name of the entity type to list entities for
-   * @param queryPath a JSON path query to filter entities; empty string returns all entities of the
-   *     type
-   * @return a list of entities matching the criteria
-   * @throws ServiceError if the entity type is not found or the query path is invalid
+   * @param typeName the entity type name
+   * @param queryPath a JSON path query; empty string returns all entities of the type
+   * @return matching entities
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public List<Entity> list(String typeName, String queryPath) throws ServiceError {
-    log.info("Listing entities with query path {}", queryPath);
-    try {
-      var entityType =
-          entityTypeRepository
-              .findByName(typeName)
-              .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
-      var qp = queryPath.trim();
-      if (qp.isEmpty()) {
-        var result = entityRepository.findByEntityType(entityType);
-        log.info("Listed entities with query path {}", queryPath);
-        return result;
-      } else {
-        var result = entityRepository.findByEntityTypeIdAndJsonPath(entityType.getId(), queryPath);
-        log.info("Listed entities with query path {}", queryPath);
-        return result;
-      }
-    } catch (com.jayway.jsonpath.InvalidPathException e) {
-      throw new ServiceError(e.getMessage());
-    }
-  }
+  List<Entity> list(String typeName, String queryPath);
+
+  List<Entity> listAll();
 
   /**
-   * Links two entities with a given relation type.
+   * Lists all entity-to-entity relationships.
    *
-   * @param sourceId the ID of the source entity
-   * @param relType the relation type to use for the link
-   * @param targetId the ID of the target entity
-   * @throws ServiceError if the link is not allowed (e.g. due to a loop or an invalid relationship)
+   * @return all entity relationships
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void link(String sourceId, RelationType relType, String targetId) throws ServiceError {
-    log.info("Linking entity with id {} with entity with id {}", sourceId, targetId);
-    // Check loops
-    if (CommonService.checkLoops(
-        entityRepository,
-        entityRelationshipRepository,
-        targetId,
-        new HashSet<>(),
-        sourceId,
-        relType)) throw new ServiceError("Loops are not allowed");
+  List<EntityRelationship> listAllRelationships();
 
-    // Check if the relationship is legit
-    if (!CommonService.checkRelIsLegit(
-        entityRepository, traitRelationshipRepository, sourceId, relType, targetId))
-      throw new ServiceError("Relationship is not legit");
-
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    var target =
-        entityRepository
-            .findById(targetId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
-
-    checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
-    if (relType.hasInverse()) {
-      checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
-    }
-    log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
-  }
-
-  private void checkRelationshipExistenceAndSave(
-      String sourceId, RelationType relType, String targetId, Entity source, Entity target)
-      throws ServiceError {
-    if (entityRelationshipRepository
-        .findBySourceAndRelationTypeAndTarget(source, relType, target)
-        .isPresent())
-      throw new ServiceError(
-          "Entity with id "
-              + sourceId
-              + " is already linked with entity with id "
-              + targetId
-              + " with relation type "
-              + relType);
-
-    var directRel = new EntityRelationship();
-    directRel.setSource(source);
-    directRel.setTarget(target);
-    directRel.setRelationType(relType);
-    entityRelationshipRepository.save(directRel);
-  }
+  /**
+   * Links two entities with the given relation type.
+   *
+   * @param sourceId the source entity ID
+   * @param relType the relation type
+   * @param targetId the target entity ID
+   */
+  void link(String sourceId, RelationType relType, String targetId);
 
   /**
    * Removes a link between two entities.
    *
-   * @param sourceId the ID of the source entity
-   * @param relType the relation type of the link
-   * @param targetId the ID of the target entity
-   * @throws ServiceError if the link does not exist
+   * @param sourceId the source entity ID
+   * @param relType the relation type
+   * @param targetId the target entity ID
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public void unlink(String sourceId, RelationType relType, String targetId) throws ServiceError {
-    log.info("Unlinking entity with id {} from entity with id {}", sourceId, targetId);
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    var target =
-        entityRepository
-            .findById(targetId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
-    var directRel =
-        entityRelationshipRepository
-            .findBySourceAndRelationTypeAndTarget(source, relType, target)
-            .orElseThrow(
-                () ->
-                    new ServiceError(
-                        ENTITY_WITH_ID
-                            + source.getId()
-                            + " does not have a relationship "
-                            + relType
-                            + " with entity with id "
-                            + target.getId()));
-    entityRelationshipRepository.delete(directRel);
-    if (relType.hasInverse()) {
-      var inverseRelType = relType.inverse();
-      var inverseRel =
-          entityRelationshipRepository
-              .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)
-              .orElseThrow(
-                  () ->
-                      new ServiceError(
-                          ENTITY_WITH_ID
-                              + target.getId()
-                              + " does not have a relationship "
-                              + inverseRelType
-                              + " with entity with id "
-                              + source.getId()));
-      entityRelationshipRepository.delete(inverseRel);
-    }
-
-    log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
-  }
+  void unlink(String sourceId, RelationType relType, String targetId);
 
   /**
-   * Retrieves a list of entities linked to the given source entity with a specific relation type.
+   * Retrieves entities linked to the given source entity with the specified relation type.
    *
-   * @param sourceId the ID of the source entity
-   * @param relType the relation type to filter the links
-   * @return a list of entities that are targets of the specified relation type from the source
-   *     entity
-   * @throws ServiceError if the source entity with the given ID does not exist
+   * @param sourceId the source entity ID
+   * @param relType the relation type
+   * @return linked target entities
    */
-  @Transactional(
-      propagation = Propagation.REQUIRED,
-      rollbackFor = {ServiceError.class})
-  public List<Entity> linked(String sourceId, RelationType relType) throws ServiceError {
-    log.info(
-        "Listing entities linked to entity with id {} with relation type {}", sourceId, relType);
-    var source =
-        entityRepository
-            .findById(sourceId)
-            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + sourceId + NOT_FOUND));
-    var linkedEntities =
-        entityRelationshipRepository.findBySourceAndRelationType(source, relType).stream()
-            .map(EntityRelationship::getTarget)
-            .toList();
-    log.info(
-        "Listed entities linked to entity with id {} with relation type {}", sourceId, relType);
-    return linkedEntities;
-  }
+  List<Entity> linked(String sourceId, RelationType relType);
 }

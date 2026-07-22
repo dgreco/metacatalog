@@ -16,14 +16,9 @@ import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import org.springframework.core.convert.TypeDescriptor;
-import org.springframework.expression.AccessException;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
-import org.springframework.expression.MethodExecutor;
-import org.springframework.expression.MethodResolver;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.DataBindingMethodResolver;
 import org.springframework.expression.spel.support.SimpleEvaluationContext;
 
 /**
@@ -36,12 +31,12 @@ import org.springframework.expression.spel.support.SimpleEvaluationContext;
  *
  * <p><b>Security note:</b> SpEL expressions in mapping values are evaluated with a {@link
  * SimpleEvaluationContext} configured for read-only data binding. Instance-method invocation is
- * restricted to a custom {@link MethodResolver} ({@link WhitelistedMethodResolver}) that only
- * resolves methods declared on {@link JsonNode} or {@link WrappedJsonNode}. This blocks every known
- * remote-code-execution vector: type references ({@code T(java.lang.Runtime).getRuntime()}),
- * constructors ({@code new ProcessBuilder(...)}), static method calls, the {@code getClass()} chain
- * ({@code #x.getClass().forName(...).getMethod(...).invoke(...)}), and any method inherited from
- * {@link Object}.
+ * restricted by {@link SpelSecurityPolicy}, which only resolves methods declared on {@link
+ * JsonNode} or {@link WrappedJsonNode}. This blocks every known remote-code-execution vector: type
+ * references ({@code T(java.lang.Runtime).getRuntime()}), constructors ({@code new
+ * ProcessBuilder(...)}), static method calls, the {@code getClass()} chain ({@code
+ * #x.getClass().forName(...).getMethod(...).invoke(...)}), and any method inherited from {@link
+ * Object}.
  */
 final class MappingValueEvaluator {
 
@@ -62,28 +57,22 @@ final class MappingValueEvaluator {
    * @param mappingValues the JSON mapping definition containing SpEL expressions
    * @param targetSchema the JSON schema to validate the generated values against
    * @return the generated JSON values
-   * @throws ServiceError if expression evaluation fails or schema validation fails
    */
   static JsonNode generateMappedValues(
       JsonNode sourceValues,
       Map<String, JsonNode> externalValues,
       JsonNode mappingValues,
-      JsonSchema targetSchema)
-      throws ServiceError {
+      JsonSchema targetSchema) {
 
     SimpleEvaluationContext context =
         SimpleEvaluationContext.forReadOnlyDataBinding()
-            .withMethodResolvers(new WhitelistedMethodResolver())
+            .withMethodResolvers(new SpelSecurityPolicy())
             .build();
     context.setVariable("source", new WrappedJsonNode(sourceValues));
     externalValues.forEach((k, v) -> context.setVariable(k, new WrappedJsonNode(v)));
 
     var mappedValues = mappingValues.deepCopy();
-    try {
-      evaluateMappingValues(mappedValues, context);
-    } catch (ServiceRuntimeError e) {
-      throw new ServiceError("Error while evaluating mapping values: " + e.getMessage());
-    }
+    evaluateMappingValues(mappedValues, context);
 
     var res =
         targetSchema.validate(
@@ -137,69 +126,7 @@ final class MappingValueEvaluator {
       case Float f -> FloatNode.valueOf(f);
       case Double d -> DoubleNode.valueOf(d);
       case null, default ->
-          throw new ServiceRuntimeError("Error while evaluating expression: " + leaf.asText());
+          throw new ServiceError("Error while evaluating expression: " + leaf.asText());
     };
-  }
-
-  /**
-   * A {@link MethodResolver} that only resolves methods when the receiver (target object) is a
-   * {@link JsonNode} (or subclass) or a {@link WrappedJsonNode}. Methods on any other receiver type
-   * — notably {@link Class} (so {@code #x.getClass().forName(...)} is blocked) and {@link Object} —
-   * are not resolved, so SpEL throws an evaluation error rather than invoking an unexpected method.
-   *
-   * <p>Delegation to {@link DataBindingMethodResolver#forInstanceMethodInvocation()} preserves the
-   * full type-conversion and overload-selection machinery of Spring's default instance-method
-   * resolver; the only extra check is the receiver-type whitelist. Note that {@code
-   * forInstanceMethodInvocation()} does <strong>not</strong> filter mutators — it resolves any
-   * instance method not declared on {@link Object}, {@link Class}, or {@link ClassLoader}. To
-   * prevent an admin-authored mapping expression from mutating the live {@link JsonNode} (which is
-   * the in-memory state of a managed JPA entity and could be flushed by Hibernate dirty-checking),
-   * a name-based denylist rejects methods matching {@code put}, {@code set}, {@code remove}, {@code
-   * replace}, {@code removeAll}, {@code retainAll}, and {@code clear} on the receiver before
-   * delegating.
-   */
-  static final class WhitelistedMethodResolver implements MethodResolver {
-
-    private final MethodResolver delegate = DataBindingMethodResolver.forInstanceMethodInvocation();
-
-    /**
-     * Method-name prefixes and exact names that mutate a {@link JsonNode} / {@link ObjectNode} /
-     * {@link ArrayNode}. Resolving these is refused so a mapping expression cannot call, e.g.,
-     * {@code #source.node.removeAll()} or {@code #source.node.put("evil", 1)}.
-     */
-    private static final java.util.Set<String> MUTATOR_NAMES =
-        java.util.Set.of(
-            "put",
-            "putAll",
-            "putIfAbsent",
-            "set",
-            "setAll",
-            "remove",
-            "removeAll",
-            "retainAll",
-            "replace",
-            "replaceAll",
-            "clear",
-            "add",
-            "addAll",
-            "insert",
-            "append",
-            "assign",
-            "with",
-            "removeNode");
-
-    @Override
-    public MethodExecutor resolve(
-        org.springframework.expression.EvaluationContext context,
-        Object targetObject,
-        String name,
-        List<TypeDescriptor> argumentTypes)
-        throws AccessException {
-      if (targetObject == null) return null;
-      if (!(targetObject instanceof JsonNode) && !(targetObject instanceof WrappedJsonNode))
-        return null;
-      if (MUTATOR_NAMES.contains(name)) return null;
-      return delegate.resolve(context, targetObject, name, argumentTypes);
-    }
   }
 }

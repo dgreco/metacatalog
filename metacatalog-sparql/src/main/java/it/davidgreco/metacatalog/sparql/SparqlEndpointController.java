@@ -4,6 +4,7 @@ import it.unibz.inf.ontop.rdf4j.repository.OntopRepositoryConnection;
 import it.unibz.inf.ontop.rdf4j.repository.impl.OntopVirtualRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.List;
 import org.eclipse.rdf4j.query.BooleanQuery;
 import org.eclipse.rdf4j.query.GraphQuery;
 import org.eclipse.rdf4j.query.MalformedQueryException;
@@ -67,7 +68,7 @@ public class SparqlEndpointController {
       @RequestParam(value = "query", required = false) String query,
       HttpServletRequest request,
       HttpServletResponse response)
-      throws Exception {
+      throws java.io.IOException {
     if (query == null || query.isBlank()) {
       respondError(response, HttpServletResponse.SC_BAD_REQUEST, "Missing 'query' parameter");
       return;
@@ -81,7 +82,7 @@ public class SparqlEndpointController {
       @RequestParam(value = "query", required = false) String query,
       HttpServletRequest request,
       HttpServletResponse response)
-      throws Exception {
+      throws java.io.IOException {
     if (query == null || query.isBlank()) {
       respondError(
           response, HttpServletResponse.SC_BAD_REQUEST, "Missing 'query' field in form body");
@@ -96,7 +97,7 @@ public class SparqlEndpointController {
       @RequestBody(required = false) String query,
       HttpServletRequest request,
       HttpServletResponse response)
-      throws Exception {
+      throws java.io.IOException {
     if (query == null || query.isBlank()) {
       respondError(response, HttpServletResponse.SC_BAD_REQUEST, "Empty SPARQL query body");
       return;
@@ -105,7 +106,7 @@ public class SparqlEndpointController {
   }
 
   private void execute(String query, HttpServletRequest request, HttpServletResponse response)
-      throws Exception {
+      throws java.io.IOException {
     String accept = request.getHeader("Accept");
     if (accept == null || accept.isBlank()) {
       accept = "*/*";
@@ -165,21 +166,42 @@ public class SparqlEndpointController {
         abbreviate(query, 200));
   }
 
+  private static final MediaType SPARQL_RESULTS_JSON =
+      MediaType.parseMediaType("application/sparql-results+json");
+  private static final MediaType SPARQL_RESULTS_XML =
+      MediaType.parseMediaType("application/sparql-results+xml");
+  private static final MediaType SPARQL_RESULTS_CSV = MediaType.parseMediaType("text/csv");
+  private static final MediaType SPARQL_RESULTS_TSV =
+      MediaType.parseMediaType("text/tab-separated-values");
+  private static final MediaType RDF_XML = MediaType.parseMediaType("application/rdf+xml");
+  private static final MediaType N_TRIPLES = MediaType.parseMediaType("application/n-triples");
+  private static final MediaType TURTLE = MediaType.parseMediaType("text/turtle");
+
+  private static List<MediaType> parseAccept(String accept) {
+    if (accept == null || accept.isBlank() || "*/*".equals(accept.trim())) {
+      return List.of(MediaType.ALL);
+    }
+    return MediaType.parseMediaTypes(accept);
+  }
+
+  private static boolean accepts(String accept, MediaType target) {
+    return parseAccept(accept).stream().anyMatch(m -> m.isCompatibleWith(target));
+  }
+
   private static void writeTuple(
       TupleQuery tq, String accept, HttpServletResponse response, java.io.OutputStream out)
       throws Exception {
-    if (accept.contains("xml")) {
-      response.setContentType("application/sparql-results+xml;charset=UTF-8");
+    if (accepts(accept, SPARQL_RESULTS_XML)) {
+      response.setContentType(SPARQL_RESULTS_XML + ";charset=UTF-8");
       tq.evaluate(new SPARQLResultsXMLWriter(out));
-    } else if (accept.contains("csv")) {
-      response.setContentType("text/csv;charset=UTF-8");
+    } else if (accepts(accept, SPARQL_RESULTS_CSV)) {
+      response.setContentType(SPARQL_RESULTS_CSV + ";charset=UTF-8");
       tq.evaluate(new SPARQLResultsCSVWriter(out));
-    } else if (accept.contains("tsv")) {
-      response.setContentType("text/tab-separated-values;charset=UTF-8");
+    } else if (accepts(accept, SPARQL_RESULTS_TSV)) {
+      response.setContentType(SPARQL_RESULTS_TSV + ";charset=UTF-8");
       tq.evaluate(new SPARQLResultsTSVWriter(out));
     } else {
-      // default — JSON (also covers */*)
-      response.setContentType("application/sparql-results+json;charset=UTF-8");
+      response.setContentType(SPARQL_RESULTS_JSON + ";charset=UTF-8");
       tq.evaluate(new SPARQLResultsJSONWriter(out));
     }
   }
@@ -187,15 +209,14 @@ public class SparqlEndpointController {
   private static void writeGraph(
       GraphQuery gq, String accept, HttpServletResponse response, java.io.OutputStream out)
       throws Exception {
-    if (accept.contains("rdf+xml") || accept.contains("application/rdf")) {
-      response.setContentType("application/rdf+xml;charset=UTF-8");
+    if (accepts(accept, RDF_XML)) {
+      response.setContentType(RDF_XML + ";charset=UTF-8");
       gq.evaluate(new RDFXMLWriter(out));
-    } else if (accept.contains("n-triples") || accept.contains("nt")) {
-      response.setContentType("application/n-triples;charset=UTF-8");
+    } else if (accepts(accept, N_TRIPLES)) {
+      response.setContentType(N_TRIPLES + ";charset=UTF-8");
       gq.evaluate(new NTriplesWriter(out));
     } else {
-      // default — Turtle
-      response.setContentType("text/turtle;charset=UTF-8");
+      response.setContentType(TURTLE + ";charset=UTF-8");
       gq.evaluate(new TurtleWriter(out));
     }
   }
@@ -204,11 +225,11 @@ public class SparqlEndpointController {
       BooleanQuery bq, String accept, HttpServletResponse response, java.io.OutputStream out)
       throws Exception {
     boolean value = bq.evaluate();
-    if (accept.contains("xml")) {
-      response.setContentType("application/sparql-results+xml;charset=UTF-8");
+    if (accepts(accept, SPARQL_RESULTS_XML)) {
+      response.setContentType(SPARQL_RESULTS_XML + ";charset=UTF-8");
       new SPARQLResultsXMLWriter(out).handleBoolean(value);
     } else {
-      response.setContentType("application/sparql-results+json;charset=UTF-8");
+      response.setContentType(SPARQL_RESULTS_JSON + ";charset=UTF-8");
       new SPARQLResultsJSONWriter(out).handleBoolean(value);
     }
   }

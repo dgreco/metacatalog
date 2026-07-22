@@ -1,5 +1,10 @@
 package it.davidgreco.metacatalog.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import it.davidgreco.metacatalog.service.MappingService;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Read model for one mapping entity type relationship rendered on the dashboard.
  *
@@ -14,4 +19,23 @@ package it.davidgreco.metacatalog.ui;
  * @param entityPathReferences the entity path references as a pretty-printed JSON string
  */
 public record MappingView(
-    String id, String source, String target, String mappingValues, String entityPathReferences) {}
+    String id, String source, String target, String mappingValues, String entityPathReferences) {
+
+  /**
+   * Builds {@link MappingView} rows for every mapping returned by {@code mappingService}, pretty-
+   * printing the JSON fields so the template can render them verbatim.
+   */
+  public static List<MappingView> listFrom(MappingService mappingService, ObjectMapper jsonMapper) {
+    var views = new ArrayList<MappingView>();
+    for (var mapping : mappingService.list()) {
+      views.add(
+          new MappingView(
+              mapping.getId(),
+              mapping.getSource().getName(),
+              mapping.getTarget().getName(),
+              mapping.getMappingValues().toPrettyString(),
+              jsonMapper.valueToTree(mapping.getEntityPathReferences()).toPrettyString()));
+    }
+    return views;
+  }
+}

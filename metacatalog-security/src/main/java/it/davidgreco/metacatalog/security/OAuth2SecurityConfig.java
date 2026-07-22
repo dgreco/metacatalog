@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.security;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -18,7 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * metadata via the issuer URI ({@link SecurityConfigProperties.Oauth2#issuerUri()}).
  */
 @Configuration
-@ConditionalOnProperty(name = SecurityConfigProperties.AUTH_MODE_PROPERTY, havingValue = "oauth2")
+@ConditionalOnAuthMode(AuthMode.OAUTH2)
 public class OAuth2SecurityConfig {
 
   private final SecurityConfigProperties properties;

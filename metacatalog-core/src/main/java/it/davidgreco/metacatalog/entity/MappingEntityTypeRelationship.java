@@ -1,8 +1,7 @@
 package it.davidgreco.metacatalog.entity;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.hypersistence.utils.hibernate.type.json.JsonBinaryType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Index;
@@ -59,14 +58,11 @@ public class MappingEntityTypeRelationship extends CommonRelationship<EntityType
    */
   public record EntityPathReference(String alias, String referencePath) {}
 
-  /**
-   * Sets the entity path references from a list of reference objects.
-   *
-   * @param eprs the list of entity path references to set
-   */
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+
   public void setEntityPathReferences(List<EntityPathReference> eprs) {
-    var nodes = eprs.stream().map(jsonFactory::<JsonNode>valueToTree).toList();
-    var node = jsonFactory.createArrayNode();
+    var nodes = eprs.stream().map(MAPPER::<JsonNode>valueToTree).toList();
+    var node = MAPPER.createArrayNode();
     node.addAll(nodes);
     entityPathReferences = node;
   }

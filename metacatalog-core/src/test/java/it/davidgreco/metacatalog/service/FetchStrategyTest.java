@@ -28,7 +28,7 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
   }
 
   @Test
-  void findingEntitiesBatchesTheEntityTypeVersionFetch() throws ServiceError {
+  void findingEntitiesBatchesTheEntityTypeVersionFetch() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
@@ -70,7 +70,7 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
   }
 
   @Test
-  void listingEntityTypesBatchesTheTraitsFetch() throws ServiceError {
+  void listingEntityTypesBatchesTheTraitsFetch() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var schema = "{ \"type\": \"object\", \"properties\": {} }";
@@ -99,7 +99,7 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
   }
 
   @Test
-  void listingEntityTypesBatchesTheFatherFetch() throws ServiceError {
+  void listingEntityTypesBatchesTheFatherFetch() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var schema = "{ \"type\": \"object\", \"properties\": {} }";
     int childCount = 5;
@@ -128,7 +128,7 @@ class FetchStrategyTest extends CommonServiceTestingSupport {
   }
 
   @Test
-  void listingTraitsBatchesTheFatherFetch() throws ServiceError {
+  void listingTraitsBatchesTheFatherFetch() {
     var traitService = getApplicationContext().getBean(TraitService.class);
     int childCount = 5;
 

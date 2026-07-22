@@ -4,51 +4,44 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.vavr.control.Try;
 import it.davidgreco.metacatalog.CoreConfigProperties;
-import java.util.*;
-import java.util.concurrent.*;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Future;
 import lombok.extern.slf4j.Slf4j;
-import org.jgrapht.Graph;
-import org.jgrapht.alg.cycle.CycleDetector;
-import org.jgrapht.graph.DefaultDirectedGraph;
-import org.jgrapht.graph.DefaultEdge;
 import org.springframework.core.task.AsyncTaskExecutor;
-import org.springframework.stereotype.Service;
 
 /**
  * Manages asynchronous task execution and scheduling.
  *
- * <p>This service provides functionality for registering task factories, creating tasks, and
- * scheduling groups of tasks with dependency management. Tasks can be organized into schedules that
- * respect dependency ordering and detect cycles.
+ * <p>This service is a facade over {@link TaskFactoryRegistry} (factory registration and task
+ * creation) and a Caffeine-backed schedule cache. {@link Schedule} is a first-class class that
+ * handles JGraphT cycle detection and CompletableFuture-based execution.
  *
  * <p>The schedule-result cache size and TTL are configurable via {@link CoreConfigProperties}
  * ({@code taskScheduleCacheMaxSize}, {@code taskScheduleCacheExpireAfterWrite}). A single cache
  * holds {@link RunningSchedule} entries that pair each {@link Schedule} with its {@link Future}, so
- * the two are always evicted together — previously they lived in two separate caches that could
- * evict independently, producing an inconsistent view where one was present and the other missing.
- * When an entry is evicted, {@link #joinSchedule} and {@link #getScheduleResults} return empty
- * results — callers should not assume a schedule is cached indefinitely.
+ * the two are always evicted together. When an entry is evicted, {@link #joinSchedule} and {@link
+ * #getScheduleResults} return empty results — callers should not assume a schedule is cached
+ * indefinitely.
  */
 @Slf4j
-@Getter
-@Service
 public class TaskManager {
 
-  private final ConcurrentMap<String, TypedTaskFactory<?>> taskFactories =
-      new ConcurrentHashMap<>();
-
+  private final TaskFactoryRegistry taskFactoryRegistry;
   private final Cache<String, RunningSchedule> runningSchedules;
-
   private final AsyncTaskExecutor asyncTaskExecutor;
-
-  private final CoreConfigProperties coreConfigProperties;
 
   public TaskManager(
       AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
+    this(new TaskFactoryRegistry(), asyncTaskExecutor, coreConfigProperties);
+  }
+
+  public TaskManager(
+      TaskFactoryRegistry taskFactoryRegistry,
+      AsyncTaskExecutor asyncTaskExecutor,
+      CoreConfigProperties coreConfigProperties) {
+    this.taskFactoryRegistry = taskFactoryRegistry;
     this.asyncTaskExecutor = asyncTaskExecutor;
-    this.coreConfigProperties = coreConfigProperties;
     this.runningSchedules =
         Caffeine.newBuilder()
             .maximumSize(coreConfigProperties.taskScheduleCacheMaxSize())
@@ -56,72 +49,28 @@ public class TaskManager {
             .build();
   }
 
-  /**
-   * Registers a task factory for creating tasks of a specific type.
-   *
-   * @param <T> the type of entity the factory creates tasks for
-   * @param name the name to register the factory under
-   * @param type the class type of entities this factory handles
-   * @param factory the task factory implementation
-   */
   public <T> void registerTaskFactory(String name, Class<T> type, TaskFactory<T> factory) {
-    taskFactories.put(name, new TypedTaskFactory<>(type, factory));
+    taskFactoryRegistry.registerTaskFactory(name, type, factory);
   }
 
-  /**
-   * Unregisters a previously registered task factory.
-   *
-   * @param entityTypeName the name of the factory to unregister
-   */
   public void unregisterTaskFactory(String entityTypeName) {
-    taskFactories.remove(entityTypeName);
+    taskFactoryRegistry.unregisterTaskFactory(entityTypeName);
   }
 
-  /**
-   * Creates a new task for the given entity using the specified factory.
-   *
-   * @param <T> the type of the entity
-   * @param entity the entity to create a task for
-   * @param factoryName the name of the registered factory to use
-   * @return the created task
-   * @throws ServiceError if no factory is registered with the given name or the entity type doesn't
-   *     match
-   */
-  @SuppressWarnings("unchecked")
-  public <T> Task<T> createTask(T entity, String factoryName) throws ServiceError {
-    TypedTaskFactory<?> typedFactory = taskFactories.get(factoryName);
-    if (typedFactory == null || !typedFactory.type.isInstance(entity)) {
-      throw new ServiceError("No factory for name: " + factoryName);
-    }
-    return ((TypedTaskFactory<T>) typedFactory).factory.createTask(entity);
+  public <T> Task<T> createTask(T entity, String factoryName) {
+    return taskFactoryRegistry.createTask(entity, factoryName);
   }
 
-  /**
-   * Creates a new empty schedule for organizing tasks.
-   *
-   * @return a new Schedule instance with a unique ID
-   */
   public Schedule createSchedule() {
-    return new Schedule(UUID.randomUUID().toString());
+    return new Schedule();
   }
 
-  /**
-   * Submits a schedule for execution and returns its ID.
-   *
-   * @param schedule the schedule to execute
-   * @return the ID of the submitted schedule
-   * @throws ServiceError if the schedule contains cycles
-   */
-  public String schedule(Schedule schedule) throws ServiceError {
-    runningSchedules.put(schedule.getId(), new RunningSchedule(schedule, schedule.schedule()));
-    return schedule.id;
+  public String schedule(Schedule schedule) {
+    runningSchedules.put(
+        schedule.getId(), new RunningSchedule(schedule, schedule.schedule(asyncTaskExecutor)));
+    return schedule.getId();
   }
 
-  /**
-   * Waits for a schedule to complete execution.
-   *
-   * @param id the ID of the schedule to wait for
-   */
   public void joinSchedule(String id) {
     var rs = runningSchedules.getIfPresent(id);
     if (rs != null) {
@@ -129,19 +78,13 @@ public class TaskManager {
         rs.future().get();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        throw new ServiceRuntimeError(e);
-      } catch (ExecutionException e) {
-        throw new ServiceRuntimeError(e);
+        throw new ServiceError("Schedule execution interrupted: " + e.getMessage());
+      } catch (java.util.concurrent.ExecutionException e) {
+        throw new ServiceError("Schedule execution failed: " + e.getMessage());
       }
     }
   }
 
-  /**
-   * Gets the results of all tasks in a completed schedule.
-   *
-   * @param id the ID of the schedule
-   * @return a list of task results (success or failure)
-   */
   public List<Try<Void>> getScheduleResults(String id) {
     var rs = runningSchedules.getIfPresent(id);
     if (rs == null) {
@@ -153,83 +96,9 @@ public class TaskManager {
         .toList();
   }
 
-  /**
-   * Gets the Future for a running schedule.
-   *
-   * @param id the ID of the schedule
-   * @return an Optional containing the Future if the schedule exists, empty otherwise
-   */
   public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
     return Optional.ofNullable(runningSchedules.getIfPresent(id)).map(RunningSchedule::future);
   }
-
-  /**
-   * Gets a running schedule by its ID.
-   *
-   * @param id the ID of the schedule
-   * @return an Optional containing the schedule if it exists, empty otherwise
-   */
-  public Optional<Schedule> getRunningSchedule(String id) {
-    return Optional.ofNullable(runningSchedules.getIfPresent(id)).map(RunningSchedule::schedule);
-  }
-
-  /**
-   * Represents a collection of tasks to be executed together.
-   *
-   * <p>Tasks can be added to a schedule and then submitted for parallel execution. The schedule
-   * validates that there are no cycles in the task dependency graph before execution.
-   */
-  @Getter
-  @RequiredArgsConstructor
-  public class Schedule {
-
-    private final String id;
-    private final List<Task<?>> tasks = new ArrayList<>();
-
-    public <T> void addTask(Task<T> task) {
-      tasks.add(task);
-    }
-
-    public <T> void addTasks(Collection<Task<T>> tsks) {
-      tasks.addAll(tsks);
-    }
-
-    public CompletableFuture<Try<Void>> schedule() throws ServiceError {
-      Graph<Task<?>, DefaultEdge> taskGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
-      tasks.forEach(
-          t -> {
-            if (!taskGraph.containsVertex(t)) taskGraph.addVertex(t);
-            t.getDependsOnTasks()
-                .forEach(
-                    e -> {
-                      if (!taskGraph.containsVertex(e)) taskGraph.addVertex(e);
-                      taskGraph.addEdge(t, e);
-                    });
-          });
-      if (new CycleDetector<>(taskGraph).detectCycles())
-        throw new ServiceError("Cycle detected in task graph");
-
-      // Schedule every task (each recursively schedules its dependencies) and let the schedule
-      // future complete once all of them have; nothing blocks a worker thread while awaiting
-      // dependencies, so wide/deep graphs cannot starve the pool.
-      List<CompletableFuture<Try<Void>>> futures =
-          tasks.stream().map(task -> task.schedule(asyncTaskExecutor)).toList();
-      return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-          .thenApply(
-              ignored ->
-                  // Report the first task failure so callers observing the schedule future can
-                  // detect that the schedule did not fully succeed (previously this always returned
-                  // success, masking every individual task failure).
-                  tasks.stream()
-                      .map(Task::getResult)
-                      .flatMap(Optional::stream)
-                      .filter(Try::isFailure)
-                      .findFirst()
-                      .orElseGet(() -> Try.success(null)));
-    }
-  }
-
-  private record TypedTaskFactory<T>(Class<T> type, TaskFactory<T> factory) {}
 
   private record RunningSchedule(Schedule schedule, Future<Try<Void>> future) {}
 }

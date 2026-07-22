@@ -1,8 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
 /**
- * Checked exception thrown by service layer operations when a named or identified resource (entity,
- * entity type, trait, version, mapping, ...) cannot be found.
+ * Exception thrown by service layer operations when a named or identified resource (entity, entity
+ * type, trait, version, mapping, ...) cannot be found.
  *
  * <p>The API layer maps this to HTTP {@code 404 Not Found} (instead of the generic {@code 400} used
  * for {@link ServiceError}) so that clients can distinguish "your input was well-formed but the

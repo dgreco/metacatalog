@@ -56,13 +56,13 @@ class CommonServiceCycleDetectionTest {
     when(relRepository.findBySourceAndRelationType(src, rel)).thenReturn(rels);
   }
 
-  private boolean checkLoops(String from, String goal) throws ServiceError {
-    return CommonService.checkLoops(
+  private boolean checkLoops(String from, String goal) {
+    return ServiceUtils.checkLoops(
         entityRepository, relRepository, from, new HashSet<>(), goal, rel);
   }
 
   @Test
-  void findsTargetReachableOnlyViaSecondEdge() throws ServiceError {
+  void findsTargetReachableOnlyViaSecondEdge() {
     // A -> B (dead end) and A -> C -> GOAL. The buggy DFS explored only the first edge (B) and
     // missed the path through C.
     edges("A", "B", "C");
@@ -73,14 +73,14 @@ class CommonServiceCycleDetectionTest {
   }
 
   @Test
-  void findsDirectSingleEdgeTarget() throws ServiceError {
+  void findsDirectSingleEdgeTarget() {
     edges("A", "GOAL");
     edges("GOAL");
     assertTrue(checkLoops("A", "GOAL"));
   }
 
   @Test
-  void returnsFalseWhenTargetUnreachable() throws ServiceError {
+  void returnsFalseWhenTargetUnreachable() {
     edges("A", "B", "C");
     edges("B");
     edges("C");
@@ -88,7 +88,7 @@ class CommonServiceCycleDetectionTest {
   }
 
   @Test
-  void terminatesOnCyclicGraphWithoutReachingTarget() throws ServiceError {
+  void terminatesOnCyclicGraphWithoutReachingTarget() {
     // A -> B -> A cycle; the visited set must prevent infinite traversal and still return false.
     edges("A", "B");
     edges("B", "A");
@@ -96,7 +96,7 @@ class CommonServiceCycleDetectionTest {
   }
 
   @Test
-  void detectsDeepMultiBranchLoop() throws ServiceError {
+  void detectsDeepMultiBranchLoop() {
     // A -> B, A -> C -> D -> GOAL: target sits at the end of a deep second branch.
     edges("A", "B", "C");
     edges("B");

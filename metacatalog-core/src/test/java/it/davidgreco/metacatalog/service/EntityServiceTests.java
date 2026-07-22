@@ -1,10 +1,10 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static org.junit.Assert.assertThrows;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.io.IOException;
 import java.util.List;
@@ -28,6 +28,8 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
+    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
 
     var schema =
         jsonSchemaFactory
@@ -39,7 +41,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
             .toPrettyString();
 
     var values =
-        jsonFactory
+        jsonMapper
             .readTree(
                 Thread.currentThread()
                     .getContextClassLoader()
@@ -47,7 +49,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
             .toPrettyString();
 
     var invalidValues =
-        jsonFactory
+        jsonMapper
             .readTree(
                 Thread.currentThread()
                     .getContextClassLoader()
@@ -91,7 +93,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testLinkUnlinkLinkedEntities() throws ServiceError {
+  void testLinkUnlinkLinkedEntities() {
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
@@ -152,7 +154,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testList() throws ServiceError {
+  void testList() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
 
@@ -215,7 +217,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testEntityIsPinnedToCreationVersion() throws ServiceError {
+  void testEntityIsPinnedToCreationVersion() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
 
@@ -301,7 +303,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testDeleteVersionRefusedWhenEntityPinned() throws ServiceError {
+  void testDeleteVersionRefusedWhenEntityPinned() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
 
@@ -341,7 +343,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testDeleteAllVersionsPreservesCurrentSnapshot() throws ServiceError {
+  void testDeleteAllVersionsPreservesCurrentSnapshot() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var entityTypeVersionRepository =
@@ -402,10 +404,11 @@ class EntityServiceTests extends CommonServiceTestingSupport {
    */
   @Test
   void testUpdateLegacyEntityWithoutPinFallsBackToLiveTypeSchema()
-      throws ServiceError, com.fasterxml.jackson.core.JsonProcessingException {
+      throws com.fasterxml.jackson.core.JsonProcessingException {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
 
     var schemaV1 =
         """
@@ -432,7 +435,7 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     var legacyEntity = new it.davidgreco.metacatalog.entity.Entity();
     legacyEntity.setEntityType(live);
     legacyEntity.setValues(
-        it.davidgreco.metacatalog.common.JsonUtils.jsonFactory.readTree(
+        jsonMapper.readTree(
             """
             { "name": "alpha" }
             """));

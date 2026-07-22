@@ -1,10 +1,11 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
+import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
 import java.util.Optional;
@@ -24,8 +25,9 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreateDeleteExists() throws ServiceError {
+  void testCreateDeleteExists() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
     var baseSchema =
         jsonSchemaFactory
@@ -55,7 +57,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void resolveTraitsValidatesExistenceUniquenessAndPreservesOrder() throws ServiceError {
+  void resolveTraitsValidatesExistenceUniquenessAndPreservesOrder() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var schema = "{ \"type\": \"object\", \"properties\": {} }";
@@ -92,10 +94,11 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testInheritance() throws ServiceError {
+  void testInheritance() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var cacheManager = getApplicationContext().getBean(CaffeineCacheManager.class);
+    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
     var inheritedSchema =
         """
@@ -233,7 +236,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
    * the wrong precedence.
    */
   @Test
-  void testLinearization() throws ServiceError {
+  void testLinearization() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -326,8 +329,9 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testList() throws ServiceError {
+  void testList() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
     var baseSchema =
         jsonSchemaFactory
@@ -360,7 +364,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreateVersionSnapshotsAndReadsHistory() throws ServiceError {
+  void testCreateVersionSnapshotsAndReadsHistory() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
 
@@ -398,21 +402,23 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     Assertions.assertEquals(2, readLive.getVersion());
 
     var historyV1 = entityTypeService.readVersion("VersionedType", 1);
-    Assertions.assertTrue(historyV1 instanceof EntityTypeVersion);
-    var snapshot = (EntityTypeVersion) historyV1;
-    Assertions.assertEquals(1, snapshot.getVersion());
-    Assertions.assertFalse(snapshot.getSchema().get("properties").has("value"));
+    Assertions.assertTrue(historyV1 instanceof VersionResult.Snapshot);
+    var snapshot = ((VersionResult.Snapshot<?, ?>) historyV1).value();
+    Assertions.assertEquals(1, ((EntityTypeVersion) snapshot).getVersion());
+    Assertions.assertFalse(
+        ((EntityTypeVersion) snapshot).getSchema().get("properties").has("value"));
 
     var snapshotTraits =
-        java.util.stream.StreamSupport.stream(snapshot.getTraits().spliterator(), false)
+        java.util.stream.StreamSupport.stream(
+                ((EntityTypeVersion) snapshot).getTraits().spliterator(), false)
             .map(JsonNode::asText)
             .toList();
     Assertions.assertEquals(List.of("VersionTrait"), snapshotTraits);
 
     var versions = entityTypeService.listVersions("VersionedType");
     Assertions.assertEquals(2, versions.size());
-    Assertions.assertTrue(versions.get(0) instanceof EntityTypeVersion);
-    Assertions.assertTrue(versions.get(1) instanceof it.davidgreco.metacatalog.entity.EntityType);
+    Assertions.assertTrue(versions.get(0) instanceof VersionResult.Snapshot);
+    Assertions.assertTrue(versions.get(1) instanceof VersionResult.Live);
 
     Assertions.assertThrows(
         ServiceError.class, () -> entityTypeService.deleteVersion("VersionedType", 2));
@@ -434,7 +440,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
    * listVersions}.
    */
   @Test
-  void testListVersionsRightAfterCreateReturnsOnlyLive() throws ServiceError {
+  void testListVersionsRightAfterCreateReturnsOnlyLive() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityTypeVersionRepository =
         getApplicationContext()
@@ -450,8 +456,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
 
     var versions = entityTypeService.listVersions("NoHistoryType");
     Assertions.assertEquals(1, versions.size());
-    Assertions.assertTrue(
-        versions.getFirst() instanceof it.davidgreco.metacatalog.entity.EntityType);
+    Assertions.assertTrue(versions.getFirst() instanceof VersionResult.Live);
 
     var live = entityTypeService.read("NoHistoryType");
     var currentSnapshot =
@@ -468,7 +473,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
    * is preserved anyway, but historical ones cannot be removed while referenced.
    */
   @Test
-  void testDeleteAllVersionsRefusesWhenEntityPinnedToHistoricalSnapshot() throws ServiceError {
+  void testDeleteAllVersionsRefusesWhenEntityPinnedToHistoricalSnapshot() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var entityTypeVersionRepository =
@@ -525,7 +530,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
    * to any snapshot, instead of surfacing the raw FK violation.
    */
   @Test
-  void testDeleteTypeRefusesWhenEntityPinned() throws ServiceError {
+  void testDeleteTypeRefusesWhenEntityPinned() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
 
@@ -565,7 +570,7 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
    */
   @Test
   void testCreateVersionBackfillsMissingCurrentSnapshot()
-      throws ServiceError, com.fasterxml.jackson.core.JsonProcessingException {
+      throws com.fasterxml.jackson.core.JsonProcessingException {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityTypeRepository =
         getApplicationContext()
@@ -573,13 +578,14 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     var entityTypeVersionRepository =
         getApplicationContext()
             .getBean(it.davidgreco.metacatalog.repository.EntityTypeVersionRepository.class);
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
 
     // Simulate a pre-V4 type: insert a live row directly via the repository, bypassing the service
     // (which now creates a v1 snapshot on create).
     var live = new it.davidgreco.metacatalog.entity.EntityType();
     live.setName("BackfillType");
     live.setBaseSchema(
-        it.davidgreco.metacatalog.common.JsonUtils.jsonFactory.readTree(
+        jsonMapper.readTree(
             """
                 { "type": "object", "properties": { "name": { "type": "string" } } }
                 """));

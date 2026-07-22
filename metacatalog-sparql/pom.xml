@@ -41,6 +41,18 @@
         </dependency>
 
         <!--
+            spring-boot-jdbc (provided): needed at compile time for
+            DataSourceProperties (used by OntopRepositoryConfig to obtain JDBC
+            coordinates without coupling to spring.datasource.* property names).
+            At runtime the application module supplies this via spring-boot-starter-data-jpa.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
             Ontop embedding (production-recommended RDF4J Repository API binding).
             ontop-system-sql-owlapi is the aggregate that pulls ontop-rdb (SQL
             reformulation + OBDA/R2RML parsers); ontop-rdf4j is declared explicitly

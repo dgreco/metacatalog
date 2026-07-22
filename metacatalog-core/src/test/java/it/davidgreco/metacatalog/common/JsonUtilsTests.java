@@ -1,15 +1,29 @@
 package it.davidgreco.metacatalog.common;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.test.json.JsonAssert;
 
 class JsonUtilsTests {
+
+  private final JsonUtils jsonUtils = newJsonUtils();
+
+  private static JsonUtils newJsonUtils() {
+    var jsonMapper = new ObjectMapper();
+    jsonMapper.registerModule(new Jdk8Module());
+    var yamlMapper = new ObjectMapper(new YAMLFactory());
+    yamlMapper.registerModule(new Jdk8Module());
+    return new JsonUtils(
+        jsonMapper, yamlMapper, JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012));
+  }
 
   @Test
   void testMergeSchemas() {
@@ -51,7 +65,8 @@ class JsonUtilsTests {
                 }""";
 
     var baseSchema =
-        jsonSchemaFactory
+        jsonUtils
+            .jsonSchemaFactory()
             .getSchema(
                 Thread.currentThread()
                     .getContextClassLoader()
@@ -59,7 +74,8 @@ class JsonUtilsTests {
             .getSchemaNode();
 
     var middleSchema =
-        jsonSchemaFactory
+        jsonUtils
+            .jsonSchemaFactory()
             .getSchema(
                 Thread.currentThread()
                     .getContextClassLoader()
@@ -67,7 +83,8 @@ class JsonUtilsTests {
             .getSchemaNode();
 
     var leafSchema =
-        jsonSchemaFactory
+        jsonUtils
+            .jsonSchemaFactory()
             .getSchema(
                 Thread.currentThread()
                     .getContextClassLoader()
@@ -76,7 +93,8 @@ class JsonUtilsTests {
 
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
         .assertIsMatch(
-            JsonUtils.mergeSchemas(List.of(baseSchema, middleSchema, leafSchema))
+            jsonUtils
+                .mergeSchemas(List.of(baseSchema, middleSchema, leafSchema))
                 .get()
                 .toPrettyString(),
             mergedSchema);
@@ -116,21 +134,23 @@ class JsonUtilsTests {
             """;
 
     var baseSchema =
-        jsonSchemaFactory.getSchema(
-            Thread.currentThread()
-                .getContextClassLoader()
-                .getResourceAsStream("jsons/base_schema.json"));
+        jsonUtils
+            .jsonSchemaFactory()
+            .getSchema(
+                Thread.currentThread()
+                    .getContextClassLoader()
+                    .getResourceAsStream("jsons/base_schema.json"));
 
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
         .assertIsMatch(
             convertedSchema,
-            JsonUtils.convertToMappingSchema(baseSchema).get().getSchemaNode().toPrettyString());
+            jsonUtils.convertToMappingSchema(baseSchema).get().getSchemaNode().toPrettyString());
   }
 
   @Test
   void stringToJsonSchemaAcceptsValidV202012Schema() {
     var result =
-        JsonUtils.stringToJsonSchema(
+        jsonUtils.stringToJsonSchema(
             "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}");
     assertTrue(result.isRight(), "a valid 2020-12 schema must be accepted");
   }
@@ -138,7 +158,7 @@ class JsonUtilsTests {
   @Test
   void stringToJsonSchemaRejectsForbiddenKeywords() {
     var result =
-        JsonUtils.stringToJsonSchema("{\"type\":\"object\",\"$ref\":\"#/definitions/foo\"}");
+        jsonUtils.stringToJsonSchema("{\"type\":\"object\",\"$ref\":\"#/definitions/foo\"}");
     assertTrue(result.isLeft(), "schemas using $ref must be rejected");
     assertTrue(
         result.getLeft().stream().anyMatch(m -> m.contains("not allowed")),
@@ -148,7 +168,7 @@ class JsonUtilsTests {
   @Test
   void stringToJsonSchemaRejectsInvalidMetaSchema() {
     // "type" must be a string in the 2020-12 meta-schema; an integer is rejected.
-    var result = JsonUtils.stringToJsonSchema("{\"type\": 42, \"properties\": {}}");
+    var result = jsonUtils.stringToJsonSchema("{\"type\": 42, \"properties\": {}}");
     assertTrue(
         result.isLeft(), "a schema invalid against the 2020-12 meta-schema must be rejected");
   }
@@ -156,8 +176,10 @@ class JsonUtilsTests {
   @Test
   void convertAggregateValuesIntoJsonNodesDoesNotMutateInput() throws Exception {
     var input =
-        jsonFactory.readTree(
-            """
+        jsonUtils
+            .jsonMapper()
+            .readTree(
+                """
             {
               "values": "{\\"a\\": 1}",
               "parts": [
@@ -171,7 +193,7 @@ class JsonUtilsTests {
     var originalValuesType = input.get("values").getNodeType();
     var originalPartsType = input.get("parts").getNodeType();
 
-    JsonUtils.convertAggregateValuesIntoJsonNodes(input);
+    jsonUtils.convertAggregateValuesIntoJsonNodes(input);
 
     assertEquals(
         originalValuesType,
