@@ -16,7 +16,7 @@ class TaskManagerTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSchedulingWithDependencies() throws ServiceError {
+  void testSchedulingWithDependencies() {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();
@@ -59,7 +59,7 @@ class TaskManagerTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSchedulingWithExceptions() throws ServiceError {
+  void testSchedulingWithExceptions() {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();

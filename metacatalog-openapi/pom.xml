@@ -113,14 +113,12 @@
                                 <implFolder>/src/main/java</implFolder>
                                 <useSpringBoot3>true</useSpringBoot3>
                                 <delegatePattern>true</delegatePattern>
-                                <unhandledException>true</unhandledException>
                                 <useOptional>true</useOptional>
                                 <useSwaggerUI>true</useSwaggerUI>
                                 <documentationProvider>springdoc</documentationProvider>
                                 <performBeanValidation>true</performBeanValidation>
                                 <useBeanValidation>true</useBeanValidation>
                                 <useJakartaEe>true</useJakartaEe>
-                                <useSpringBoot3>true</useSpringBoot3>
                             </configOptions>
                         </configuration>
                     </execution>

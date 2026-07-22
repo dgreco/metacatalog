@@ -91,41 +91,26 @@ public class ProcedureExecutor {
    * @throws ServiceError if the procedure is not found, the entity is not found, the plan-building
    *     fails, or an async task fails
    */
-  public void executeProcedure(String procedureName, String entityId) throws ServiceError {
+  public void executeProcedure(String procedureName, String entityId) {
     var procedure = procedureRegistry.get(procedureName);
     if (procedure == null) {
       throw new ServiceError("Procedure not found: " + procedureName);
     }
-    // Phase 1: plan-building in a transaction (lazy loading needs an open session; there is no
-    // OSIV on this non-web path). The transaction commits when executeInTransaction returns,
-    // releasing its DB connection before any async task tries to acquire one.
     var scheduleId = executeInTransaction(entityId, procedure);
-    // Phase 2: wait for async tasks OUTSIDE the transaction so the plan-building connection is
-    // not held during task execution.
     if (scheduleId.isPresent()) {
       joinAndCheck(scheduleId.get());
     }
   }
 
-  private Optional<String> executeInTransaction(String entityId, EntityProcedure procedure)
-      throws ServiceError {
-    try {
-      return transactionTemplate.execute(
-          status -> {
-            try {
-              var entity = entityService.read(entityId);
-              return procedure.accept(entity);
-            } catch (ServiceError e) {
-              throw new RuntimeException(e);
-            }
-          });
-    } catch (RuntimeException e) {
-      if (e.getCause() instanceof ServiceError se) throw se;
-      throw e;
-    }
+  private Optional<String> executeInTransaction(String entityId, EntityProcedure procedure) {
+    return transactionTemplate.execute(
+        status -> {
+          var entity = entityService.read(entityId);
+          return procedure.accept(entity);
+        });
   }
 
-  private void joinAndCheck(String scheduleId) throws ServiceError {
+  private void joinAndCheck(String scheduleId) {
     // Fetch the future ONCE and use this single reference for both blocking and result
     // inspection. Two independent cache lookups (joinSchedule then getRunningScheduleFuture)
     // race against Caffeine eviction: if the entry evicts between them, a failed schedule is

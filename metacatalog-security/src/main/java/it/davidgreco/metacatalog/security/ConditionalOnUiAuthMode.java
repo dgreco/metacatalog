@@ -5,19 +5,39 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 
 /**
- * Meta-annotation activating a bean only in the auth modes that have a username/password to check
- * against a browser session: {@code basic} and {@code ldap}.
+ * Meta-annotation activating a bean only in auth modes whose {@link AuthMode#isUiMode()} returns
+ * true — i.e. {@code basic} and {@code ldap}.
  *
- * <p>Centralises the {@code auth-mode == basic || ldap} condition that the UI security chain, the
- * SPARQL Protocol chain and the login controller all share, so the expression is declared once.
+ * <p>The set of UI-capable modes is defined by {@link AuthMode#isUiMode()}, not by a hardcoded SpEL
+ * string, so adding a new UI-capable mode is a one-line change to the enum.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@ConditionalOnExpression(
-    "'${application.config.security.auth-mode:}' eq 'basic'"
-        + " or '${application.config.security.auth-mode:}' eq 'ldap'")
-public @interface ConditionalOnUiAuthMode {}
+@Conditional(ConditionalOnUiAuthMode.UiAuthModeCondition.class)
+public @interface ConditionalOnUiAuthMode {
+
+  /**
+   * Spring condition that resolves the active {@code auth-mode} property and delegates to {@link
+   * AuthMode#isUiMode()}.
+   */
+  class UiAuthModeCondition implements Condition {
+    @Override
+    public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+      var env = context.getEnvironment();
+      var modeStr =
+          env.getProperty(SecurityConfigProperties.AUTH_MODE_PROPERTY, AuthMode.NONE.name());
+      try {
+        return AuthMode.valueOf(modeStr.toUpperCase()).isUiMode();
+      } catch (IllegalArgumentException e) {
+        return false;
+      }
+    }
+  }
+}

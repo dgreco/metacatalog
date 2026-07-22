@@ -22,7 +22,7 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testProvisioningProcedure() throws ServiceError {
+  void testProvisioningProcedure() {
     var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
     var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);

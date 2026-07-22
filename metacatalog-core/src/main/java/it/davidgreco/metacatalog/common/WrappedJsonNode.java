@@ -1,9 +1,10 @@
 package it.davidgreco.metacatalog.common;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonPathConfiguration;
-
 import com.fasterxml.jackson.databind.JsonNode;
+import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
+import java.util.Map;
 
 /**
  * A wrapper around a Jackson {@link JsonNode} that provides convenient JSON Path query operations.
@@ -15,6 +16,23 @@ import com.jayway.jsonpath.JsonPath;
  */
 public record WrappedJsonNode(JsonNode node) {
 
+  private static final Configuration JSON_PATH_CONFIG =
+      Configuration.builder().jsonProvider(new JacksonJsonNodeJsonProvider()).build();
+
+  @FunctionalInterface
+  private interface JsonNodeExtractor {
+    Object extract(JsonNode node);
+  }
+
+  private static final Map<Class<?>, JsonNodeExtractor> EXTRACTORS =
+      Map.of(
+          String.class, JsonNode::asText,
+          Integer.class, JsonNode::asInt,
+          Long.class, JsonNode::asLong,
+          Float.class, JsonNode::floatValue,
+          Double.class, JsonNode::asDouble,
+          Boolean.class, JsonNode::booleanValue);
+
   /**
    * Retrieves a value from the JSON node using a JSON Path expression.
    *
@@ -22,7 +40,7 @@ public record WrappedJsonNode(JsonNode node) {
    * @return the value at the specified path
    */
   public Object getValue(String pathExpression) {
-    var dc = JsonPath.using(jsonPathConfiguration).parse(node);
+    var dc = JsonPath.using(JSON_PATH_CONFIG).parse(node);
     return dc.read(pathExpression);
   }
 
@@ -30,7 +48,8 @@ public record WrappedJsonNode(JsonNode node) {
    * Retrieves a typed value from the JSON node using a JSON Path expression.
    *
    * <p>Supports String, Integer, Long, Float, Double, and Boolean types with automatic conversion
-   * from the underlying JSON node types.
+   * from the underlying JSON node types. Adding a new supported type is additive: put an entry in
+   * {@link #EXTRACTORS}.
    *
    * @param <T> the expected return type
    * @param clazz the class of the expected return type
@@ -38,7 +57,7 @@ public record WrappedJsonNode(JsonNode node) {
    * @return the value at the specified path, cast to the requested type
    */
   public <T> T getValue(Class<T> clazz, String pathExpression) {
-    var dc = JsonPath.using(jsonPathConfiguration).parse(node);
+    var dc = JsonPath.using(JSON_PATH_CONFIG).parse(node);
     var obj = dc.read(pathExpression);
 
     if (!(obj instanceof JsonNode jsonNode) || jsonNode.isMissingNode() || jsonNode.isNull()) {
@@ -46,33 +65,31 @@ public record WrappedJsonNode(JsonNode node) {
           "Path '" + pathExpression + "' did not resolve to a value");
     }
 
-    if (clazz == String.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isTextual, pathExpression, "a string").asText());
-    else if (clazz == Integer.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asInt());
-    else if (clazz == Long.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asLong());
-    else if (clazz == Float.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").floatValue());
-    else if (clazz == Double.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isNumber, pathExpression, "a number").asDouble());
-    else if (clazz == Boolean.class)
-      return clazz.cast(
-          requireType(jsonNode, JsonNode::isBoolean, pathExpression, "a boolean").booleanValue());
-    else return clazz.cast(obj);
+    var extractor = EXTRACTORS.get(clazz);
+    if (extractor != null) {
+      var expected =
+          switch (clazz.getSimpleName()) {
+            case "String" -> "a string";
+            case "Integer", "Long", "Float", "Double" -> "a number";
+            case "Boolean" -> "a boolean";
+            default -> "the expected type";
+          };
+      requireType(jsonNode, extractor, pathExpression, expected);
+      return clazz.cast(extractor.extract(jsonNode));
+    }
+    return clazz.cast(obj);
   }
 
-  private static JsonNode requireType(
-      JsonNode node,
-      java.util.function.Predicate<JsonNode> test,
-      String pathExpression,
-      String expected) {
-    if (!test.test(node)) {
+  private static void requireType(
+      JsonNode node, JsonNodeExtractor extractor, String pathExpression, String expected) {
+    boolean ok =
+        switch (expected) {
+          case "a string" -> node.isTextual();
+          case "a number" -> node.isNumber();
+          case "a boolean" -> node.isBoolean();
+          default -> true;
+        };
+    if (!ok) {
       throw new IllegalArgumentException(
           "Path '"
               + pathExpression
@@ -81,6 +98,5 @@ public record WrappedJsonNode(JsonNode node) {
               + " but to "
               + node.getNodeType());
     }
-    return node;
   }
 }

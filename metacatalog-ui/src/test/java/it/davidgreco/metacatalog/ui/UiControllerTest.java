@@ -25,16 +25,13 @@ import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPath
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitVersion;
-import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
-import it.davidgreco.metacatalog.repository.EntityRepository;
-import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
-import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
-import it.davidgreco.metacatalog.repository.TraitVersionRepository;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
+import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.MappingService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
+import it.davidgreco.metacatalog.service.VersionResult;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -56,16 +53,9 @@ class UiControllerTest {
 
   private final TraitService traitService = mock(TraitService.class);
   private final EntityTypeService entityTypeService = mock(EntityTypeService.class);
+  private final EntityService entityService = mock(EntityService.class);
   private final BulkLoaderService bulkLoaderService = mock(BulkLoaderService.class);
   private final MappingService mappingService = mock(MappingService.class);
-  private final EntityTypeVersionRepository entityTypeVersionRepository =
-      mock(EntityTypeVersionRepository.class);
-  private final TraitVersionRepository traitVersionRepository = mock(TraitVersionRepository.class);
-  private final EntityRepository entityRepository = mock(EntityRepository.class);
-  private final EntityRelationshipRepository entityRelationshipRepository =
-      mock(EntityRelationshipRepository.class);
-  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository =
-      mock(MappingEntityRelationshipRepository.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private MockMvc mockMvc;
 
@@ -74,30 +64,32 @@ class UiControllerTest {
     given(traitService.list()).willReturn(List.of());
     given(entityTypeService.list()).willReturn(List.of());
     given(mappingService.list()).willReturn(List.of());
-    given(entityTypeVersionRepository.findAll()).willReturn(List.of());
-    given(traitVersionRepository.findAll()).willReturn(List.of());
-    given(entityRepository.findAll()).willReturn(List.of());
-    given(entityRelationshipRepository.findAll()).willReturn(List.of());
-    given(mappingEntityRelationshipRepository.findAll()).willReturn(List.of());
+    given(entityTypeService.listAllVersions()).willReturn(List.of());
+    given(traitService.listAllVersions()).willReturn(List.of());
+    given(entityService.listAll()).willReturn(List.of());
+    given(entityService.listAllRelationships()).willReturn(List.of());
+    given(mappingService.listAllEntityRelationships()).willReturn(List.of());
+    var objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     var catalogGraphService =
         new CatalogGraphService(
             traitService,
             entityTypeService,
+            entityService,
             mappingService,
-            entityTypeVersionRepository,
-            traitVersionRepository,
-            entityRepository,
-            entityRelationshipRepository,
-            mappingEntityRelationshipRepository,
-            new HtmlSafeJsonSerializer());
+            new HtmlSafeJsonSerializer(objectMapper),
+            objectMapper);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
-                new UiController(
+                new GraphUiController(
                     traitService,
                     entityTypeService,
-                    bulkLoaderService,
                     mappingService,
-                    catalogGraphService))
+                    catalogGraphService,
+                    objectMapper),
+                new TraitUiController(traitService, catalogGraphService),
+                new EntityTypeUiController(entityTypeService, traitService),
+                new MappingUiController(mappingService, entityTypeService, objectMapper),
+                new BulkUiController(bulkLoaderService))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -188,7 +180,7 @@ class UiControllerTest {
     entity.setId("ent-1");
     entity.setEntityType(type);
     entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
-    given(entityRepository.findAll()).willReturn(List.of(entity));
+    given(entityService.listAll()).willReturn(List.of(entity));
 
     mockMvc
         .perform(get("/ui/graph/data").param("showEntities", "true"))
@@ -216,14 +208,14 @@ class UiControllerTest {
     snapshot.setVersionGroupId("vg-1");
     snapshot.setVersion(1);
     snapshot.setName("Person");
-    given(entityTypeVersionRepository.findAll()).willReturn(List.of(snapshot));
+    given(entityTypeService.listAllVersions()).willReturn(List.of(snapshot));
 
     var entity = new Entity();
     entity.setId("ent-1");
     entity.setEntityType(type);
     entity.setEntityTypeVersion(snapshot);
     entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
-    given(entityRepository.findAll()).willReturn(List.of(entity));
+    given(entityService.listAll()).willReturn(List.of(entity));
 
     mockMvc
         .perform(get("/ui/graph/data").param("showEntities", "true"))
@@ -253,7 +245,7 @@ class UiControllerTest {
     entity.setId("ent-1");
     entity.setEntityType(type);
     entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
-    given(entityRepository.findAll()).willReturn(List.of(entity));
+    given(entityService.listAll()).willReturn(List.of(entity));
 
     mockMvc
         .perform(get("/ui/graph/data"))
@@ -649,7 +641,8 @@ class UiControllerTest {
     live.setName("Person");
     live.setBaseSchema(
         mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
-    given(entityTypeService.listVersions("Person")).willReturn(List.of(snap, live));
+    given(entityTypeService.listVersions("Person"))
+        .willReturn(List.of(new VersionResult.Snapshot<>(snap), new VersionResult.Live<>(live)));
 
     mockMvc
         .perform(get("/ui/entity-types/Person/versions"))
@@ -735,7 +728,8 @@ class UiControllerTest {
     live.setName("Timestamped");
     live.setBaseSchema(
         mapper.readTree("{\"type\":\"object\",\"properties\":{\"n\":{\"type\":\"string\"}}}"));
-    given(traitService.listVersions("Timestamped")).willReturn(List.of(snap, live));
+    given(traitService.listVersions("Timestamped"))
+        .willReturn(List.of(new VersionResult.Snapshot<>(snap), new VersionResult.Live<>(live)));
 
     mockMvc
         .perform(get("/ui/traits/Timestamped/versions"))

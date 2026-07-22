@@ -1,8 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.stringToJsonSchema;
-
 import com.fasterxml.jackson.databind.JsonNode;
+import it.davidgreco.metacatalog.common.JsonUtils;
 import java.util.Optional;
 import java.util.function.BiFunction;
 
@@ -27,8 +26,8 @@ final class TypeServiceSupport {
    * @return the parsed schema node
    * @throws SchemaValidationError if the schema is invalid
    */
-  static JsonNode parseSchema(String schema) throws SchemaValidationError {
-    var eitherSchema = stringToJsonSchema(schema);
+  static JsonNode parseSchema(JsonUtils jsonUtils, String schema) {
+    var eitherSchema = jsonUtils.stringToJsonSchema(schema);
     if (eitherSchema.isLeft()) {
       throw new SchemaValidationError(eitherSchema.getLeft());
     }
@@ -48,7 +47,6 @@ final class TypeServiceSupport {
    * @param <L> the live type
    * @param <S> the snapshot type
    * @return the live row (if {@code requested} is current) or the snapshot
-   * @throws ServiceError if the requested version is out of range or missing
    */
   static <L, S> Object resolveVersion(
       L live,
@@ -56,8 +54,7 @@ final class TypeServiceSupport {
       String versionGroupId,
       int requested,
       String notFoundMessage,
-      BiFunction<String, Integer, Optional<S>> snapshotLookup)
-      throws ServiceError {
+      BiFunction<String, Integer, Optional<S>> snapshotLookup) {
     if (requested == liveVersion) {
       return live;
     }

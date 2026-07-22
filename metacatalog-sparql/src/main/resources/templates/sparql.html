@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Meta Catalog — SPARQL</title>
     <!-- Shared theme system: app.css tokens + topbar/.btn/.logout-form, theme.js applies the
-         chosen theme before first paint and mounts the toggle into .topbar nav. -->
+         chosen theme before first paint and mounts the toggle into .topbar nav.
+         These assets are owned by metacatalog-ui and served from its static resources; the
+         metacatalog-application module always includes metacatalog-ui on the classpath so they
+         are available at runtime. -->
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
-    <!-- Yasgui (SPARQL query editor + results visualiser) from CDN. -->
-    <link rel="stylesheet" href="https://unpkg.com/@triply/yasgui/build/yasgui.min.css"/>
+    <!-- Yasgui (SPARQL query editor + results visualiser) — served locally for air-gapped/offline deployments. -->
+    <link rel="stylesheet" th:href="@{/sparql/vendor/yasgui.min.css}"/>
     <style>
         /* The Yasgui editor needs the full viewport height below the topbar; app.css sizes main
            to a 1000px column, which would clip it, so let the SPARQL page span the viewport. */
@@ -38,7 +41,7 @@
     </div>
     <div id="yasgui"></div>
 </main>
-<script src="https://unpkg.com/@triply/yasgui/build/yasgui.min.js"></script>
+<script th:src="@{/sparql/vendor/yasgui.min.js}"></script>
 <script th:inline="javascript">
     /*<![CDATA[*/
     const endpoint = /*[[${endpoint}]]*/ '/sparql/query';

@@ -1,13 +1,13 @@
 package it.davidgreco.metacatalog.service;
 
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonSchemaFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 import static it.davidgreco.metacatalog.service.MappingValueEvaluator.generateMappedValues;
 import static org.awaitility.Awaitility.await;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.IntNode;
+import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.repository.EntityRepository;
@@ -30,7 +30,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreateDelete() throws ServiceError {
+  void testCreateDelete() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
 
@@ -62,7 +62,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCheckLoopsAndIsSourceAndIsTarget() throws ServiceError {
+  void testCheckLoopsAndIsSourceAndIsTarget() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
 
@@ -125,12 +125,13 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testGraphPath() throws ServiceError {
+  void testGraphPath() {
 
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
+    var entityPathResolver = getApplicationContext().getBean(EntityPathResolver.class);
 
     traitService.create("Trait_NA", Optional.empty(), Optional.empty());
 
@@ -224,7 +225,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     {
       var retrievedEntity =
-          mappingService.retrieveEntityByPath(
+          entityPathResolver.retrieveEntityByPath(
               d.getId(),
               "DEPENDS_ON{$.[?(@.c == 'c1')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$}");
 
@@ -234,7 +235,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     {
       var retrievedEntity =
-          mappingService.retrieveEntityByPath(
+          entityPathResolver.retrieveEntityByPath(
               b1.getId(),
               "DEPENDS_ON{$.[?(@.c == 'c3')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}");
       Assertions.assertTrue(retrievedEntity.isEmpty());
@@ -242,7 +243,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     {
       var retrievedEntity =
-          mappingService.retrieveEntityByPath(
+          entityPathResolver.retrieveEntityByPath(
               d.getId(),
               "DEPENDS_ON{$.[?(@.c == 'c3')]}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}");
 
@@ -253,7 +254,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
       Assertions.assertThrows(
           ServiceError.class,
           () ->
-              mappingService.retrieveEntityByPath(
+              entityPathResolver.retrieveEntityByPath(
                   d.getId(),
                   "DEPENDS_ON{$}/DEPENDS_ON{$.[?(@.b == 0.1)]}/DEPENDS_ON{$.[?(@.a == 1)]}"));
     }
@@ -261,19 +262,21 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
   @Test
   void testGenerateMappedValues() throws JsonProcessingException, ServiceError {
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
+    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
     var sourceValues =
-        jsonFactory.readTree(
+        jsonMapper.readTree(
             """
                 {"a": 1}
                 """);
     var externalValues =
         Map.of(
             "as",
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                 {"c": 1}"""));
     var mappingValues =
-        jsonFactory.readTree(
+        jsonMapper.readTree(
             """
                         {"b": "#source.getValue('$.a').intValue() + #as.getValue('$.c').intValue()*10"}""");
     var targetSchema =
@@ -290,7 +293,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testAutomaticCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+  void testAutomaticCreateAndUpdateAndDeleteMappedEntities() {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
@@ -411,12 +414,13 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testCreateAndUpdateAndDeleteMappedEntities() throws ServiceError {
+  void testCreateAndUpdateAndDeleteMappedEntities() {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappedEntityService = getApplicationContext().getBean(MappedEntityService.class);
 
     traitService.create("DependingRelSourceTrait", Optional.empty(), Optional.empty());
 
@@ -486,7 +490,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
 
     entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
 
-    mappingService.createMappedEntities(sourceInstance.getId());
+    mappedEntityService.createMappedEntities(sourceInstance.getId());
 
     Assertions.assertEquals(1, entityRepository.countByEntityType(targeType));
 
@@ -499,7 +503,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     }
 
     // Check that idempotency works
-    mappingService.createMappedEntities(sourceInstance.getId());
+    mappedEntityService.createMappedEntities(sourceInstance.getId());
 
     {
       var int1 =
@@ -518,7 +522,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     Assertions.assertThrows(
         ServiceError.class,
         () ->
-            mappingService.createMappedEntities(
+            mappedEntityService.createMappedEntities(
                 entityRepository.findByEntityType(targeType).getFirst().getId()));
 
     // Update the source
@@ -528,7 +532,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
-    mappingService.updateMappedEntities(sourceInstance.getId());
+    mappedEntityService.updateMappedEntities(sourceInstance.getId());
 
     {
       var int1 =
@@ -577,24 +581,24 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     Assertions.assertThrows(
         ServiceError.class,
         () ->
-            mappingService.updateMappedEntities(
+            mappedEntityService.updateMappedEntities(
                 entityRepository.findByEntityType(targeType).getFirst().getId()));
 
     // I cannot delete the source entity
     Assertions.assertThrows(ServiceError.class, () -> entityService.delete(sourceInstance.getId()));
 
-    mappingService.deleteMappedEntities(sourceInstance.getId());
+    mappedEntityService.deleteMappedEntities(sourceInstance.getId());
 
     Assertions.assertEquals(0, entityRepository.countByEntityType(targeType));
 
     Assertions.assertEquals(0, entityRepository.countByEntityType(anotherTargetType));
 
     // Check that idempotency works
-    mappingService.deleteMappedEntities(sourceInstance.getId());
+    mappedEntityService.deleteMappedEntities(sourceInstance.getId());
   }
 
   @Test
-  void testListMappings() throws ServiceError {
+  void testListMappings() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
 
@@ -642,9 +646,10 @@ class MappingServiceTests extends CommonServiceTestingSupport {
    * reads it back, and asserts the parsed JSON tree is equal to the one supplied.
    */
   @Test
-  void createPersistsMappingValuesForRoundTrip() throws ServiceError, JsonProcessingException {
+  void createPersistsMappingValuesForRoundTrip() throws JsonProcessingException {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
 
     entityTypeService.create(
         "RoundTripSrc",
@@ -661,7 +666,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     var created = mappingService.create("RoundTripSrc", "RoundTripDst", mappingValues, List.of());
 
     var readBack = mappingService.read(created.getId());
-    var expectedNode = jsonFactory.readTree(mappingValues);
+    var expectedNode = jsonMapper.readTree(mappingValues);
     Assertions.assertEquals(expectedNode, readBack.getMappingValues());
 
     mappingService.delete(created.getId());
@@ -676,11 +681,12 @@ class MappingServiceTests extends CommonServiceTestingSupport {
    * reject values that the mapped expression still produces according to the old schema.
    */
   @Test
-  void testUpdateMappedEntitiesUsesPinnedSchemaAfterTargetVersioned() throws ServiceError {
+  void testUpdateMappedEntitiesUsesPinnedSchemaAfterTargetVersioned() {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappedEntityService = getApplicationContext().getBean(MappedEntityService.class);
 
     // Source type carries one integer "a"; target type v1 has one integer "b" (no "extra").
     entityTypeService.create(
@@ -714,7 +720,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
             {"a": 5}
             """);
 
-    mappingService.createMappedEntities(source.getId());
+    mappedEntityService.createMappedEntities(source.getId());
 
     var mapped = entityRepository.findByEntityType(targetTypeV1).getFirst();
     Assertions.assertNotNull(mapped.getEntityTypeVersion());
@@ -743,7 +749,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
         {"a": 7}
         """);
 
-    mappingService.updateMappedEntities(source.getId());
+    mappedEntityService.updateMappedEntities(source.getId());
 
     var regenerated = entityRepository.findByEntityType(targetTypeV1).getFirst();
     Assertions.assertEquals(
@@ -753,7 +759,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     Assertions.assertFalse(
         regenerated.getValues().has("c"), "regenerated values must follow v1 schema, not v2");
 
-    mappingService.deleteMappedEntities(source.getId());
+    mappedEntityService.deleteMappedEntities(source.getId());
     var mappings =
         mappingService.list().stream()
             .filter(m -> m.getSource().getName().equals("PinSrcType"))
@@ -787,7 +793,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
    * 404 instead of 400.
    */
   @Test
-  void createThrowsNotFoundExceptionForMissingSourceType() throws ServiceError {
+  void createThrowsNotFoundExceptionForMissingSourceType() {
     var mappingService = getApplicationContext().getBean(MappingService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
 

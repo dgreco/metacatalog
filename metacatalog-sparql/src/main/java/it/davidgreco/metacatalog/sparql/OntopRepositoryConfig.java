@@ -6,8 +6,8 @@ import it.unibz.inf.ontop.rdf4j.repository.impl.OntopVirtualRepository;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -26,8 +26,9 @@ import org.springframework.context.annotation.Configuration;
  * </ul>
  *
  * <p>Ontop does NOT accept an external {@code javax.sql.DataSource}; it opens its own JDBC
- * connections from {@code jdbcUrl}/{@code jdbcUser}/{@code jdbcPassword}. We point it at the same
- * Postgres instance Spring Data uses (read from {@code spring.datasource.*}).
+ * connections from {@code jdbcUrl}/{@code jdbcUser}/{@code jdbcPassword}. We obtain these from
+ * Spring Boot's {@link DataSourceProperties} (bound from {@code spring.datasource.*}) so the Ontop
+ * repository points at the same Postgres instance Spring Data uses.
  *
  * <p>The bean is gated on {@code application.sparql.enabled} (default {@code true}) so the endpoint
  * can be turned off without removing the module.
@@ -49,30 +50,30 @@ public class OntopRepositoryConfig {
   /**
    * Eagerly constructs and initialises the Ontop repository.
    *
+   * @param dataSourceProperties Spring Boot's bound datasource properties (URL, username, password)
    * @param mappingFile classpath or filesystem path to the {@code .obda} mapping file
    * @param ontologyFile classpath or filesystem path to the {@code .owl} ontology file
-   * @param jdbcUrl JDBC URL of the metacatalog Postgres database
-   * @param jdbcUser JDBC username
-   * @param jdbcPassword JDBC password
    * @return the initialised {@link OntopVirtualRepository} singleton
    */
   // Shutdown is handled by the @PreDestroy method below; do not also register a bean
   // destroyMethod, otherwise repository.shutDown() would be invoked twice on context close.
   @Bean
   public OntopVirtualRepository ontopVirtualRepository(
-      @Value("${application.sparql.mapping:classpath:ontop/mapping.obda}") String mappingFile,
-      @Value("${application.sparql.ontology:classpath:ontop/ontology.owl}") String ontologyFile,
-      @Value("${spring.datasource.url}") String jdbcUrl,
-      @Value("${spring.datasource.username}") String jdbcUser,
-      @Value("${spring.datasource.password}") String jdbcPassword) {
+      DataSourceProperties dataSourceProperties,
+      @org.springframework.beans.factory.annotation.Value(
+              "${application.sparql.mapping:classpath:ontop/mapping.obda}")
+          String mappingFile,
+      @org.springframework.beans.factory.annotation.Value(
+              "${application.sparql.ontology:classpath:ontop/ontology.owl}")
+          String ontologyFile) {
 
     OntopSQLOWLAPIConfiguration.Builder<?> builder =
         OntopSQLOWLAPIConfiguration.defaultBuilder()
             .nativeOntopMappingFile(resolveClasspath(mappingFile))
             .ontologyFile(resolveClasspath(ontologyFile))
-            .jdbcUrl(jdbcUrl)
-            .jdbcUser(jdbcUser)
-            .jdbcPassword(jdbcPassword);
+            .jdbcUrl(dataSourceProperties.getUrl())
+            .jdbcUser(dataSourceProperties.getUsername())
+            .jdbcPassword(dataSourceProperties.getPassword());
 
     OntopSQLOWLAPIConfiguration config = builder.build();
 

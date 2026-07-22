@@ -22,11 +22,7 @@ public class SparqlUiController {
   public SparqlUiController(
       @Value("${application.sparql.endpoint:/sparql/query}") String sparqlEndpoint,
       @Value("${application.sparql.ontology-iri:http://metacatalog/}") String ontologyIri,
-      @Value(
-              "${application.sparql.default-query:"
-                  + "PREFIX mt: <http://metacatalog/>\n"
-                  + "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50}")
-          String defaultQuery) {
+      @Value("${application.sparql.default-query}") String defaultQuery) {
     this.sparqlEndpoint = sparqlEndpoint;
     this.ontologyIri = ontologyIri;
     this.defaultQuery = defaultQuery;

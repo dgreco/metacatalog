@@ -89,14 +89,16 @@ public abstract class Task<T> {
                             .anyMatch(Try::isFailure);
                     return dependsOnTasksFailed
                         ? Try.<Void>failure(
-                            new ServiceRuntimeError("One or more of the depending tasks failed"))
+                            new ServiceError("One or more of the depending tasks failed"))
                         : Try.of(Task.this::apply);
                   },
                   executor)
               .handle(
                   (taskResult, ex) -> {
                     Try<Void> finalResult =
-                        taskResult != null ? taskResult : Try.failure(new ServiceRuntimeError(ex));
+                        taskResult != null
+                            ? taskResult
+                            : Try.failure(new ServiceError(ex.getMessage(), ex));
                     result.set(finalResult);
                     return finalResult;
                   });

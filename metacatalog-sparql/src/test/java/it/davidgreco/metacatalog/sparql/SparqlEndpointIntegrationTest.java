@@ -51,6 +51,9 @@ class SparqlEndpointIntegrationTest {
     registry.add("spring.datasource.username", postgres::getUsername);
     registry.add("spring.datasource.password", postgres::getPassword);
     registry.add("spring.flyway.enabled", () -> "false"); // migrated manually above
+    registry.add(
+        "application.sparql.default-query",
+        () -> "PREFIX mt: <http://metacatalog/>\nSELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50");
   }
 
   @Autowired MockMvc mockMvc;

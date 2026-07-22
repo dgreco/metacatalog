@@ -2,19 +2,33 @@ openapi: "3.1.0"
 info:
   version: 1.0.0
   title: Meta Catalog Manager API
+  description: >
+    REST API for managing metadata: traits, entity types, entities, relationships,
+    mappings, aggregates, and version history. Entities are validated against JSON
+    Schemas derived from their entity type and traits. Relationships between traits
+    and entities are bidirectional. Mappings define how entities of one type are
+    derived from entities of another. Aggregates compose entities from parts and
+    dependencies. All versioned resources support a full version history with
+    snapshot-based rollback.
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
 servers:
-  - url: https://metacatalog.fairytales.local
+  - url: http://localhost:8080
+    description: Local development
 tags:
   - name: Meta Catalog Manager
+    description: Metadata management operations for traits, entity types, entities, mappings, and aggregates.
 paths:
   /metacatalog/v1/bulk-creation:
     post:
       tags:
         - Meta Catalog Manager
       summary: Bulk creation of traits, entity types and entities
+      description: >
+        Accepts a YAML document (or multiple YAML documents) and creates all
+        contained traits, entity types, relationships, mappings, and entities in
+        a single transaction.
       operationId: bulkCreation
       requestBody:
         description: A YAML file containing one or more YAML documents
@@ -103,22 +117,22 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
       responses:
         200:
           description: If successful, return a Trait object
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/Trait'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Trait not found
           content:
@@ -126,11 +140,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                  $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -140,18 +154,18 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
       responses:
         204:
           description: Trait deleted
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Trait not found
           content:
@@ -159,11 +173,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                  $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     head:
       tags:
         - Meta Catalog Manager
@@ -173,26 +187,26 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
       responses:
         200:
           description: Trait exists
         404:
           description: Trait does not exist
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/trait/{name}/versions:
     get:
       tags:
@@ -203,9 +217,9 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
       responses:
         200:
           description: If successful, return a list of Trait objects (oldest version first, live version last)
@@ -216,11 +230,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/Trait'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Trait not found
           content:
@@ -228,11 +242,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-            description: System problem
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     post:
       tags:
         - Meta Catalog Manager
@@ -245,9 +259,9 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
       requestBody:
         description: The new Trait spec for the new version
         content:
@@ -268,6 +282,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Trait not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
           description: System problem, details of the error are provided
           content:
@@ -284,28 +304,28 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
         - in: path
           name: version
           required: true
+          description: Version number
           schema:
             type: integer
-            description: Version number
       responses:
         200:
           description: If successful, return a Trait object frozen at the requested version
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/Trait'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trait'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Trait or version not found
           content:
@@ -313,11 +333,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -330,15 +350,15 @@ paths:
         - in: path
           name: name
           required: true
+          description: Trait name
           schema:
             type: string
-            description: Trait name
         - in: path
           name: version
           required: true
+          description: Version number
           schema:
             type: integer
-            description: Version number
       responses:
         204:
           description: Version deleted
@@ -355,11 +375,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/trait/link:
     post:
       tags:
@@ -379,10 +399,13 @@ paths:
               properties:
                 sourceTrait:
                   type: string
+                  description: Source trait name
                 relationshipTypeName:
                   type: string
+                  description: Relationship type name (DEPENDS_ON, HAS_PART, MAPPED_TO)
                 targetTrait:
                   type: string
+                  description: Target trait name
         required: true
       responses:
         204:
@@ -415,21 +438,21 @@ paths:
         - in: path
           name: sourceTrait
           required: true
+          description: Source Trait name
           schema:
             type: string
-            description: Source Trait name
         - in: path
           name: relationshipTypeName
           required: true
+          description: A relationship type name
           schema:
             type: string
-            description: A relationship type name
         - in: path
           name: targetTrait
           required: true
+          description: Target Trait name
           schema:
             type: string
-            description: Target Trait name
       responses:
         204:
           description: Link deleted
@@ -460,24 +483,26 @@ paths:
         - in: path
           name: sourceTrait
           required: true
+          description: Source Trait name
           schema:
             type: string
-            description: Source Trait name
         - in: path
           name: relationshipTypeName
           required: true
+          description: A relationship type name
           schema:
             type: string
-            description: A relationship type name
         - in: path
           name: targetTrait
           required: true
+          description: Target Trait name
           schema:
             type: string
-            description: Target Trait name
       responses:
         200:
           description: Link exists
+        404:
+          description: Link does not exist
         400:
           description: Invalid input
           content:
@@ -500,15 +525,15 @@ paths:
         - in: path
           name: sourceTrait
           required: true
+          description: Source Trait name
           schema:
             type: string
-            description: Source Trait name
         - in: path
           name: relationshipTypeName
           required: true
+          description: Relationship Type Name
           schema:
             type: string
-            description: Relationship Type Name
       responses:
         200:
           description: If successful, return a list of linked traits
@@ -600,22 +625,22 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
       responses:
         200:
           description: If successful, return an EntityType object
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/EntityType'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityType'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: EntityType not found
           content:
@@ -623,11 +648,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -637,18 +662,18 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
       responses:
         204:
           description: Type deleted
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: EntityType not found
           content:
@@ -656,11 +681,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     head:
       tags:
         - Meta Catalog Manager
@@ -670,26 +695,26 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
       responses:
         200:
           description: EntityType exists
         404:
           description: EntityType does not exist
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity-type/{name}/versions:
     get:
       tags:
@@ -700,9 +725,9 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
       responses:
         200:
           description: If successful, return a list of EntityType objects (oldest version first, live version last)
@@ -713,11 +738,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/EntityType'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: EntityType not found
           content:
@@ -725,11 +750,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-            description: System problem
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     post:
       tags:
         - Meta Catalog Manager
@@ -743,9 +768,9 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
       requestBody:
         description: The new EntityType spec for the new version
         content:
@@ -766,6 +791,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        404:
+          description: EntityType not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
           description: System problem, details of the error are provided
           content:
@@ -782,28 +813,28 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
         - in: path
           name: version
           required: true
+          description: Version number
           schema:
             type: integer
-            description: Version number
       responses:
         200:
           description: If successful, return an EntityType object frozen at the requested version
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/EntityType'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityType'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: EntityType or version not found
           content:
@@ -811,11 +842,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -828,15 +859,15 @@ paths:
         - in: path
           name: name
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
         - in: path
           name: version
           required: true
+          description: Version number
           schema:
             type: integer
-            description: Version number
       responses:
         204:
           description: Version deleted
@@ -853,11 +884,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/mapping:
     get:
       tags:
@@ -889,8 +920,14 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Create a mapping
+      description: >
+        Creates a mapping between two entity types, defining how entities of the source type
+        are derived from entities of the target type. The mapping values are SpEL expressions
+        evaluated against the source entity; entity path references describe how to traverse
+        from source to target via relationships.
       operationId: createMapping
       requestBody:
+        description: A Mapping spec
         required: true
         content:
           application/json:
@@ -927,14 +964,20 @@ paths:
         - in: path
           name: id
           required: true
+          description: Mapping id
           schema:
             type: string
-            description: Mapping id
       responses:
         204:
           description: Mapping deleted
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Mapping not found
           content:
             application/json:
               schema:
@@ -962,9 +1005,9 @@ paths:
         200:
           description: If successful, return an entity id
           content:
-             application/text:
-                schema:
-                  type: string
+            text/plain:
+              schema:
+                type: string
         400:
           description: Invalid input; details of the error are provided
           content:
@@ -986,24 +1029,24 @@ paths:
         - in: query
           name: entityTypeName
           required: true
+          description: EntityType name
           schema:
             type: string
-            description: EntityType name
         - in: query
           name: queryPath
           required: true
+          description: Query path expression
           schema:
             type: string
-            description: Query path expression
       responses:
         200:
           description: If successful, return a list of entities
           content:
-             application/json:
-               schema:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/Entity'
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entity'
         400:
           description: Invalid input; details of the error are provided
           content:
@@ -1032,22 +1075,22 @@ paths:
         - in: path
           name: id
           required: true
+          description: Entity Id
           schema:
             type: string
-            description: Entity Id
       responses:
         200:
           description: If successful, return an Entity object
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/Entity'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Entity not found
           content:
@@ -1055,11 +1098,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager
@@ -1069,18 +1112,18 @@ paths:
         - in: path
           name: id
           required: true
+          description: Entity Id
           schema:
             type: string
-            description: Entity Id
       responses:
         204:
-          description: Type deleted
+          description: Entity deleted
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Entity not found
           content:
@@ -1088,11 +1131,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     head:
       tags:
         - Meta Catalog Manager
@@ -1102,26 +1145,26 @@ paths:
         - in: path
           name: id
           required: true
+          description: Entity id
           schema:
             type: string
-            description: Entity id
       responses:
         200:
           description: Entity exists
         404:
           description: Entity does not exist
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity/link:
     post:
       tags:
@@ -1141,14 +1184,17 @@ paths:
               properties:
                 sourceEntityId:
                   type: string
+                  description: Source entity id
                 relationshipTypeName:
                   type: string
+                  description: Relationship type name (DEPENDS_ON, HAS_PART, MAPPED_TO)
                 targetEntityId:
                   type: string
+                  description: Target entity id
         required: true
       responses:
         204:
-          description: Trait link created
+          description: Entity link created
         400:
           description: Invalid input; details of the error are provided
           content:
@@ -1177,21 +1223,21 @@ paths:
         - in: path
           name: sourceEntityId
           required: true
+          description: Source Entity Id
           schema:
             type: string
-            description: Source Entity Id
         - in: path
           name: relationshipTypeName
           required: true
+          description: A relationship type name
           schema:
             type: string
-            description: A relationship type name
         - in: path
           name: targetEntityId
           required: true
+          description: Target Entity Id
           schema:
             type: string
-            description: Target Entity Id
       responses:
         204:
           description: Link deleted
@@ -1223,15 +1269,15 @@ paths:
         - in: path
           name: sourceEntityId
           required: true
+          description: Source Entity Id
           schema:
             type: string
-            description: Source Entity Id
         - in: path
           name: relationshipTypeName
           required: true
+          description: Relationship Type Name
           schema:
             type: string
-            description: Relationship Type Name
       responses:
         200:
           description: If successful, return a list of linked entities
@@ -1264,6 +1310,10 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Create an aggregate
+      description: >
+        Accepts a YAML document containing one or more aggregate definitions and creates
+        them in a single transaction. Each aggregate is an entity of an aggregate entity type,
+        composed of parts (other entities) and dependencies.
       operationId: createAggregateAsYaml
       requestBody:
         description: A YAML file containing one or more aggregate YAML documents
@@ -1274,20 +1324,20 @@ paths:
               type: string
               format: binary
       responses:
-         204:
-           description: Aggregates created
-         400:
-           description: Invalid input; details of the error are provided
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/ValidationError'
-         500:
-           description: System problem, details of the error are provided
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+        204:
+          description: Aggregates created
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}:
     get:
       tags:
@@ -1298,28 +1348,28 @@ paths:
         - in: path
           name: id
           required: true
+          description: Aggregate Id
           schema:
             type: string
-            description: Aggregate Id
         - in: query
           name: retrieveMappedEntities
           required: true
+          description: If true, retrieve the mapped entities
           schema:
             type: boolean
-            description: if true, retrieve the mapped entities
       responses:
         200:
           description: If successful, return an Aggregate object
           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/Aggregate'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aggregate'
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Aggregate not found
           content:
@@ -1327,30 +1377,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}/yaml:
     get:
       tags:
         - Meta Catalog Manager
-      summary: Get an aggregate by id
+      summary: Get an aggregate by id as YAML
+      description: >
+        Returns the aggregate as a YAML file. Same data as the JSON variant
+        (GET /aggregate/{id}) but serialized as YAML.
       operationId: getAggregateAsYaml
       parameters:
         - in: path
           name: id
           required: true
+          description: Aggregate Id
           schema:
             type: string
-            description: Aggregate Id
         - in: query
           name: retrieveMappedEntities
           required: true
+          description: If true, retrieve the mapped entities
           schema:
             type: boolean
-            description: if true, retrieve the mapped entities
       responses:
         200:
           description: If successful, return an Aggregate object as a YAML file
@@ -1360,11 +1413,11 @@ paths:
                 type: string
                 format: binary
         400:
-            description: Invalid input
-            content:
-              application/json:
-                schema:
-                  $ref: '#/components/schemas/ValidationError'
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
         404:
           description: Aggregate not found
           content:
@@ -1372,28 +1425,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/ValidationError'
         500:
-           description: System problem
-           content:
-             application/json:
-               schema:
-                 $ref: '#/components/schemas/SystemError'
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
 components:
   schemas:
     Trait:
-      required:
-        - id
-        - name
       type: object
+      description: A reusable characteristic contributing schema properties to entity types.
+      required:
+        - name
       properties:
         id:
           type: string
           readOnly: true
+          description: Server-generated unique identifier.
         name:
           type: string
+          description: Unique trait name.
         schema:
           type: string
+          description: JSON Schema string defining the trait's properties. Defaults to an empty schema if omitted.
         inheritsFrom:
           type: string
+          description: Name of the parent trait this trait inherits from, or null for a root trait.
         version:
           type: integer
           readOnly: true
@@ -1403,25 +1460,30 @@ components:
           readOnly: true
           description: Stable identifier grouping every version of the same logical trait.
     EntityType:
+      type: object
+      description: A type definition for entities, with a JSON Schema and optional traits.
       required:
-        - id
         - name
         - schema
-      type: object
       properties:
         id:
           type: string
           readOnly: true
+          description: Server-generated unique identifier.
         name:
           type: string
+          description: Unique entity type name.
         schema:
           type: string
+          description: JSON Schema string defining the entity type's properties.
         traits:
           type: array
           items:
             type: string
+          description: Names of the traits associated with this entity type.
         inheritsFrom:
           type: string
+          description: Name of the parent entity type this type inherits from, or null for a root type.
         version:
           type: integer
           readOnly: true
@@ -1431,39 +1493,48 @@ components:
           readOnly: true
           description: Stable identifier grouping every version of the same logical entity type.
     Aggregate:
+      type: object
+      description: >
+        An aggregate entity composed of parts (other entities) and dependencies.
+        Aggregates are created from aggregate entity types and can include mapped entities.
       required:
-        - id
         - entityType
         - values
-      type: object
-      properties:
-        id:
-          type: string
-        entityType:
-          type: string
-        values:
-          type: string
-        dependencies:
-          type: array
-          items:
-            type: string
-        parts:
-          type: array
-          items:
-            schema:
-              $ref: '#/components/schemas/Aggregate'
-    Entity:
-      required:
-        - id
-        - entityType
-        - values
-      type: object
       properties:
         id:
           type: string
           readOnly: true
+          description: Server-generated unique identifier.
         entityType:
           type: string
+          description: Name of the entity type this aggregate belongs to.
+        values:
+          type: string
+          description: JSON string containing the aggregate's values, validated against the entity type's schema.
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: Ids of entities this aggregate depends on.
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aggregate'
+          description: Sub-aggregates that compose this aggregate.
+    Entity:
+      type: object
+      description: A concrete instance of an entity type, with JSON values validated against the type's schema.
+      required:
+        - entityType
+        - values
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Server-generated unique identifier.
+        entityType:
+          type: string
+          description: Name of the entity type this entity belongs to.
         entityTypeVersionId:
           type: string
           readOnly: true
@@ -1474,39 +1545,51 @@ components:
             entities created before pinning was introduced.
         values:
           type: string
+          description: JSON string containing the entity's values, validated against the entity type's schema.
     Mapping:
+      type: object
+      description: >
+        A mapping between two entity types, defining how source entities are derived from
+        target entities via SpEL expressions and relationship path traversal.
       required:
-        - id
         - sourceEntityType
         - targetEntityType
         - mappingValues
         - entityPathReferences
-      type: object
       properties:
         id:
           type: string
           readOnly: true
+          description: Server-generated unique identifier.
         sourceEntityType:
           type: string
+          description: Name of the source entity type.
         targetEntityType:
           type: string
+          description: Name of the target entity type.
         mappingValues:
           type: string
+          description: JSON string of SpEL expressions mapping source fields to target fields.
         entityPathReferences:
           type: string
+          description: JSON string of entity path references describing relationship traversal from source to target.
     ValidationError:
+      type: object
+      description: Error response for client-side errors (4xx), listing all validation errors.
       required:
         - errors
-      type: object
       properties:
         errors:
           type: array
           items:
             type: string
+          description: List of validation error messages.
     SystemError:
+      type: object
+      description: Error response for server-side errors (5xx).
       required:
         - error
-      type: object
       properties:
         error:
           type: string
+          description: System error message.

@@ -74,6 +74,17 @@ class OAuth2SecurityConfigTest {
   }
 
   /**
+   * Verifies that the management UI at {@code /ui/**} is not open in oauth2 mode. Without a JWT
+   * bearer token the request must be rejected (401), not permitted. This prevents state-changing
+   * POSTs (create/delete trait, entity-type, mapping, bulk) from being unauthenticated when a
+   * protected profile is deployed with {@code auth-mode: oauth2}.
+   */
+  @Test
+  void uiPathRequiresAuthenticationInOauth2Mode() throws Exception {
+    mockMvc.perform(get("/ui/")).andExpect(status().isUnauthorized());
+  }
+
+  /**
    * Verifies that Basic auth credentials are rejected in OAuth2 mode even when a {@link
    * UserDetailsService} is available. The {@link SecurityFilterChainCustomizer} must not wire
    * {@code .httpBasic(...)} in OAuth2 mode; only JWT bearer tokens should be accepted. If the

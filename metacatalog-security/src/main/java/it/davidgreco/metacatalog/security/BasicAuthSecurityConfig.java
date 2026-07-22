@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.security;
 
 import java.util.List;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -21,7 +20,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * DelegatingPasswordEncoder scheme (e.g. {@code {noop}secret} or {@code {bcrypt}$2a$...}).
  */
 @Configuration
-@ConditionalOnProperty(name = SecurityConfigProperties.AUTH_MODE_PROPERTY, havingValue = "basic")
+@ConditionalOnAuthMode(AuthMode.BASIC)
 public class BasicAuthSecurityConfig {
 
   private final SecurityConfigProperties properties;

@@ -1,12 +1,14 @@
 package it.davidgreco.metacatalog.service;
 
 /**
- * Checked exception thrown by service layer operations.
+ * Unchecked exception thrown by service layer operations.
  *
  * <p>This exception is used to indicate business logic errors that can be handled and recovered
- * from, such as entity not found, validation failures, or constraint violations.
+ * from, such as entity not found, validation failures, or constraint violations. It extends {@link
+ * RuntimeException} so it propagates naturally through lambdas, streams, and transaction callbacks
+ * without boilerplate wrap/unwrap code.
  */
-public class ServiceError extends Exception {
+public class ServiceError extends RuntimeException {
 
   /** Generic, non-leaking message used whenever a database constraint is violated. */
   public static final String DATA_INTEGRITY_VIOLATION =

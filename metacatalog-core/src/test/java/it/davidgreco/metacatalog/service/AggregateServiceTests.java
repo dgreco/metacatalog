@@ -1,9 +1,9 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.common.JsonUtils.EMPTY_SCHEMA;
-import static it.davidgreco.metacatalog.common.JsonUtils.jsonFactory;
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.io.IOException;
@@ -25,6 +25,7 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
 
   @Test
   void testCreateAndRead() throws IOException, ServiceError {
+    var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
@@ -64,35 +65,35 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
     var root =
         new Entity(
             aggregateType,
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                         {"name": "root"}"""));
 
     var leaf1 =
         new Entity(
             aggregateElementType,
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                         {"name": "leaf1"}"""));
 
     var leaf2 =
         new Entity(
             aggregateElementType,
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                         {"name": "leaf2"}"""));
 
     var subRoot =
         new Entity(
             aggregateType,
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                         {"name": "subRoot"}"""));
 
     var leaf3 =
         new Entity(
             aggregateElementType,
-            jsonFactory.readTree(
+            jsonMapper.readTree(
                 """
                         {"name": "leaf3"}"""));
 

@@ -1,8 +1,6 @@
 package it.davidgreco.metacatalog.functions;
 
 import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.service.ServiceError;
-import it.davidgreco.metacatalog.service.ServiceRuntimeError;
 import java.util.Optional;
 
 /**
@@ -24,25 +22,19 @@ public abstract class AbstractEntityProcedure implements EntityProcedure {
    * @param entity the entity to process
    * @return the schedule ID to join after the transaction commits, or empty if no async work was
    *     scheduled
-   * @throws ServiceRuntimeError if type checking fails or execution throws a ServiceError
    */
   @Override
   public Optional<String> accept(Entity entity) {
-    try {
-      checkInputType(entity);
-      return execute(entity);
-    } catch (ServiceError e) {
-      throw new ServiceRuntimeError(e);
-    }
+    checkInputType(entity);
+    return execute(entity);
   }
 
   /**
    * Validates that the entity is of the expected type for this procedure.
    *
    * @param entity the entity to validate
-   * @throws ServiceError if the entity is not of the expected type
    */
-  protected abstract void checkInputType(Entity entity) throws ServiceError;
+  protected abstract void checkInputType(Entity entity);
 
   /**
    * Executes the procedure logic on the validated entity.
@@ -50,7 +42,6 @@ public abstract class AbstractEntityProcedure implements EntityProcedure {
    * @param entity the entity to process
    * @return the schedule ID to join after the transaction commits, or empty if no async work was
    *     scheduled
-   * @throws ServiceError if an error occurs during execution
    */
-  protected abstract Optional<String> execute(Entity entity) throws ServiceError;
+  protected abstract Optional<String> execute(Entity entity);
 }

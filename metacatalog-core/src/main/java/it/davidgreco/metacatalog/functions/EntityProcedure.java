@@ -7,10 +7,10 @@ import java.util.Optional;
  * Functional interface for procedures that operate on entities.
  *
  * <p>Entity procedures are used to execute custom operations on entities, such as provisioning,
- * validation, or transformation tasks. Unlike {@link EntityFunction}, procedures do not return a
- * result entity; they return an optional schedule ID that the {@link ProcedureExecutor} may join
- * after the plan-building transaction has committed, so async task execution does not hold the
- * plan-building transaction's DB connection.
+ * validation, or transformation tasks. Procedures do not return a result entity; they return an
+ * optional schedule ID that the {@link ProcedureExecutor} may join after the plan-building
+ * transaction has committed, so async task execution does not hold the plan-building transaction's
+ * DB connection.
  *
  * @see AbstractEntityProcedure
  * @see ProcedureExecutor

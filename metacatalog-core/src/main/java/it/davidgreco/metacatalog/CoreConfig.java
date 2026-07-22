@@ -1,12 +1,20 @@
 package it.davidgreco.metacatalog;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
 import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
@@ -61,6 +69,41 @@ public class CoreConfig {
     return caffeineCacheManager;
   }
 
+  @Bean
+  @Primary
+  public ObjectMapper jsonMapper() {
+    var mapper = new ObjectMapper();
+    mapper.registerModule(new Jdk8Module());
+    return mapper;
+  }
+
+  @Bean
+  public ObjectMapper yamlMapper() {
+    var mapper = new ObjectMapper(new YAMLFactory());
+    mapper.registerModule(new Jdk8Module());
+    return mapper;
+  }
+
+  @Bean
+  public JsonSchemaFactory jsonSchemaFactory() {
+    return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+  }
+
+  @Bean
+  public com.jayway.jsonpath.Configuration jsonPathConfiguration() {
+    return com.jayway.jsonpath.Configuration.builder()
+        .jsonProvider(new JacksonJsonNodeJsonProvider())
+        .build();
+  }
+
+  @Bean
+  public JsonUtils jsonUtils(
+      ObjectMapper jsonMapper,
+      @Qualifier("yamlMapper") ObjectMapper yamlMapper,
+      JsonSchemaFactory jsonSchemaFactory) {
+    return new JsonUtils(jsonMapper, yamlMapper, jsonSchemaFactory);
+  }
+
   /**
    * Creates the trait service bean.
    *
@@ -72,8 +115,10 @@ public class CoreConfig {
   public TraitService traitService(
       TraitRepository traitRepository,
       TraitRelationshipRepository traitRelationshipRepository,
-      TraitVersionRepository traitVersionRepository) {
-    return new TraitService(traitRepository, traitRelationshipRepository, traitVersionRepository);
+      TraitVersionRepository traitVersionRepository,
+      JsonUtils jsonUtils) {
+    return new TraitServiceImpl(
+        traitRepository, traitRelationshipRepository, traitVersionRepository, jsonUtils);
   }
 
   /**
@@ -90,9 +135,14 @@ public class CoreConfig {
       EntityTypeRepository entityTypeRepository,
       TraitRepository traitRepository,
       EntityTypeVersionRepository entityTypeVersionRepository,
-      EntityRepository entityRepository) {
-    return new EntityTypeService(
-        entityTypeRepository, traitRepository, entityTypeVersionRepository, entityRepository);
+      EntityRepository entityRepository,
+      JsonUtils jsonUtils) {
+    return new EntityTypeServiceImpl(
+        entityTypeRepository,
+        traitRepository,
+        entityTypeVersionRepository,
+        entityRepository,
+        jsonUtils);
   }
 
   /**
@@ -115,55 +165,95 @@ public class CoreConfig {
       EntityRelationshipRepository entityRelationshipRepository,
       TraitRelationshipRepository traitRelationshipRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
-      EntityLifeCycleEventRepository entityLifeCycleEventRepository) {
-    return new EntityService(
+      EntityLifeCycleEventRepository entityLifeCycleEventRepository,
+      JsonUtils jsonUtils) {
+    return new EntityServiceImpl(
         entityTypeRepository,
         entityTypeVersionRepository,
         entityRepository,
         entityRelationshipRepository,
         traitRelationshipRepository,
         mappingEntityTypeRelationshipRepository,
-        entityLifeCycleEventRepository);
+        entityLifeCycleEventRepository,
+        jsonUtils);
   }
 
   /**
    * Creates the mapping service bean.
    *
-   * @param traitRelationshipRepository the trait relationship repository
-   * @param entityRepository the entity repository
    * @param entityTypeRepository the entity type repository
-   * @param entityTypeVersionRepository the entity type version repository
    * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
    * @param mappingEntityRelationshipRepository the mapping entity relationship repository
-   * @param entityRelationshipRepository the entity relationship repository
-   * @param entityLifeCycleEventRepository the lifecycle event repository
-   * @param transactionManager the transaction manager
-   * @param applicationConfigurationProperties the application configuration
    * @return the mapping service
    */
   @Bean
   public MappingService mappingService(
-      TraitRelationshipRepository traitRelationshipRepository,
-      EntityRepository entityRepository,
       EntityTypeRepository entityTypeRepository,
+      MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
+      JsonUtils jsonUtils) {
+    return new MappingServiceImpl(
+        entityTypeRepository,
+        mappingEntityTypeRelationshipRepository,
+        mappingEntityRelationshipRepository,
+        jsonUtils);
+  }
+
+  /**
+   * Creates the entity path resolver bean.
+   *
+   * @param entityRepository the entity repository
+   * @param mappingEntityRelationshipRepository the mapping entity relationship repository
+   * @param entityRelationshipRepository the entity relationship repository
+   * @return the entity path resolver
+   */
+  @Bean
+  public EntityPathResolver entityPathResolver(
+      EntityRepository entityRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      com.jayway.jsonpath.Configuration jsonPathConfiguration) {
+    return new EntityPathResolver(
+        entityRepository,
+        mappingEntityRelationshipRepository,
+        entityRelationshipRepository,
+        jsonPathConfiguration);
+  }
+
+  /**
+   * Creates the mapped entity service bean.
+   *
+   * @param entityRepository the entity repository
+   * @param entityTypeVersionRepository the entity type version repository
+   * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
+   * @param mappingEntityRelationshipRepository the mapping entity relationship repository
+   * @param entityLifeCycleEventRepository the lifecycle event repository
+   * @param transactionManager the transaction manager
+   * @param applicationConfigurationProperties the application configuration
+   * @param entityPathResolver the entity path resolver
+   * @return the mapped entity service
+   */
+  @Bean
+  public MappedEntityService mappedEntityService(
+      EntityRepository entityRepository,
       EntityTypeVersionRepository entityTypeVersionRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
-      EntityRelationshipRepository entityRelationshipRepository,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
       PlatformTransactionManager transactionManager,
-      CoreConfigProperties applicationConfigurationProperties) {
-    return new MappingService(
-        traitRelationshipRepository,
+      CoreConfigProperties applicationConfigurationProperties,
+      EntityPathResolver entityPathResolver,
+      JsonUtils jsonUtils) {
+    return new MappedEntityService(
         entityRepository,
-        entityTypeRepository,
         entityTypeVersionRepository,
         mappingEntityTypeRelationshipRepository,
         mappingEntityRelationshipRepository,
-        entityRelationshipRepository,
         entityLifeCycleEventRepository,
         transactionManager,
-        applicationConfigurationProperties);
+        applicationConfigurationProperties,
+        entityPathResolver,
+        jsonUtils);
   }
 
   /**
@@ -188,7 +278,7 @@ public class CoreConfig {
    *
    * @param advisoryLockManager the advisory lock manager
    * @param entityLifeCycleEventRepository the lifecycle event repository
-   * @param mappingService the mapping service
+   * @param mappedEntityService the mapped entity service
    * @param transactionManager the transaction manager (used for the {@code markFailed} {@code
    *     REQUIRES_NEW} transaction)
    * @return the mapping updater service
@@ -197,13 +287,13 @@ public class CoreConfig {
   MappingUpdaterService mappingUpdaterService(
       AdvisoryLockManager advisoryLockManager,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
-      MappingService mappingService,
+      MappedEntityService mappedEntityService,
       PlatformTransactionManager transactionManager) {
     var mus =
         new MappingUpdaterService(
             advisoryLockManager,
             entityLifeCycleEventRepository,
-            mappingService,
+            mappedEntityService,
             transactionManager);
     mus.setAutomaticEntitiesMapping(applicationConfigurationProperties.automaticEntitiesMapping());
     return mus;
@@ -223,8 +313,10 @@ public class CoreConfig {
       TraitService traitService,
       EntityTypeService entityTypeService,
       MappingService mappingService,
-      EntityService entityService) {
-    return new BulkLoaderService(traitService, entityTypeService, mappingService, entityService);
+      EntityService entityService,
+      @Qualifier("yamlMapper") ObjectMapper yamlMapper) {
+    return new BulkLoaderService(
+        traitService, entityTypeService, mappingService, entityService, yamlMapper);
   }
 
   /**
@@ -244,5 +336,16 @@ public class CoreConfig {
     executor.setAwaitTerminationSeconds(60);
     executor.initialize();
     return executor;
+  }
+
+  @Bean
+  public TaskFactoryRegistry taskFactoryRegistry() {
+    return new TaskFactoryRegistry();
+  }
+
+  @Bean
+  public TaskManager taskManager(
+      AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
+    return new TaskManager(asyncTaskExecutor, coreConfigProperties);
   }
 }

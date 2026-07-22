@@ -6,31 +6,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
 import com.networknt.schema.*;
 import io.vavr.Tuple2;
 import io.vavr.control.Either;
 import java.util.*;
 
 /**
- * Utility class providing JSON and JSON Schema operations for the metacatalog.
+ * Spring-managed JSON utility component providing JSON Schema validation, schema merging, and
+ * aggregate value conversion.
  *
- * <p>This class contains static methods and constants for working with JSON data, including schema
- * validation, schema merging, and JSON path operations. It uses Jackson for JSON processing and
- * NetworkNT for JSON Schema validation.
+ * <p>The underlying {@link ObjectMapper} instances, {@link JsonSchemaFactory}, and JSON Path {@link
+ * com.jayway.jsonpath.Configuration} are registered as Spring beans in {@link
+ * it.davidgreco.metacatalog.CoreConfig} and injected here, replacing the previous mutable static
+ * singletons.
  */
 public class JsonUtils {
-
-  private JsonUtils() {}
-
-  /** Jackson ObjectMapper configured for JSON processing. */
-  public static final ObjectMapper jsonFactory = new ObjectMapper();
-
-  /** Jackson ObjectMapper configured for YAML processing. */
-  public static final ObjectMapper yamlFactory = new ObjectMapper(new YAMLFactory());
 
   /** An empty JSON schema template with no properties defined. */
   public static final String EMPTY_SCHEMA =
@@ -42,23 +32,32 @@ public class JsonUtils {
             }
             """;
 
-  static {
-    jsonFactory.registerModule(new Jdk8Module());
-    yamlFactory.registerModule(new Jdk8Module());
+  private final ObjectMapper jsonMapper;
+  private final ObjectMapper yamlMapper;
+  private final JsonSchemaFactory jsonSchemaFactory;
+  private final JsonSchema jsonSchemaSchema;
+
+  public JsonUtils(
+      ObjectMapper jsonMapper, ObjectMapper yamlMapper, JsonSchemaFactory jsonSchemaFactory) {
+    this.jsonMapper = jsonMapper;
+    this.yamlMapper = yamlMapper;
+    this.jsonSchemaFactory = jsonSchemaFactory;
+    this.jsonSchemaSchema =
+        jsonSchemaFactory.getSchema(
+            SchemaLocation.of(SchemaId.V202012), SchemaValidatorsConfig.builder().build());
   }
 
-  /** Factory for creating JSON Schema validators using the 2020-12 specification. */
-  public static final JsonSchemaFactory jsonSchemaFactory =
-      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+  public ObjectMapper jsonMapper() {
+    return jsonMapper;
+  }
 
-  /** JSON Schema validator for validating JSON Schema documents themselves. */
-  public static final JsonSchema jsonSchemaSchema =
-      jsonSchemaFactory.getSchema(
-          SchemaLocation.of(SchemaId.V202012), SchemaValidatorsConfig.builder().build());
+  public ObjectMapper yamlMapper() {
+    return yamlMapper;
+  }
 
-  /** Configuration for JSON Path operations using Jackson as the JSON provider. */
-  public static final Configuration jsonPathConfiguration =
-      Configuration.builder().jsonProvider(new JacksonJsonNodeJsonProvider()).build();
+  public JsonSchemaFactory jsonSchemaFactory() {
+    return jsonSchemaFactory;
+  }
 
   private static final Set<String> notAllowedKeywords =
       Set.of(
@@ -81,13 +80,6 @@ public class JsonUtils {
 
   private static final String REQUIRED = "required";
 
-  /**
-   * Check if a given JSON node contains any of the keywords that are not allowed in a Metacatalog
-   * schema.
-   *
-   * @param node the JSON node to check
-   * @return true if the node contains any of the not allowed keywords, false otherwise
-   */
   private static boolean checkNotAllowedKeywords(JsonNode node) {
     if (node.isObject()) {
       for (Map.Entry<String, JsonNode> stringJsonNodeEntry : node.properties()) {
@@ -108,17 +100,6 @@ public class JsonUtils {
     return false;
   }
 
-  /**
-   * Converts the field types of a JSON node to "string" if they are not already "string" or
-   * "object". This method recursively traverses through the JSON node and its nested objects or
-   * arrays, ensuring that all non-object, non-string types are set to "string".
-   *
-   * <p><b>Mutates its input.</b> The caller is responsible for passing a defensive {@code deepCopy}
-   * if it needs to preserve the original node. The sole caller ({@link #convertToMappingSchema})
-   * already does this.
-   *
-   * @param node the JSON node whose field types are to be converted
-   */
   private static void convertFieldTypeToStringType(JsonNode node) {
     if (node.isObject()) {
       for (Map.Entry<String, JsonNode> entry : node.properties()) {
@@ -140,28 +121,15 @@ public class JsonUtils {
     }
   }
 
-  /**
-   * Converts a JSON schema to a mapping schema by changing all field types to string.
-   *
-   * @param jsonSchema the JSON schema to convert
-   * @return the converted mapping schema, or validation errors if conversion fails
-   */
-  public static Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema jsonSchema) {
-    var node = jsonSchema.getSchemaNode().deepCopy();
+  public Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema schema) {
+    var node = schema.getSchemaNode().deepCopy();
     convertFieldTypeToStringType(node.get(PROPERTIES));
     return Either.right(jsonSchemaFactory.getSchema(node));
   }
 
-  /**
-   * Validate a given JSON schema string and return it as a {@link JsonSchema} if it is valid.
-   * Otherwise, return the validation errors as a list of strings.
-   *
-   * @param json the JSON schema string to validate
-   * @return the validated JSON schema if it is valid, otherwise a list of validation errors
-   */
-  public static Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
+  public Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
     try {
-      var schemaNode = jsonFactory.readTree(json);
+      var schemaNode = jsonMapper.readTree(json);
       var res =
           jsonSchemaSchema.validate(
               schemaNode.toPrettyString(),
@@ -181,13 +149,7 @@ public class JsonUtils {
     }
   }
 
-  /**
-   * Merge a list of JSON schemas into a single JSON schema.
-   *
-   * @param schemas the JSON schemas to merge
-   * @return the merged JSON schema if it is valid, otherwise a list of validation errors
-   */
-  public static Either<List<String>, JsonNode> mergeSchemas(List<JsonNode> schemas) {
+  public Either<List<String>, JsonNode> mergeSchemas(List<JsonNode> schemas) {
     Map<String, Tuple2<JsonNode, Boolean>> propertiesToMerge = new HashMap<>();
     List<String> propertiesNamesToMerge = new LinkedList<>();
     for (JsonNode node : schemas) {
@@ -218,9 +180,9 @@ public class JsonUtils {
                 propertiesToMerge.put(key, new Tuple2<>(value, isRequired));
               });
     }
-    var mergedSchemaJson = jsonFactory.createObjectNode();
-    var properties = jsonFactory.createObjectNode();
-    var required = jsonFactory.createArrayNode();
+    var mergedSchemaJson = jsonMapper.createObjectNode();
+    var properties = jsonMapper.createObjectNode();
+    var required = jsonMapper.createArrayNode();
 
     propertiesNamesToMerge.forEach(
         propertyName -> {
@@ -249,31 +211,18 @@ public class JsonUtils {
   private static final String VALUES = "values";
   private static final String PARTS = "parts";
 
-  /**
-   * Converts aggregate values stored as strings into proper JSON nodes.
-   *
-   * <p>This method recursively processes a JSON structure, converting any "values" fields that are
-   * stored as YAML/JSON strings into parsed JSON nodes, and removing empty "parts" arrays.
-   *
-   * <p>Returns a <em>deep copy</em> of the input — the original node is not mutated. Previously
-   * this method mutated the input in place, which silently corrupted the caller's tree.
-   *
-   * @param jsonNode the JSON node to process
-   * @return a new JSON node with converted values; the input is left untouched
-   * @throws JsonProcessingException if the string values cannot be parsed as JSON
-   */
-  public static JsonNode convertAggregateValuesIntoJsonNodes(JsonNode jsonNode)
+  public JsonNode convertAggregateValuesIntoJsonNodes(JsonNode jsonNode)
       throws JsonProcessingException {
     var copy = jsonNode.deepCopy();
     convertAggregateValuesIntoJsonNodesInPlace(copy);
     return copy;
   }
 
-  private static void convertAggregateValuesIntoJsonNodesInPlace(JsonNode jsonNode)
+  private void convertAggregateValuesIntoJsonNodesInPlace(JsonNode jsonNode)
       throws JsonProcessingException {
     if (jsonNode.has(VALUES)) {
       var values = jsonNode.get(VALUES).asText();
-      var valuesJson = yamlFactory.readTree(values);
+      var valuesJson = yamlMapper.readTree(values);
       ((ObjectNode) jsonNode).set(VALUES, valuesJson);
     }
     if (jsonNode.has(PARTS)) {
