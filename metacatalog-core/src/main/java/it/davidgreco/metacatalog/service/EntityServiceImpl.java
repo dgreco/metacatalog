@@ -5,7 +5,6 @@ import static it.davidgreco.metacatalog.service.ServiceUtils.NOT_FOUND;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import it.davidgreco.metacatalog.common.JsonUtils;
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
@@ -128,6 +127,9 @@ public class EntityServiceImpl implements EntityService {
    * creation time). If the entity has no pin (legacy row created before pinning was introduced),
    * validation falls back to the live {@link EntityType#getSchema()}.
    *
+   * <p>Entities whose type is the target of a mapping relationship cannot be updated through this
+   * method. Internal system updates (e.g. provisioning) should use {@link #updateValues}.
+   *
    * @param entityId the ID of the entity to update
    * @param values a JSON string containing the new values for the entity
    */
@@ -140,10 +142,8 @@ public class EntityServiceImpl implements EntityService {
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
 
-      if (!ServiceUtils.implementsTrait(
-              entity.getEntityType(), BuiltInTraits.PROVISIONABLE_RESOURCE)
-          && ServiceUtils.isMappingTargetEntityType(
-              mappingEntityTypeRelationshipRepository, entity.getEntityType()))
+      if (ServiceUtils.isMappingTargetEntityType(
+          mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
 
@@ -163,14 +163,49 @@ public class EntityServiceImpl implements EntityService {
                 entity.getEntityType().getName(),
                 EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED,
                 EntityLifeCycleEvent.STATUS_PENDING));
-      else
+      else {
         entityLifeCycleEventRepository.save(
             new EntityLifeCycleEvent(
                 entity.getId(),
                 entity.getEntityType().getName(),
                 EntityLifeCycleEvent.ENTITY_UPDATED,
                 NO_PROCESSING));
+        emitSourceUpdatedForDependentMappingSources(entity);
+      }
       log.info("Updated entity with id {}", entityId);
+    } catch (JsonProcessingException e) {
+      throw new ServiceError(e.getMessage());
+    }
+  }
+
+  /**
+   * Updates an existing entity's values without enforcing mapping-target restrictions or emitting
+   * lifecycle events.
+   *
+   * <p>Intended for internal system use (e.g. the provisioning task writing back provisioning
+   * status to a mapped entity). Validation still uses the entity's pinned schema.
+   *
+   * @param entityId the ID of the entity to update
+   * @param values a JSON string containing the new values for the entity
+   */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void updateValues(String entityId, String values) {
+    log.info("Updating values for entity with id {}", entityId);
+    try {
+      var entity =
+          entityRepository
+              .findById(entityId)
+              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+      var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
+      var pinnedVersion = entity.getEntityTypeVersion();
+      var schema =
+          pinnedVersion != null ? pinnedVersion.getSchema() : entity.getEntityType().getSchema();
+      SchemaValidationError.validateOrThrow(
+          jsonUtils.jsonSchemaFactory().getSchema(schema), valuesJsonNode);
+      entity.setValues(valuesJsonNode);
+      entityRepository.save(entity);
+      log.info("Updated values for entity with id {}", entityId);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
     }
@@ -202,6 +237,13 @@ public class EntityServiceImpl implements EntityService {
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         throw new ServiceError(
             ENTITY_WITH_ID + entityId + " is an instance of a source entity type");
+
+      if (!entityRelationshipRepository.findBySource(entity).isEmpty()
+          || !entityRelationshipRepository.findByTarget(entity).isEmpty())
+        throw new ServiceError(
+            ENTITY_WITH_ID
+                + entityId
+                + " has relationships and cannot be deleted; remove all links first");
 
       entityRepository.delete(entity);
       entityLifeCycleEventRepository.save(
@@ -409,5 +451,44 @@ public class EntityServiceImpl implements EntityService {
     log.info(
         "Listed entities linked to entity with id {} with relation type {}", sourceId, relType);
     return linkedEntities;
+  }
+
+  /**
+   * Emits {@code ENTITY_SOURCE_UPDATED} events for every mapping source entity that is directly
+   * related to the given non-source entity.
+   *
+   * <p>When an entity that is not itself a mapping source (e.g. a {@code DataProductType} entity)
+   * is updated, the mapping values that reference it indirectly — via an {@code
+   * entityPathReferences} path in a mapping relationship — must be re-evaluated. This method finds
+   * all entities that have a direct entity relationship with the updated entity and, for each one
+   * whose type is a mapping source type, emits a {@code SOURCE_UPDATED} lifecycle event so the
+   * {@link MappingUpdaterService} will re-run the mapping for that source entity.
+   *
+   * @param entity the non-source entity that was updated
+   */
+  private void emitSourceUpdatedForDependentMappingSources(Entity entity) {
+    var relatedEntities = new java.util.LinkedHashSet<Entity>();
+    entityRelationshipRepository.findBySource(entity).stream()
+        .map(EntityRelationship::getTarget)
+        .forEach(relatedEntities::add);
+    entityRelationshipRepository.findByTarget(entity).stream()
+        .map(EntityRelationship::getSource)
+        .forEach(relatedEntities::add);
+    for (Entity related : relatedEntities) {
+      if (related.getId().equals(entity.getId())) continue;
+      if (ServiceUtils.isMappingSourceEntityType(
+          mappingEntityTypeRelationshipRepository, related.getEntityType())) {
+        log.info(
+            "Emitting SOURCE_UPDATED for dependent mapping source {} (triggered by update of {})",
+            related.getId(),
+            entity.getId());
+        entityLifeCycleEventRepository.save(
+            new EntityLifeCycleEvent(
+                related.getId(),
+                related.getEntityType().getName(),
+                EntityLifeCycleEvent.ENTITY_SOURCE_UPDATED,
+                EntityLifeCycleEvent.STATUS_PENDING));
+      }
+    }
   }
 }

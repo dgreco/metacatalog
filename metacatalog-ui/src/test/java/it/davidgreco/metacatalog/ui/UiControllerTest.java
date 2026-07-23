@@ -25,7 +25,6 @@ import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPath
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitVersion;
-import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
@@ -55,7 +54,6 @@ class UiControllerTest {
   private final TraitService traitService = mock(TraitService.class);
   private final EntityTypeService entityTypeService = mock(EntityTypeService.class);
   private final EntityService entityService = mock(EntityService.class);
-  private final AggregateService aggregateService = mock(AggregateService.class);
   private final BulkLoaderService bulkLoaderService = mock(BulkLoaderService.class);
   private final MappingService mappingService = mock(MappingService.class);
   private final ObjectMapper mapper = new ObjectMapper();
@@ -92,9 +90,7 @@ class UiControllerTest {
                 new EntityTypeUiController(entityTypeService, traitService),
                 new MappingUiController(mappingService, entityTypeService, objectMapper),
                 new BulkUiController(bulkLoaderService),
-                new EntityInstanceController(entityService, entityTypeService, objectMapper),
-                new AggregateInstanceController(
-                    entityService, aggregateService, entityTypeService, objectMapper))
+                new UnifiedInstanceController(entityService, entityTypeService, objectMapper))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -841,86 +837,57 @@ class UiControllerTest {
         .andExpect(flash().attribute("error", "Trait Ghost not found"));
   }
 
-  // --- entity instance management ----------------------------------------------
+  // --- instances ----------------------------------------------------------------
 
   @Test
-  void entityInstanceIndexRedirectsToEntities() throws Exception {
+  void instancesListRenders() throws Exception {
     mockMvc
         .perform(get("/ui/instances"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/entities"));
-  }
-
-  @Test
-  void entityInstanceListRenders() throws Exception {
-    mockMvc
-        .perform(get("/ui/instances/entities"))
         .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-list"))
+        .andExpect(view().name("instances-list"))
         .andExpect(model().attributeExists("instances", "entityTypes"));
   }
 
   @Test
-  void entityInstanceListRendersWithFilter() throws Exception {
-    var type = new EntityType();
-    type.setName("Person");
-    given(entityTypeService.list()).willReturn(List.of(type));
-
-    var entity = new Entity();
-    entity.setId("ent-1");
-    entity.setEntityType(type);
-    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
-    given(entityService.list("Person", "")).willReturn(List.of(entity));
-
+  void instancesNewFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/instances/entities").param("type", "Person"))
+        .perform(get("/ui/instances/new"))
         .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-list"))
-        .andExpect(model().attribute("selectedType", "Person"));
-
-    verify(entityService).list("Person", "");
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attributeExists("instanceForm", "entityTypes"));
   }
 
   @Test
-  void entityInstanceNewFormRenders() throws Exception {
-    mockMvc
-        .perform(get("/ui/instances/entities/new"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-form"))
-        .andExpect(model().attributeExists("entityForm", "entityTypes"));
-  }
-
-  @Test
-  void createEntitySubmitsToServiceAndRedirects() throws Exception {
+  void createEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/entities")
+            post("/ui/instances")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Alice\"}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/entities"));
+        .andExpect(redirectedUrl("/ui/instances"));
 
     verify(entityService).create("Person", "{\"name\":\"Alice\"}");
   }
 
   @Test
-  void createEntityReRendersFormOnServiceError() throws Exception {
+  void createInstanceReRendersFormOnServiceError() throws Exception {
     doThrow(new ServiceError("Invalid schema"))
         .when(entityService)
         .create(eq("Person"), eq("{\"name\":\"Alice\"}"));
 
     mockMvc
         .perform(
-            post("/ui/instances/entities")
+            post("/ui/instances")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Alice\"}"))
         .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-form"))
+        .andExpect(view().name("instances-form"))
         .andExpect(model().attribute("error", "Invalid schema"));
   }
 
   @Test
-  void entityInstanceEditFormRenders() throws Exception {
+  void editEntityInstanceFormRenders() throws Exception {
     var type = new EntityType();
     type.setName("Person");
     var entity = new Entity();
@@ -930,61 +897,34 @@ class UiControllerTest {
     given(entityService.read("ent-1")).willReturn(entity);
 
     mockMvc
-        .perform(get("/ui/instances/entities/ent-1/edit"))
+        .perform(get("/ui/instances/ent-1/edit"))
         .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-form"))
-        .andExpect(model().attribute("entityId", "ent-1"))
-        .andExpect(model().attributeExists("entityForm", "entityTypes"));
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attribute("instanceId", "ent-1"))
+        .andExpect(model().attributeExists("instanceForm", "entityTypes"));
   }
 
   @Test
-  void updateEntitySubmitsToServiceAndRedirects() throws Exception {
+  void updateEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/entities/ent-1")
+            post("/ui/instances/ent-1")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Bob\"}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/entities"));
+        .andExpect(redirectedUrl("/ui/instances"));
 
     verify(entityService).update("ent-1", "{\"name\":\"Bob\"}");
   }
 
   @Test
-  void updateEntityReRendersFormOnServiceError() throws Exception {
-    doThrow(new ServiceError("Invalid schema"))
-        .when(entityService)
-        .update(eq("ent-1"), eq("{\"name\":\"Bob\"}"));
-
+  void deleteEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
-        .perform(
-            post("/ui/instances/entities/ent-1")
-                .param("entityType", "Person")
-                .param("values", "{\"name\":\"Bob\"}"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-form"))
-        .andExpect(model().attribute("error", "Invalid schema"));
-  }
-
-  @Test
-  void deleteEntitySubmitsToServiceAndRedirects() throws Exception {
-    mockMvc
-        .perform(post("/ui/instances/entities/ent-1/delete"))
+        .perform(post("/ui/instances/ent-1/delete"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/entities"));
+        .andExpect(redirectedUrl("/ui/instances"));
 
     verify(entityService).delete("ent-1");
-  }
-
-  @Test
-  void deleteEntityRedirectsWithFlashOnServiceError() throws Exception {
-    doThrow(new ServiceError("Entity still in use")).when(entityService).delete("ent-1");
-
-    mockMvc
-        .perform(post("/ui/instances/entities/ent-1/delete"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/entities"))
-        .andExpect(flash().attribute("error", "Entity still in use"));
   }
 
   @Test
@@ -998,98 +938,9 @@ class UiControllerTest {
     given(entityService.read("ent-1")).willReturn(entity);
 
     mockMvc
-        .perform(get("/ui/instances/entities/ent-1"))
+        .perform(get("/ui/instances/ent-1"))
         .andExpect(status().isOk())
-        .andExpect(view().name("entity-instance-view"))
+        .andExpect(view().name("instances-view"))
         .andExpect(model().attributeExists("entity", "valuesJson"));
-  }
-
-  // --- aggregate instance management -------------------------------------------
-
-  @Test
-  void aggregateInstanceListRenders() throws Exception {
-    mockMvc
-        .perform(get("/ui/instances/aggregates"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("aggregate-instance-list"))
-        .andExpect(model().attributeExists("aggregates", "entityTypes"));
-  }
-
-  @Test
-  void aggregateInstanceNewFormRenders() throws Exception {
-    mockMvc
-        .perform(get("/ui/instances/aggregates/new"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("aggregate-instance-form"))
-        .andExpect(model().attributeExists("aggregateForm", "entityTypes"));
-  }
-
-  @Test
-  void createAggregateRedirectsOnSuccess() throws Exception {
-    mockMvc
-        .perform(
-            post("/ui/instances/aggregates")
-                .param("yaml", "entityType: Server\nvalues:\n  name: web-1\n"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/aggregates"));
-  }
-
-  @Test
-  void createAggregateReRendersFormOnParseError() throws Exception {
-    mockMvc
-        .perform(post("/ui/instances/aggregates").param("yaml", "not: valid: yaml: ["))
-        .andExpect(status().isOk())
-        .andExpect(view().name("aggregate-instance-form"))
-        .andExpect(model().attributeExists("error"));
-  }
-
-  @Test
-  void aggregateInstanceViewRenders() throws Exception {
-    var type = new EntityType();
-    type.setName("Server");
-    var entity = new Entity();
-    entity.setId("agg-1");
-    entity.setEntityType(type);
-    entity.setValues(mapper.readTree("{\"name\":\"web-1\"}"));
-    var aggregate = new AggregateService.Aggregate(entity, List.of());
-    given(aggregateService.read("agg-1", false)).willReturn(aggregate);
-
-    mockMvc
-        .perform(get("/ui/instances/aggregates/agg-1"))
-        .andExpect(status().isOk())
-        .andExpect(view().name("aggregate-instance-view"))
-        .andExpect(model().attributeExists("aggregate", "valuesJson", "yaml"));
-  }
-
-  @Test
-  void aggregateInstanceViewRedirectsWithFlashOnServiceError() throws Exception {
-    doThrow(new ServiceError("Not an aggregate")).when(aggregateService).read("agg-1", false);
-
-    mockMvc
-        .perform(get("/ui/instances/aggregates/agg-1"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/aggregates"))
-        .andExpect(flash().attribute("error", "Not an aggregate"));
-  }
-
-  @Test
-  void deleteAggregateSubmitsToServiceAndRedirects() throws Exception {
-    mockMvc
-        .perform(post("/ui/instances/aggregates/agg-1/delete"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/aggregates"));
-
-    verify(entityService).delete("agg-1");
-  }
-
-  @Test
-  void deleteAggregateRedirectsWithFlashOnServiceError() throws Exception {
-    doThrow(new ServiceError("Aggregate still in use")).when(entityService).delete("agg-1");
-
-    mockMvc
-        .perform(post("/ui/instances/aggregates/agg-1/delete"))
-        .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/aggregates"))
-        .andExpect(flash().attribute("error", "Aggregate still in use"));
   }
 }

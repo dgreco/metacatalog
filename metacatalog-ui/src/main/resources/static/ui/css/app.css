@@ -487,6 +487,24 @@ select[multiple].traits-select {
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+.mv-readonly {
+    margin-left: 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--muted-text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* --- instance manager array items ----------------------------------------- */
+.iv-array-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.iv-array-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+}
+.iv-array-item > label { flex: 1 1 auto; }
+.iv-array-item > .link-remove { flex: 0 0 auto; margin-top: 0.35rem; }
 
 /* --- read-only schema / mapping viewers ----------------------------------- */
 .sv { max-width: 420px; }

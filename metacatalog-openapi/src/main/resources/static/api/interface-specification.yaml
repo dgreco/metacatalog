@@ -1103,6 +1103,50 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+    put:
+      tags:
+        - Meta Catalog Manager
+      summary: Update an entity by id
+      description: >
+        Replaces the values of an existing entity. The entity type cannot be changed.
+        Entities whose type is the target of a mapping relationship cannot be updated
+        through this endpoint.
+      operationId: updateEntity
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Entity Id
+          schema:
+            type: string
+      requestBody:
+        description: An Entity spec with the new values
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entity'
+        required: true
+      responses:
+        204:
+          description: Entity updated
+        400:
+          description: Invalid input; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
     delete:
       tags:
         - Meta Catalog Manager

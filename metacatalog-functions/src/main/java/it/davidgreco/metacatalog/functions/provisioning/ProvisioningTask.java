@@ -86,7 +86,7 @@ public abstract class ProvisioningTask extends Task<Entity> {
     }
     values.put(PROVISIONING_STATUS, status);
     values.put(PROVISIONING_RESULT, result);
-    getEntityService().update(getEntity().getId(), values.toPrettyString());
+    getEntityService().updateValues(getEntity().getId(), values.toPrettyString());
   }
 
   @Override

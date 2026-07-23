@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Entity Instances — Meta Catalog</title>
+    <title>Instances — Meta Catalog</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
 </head>
 <body>
 <header class="topbar">
-    <h1>Entity Instances</h1>
+    <h1>Instances</h1>
     <nav>
         <a class="btn" th:href="@{/ui}">Back</a>
-        <a class="btn" th:href="@{/ui/instances/entities/new}">+ New Entity</a>
-        <a class="btn" th:href="@{/ui/instances/aggregates}">Aggregates</a>
+        <a class="btn" th:href="@{/ui/instances/new}">+ New</a>
     </nav>
 </header>
 
@@ -23,7 +22,7 @@
 
     <!-- Filter -->
     <div class="filter-bar">
-        <form method="get" th:action="@{/ui/instances/entities}">
+        <form method="get" th:action="@{/ui/instances}">
             <label for="type">Filter by type:</label>
             <select name="type" id="type" onchange="this.form.submit()">
                 <option value="">All types</option>
@@ -35,36 +34,40 @@
         </form>
     </div>
 
-    <!-- Entity instances table -->
+    <!-- Instances table -->
     <table th:if="${!instances.isEmpty()}">
         <thead>
         <tr>
             <th>Name</th>
             <th>Type</th>
+            <th>Version</th>
             <th>Actions</th>
         </tr>
         </thead>
         <tbody>
         <tr th:each="inst : ${instances}">
             <td>
-                <a th:href="@{/ui/instances/entities/{id}(id=${inst.id})}"
+                <a th:href="@{/ui/instances/{id}(id=${inst.id})}"
                    th:text="${inst.name}">name</a>
             </td>
             <td>
                 <span class="tag" th:text="${inst.entityType}">entityType</span>
             </td>
             <td>
-                <a class="btn-sm" th:href="@{/ui/instances/entities/{id}(id=${inst.id})}" title="View">View</a>
-                <a class="btn-sm" th:href="@{/ui/instances/entities/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
-                <form method="post" th:action="@{/ui/instances/entities/{id}/delete(id=${inst.id})}"
-                      class="inline-form" data-confirm="Delete this entity?">
+                <span class="tag muted" th:text="${inst.entityTypeVersionId}">version</span>
+            </td>
+            <td>
+                <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
+                <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
+                <form method="post" th:action="@{/ui/instances/{id}/delete(id=${inst.id})}"
+                      class="inline-form" data-confirm="Delete this instance?">
                     <button type="submit" class="link-remove" title="Delete">×</button>
                 </form>
             </td>
         </tr>
         </tbody>
     </table>
-    <p class="empty" th:if="${instances.isEmpty()}">No entity instances yet.</p>
+    <p class="empty" th:if="${instances.isEmpty()}">No instances yet.</p>
 </main>
 
 <script>

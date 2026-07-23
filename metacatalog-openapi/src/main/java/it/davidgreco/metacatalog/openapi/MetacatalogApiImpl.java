@@ -211,6 +211,12 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity updateEntity(String id, Entity entity) {
+    entityService.update(id, entity.getValues());
+    return status(204).build();
+  }
+
+  @Override
   public ResponseEntity deleteEntity(String id) {
     entityService.delete(id);
     return status(204).build();

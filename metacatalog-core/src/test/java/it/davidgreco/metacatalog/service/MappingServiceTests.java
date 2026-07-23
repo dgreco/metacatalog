@@ -413,6 +413,114 @@ class MappingServiceTests extends CommonServiceTestingSupport {
     }
   }
 
+  /**
+   * Verifies that updating a non-source entity that is referenced by a mapping's
+   * entityPathReferences triggers re-evaluation of the mapped entities.
+   *
+   * <p>The test sets up: SourceType2 (mapping source, DEPENDS_ON → AnotherType2) with a mapping to
+   * TargetType2 whose expression references the depended-on entity via {@code IS_REQUIRED_BY{$}}.
+   * After the initial mapping is created and verified, the non-source entity (AnotherType2) is
+   * updated — changing its {@code c} value from 1 to 5. The mapped TargetType2 entity should then
+   * be re-evaluated to reflect the new value of {@code c}.
+   */
+  @Test
+  void testAutomaticMappingPropagationOnIndirectSourceUpdate() {
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappingUpdaterService = getApplicationContext().getBean(MappingUpdaterService.class);
+    mappingUpdaterService.setAutomaticEntitiesMapping(true);
+
+    traitService.create("IndirectSrcTrait", Optional.empty(), Optional.empty());
+    traitService.create("IndirectRefTrait", Optional.empty(), Optional.empty());
+    traitService.link("IndirectSrcTrait", DEPENDS_ON, "IndirectRefTrait");
+
+    entityTypeService.create(
+        "AnotherType2",
+        List.of("IndirectRefTrait"),
+        Optional.empty(),
+        """
+                    { "type": "object", "properties": { "c": { "type": "integer" } } }""");
+
+    entityTypeService.create(
+        "SourceType2",
+        List.of("IndirectSrcTrait"),
+        Optional.empty(),
+        """
+                    { "type": "object", "properties": { "a": { "type": "integer" } } }""");
+
+    var targetType2 =
+        entityTypeService.create(
+            "TargetType2",
+            List.of(),
+            Optional.empty(),
+            """
+                    { "type": "object", "properties": { "b": { "type": "integer" } } }""");
+
+    mappingService.create(
+        "SourceType2",
+        "TargetType2",
+        """
+                    {"b": "#source.getValue('$.a').intValue() + #ai.getValue('$.c').intValue()*10"}""",
+        List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "IS_REQUIRED_BY{$}")));
+
+    var anotherInstance =
+        entityService.create(
+            "AnotherType2",
+            """
+                    {"c": 1}
+                    """);
+
+    var sourceInstance =
+        entityService.create(
+            "SourceType2",
+            """
+                    {"a": 1}
+                    """);
+
+    entityService.link(sourceInstance.getId(), DEPENDS_ON, anotherInstance.getId());
+
+    await()
+        .atMost(Duration.ofSeconds(30))
+        .pollDelay(Durations.ONE_SECOND)
+        .until(() -> !entityRepository.findByEntityType(targetType2).isEmpty());
+
+    {
+      var int1 =
+          new WrappedJsonNode(entityRepository.findByEntityType(targetType2).getFirst().getValues())
+              .getValue(Integer.class, "$.b");
+      Assertions.assertEquals(11, int1);
+    }
+
+    entityService.update(
+        anotherInstance.getId(),
+        """
+                {"c": 5}
+                """);
+
+    await()
+        .atMost(Durations.TEN_SECONDS)
+        .pollDelay(Durations.ONE_SECOND)
+        .until(
+            () -> {
+              var entities = entityRepository.findByEntityType(targetType2);
+              if (entities.isEmpty()) return false;
+              var b =
+                  new WrappedJsonNode(entities.getFirst().getValues())
+                      .getValue(Integer.class, "$.b");
+              return b == 51;
+            });
+
+    {
+      var int1 =
+          new WrappedJsonNode(entityRepository.findByEntityType(targetType2).getFirst().getValues())
+              .getValue(Integer.class, "$.b");
+      Assertions.assertEquals(51, int1);
+    }
+  }
+
   @Test
   void testCreateAndUpdateAndDeleteMappedEntities() {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);

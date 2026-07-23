@@ -17,7 +17,7 @@ logging:
     org.hibernate.type.descriptor.sql: INFO
 application:
   config:
-    updateMappedEntitiesSchedulingInterval: 30s
+    updateMappedEntitiesSchedulingInterval: 1s
     security:
       auth-mode: basic
       basic:
