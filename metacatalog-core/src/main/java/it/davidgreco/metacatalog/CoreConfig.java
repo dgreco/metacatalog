@@ -11,7 +11,6 @@ import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
-import java.util.concurrent.TimeUnit;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -47,13 +46,14 @@ public class CoreConfig {
   private final CoreConfigProperties applicationConfigurationProperties;
 
   /**
-   * Creates the Caffeine cache configuration with 60-minute expiration.
+   * Creates the Caffeine cache configuration.
    *
+   * @param properties application configuration properties
    * @return the Caffeine cache builder
    */
   @Bean
-  public Caffeine<Object, Object> caffeineConfig() {
-    return Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.MINUTES);
+  public Caffeine<Object, Object> caffeineConfig(CoreConfigProperties properties) {
+    return Caffeine.newBuilder().expireAfterWrite(properties.cacheExpireAfterWrite());
   }
 
   /**

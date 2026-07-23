@@ -53,8 +53,9 @@ application:
     automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
-    # taskScheduleCacheMaxSize: 100            # TaskManager schedule-result cache capacity
+    # taskScheduleCacheMaxSize: 100           # TaskManager schedule-result cache capacity
     # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
+    cacheExpireAfterWrite: 1h                 # Spring cache (Traits, EntityTypes) TTL
     security:
       # Authentication mechanism: none | basic | oauth2 | ldap
       # - none   : security disabled (default for local dev)

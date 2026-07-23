@@ -19,7 +19,6 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Default implementation of {@link TraitService}. */
 @Slf4j
 @RequiredArgsConstructor
-@EnableCaching
 public class TraitServiceImpl implements TraitService {
 
   private static final String TRAIT = "Trait ";

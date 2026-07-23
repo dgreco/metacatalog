@@ -29,7 +29,7 @@ class TypeLinearizationTest {
 
   @Test
   void singleTypeLinearizesToItself() {
-    var a = trait("A", null);
+    var a = entityType("A", null);
     assertEquals(List.of("A"), names(TypeLinearization.linearize(a)));
   }
 

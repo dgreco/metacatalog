@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 /** Default implementation of {@link EntityTypeService}. */
 @Slf4j
 @RequiredArgsConstructor
-@EnableCaching
 public class EntityTypeServiceImpl implements EntityTypeService {
 
   private static final String ENTITYTYPE = "EntityType ";

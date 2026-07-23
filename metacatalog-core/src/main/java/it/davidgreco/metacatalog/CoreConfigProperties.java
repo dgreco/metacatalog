@@ -17,6 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *     {@code 100} when unset or non-positive
  * @param taskScheduleCacheExpireAfterWrite time-to-live for entries in the {@link
  *     it.davidgreco.metacatalog.service.TaskManager} result cache; defaults to 1 hour when unset
+ * @param cacheExpireAfterWrite time-to-live for entries in the Spring-managed caches (Traits,
+ *     EntityTypes); defaults to 1 hour when unset
  */
 @ConfigurationProperties("application.config")
 public record CoreConfigProperties(
@@ -24,11 +26,13 @@ public record CoreConfigProperties(
     Duration updateMappedEntitiesSchedulingInterval,
     int entityPathResolutionMaxAttempts,
     int taskScheduleCacheMaxSize,
-    Duration taskScheduleCacheExpireAfterWrite) {
+    Duration taskScheduleCacheExpireAfterWrite,
+    Duration cacheExpireAfterWrite) {
 
   public CoreConfigProperties {
     if (taskScheduleCacheMaxSize <= 0) taskScheduleCacheMaxSize = 100;
     if (taskScheduleCacheExpireAfterWrite == null)
       taskScheduleCacheExpireAfterWrite = Duration.ofHours(1);
+    if (cacheExpireAfterWrite == null) cacheExpireAfterWrite = Duration.ofHours(1);
   }
 }

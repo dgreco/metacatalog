@@ -24,7 +24,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 class TaskEngineTest {
 
   private static CoreConfigProperties testConfigProperties() {
-    return new CoreConfigProperties(false, Duration.ofSeconds(1), 3, 100, Duration.ofHours(1));
+    return new CoreConfigProperties(
+        false, Duration.ofSeconds(1), 3, 100, Duration.ofHours(1), Duration.ofHours(1));
   }
 
   private final TaskManager taskManager =
@@ -226,7 +227,8 @@ class TaskEngineTest {
   @Test
   void evictedScheduleReturnsEmptyResults() throws Exception {
     var tinyConfig =
-        new CoreConfigProperties(false, Duration.ofSeconds(1), 3, 1, Duration.ofMillis(100));
+        new CoreConfigProperties(
+            false, Duration.ofSeconds(1), 3, 1, Duration.ofMillis(100), Duration.ofHours(1));
     var tinyTaskManager = new TaskManager(new SimpleAsyncTaskExecutor(), tinyConfig);
     var schedule = tinyTaskManager.createSchedule();
     schedule.addTask(new SimpleTask("t1", () -> {}));

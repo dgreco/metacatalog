@@ -35,14 +35,27 @@ public final class TypeLinearization {
   private TypeLinearization() {}
 
   /**
-   * Returns the linearization of the given type, ordered from the most specific type (the type
-   * itself, at the head) to the most general ancestor (at the tail). Every ancestor reachable
-   * through the father chain and the trait mixins appears exactly once.
+   * Returns the linearization of the given entity type's hierarchy, ordered from the most specific
+   * type (the type itself, at the head) to the most general ancestor (at the tail). Every ancestor
+   * reachable through the father chain and the trait mixins appears exactly once.
    *
-   * @param type the type to linearize
+   * <p>This method is specific to {@link EntityType} because only entity types can mix in traits.
+   * Trait types do not participate in the trait mixin graph and therefore cannot be linearized
+   * using this algorithm.
+   *
+   * @param type the entity type to linearize
    * @return the de-duplicated, most-specific-first list of the type and all its ancestors
    */
-  public static List<Type<?>> linearize(Type<?> type) {
+  public static List<Type<?>> linearize(EntityType type) {
+    return linearizeInternal(type);
+  }
+
+  /**
+   * Recursive helper that traverses both {@link EntityType} and {@link Trait} ancestors. The public
+   * {@link #linearize(EntityType)} entry point enforces the EntityType precondition; this internal
+   * variant is used for recursive descent through trait and father chains.
+   */
+  private static List<Type<?>> linearizeInternal(Type<?> type) {
     // Scala: L(C) = C, L(Cn) +: ... +: L(C1), with C1 the father (superclass, lowest precedence)
     // and C2..Cn the traits (mixins) in declaration order. Folding the operands left-to-right
     // therefore starts from the highest-precedence mixin (the last declared trait) and ends with
@@ -50,10 +63,10 @@ public final class TypeLinearization {
     List<Type<?>> combined = new ArrayList<>();
     var traits = type.getTraits();
     for (int i = traits.size() - 1; i >= 0; i--) {
-      combined = writeConcat(combined, linearize(traits.get(i)));
+      combined = writeConcat(combined, linearizeInternal(traits.get(i)));
     }
     if (type.getFather() != null) {
-      combined = writeConcat(combined, linearize(type.getFather()));
+      combined = writeConcat(combined, linearizeInternal(type.getFather()));
     }
 
     List<Type<?>> result = new ArrayList<>();
