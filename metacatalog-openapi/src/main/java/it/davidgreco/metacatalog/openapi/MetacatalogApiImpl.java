@@ -112,6 +112,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity listTraitRelationships() {
+    var rels =
+        traitService.listAllRelationships().stream()
+            .map(dtoMapper::traitRelationshipToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(rels);
+  }
+
+  @Override
   public ResponseEntity createMapping(Mapping mapping) {
     mappingService.create(
         mapping.getSourceEntityType(),

@@ -101,6 +101,13 @@ public interface TraitService extends CommonTypeService<Trait, String> {
   List<Trait> linked(String traitName1, RelationType relType);
 
   /**
+   * Lists all trait relationships.
+   *
+   * @return all trait relationships
+   */
+  List<it.davidgreco.metacatalog.entity.TraitRelationship> listAllRelationships();
+
+  /**
    * Counts the number of child traits inheriting from the given trait.
    *
    * @param name the parent trait name

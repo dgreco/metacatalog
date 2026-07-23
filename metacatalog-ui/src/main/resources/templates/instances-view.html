@@ -12,7 +12,7 @@
     <h1>Instance Detail</h1>
     <nav>
         <a class="btn" th:href="@{/ui/instances}">Back</a>
-        <a class="btn" th:href="@{/ui/instances/{id}/edit(id=${entity.id})}">Edit</a>
+        <a class="btn" th:href="@{/ui/instances/{id}/edit(id=${entityId})}">Edit</a>
     </nav>
 </header>
 
@@ -21,13 +21,13 @@
 
     <dl class="detail-grid">
         <dt>ID</dt>
-        <dd th:text="${entity.id}">id</dd>
+        <dd th:text="${entityId}">id</dd>
 
         <dt>Type</dt>
-        <dd><span class="tag" th:text="${entity.entityType.name}">entityType</span></dd>
+        <dd><span class="tag" th:text="${entity.entityType}">entityType</span></dd>
 
         <dt>Type Version</dt>
-        <dd th:text="${entity.entityTypeVersion != null ? entity.entityTypeVersion.id : 'latest'}">versionId</dd>
+        <dd th:text="${entityTypeVersionId}">versionId</dd>
     </dl>
 
     <h2>Values (JSON)</h2>

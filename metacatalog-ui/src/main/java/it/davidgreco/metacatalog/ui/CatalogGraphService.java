@@ -10,7 +10,6 @@ import it.davidgreco.metacatalog.entity.TraitVersion;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TraitService;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,17 +66,10 @@ public class CatalogGraphService {
    */
   public List<TraitLinkView> traitLinks() {
     var links = new ArrayList<TraitLinkView>();
-    for (var trait : traitService.list()) {
-      for (var relType : PRIMARY_RELATION_TYPES) {
-        try {
-          for (var target : traitService.linked(trait.getName(), relType)) {
-            links.add(new TraitLinkView(trait.getName(), relType, target.getName()));
-          }
-        } catch (ServiceError e) {
-          // Trait vanished between listing and traversal; skip it.
-          log.debug(
-              "Skipping trait '{}' during link traversal: {}", trait.getName(), e.getMessage());
-        }
+    for (var rel : traitService.listAllRelationships()) {
+      var rt = rel.getRelationType();
+      if (PRIMARY_RELATION_TYPES.contains(rt)) {
+        links.add(new TraitLinkView(rel.getSource().getName(), rt, rel.getTarget().getName()));
       }
     }
     return links;

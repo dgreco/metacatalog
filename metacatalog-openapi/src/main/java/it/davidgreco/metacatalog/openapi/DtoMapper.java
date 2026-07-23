@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.openapi;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
+import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.entity.TraitVersion;
 import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
@@ -114,6 +115,16 @@ public class DtoMapper {
           java.util.Optional.of(entity.getEntityTypeVersion().getId()));
     dtoEntity.setValues(entity.getValues().toPrettyString());
     return dtoEntity;
+  }
+
+  public it.davidgreco.metacatalog.openapi.model.TraitRelationship traitRelationshipToDto(
+      TraitRelationship rel) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.TraitRelationship();
+    dto.setId(Optional.ofNullable(rel.getId()));
+    dto.setSourceTrait(Optional.of(rel.getSource().getName()));
+    dto.setTargetTrait(Optional.of(rel.getTarget().getName()));
+    dto.setRelationType(Optional.of(rel.getRelationType().name()));
+    return dto;
   }
 
   public Mapping mappingToDto(it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship m) {
