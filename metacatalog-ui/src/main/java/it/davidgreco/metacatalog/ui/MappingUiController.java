@@ -1,10 +1,8 @@
 package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
-import it.davidgreco.metacatalog.service.EntityTypeService;
-import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.SchemaValidationError;
+import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Mapping;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Controller;
@@ -16,55 +14,41 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-/**
- * Mapping CRUD: create / delete mapping entity type relationships, with the mapping creation form.
- */
+/** Mapping CRUD: create / delete mapping entity type relationships via the REST API. */
 @Controller
 @RequestMapping("/ui")
 public class MappingUiController {
 
-  private final MappingService mappingService;
-  private final EntityTypeService entityTypeService;
+  private final MetacatalogApiDelegate api;
   private final ObjectMapper jsonMapper;
 
-  public MappingUiController(
-      MappingService mappingService, EntityTypeService entityTypeService, ObjectMapper jsonMapper) {
-    this.mappingService = mappingService;
-    this.entityTypeService = entityTypeService;
+  public MappingUiController(MetacatalogApiDelegate api, ObjectMapper jsonMapper) {
+    this.api = api;
     this.jsonMapper = jsonMapper;
   }
 
-  /** Renders the mapping creation form. */
   @GetMapping("/mappings/new")
   public String newMapping(Model model) {
     if (!model.containsAttribute("mappingForm")) {
       model.addAttribute("mappingForm", new MappingForm());
     }
-    model.addAttribute("entityTypes", entityTypeService.list());
-    model.addAttribute("mappings", MappingView.listFrom(mappingService, jsonMapper));
+    model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+    model.addAttribute("mappings", MappingView.listFrom(api.listMappings().getBody()));
     return "mapping-form";
   }
 
-  /**
-   * Handles submission of the mapping creation form.
-   *
-   * <p>Delegates to {@link MappingService#create}, which validates the mapping values against the
-   * target entity type's schema and rejects mappings that would introduce a loop. The alias /
-   * reference-path rows are zipped into {@link
-   * it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference}s, dropping
-   * rows where either field is blank.
-   */
   @PostMapping("/mappings")
   public String createMapping(
       @ModelAttribute("mappingForm") MappingForm form,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      mappingService.create(
-          form.getSourceEntityType(),
-          form.getTargetEntityType(),
-          form.getMappingValues(),
-          entityPathReferences(form));
+      var dto = new Mapping();
+      dto.setSourceEntityType(form.getSourceEntityType());
+      dto.setTargetEntityType(form.getTargetEntityType());
+      dto.setMappingValues(form.getMappingValues());
+      dto.setEntityPathReferences(entityPathReferencesJson(form));
+      api.createMapping(dto);
       redirectAttributes.addFlashAttribute(
           "message",
           "Mapping from '"
@@ -73,8 +57,6 @@ public class MappingUiController {
               + form.getTargetEntityType()
               + "' created.");
       return "redirect:/ui";
-    } catch (SchemaValidationError e) {
-      return renderMappingError(model, String.join("; ", e.getErrors()));
     } catch (RuntimeException e) {
       return renderMappingError(model, e.getMessage());
     }
@@ -82,42 +64,32 @@ public class MappingUiController {
 
   private String renderMappingError(Model model, String message) {
     model.addAttribute("error", message);
-    model.addAttribute("entityTypes", entityTypeService.list());
-    model.addAttribute("mappings", MappingView.listFrom(mappingService, jsonMapper));
+    model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+    model.addAttribute("mappings", MappingView.listFrom(api.listMappings().getBody()));
     return "mapping-form";
   }
 
-  /**
-   * Zips the form's parallel alias / reference-path lists into entity path references, dropping any
-   * row where either the alias or the reference path is blank.
-   */
-  private static List<MappingEntityTypeRelationship.EntityPathReference> entityPathReferences(
-      MappingForm form) {
+  private String entityPathReferencesJson(MappingForm form) {
     var aliases = form.getAliases() == null ? List.<String>of() : form.getAliases();
     var paths = form.getReferencePaths() == null ? List.<String>of() : form.getReferencePaths();
-    var refs = new ArrayList<MappingEntityTypeRelationship.EntityPathReference>();
+    var refs = new ArrayList<java.util.Map<String, String>>();
     for (int i = 0; i < Math.min(aliases.size(), paths.size()); i++) {
       var alias = aliases.get(i);
       var path = paths.get(i);
       if (alias != null && !alias.isBlank() && path != null && !path.isBlank()) {
-        refs.add(new MappingEntityTypeRelationship.EntityPathReference(alias.trim(), path.trim()));
+        refs.add(java.util.Map.of("alias", alias.trim(), "referencePath", path.trim()));
       }
     }
-    return refs;
+    try {
+      return jsonMapper.writeValueAsString(refs);
+    } catch (Exception e) {
+      return "[]";
+    }
   }
 
-  /**
-   * Deletes a mapping entity type relationship by id. Fails if the mapping is still referenced by
-   * mapped entities.
-   */
   @PostMapping("/mappings/delete")
   public String deleteMapping(@RequestParam String id, RedirectAttributes redirectAttributes) {
     return UiControllerHelper.flashAndRedirect(
-        () -> mappingService.delete(id),
-        "Mapping deleted.",
-        "Mapping",
-        id,
-        "/ui",
-        redirectAttributes);
+        () -> api.deleteMapping(id), "Mapping deleted.", "Mapping", id, "/ui", redirectAttributes);
   }
 }

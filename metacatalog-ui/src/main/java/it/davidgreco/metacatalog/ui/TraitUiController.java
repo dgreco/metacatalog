@@ -1,10 +1,9 @@
 package it.davidgreco.metacatalog.ui;
 
 import it.davidgreco.metacatalog.entity.RelationType;
-import it.davidgreco.metacatalog.entity.Trait;
-import it.davidgreco.metacatalog.entity.TraitVersion;
-import it.davidgreco.metacatalog.service.TraitService;
-import it.davidgreco.metacatalog.service.VersionResult;
+import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.LinkTraitRequest;
+import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Controller;
@@ -19,57 +18,56 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
  * Trait CRUD, trait relationship management, and trait version management (list / new / create /
- * delete / delete-all).
+ * delete / delete-all) via the REST API.
  */
 @Controller
 @RequestMapping("/ui")
 public class TraitUiController {
 
-  private final TraitService traitService;
+  private final MetacatalogApiDelegate api;
   private final CatalogGraphService catalogGraphService;
 
-  public TraitUiController(TraitService traitService, CatalogGraphService catalogGraphService) {
-    this.traitService = traitService;
+  public TraitUiController(MetacatalogApiDelegate api, CatalogGraphService catalogGraphService) {
+    this.api = api;
     this.catalogGraphService = catalogGraphService;
   }
 
   // --- trait CRUD ----------------------------------------------------------------
 
-  /** Renders the trait creation form. */
   @GetMapping("/traits/new")
   public String newTrait(Model model) {
     if (!model.containsAttribute("traitForm")) {
       model.addAttribute("traitForm", new TraitForm());
     }
-    model.addAttribute("traits", traitService.list());
+    model.addAttribute("traits", api.listTraits().getBody());
     return "trait-form";
   }
 
-  /** Handles submission of the trait creation form. */
   @PostMapping("/traits")
   public String createTrait(
       @ModelAttribute("traitForm") TraitForm form,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      traitService.create(
-          form.getName(),
-          UiControllerHelper.optional(form.getSchema()),
-          UiControllerHelper.optional(form.getFather()));
+      var dto = new Trait();
+      dto.setName(form.getName());
+      if (form.getSchema() != null && !form.getSchema().isBlank()) dto.schema(form.getSchema());
+      if (form.getFather() != null && !form.getFather().isBlank())
+        dto.inheritsFrom(form.getFather());
+      api.createTrait(dto);
       redirectAttributes.addFlashAttribute("message", "Trait '" + form.getName() + "' created.");
       return "redirect:/ui";
     } catch (RuntimeException e) {
       model.addAttribute("error", e.getMessage());
-      model.addAttribute("traits", traitService.list());
+      model.addAttribute("traits", api.listTraits().getBody());
       return "trait-form";
     }
   }
 
-  /** Deletes a trait. Fails if the trait is still referenced (child, relationship, entity type). */
   @PostMapping("/traits/delete")
   public String deleteTrait(@RequestParam String name, RedirectAttributes redirectAttributes) {
     return UiControllerHelper.flashAndRedirect(
-        () -> traitService.delete(name),
+        () -> api.deleteTrait(name),
         "Trait '" + name + "' deleted.",
         "Trait",
         name,
@@ -79,26 +77,18 @@ public class TraitUiController {
 
   // --- trait links ----------------------------------------------------------------
 
-  /** Renders the trait relationship creation form. */
   @GetMapping("/trait-links/new")
   public String newTraitLink(Model model) {
     if (!model.containsAttribute("traitLinkForm")) {
       model.addAttribute("traitLinkForm", new TraitLinkForm());
     }
-    model.addAttribute("traits", traitService.list());
+    model.addAttribute("traits", api.listTraits().getBody());
     model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
-    model.addAttribute("traitLinks", catalogGraphService.traitLinks());
+    model.addAttribute(
+        "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";
   }
 
-  /**
-   * Handles submission of the trait relationship creation form.
-   *
-   * <p>Delegates to {@link TraitService#link}, which enforces the constraints: both traits must
-   * exist, the link must not already exist, and it must not introduce a loop. A self-referential
-   * link (source equals target) is permitted. The inverse relationship is created automatically by
-   * the service.
-   */
   @PostMapping("/trait-links")
   public String createTraitLink(
       @ModelAttribute("traitLinkForm") TraitLinkForm form,
@@ -108,7 +98,11 @@ public class TraitUiController {
       var source = form.getSourceTrait();
       var target = form.getTargetTrait();
       var relType = RelationType.parse(form.getRelationshipType());
-      traitService.link(source, relType, target);
+      var req = new LinkTraitRequest();
+      req.setSourceTrait(source);
+      req.setRelationshipTypeName(relType.name());
+      req.setTargetTrait(target);
+      api.linkTrait(req);
       redirectAttributes.addFlashAttribute(
           "message",
           "Linked '" + source + "' " + relType + " '" + target + "' (inverse created too).");
@@ -120,10 +114,6 @@ public class TraitUiController {
     }
   }
 
-  /**
-   * Removes a trait relationship (and its inverse). Delegates to {@link TraitService#unlink}, which
-   * fails if the relationship does not exist.
-   */
   @PostMapping("/trait-links/delete")
   public String deleteTraitLink(
       @RequestParam String sourceTrait,
@@ -131,7 +121,7 @@ public class TraitUiController {
       @RequestParam String targetTrait,
       RedirectAttributes redirectAttributes) {
     try {
-      traitService.unlink(sourceTrait, RelationType.parse(relationshipType), targetTrait);
+      api.unlinkTrait(sourceTrait, relationshipType, targetTrait);
       redirectAttributes.addFlashAttribute(
           "message",
           "Removed relationship between '" + sourceTrait + "' and '" + targetTrait + "'.");
@@ -145,18 +135,15 @@ public class TraitUiController {
 
   private String renderTraitLinkError(Model model, String message) {
     model.addAttribute("error", message);
-    model.addAttribute("traits", traitService.list());
+    model.addAttribute("traits", api.listTraits().getBody());
     model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
-    model.addAttribute("traitLinks", catalogGraphService.traitLinks());
+    model.addAttribute(
+        "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";
   }
 
   // --- trait versioning -----------------------------------------------------------
 
-  /**
-   * Lists every version of a trait, oldest first, with the live (current) version last. Renders the
-   * shared {@code versions} template, parameterised for a trait (no traits column).
-   */
   @GetMapping("/traits/{name}/versions")
   public String listTraitVersions(
       @PathVariable String name, Model model, RedirectAttributes redirectAttributes) {
@@ -173,16 +160,12 @@ public class TraitUiController {
     }
   }
 
-  /**
-   * Renders the trait new-version form, pre-populated with the current live trait's base schema and
-   * father so the user can edit them rather than start from scratch.
-   */
   @GetMapping("/traits/{name}/versions/new")
   public String newTraitVersion(
       @PathVariable String name, Model model, RedirectAttributes redirectAttributes) {
     Trait live;
     try {
-      live = traitService.read(name);
+      live = api.getTrait(name).getBody();
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
       return "redirect:/ui";
@@ -190,23 +173,15 @@ public class TraitUiController {
     if (!model.containsAttribute("traitVersionForm")) {
       var form = new TraitVersionForm();
       form.setName(live.getName());
-      form.setFather(live.getFather() == null ? null : live.getFather().getName());
-      form.setSchema(live.getBaseSchema() == null ? null : live.getBaseSchema().toPrettyString());
+      form.setFather(live.getInheritsFrom().orElse(null));
+      form.setSchema(live.getSchema().orElse(null));
       model.addAttribute("traitVersionForm", form);
     }
-    model.addAttribute("currentVersion", live.getVersion());
-    model.addAttribute("traits", traitService.list());
+    model.addAttribute("currentVersion", live.getVersion().orElse(null));
+    model.addAttribute("traits", api.listTraits().getBody());
     return "trait-version-form";
   }
 
-  /**
-   * Handles submission of the trait new-version form.
-   *
-   * <p>Delegates to {@link TraitService#createVersion}, which snapshots the current live row into
-   * the history table and mutates the live row in place with the new schema / father, bumping its
-   * version. The name comes from the URL path, so the form's read-only {@code name} field is
-   * ignored.
-   */
   @PostMapping("/traits/{name}/versions")
   public String createTraitVersion(
       @PathVariable String name,
@@ -214,10 +189,11 @@ public class TraitUiController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      traitService.createVersion(
-          name,
-          UiControllerHelper.optional(form.getSchema()),
-          UiControllerHelper.optional(form.getFather()));
+      var dto = new Trait();
+      if (form.getSchema() != null && !form.getSchema().isBlank()) dto.schema(form.getSchema());
+      if (form.getFather() != null && !form.getFather().isBlank())
+        dto.inheritsFrom(form.getFather());
+      api.createTraitVersion(name, dto);
       redirectAttributes.addFlashAttribute(
           "message", "New version of trait '" + name + "' created.");
       return "redirect:/ui/traits/" + name + "/versions";
@@ -228,69 +204,51 @@ public class TraitUiController {
     }
   }
 
-  /** Re-supplies the new-version form model attributes after a failed submission. */
   private void populateTraitVersionModel(String name, Model model) {
     try {
-      var live = traitService.read(name);
-      model.addAttribute("currentVersion", live.getVersion());
+      var live = api.getTrait(name).getBody();
+      model.addAttribute("currentVersion", live.getVersion().orElse(null));
     } catch (RuntimeException e) {
       model.addAttribute("currentVersion", null);
     }
-    model.addAttribute("traits", traitService.list());
+    model.addAttribute("traits", api.listTraits().getBody());
   }
 
-  /**
-   * Deletes a single historical snapshot of a trait. The live (current) version is refused by the
-   * service; to revert the live trait, create a new version. Redirects back to the versions list.
-   */
   @PostMapping("/traits/{name}/versions/{version}/delete")
   public String deleteTraitVersion(
       @PathVariable String name, @PathVariable int version, RedirectAttributes redirectAttributes) {
     return UiControllerHelper.flashAndRedirect(
-        () -> traitService.deleteVersion(name, version),
+        () -> api.deleteTraitVersion(name, version),
         "Version " + version + " of trait '" + name + "' deleted.",
         "/ui/traits/" + name + "/versions",
         redirectAttributes);
   }
 
-  /**
-   * Deletes every historical snapshot of a trait, keeping the live row. The trait continues to
-   * exist at its current version with no history behind it.
-   */
   @PostMapping("/traits/{name}/versions/delete-all")
   public String deleteAllTraitVersions(
       @PathVariable String name, RedirectAttributes redirectAttributes) {
     return UiControllerHelper.flashAndRedirect(
-        () -> traitService.deleteAllVersions(name),
+        () -> {
+          for (var v : api.listTraitVersions(name).getBody()) {
+            if (v.getVersion().isPresent()) api.deleteTraitVersion(name, v.getVersion().get());
+          }
+        },
         "All versions of trait '" + name + "' deleted.",
         "/ui/traits/" + name + "/versions",
         redirectAttributes);
   }
 
-  /** Builds the {@link VersionView} rows for a trait's version history. */
   private List<VersionView> traitVersionViews(String name) {
     var views = new ArrayList<VersionView>();
-    for (var v : traitService.listVersions(name)) {
-      switch (v) {
-        case VersionResult.Live(Trait live) ->
-            views.add(
-                new VersionView(
-                    live.getVersion(),
-                    true,
-                    live.getFather() == null ? null : live.getFather().getName(),
-                    List.of(),
-                    live.getSchema() == null ? null : live.getSchema().toPrettyString(),
-                    null));
-        case VersionResult.Snapshot(TraitVersion snap) ->
-            views.add(
-                new VersionView(
-                    snap.getVersion(),
-                    false,
-                    snap.getFatherName(),
-                    List.of(),
-                    snap.getSchema() == null ? null : snap.getSchema().toPrettyString(),
-                    UiControllerHelper.formatInstant(snap.getCreatedAt())));
-      }
+    for (var v : api.listTraitVersions(name).getBody()) {
+      views.add(
+          new VersionView(
+              v.getVersion().orElse(0),
+              true,
+              v.getInheritsFrom().orElse(null),
+              List.of(),
+              v.getSchema().orElse(null),
+              null));
     }
     return views;
   }

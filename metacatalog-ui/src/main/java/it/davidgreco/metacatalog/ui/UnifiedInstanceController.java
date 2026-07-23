@@ -1,12 +1,12 @@
 package it.davidgreco.metacatalog.ui;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.entity.EntityType;
-import it.davidgreco.metacatalog.service.EntityService;
-import it.davidgreco.metacatalog.service.EntityTypeService;
-import it.davidgreco.metacatalog.service.ServiceError;
+import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Entity;
+import it.davidgreco.metacatalog.openapi.model.EntityType;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,46 +18,36 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
- * Instances: a single page that lists, creates, edits, deletes and views entities. Both the list
- * and the form share a schema-driven values editor ({@link InstanceForm} backed by {@code
- * instance-values-form.js}).
- *
- * <p>Updates go through {@link EntityService#update}, which enforces the same rules as the {@code
- * PUT /metacatalog/v1/entity/{id}} REST endpoint — entities whose type is a mapping target are
- * rejected server-side with a {@link ServiceError}.
+ * Instances: a single page that lists, creates, edits, deletes and views entities via the REST API
+ * delegate ({@link MetacatalogApiDelegate}).
  */
 @Controller
 @RequestMapping("/ui/instances")
 class UnifiedInstanceController {
 
-  private final EntityService entityService;
-  private final EntityTypeService entityTypeService;
-  private final ObjectMapper jsonMapper;
+  private final MetacatalogApiDelegate api;
 
-  UnifiedInstanceController(
-      EntityService entityService, EntityTypeService entityTypeService, ObjectMapper jsonMapper) {
-    this.entityService = entityService;
-    this.entityTypeService = entityTypeService;
-    this.jsonMapper = jsonMapper;
+  UnifiedInstanceController(MetacatalogApiDelegate api) {
+    this.api = api;
   }
 
-  /** Renders the instance list, optionally filtered by entity type. */
   @GetMapping
   public String list(@RequestParam(required = false) String type, Model model) {
-    List<EntityType> types = entityTypeService.list();
-    List<Entity> entities;
+    List<EntityType> types = api.listEntityTypes().getBody();
+    List<Entity> entities = new ArrayList<>();
     if (type != null && !type.isBlank()) {
-      entities = entityService.list(type, "");
+      entities.addAll(api.getEntities(type, "").getBody());
     } else {
-      entities = entityService.listAll();
+      for (var t : types) {
+        entities.addAll(api.getEntities(t.getName(), "").getBody());
+      }
     }
-    model.addAttribute("instances", InstanceRowView.listFrom(entities, jsonMapper));
+    model.addAttribute("instances", InstanceRowView.listFrom(entities));
     model.addAttribute("selectedType", type);
     model.addAttribute("entityTypes", types);
     return "instances-list";
   }
 
-  /** Renders the schema-driven create form. */
   @GetMapping("/new")
   public String newForm(@RequestParam(required = false) String type, Model model) {
     if (!model.containsAttribute("instanceForm")) {
@@ -65,42 +55,48 @@ class UnifiedInstanceController {
       form.setEntityType(type);
       model.addAttribute("instanceForm", form);
     }
-    model.addAttribute("entityTypes", entityTypeService.list());
+    var types = api.listEntityTypes().getBody();
+    model.addAttribute("entityTypes", types);
+    model.addAttribute("typeSchemas", schemaMap(types));
     return "instances-form";
   }
 
-  /** Handles submission of the create form. */
   @PostMapping
   public String create(
       @ModelAttribute("instanceForm") InstanceForm form,
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      entityService.create(form.getEntityType(), form.getValues());
+      var dto = new Entity();
+      dto.setEntityType(form.getEntityType());
+      dto.setValues(form.getValues());
+      api.createEntity(dto);
       redirectAttributes.addFlashAttribute("message", "Entity created.");
       return "redirect:/ui/instances";
-    } catch (ServiceError e) {
+    } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
-      model.addAttribute("entityTypes", entityTypeService.list());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
       model.addAttribute("error", e.getMessage());
       return "instances-form";
     }
   }
 
-  /** Renders the schema-driven edit form, seeded from the existing entity. */
   @GetMapping("/{id}/edit")
   public String edit(@PathVariable String id, Model model) {
-    InstanceForm form = new InstanceForm();
-    Entity entity = entityService.read(id);
-    form.setEntityType(entity.getEntityType().getName());
-    form.setValues(entity.getValues().toPrettyString());
+    var entity = (Entity) api.getEntity(id).getBody();
+    var form = new InstanceForm();
+    form.setEntityType(entity.getEntityType());
+    form.setValues(entity.getValues());
     model.addAttribute("instanceForm", form);
     model.addAttribute("instanceId", id);
-    model.addAttribute("entityTypes", entityTypeService.list());
+    var types = api.listEntityTypes().getBody();
+    model.addAttribute("entityTypes", types);
+    model.addAttribute("typeSchemas", schemaMap(types));
     return "instances-form";
   }
 
-  /** Handles submission of the edit form. */
   @PostMapping("/{id}")
   public String update(
       @PathVariable String id,
@@ -108,41 +104,59 @@ class UnifiedInstanceController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      entityService.update(id, form.getValues());
+      var dto = new Entity();
+      dto.setEntityType(form.getEntityType());
+      dto.setValues(form.getValues());
+      api.updateEntity(id, dto);
       redirectAttributes.addFlashAttribute("message", "Entity updated.");
       return "redirect:/ui/instances";
-    } catch (ServiceError e) {
+    } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
       model.addAttribute("instanceId", id);
-      model.addAttribute("entityTypes", entityTypeService.list());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
       model.addAttribute("error", e.getMessage());
       return "instances-form";
     }
   }
 
-  /** Handles entity deletion. */
   @PostMapping("/{id}/delete")
   public String delete(@PathVariable String id, RedirectAttributes redirectAttributes) {
     try {
-      entityService.delete(id);
+      api.deleteEntity(id);
       redirectAttributes.addFlashAttribute("message", "Entity deleted.");
-    } catch (ServiceError e) {
+    } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
     return "redirect:/ui/instances";
   }
 
-  /** Renders the entity detail view. */
   @GetMapping("/{id}")
   public String view(@PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
     try {
-      Entity entity = entityService.read(id);
-      model.addAttribute("entity", entity);
-      model.addAttribute("valuesJson", entity.getValues().toPrettyString());
-      return "instances-view";
-    } catch (ServiceError e) {
+      var entity = (Entity) api.getEntity(id).getBody();
+      var form = new InstanceForm();
+      form.setEntityType(entity.getEntityType());
+      form.setValues(entity.getValues());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("instanceForm", form);
+      model.addAttribute("instanceId", id);
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
+      model.addAttribute("readOnly", true);
+      return "instances-form";
+    } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
       return "redirect:/ui/instances";
     }
+  }
+
+  private Map<String, String> schemaMap(List<EntityType> types) {
+    var map = new LinkedHashMap<String, String>();
+    for (var t : types) {
+      map.put(t.getName(), t.getSchema());
+    }
+    return map;
   }
 }

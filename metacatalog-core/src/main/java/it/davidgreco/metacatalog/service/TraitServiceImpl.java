@@ -359,6 +359,13 @@ public class TraitServiceImpl implements TraitService {
     return traitVersionRepository.findAll();
   }
 
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public List<TraitRelationship> listAllRelationships() {
+    log.info("Listing all trait relationships");
+    return traitRelationshipRepository.findAll();
+  }
+
   /**
    * Links two Traits with a given relation type.
    *

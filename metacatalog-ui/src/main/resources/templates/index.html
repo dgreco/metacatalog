@@ -50,7 +50,7 @@
                        th:href="@{/ui/traits/{name}/versions(name=${trait.name})}"
                        th:text="'v' + ${trait.version}">v1</a>
                 </td>
-                <td th:text="${trait.father != null ? trait.father.name : '—'}">father</td>
+                <td th:text="${trait.father != null ? trait.father : '—'}">father</td>
                 <td>
                     <div class="js-schema" th:text="${trait.schema}">{}</div>
                 </td>
@@ -121,10 +121,10 @@
                        th:href="@{/ui/entity-types/{name}/versions(name=${et.name})}"
                        th:text="'v' + ${et.version}">v1</a>
                 </td>
-                <td th:text="${et.father != null ? et.father.name : '—'}">father</td>
+                <td th:text="${et.father != null ? et.father : '—'}">father</td>
                 <td>
                     <span th:if="${et.traits.isEmpty()}">—</span>
-                    <span class="tag" th:each="t : ${et.traits}" th:text="${t.name}">trait</span>
+                    <span class="tag" th:each="t : ${et.traits}" th:text="${t}">trait</span>
                 </td>
                 <td>
                     <div class="js-schema" th:text="${et.schema}">{}</div>

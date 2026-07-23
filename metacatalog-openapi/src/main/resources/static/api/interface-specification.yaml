@@ -561,6 +561,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/relationships:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all trait relationships
+      operationId: listTraitRelationships
+      responses:
+        200:
+          description: If successful, return a list of all trait relationships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TraitRelationship'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity-type:
     get:
       tags:
@@ -1617,6 +1638,23 @@ components:
         entityPathReferences:
           type: string
           description: JSON string of entity path references describing relationship traversal from source to target.
+    TraitRelationship:
+      type: object
+      description: A directed relationship between two traits.
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Server-generated unique identifier for the relationship.
+        sourceTrait:
+          type: string
+          description: Name of the source trait.
+        targetTrait:
+          type: string
+          description: Name of the target trait.
+        relationType:
+          type: string
+          description: The relationship type name (DEPENDS_ON, HAS_PART, MAPPED_TO, IS_REQUIRED_BY, IS_PART_OF, IS_MAPPED_BY).
     ValidationError:
       type: object
       description: Error response for client-side errors (4xx), listing all validation errors.

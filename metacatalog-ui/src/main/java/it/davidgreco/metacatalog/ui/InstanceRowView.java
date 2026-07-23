@@ -2,7 +2,7 @@ package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.openapi.model.Entity;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,26 +17,29 @@ import java.util.List;
 public record InstanceRowView(
     String id, String entityType, String entityTypeVersionId, String name) {
 
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+
   /**
    * Builds {@link InstanceRowView} rows for the given entities, extracting a human-readable name
    * from the entity's {@code name} property when present, falling back to the entity id.
    */
-  public static List<InstanceRowView> listFrom(List<Entity> entities, ObjectMapper jsonMapper) {
+  public static List<InstanceRowView> listFrom(List<Entity> entities) {
     var views = new ArrayList<InstanceRowView>();
     for (var entity : entities) {
-      String name = entity.getId();
-      JsonNode values = jsonMapper.valueToTree(entity.getValues());
-      if (values != null && values.has("name") && values.get("name").isTextual()) {
-        name = values.get("name").asText();
+      String id = entity.getId().orElse(null);
+      String name = id;
+      if (entity.getValues() != null) {
+        try {
+          JsonNode values = MAPPER.readTree(entity.getValues());
+          if (values != null && values.has("name") && values.get("name").isTextual()) {
+            name = values.get("name").asText();
+          }
+        } catch (Exception ignored) {
+        }
       }
       views.add(
           new InstanceRowView(
-              entity.getId(),
-              entity.getEntityType().getName(),
-              entity.getEntityTypeVersion() != null
-                  ? entity.getEntityTypeVersion().getId()
-                  : "latest",
-              name));
+              id, entity.getEntityType(), entity.getEntityTypeVersionId().orElse("latest"), name));
     }
     return views;
   }

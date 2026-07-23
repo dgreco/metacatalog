@@ -20,13 +20,14 @@
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("instance-form");
     if (!form) return;
+    var READ_ONLY = window.__READ_ONLY__ === true;
 
     var typeSelect = document.getElementById("entityType");
     var container = document.getElementById("instance-values-editor");
     var hidden = document.getElementById("values");
     var rawTextarea = document.getElementById("instance-raw-values");
     var validation = document.getElementById("instance-validation");
-    if (!typeSelect || !container || !hidden || !rawTextarea) return;
+    if (!typeSelect || !container || !hidden) return;
 
     var model = null; // current builder tree; null while no schema is loaded
     var currentSchema = null; // last fetched schema object (for Raw->Builder rebuild)
@@ -115,8 +116,8 @@
         input.type = "text";
       }
       input.className = "mv-input";
-      if (isReadOnly) input.disabled = true;
-      if (isRequired && type !== "boolean" && !isReadOnly) input.required = true;
+      if (isReadOnly || READ_ONLY) input.disabled = true;
+      if (isRequired && type !== "boolean" && !isReadOnly && !READ_ONLY) input.required = true;
       return { kind: "leaf", input: input, type: type, required: isRequired, readOnly: isReadOnly };
     }
 
@@ -205,30 +206,34 @@
         var itemModel = renderItem(itemsSchema, itemRow);
         if (value !== undefined) setModelValue(itemModel, value);
 
-        var removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "link-remove";
-        removeBtn.title = "Remove";
-        removeBtn.textContent = "×";
-        removeBtn.addEventListener("click", function () {
-          itemRow.remove();
-          var idx = itemNodes.indexOf(itemModel);
-          if (idx !== -1) itemNodes.splice(idx, 1);
-        });
-        itemRow.appendChild(removeBtn);
+        if (!READ_ONLY) {
+          var removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "link-remove";
+          removeBtn.title = "Remove";
+          removeBtn.textContent = "×";
+          removeBtn.addEventListener("click", function () {
+            itemRow.remove();
+            var idx = itemNodes.indexOf(itemModel);
+            if (idx !== -1) itemNodes.splice(idx, 1);
+          });
+          itemRow.appendChild(removeBtn);
+        }
 
         listEl.appendChild(itemRow);
         itemNodes.push(itemModel);
       }
 
-      var addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "btn";
-      addBtn.textContent = "+ Add item";
-      addBtn.addEventListener("click", function () {
-        addItem();
-      });
-      parentEl.appendChild(addBtn);
+      if (!READ_ONLY) {
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "btn";
+        addBtn.textContent = "+ Add item";
+        addBtn.addEventListener("click", function () {
+          addItem();
+        });
+        parentEl.appendChild(addBtn);
+      }
 
       return { kind: "array", items: itemNodes, addItem: addItem };
     }
@@ -305,32 +310,24 @@
         message("Select an entity type to build the values.", "empty");
         return;
       }
-      message("Loading schema for '" + name + "'…", "empty");
-
-      fetch("/metacatalog/v1/entity-type/" + encodeURIComponent(name), {
-        headers: { Accept: "application/json" },
-      })
-        .then(function (response) {
-          if (!response.ok) throw new Error("HTTP " + response.status);
-          return response.json();
-        })
-        .then(function (dto) {
-          var schema;
-          try {
-            schema = JSON.parse(dto.schema);
-          } catch (e) {
-            throw new Error("the schema is not valid JSON");
-          }
-          currentSchema = schema;
-          renderEditor(schema, existingValues);
-          if (rawTextarea && !rawTextarea.value && existingValues) {
-            rawTextarea.value = existingValues;
-          }
-        })
-        .catch(function (err) {
-          model = null;
-          message("Could not load schema for '" + name + "': " + err.message, "error");
-        });
+      var schemas = window.__TYPE_SCHEMAS__ || {};
+      var schemaStr = schemas[name];
+      if (!schemaStr) {
+        model = null;
+        message("Could not load schema for '" + name + "': not found", "error");
+        return;
+      }
+      try {
+        var schema = JSON.parse(schemaStr);
+        currentSchema = schema;
+        renderEditor(schema, existingValues);
+        if (rawTextarea && !rawTextarea.value && existingValues) {
+          rawTextarea.value = existingValues;
+        }
+      } catch (err) {
+        model = null;
+        message("Could not load schema for '" + name + "': " + err.message, "error");
+      }
     }
 
     function setMode(next) {
