@@ -498,4 +498,111 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     entityService.delete(v2.getId());
     entityTypeService.delete("LegacyType");
   }
+
+  /**
+   * Verifies that entities whose type is the target of a mapping relationship cannot be created,
+   * updated, or deleted through the user-facing {@code update}/{@code create}/{@code delete}
+   * methods — even when the target type implements the {@code ProvisionableResource} trait (which
+   * was previously exempted and allowed direct updates, e.g. {@code AthenaTableType}).
+   *
+   * <p>Also verifies that the internal {@code updateValues} method (used by the provisioning task
+   * to write back {@code provisioningStatus}/{@code provisioningResult}) still works on mapped
+   * entities.
+   */
+  @Test
+  void testMappingTargetEntityCannotBeUpdatedOrDeletedDirectly() {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappedEntityService = getApplicationContext().getBean(MappedEntityService.class);
+    var entityRepository = getApplicationContext().getBean(EntityRepository.class);
+
+    var emptySchema =
+        """
+        { "type": "object", "properties": {} }
+        """;
+
+    entityTypeService.create("BlockSource", List.of(), Optional.empty(), emptySchema);
+
+    var targetType =
+        entityTypeService.create(
+            "BlockTarget",
+            List.of("ProvisionableResource"),
+            Optional.empty(),
+            """
+            { "type": "object", "properties": {} }
+            """);
+
+    mappingService.create("BlockSource", "BlockTarget", "{}", List.of());
+
+    var sourceEntity = entityService.create("BlockSource", "{}");
+
+    mappedEntityService.createMappedEntities(sourceEntity.getId());
+
+    var mappedEntities = entityRepository.findByEntityType(targetType);
+    Assertions.assertEquals(1, mappedEntities.size(), "mapped entity must have been created");
+    var mappedEntity = mappedEntities.getFirst();
+
+    // Creating a target entity directly is not allowed
+    Assertions.assertThrows(ServiceError.class, () -> entityService.create("BlockTarget", "{}"));
+
+    // Updating a target entity is not allowed — even with ProvisionableResource trait
+    Assertions.assertThrows(
+        ServiceError.class, () -> entityService.update(mappedEntity.getId(), "{}"));
+
+    // Deleting a target entity is not allowed
+    Assertions.assertThrows(ServiceError.class, () -> entityService.delete(mappedEntity.getId()));
+
+    // The internal updateValues path still works (used by the provisioning task)
+    entityService.updateValues(mappedEntity.getId(), "{}");
+    var afterUpdate = entityService.read(mappedEntity.getId());
+    Assertions.assertNotNull(afterUpdate, "entity must still exist after updateValues");
+
+    // Cleanup
+    mappedEntityService.deleteMappedEntities(sourceEntity.getId());
+    entityRepository.delete(sourceEntity);
+    mappingService.list().forEach(m -> mappingService.delete(m.getId()));
+    entityTypeService.delete("BlockSource");
+    entityTypeService.delete("BlockTarget");
+  }
+
+  /**
+   * Verifies that an entity with relationships cannot be deleted and produces a clear error message
+   * instead of a generic data-integrity-violation.
+   */
+  @Test
+  void testEntityWithRelationshipsCannotBeDeleted() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var emptySchema =
+        """
+        { "type": "object", "properties": {} }
+        """;
+
+    traitService.create("RelSourceTrait", Optional.empty(), Optional.empty());
+    traitService.create("RelTargetTrait", Optional.empty(), Optional.empty());
+    traitService.link("RelSourceTrait", DEPENDS_ON, "RelTargetTrait");
+
+    entityTypeService.create("RelSource", List.of("RelSourceTrait"), Optional.empty(), emptySchema);
+    entityTypeService.create("RelTarget", List.of("RelTargetTrait"), Optional.empty(), emptySchema);
+
+    var source = entityService.create("RelSource", "{}");
+    var target = entityService.create("RelTarget", "{}");
+    entityService.link(source.getId(), DEPENDS_ON, target.getId());
+
+    var ex =
+        Assertions.assertThrows(ServiceError.class, () -> entityService.delete(target.getId()));
+    Assertions.assertTrue(ex.getMessage().contains("has relationships"));
+
+    entityService.unlink(source.getId(), DEPENDS_ON, target.getId());
+    entityService.delete(source.getId());
+    entityService.delete(target.getId());
+    entityTypeService.delete("RelSource");
+    entityTypeService.delete("RelTarget");
+    traitService.unlink("RelSourceTrait", DEPENDS_ON, "RelTargetTrait");
+    traitService.delete("RelTargetTrait");
+    traitService.delete("RelSourceTrait");
+  }
 }

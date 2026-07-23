@@ -487,6 +487,24 @@ select[multiple].traits-select {
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+.mv-readonly {
+    margin-left: 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--muted-text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* --- instance manager array items ----------------------------------------- */
+.iv-array-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.iv-array-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+}
+.iv-array-item > label { flex: 1 1 auto; }
+.iv-array-item > .link-remove { flex: 0 0 auto; margin-top: 0.35rem; }
 
 /* --- read-only schema / mapping viewers ----------------------------------- */
 .sv { max-width: 420px; }
@@ -725,6 +743,115 @@ select[multiple].traits-select {
     background: var(--ok-bg);
     color: var(--ok-text);
     border-color: var(--ok-border);
+}
+
+/* ============================================================================
+   Instance management UI styles
+   ========================================================================== */
+
+.filter-bar {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.filter-bar label {
+    font-size: 0.88rem;
+    color: var(--text-2);
+    font-weight: 500;
+}
+.filter-bar select {
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 0.88rem;
+}
+
+/* Detail grid for entity/aggregate view pages */
+.detail-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.45rem 1.25rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.92rem;
+}
+.detail-grid dt {
+    font-weight: 600;
+    color: var(--text-2);
+    text-align: right;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+}
+.detail-grid dd {
+    margin: 0;
+    color: var(--text);
+}
+
+/* Pre-formatted JSON/YAML blocks */
+pre.js-entity-values,
+pre.js-aggregate-yaml {
+    margin: 0;
+    padding: 0.85rem;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    overflow: auto;
+    font-size: 0.82rem;
+    max-height: 500px;
+}
+
+/* Nested list for aggregate elements */
+.nested-list ul {
+    list-style: none;
+    padding-left: 1.25rem;
+    margin: 0;
+}
+.nested-list li {
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.nested-list li:last-child { border-bottom: none; }
+.nested-list .part-type {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-left: 0.35rem;
+}
+
+/* Small button variant for table actions */
+.btn-sm {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--panel);
+    color: var(--text-2);
+    text-decoration: none;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-right: 0.3rem;
+}
+.btn-sm:hover {
+    background: var(--inset);
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+
+/* Form actions row */
+.form-actions {
+    display: flex;
+    gap: 0.55rem;
+    padding-top: 0.5rem;
+}
+
+/* Flash messages in instance pages */
+.flash, .error {
+    margin-bottom: 1rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

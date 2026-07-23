@@ -24,10 +24,26 @@ public interface EntityService extends CommonService<Entity, String> {
   /**
    * Updates the values of an existing entity.
    *
+   * <p>Entities whose type is the target of a mapping relationship cannot be updated through this
+   * method — they are managed exclusively by the mapping/provisioning subsystem.
+   *
    * @param entityId the entity ID
    * @param values a JSON string containing the new values
    */
   void update(String entityId, String values);
+
+  /**
+   * Updates the values of an existing entity without enforcing mapping-target restrictions or
+   * emitting lifecycle events.
+   *
+   * <p>This is intended for internal system use (e.g. the provisioning task writing back {@code
+   * provisioningStatus}/{@code provisioningResult} to a mapped entity). User-facing updates must go
+   * through {@link #update(String, String)}.
+   *
+   * @param entityId the entity ID
+   * @param values a JSON string containing the new values
+   */
+  void updateValues(String entityId, String values);
 
   /**
    * Lists entities of the specified type, optionally filtered by a JSON path query.

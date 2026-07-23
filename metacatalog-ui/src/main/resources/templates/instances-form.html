@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog'">Instance Form</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1 th:text="${instanceId != null} ? 'Edit Instance' : 'New Instance'">Instance</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances}">Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <form method="post"
+          th:action="${instanceId != null} ? @{/ui/instances/{id}(id=${instanceId})} : @{/ui/instances}"
+          th:object="${instanceForm}"
+          id="instance-form">
+
+        <!-- Entity type selector -->
+        <div class="form-group">
+            <label for="entityType">Entity Type</label>
+            <select name="entityType" id="entityType" th:field="*{entityType}" required
+                    th:disabled="${instanceId != null}">
+                <option value="">— Select a type —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}"
+                        th:selected="${et.name == instanceForm.entityType}">type</option>
+            </select>
+            <small class="hint">The type's derived schema drives the values form below.</small>
+        </div>
+
+        <!-- Schema-driven values editor -->
+        <div class="form-group">
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="builder">Builder</button>
+                <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder">
+                <div id="instance-values-editor" class="iv-editor">
+                    <p class="empty">Select an entity type to build the values.</p>
+                </div>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="raw">
+                <textarea id="instance-raw-values" class="raw-schema" rows="16" spellcheck="false"
+                          style="font-family: monospace; font-size: 0.9em; width: 100%;"
+                          placeholder='{"name": "...", ...}'></textarea>
+            </div>
+
+            <div id="instance-validation" class="validation"></div>
+            <input type="hidden" th:field="*{values}" id="values"/>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Save</button>
+            <a class="btn" th:href="@{/ui/instances}">Cancel</a>
+        </div>
+    </form>
+</main>
+
+<script th:src="@{/ui/js/instance-values-form.js}"></script>
+</body>
+</html>

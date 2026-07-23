@@ -294,6 +294,52 @@ class MetacatalogApiTests {
             .contains("not found"));
   }
 
+  @Test
+  void testUpdateEntity() {
+    var api = getMetaCatalogManagerApi();
+    var entityType = new EntityType();
+    entityType.setName("UpdateTestType");
+    entityType.setSchema(
+        """
+                {
+                  "type": "object",
+                  "properties": {
+                    "a": { "type": "string" }
+                  }
+                }""");
+    api.createEntityType(entityType);
+
+    var entity = new Entity();
+    entity.setEntityType("UpdateTestType");
+    entity.setValues(
+        """
+                {
+                   "a": "b"
+                }
+                """);
+
+    var id = api.createEntity(entity);
+
+    var update = new Entity();
+    update.setEntityType("UpdateTestType");
+    update.setValues(
+        """
+                {
+                   "a": "c"
+                }
+                """);
+
+    api.updateEntity(id, update);
+
+    var retrieved = api.getEntity(id);
+    Assertions.assertEquals("UpdateTestType", retrieved.getEntityType());
+    Assertions.assertTrue(
+        retrieved.getValues().contains("\"c\""), "values must reflect the update");
+
+    api.deleteEntity(id);
+    api.deleteEntityType("UpdateTestType");
+  }
+
   /**
    * Verifies the entity-pinning contract end-to-end through the REST API: an entity created against
    * v1 of a type stays pinned to v1's snapshot (returned as {@code entityTypeVersionId}) even after

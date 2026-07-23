@@ -89,7 +89,8 @@ class UiControllerTest {
                 new TraitUiController(traitService, catalogGraphService),
                 new EntityTypeUiController(entityTypeService, traitService),
                 new MappingUiController(mappingService, entityTypeService, objectMapper),
-                new BulkUiController(bulkLoaderService))
+                new BulkUiController(bulkLoaderService),
+                new UnifiedInstanceController(entityService, entityTypeService, objectMapper))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -834,5 +835,112 @@ class UiControllerTest {
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/traits/Ghost/versions"))
         .andExpect(flash().attribute("error", "Trait Ghost not found"));
+  }
+
+  // --- instances ----------------------------------------------------------------
+
+  @Test
+  void instancesListRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/instances"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-list"))
+        .andExpect(model().attributeExists("instances", "entityTypes"));
+  }
+
+  @Test
+  void instancesNewFormRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/instances/new"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attributeExists("instanceForm", "entityTypes"));
+  }
+
+  @Test
+  void createEntityInstanceSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/instances")
+                .param("entityType", "Person")
+                .param("values", "{\"name\":\"Alice\"}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"));
+
+    verify(entityService).create("Person", "{\"name\":\"Alice\"}");
+  }
+
+  @Test
+  void createInstanceReRendersFormOnServiceError() throws Exception {
+    doThrow(new ServiceError("Invalid schema"))
+        .when(entityService)
+        .create(eq("Person"), eq("{\"name\":\"Alice\"}"));
+
+    mockMvc
+        .perform(
+            post("/ui/instances")
+                .param("entityType", "Person")
+                .param("values", "{\"name\":\"Alice\"}"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attribute("error", "Invalid schema"));
+  }
+
+  @Test
+  void editEntityInstanceFormRenders() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    var entity = new Entity();
+    entity.setId("ent-1");
+    entity.setEntityType(type);
+    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
+    given(entityService.read("ent-1")).willReturn(entity);
+
+    mockMvc
+        .perform(get("/ui/instances/ent-1/edit"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attribute("instanceId", "ent-1"))
+        .andExpect(model().attributeExists("instanceForm", "entityTypes"));
+  }
+
+  @Test
+  void updateEntityInstanceSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/instances/ent-1")
+                .param("entityType", "Person")
+                .param("values", "{\"name\":\"Bob\"}"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"));
+
+    verify(entityService).update("ent-1", "{\"name\":\"Bob\"}");
+  }
+
+  @Test
+  void deleteEntityInstanceSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/ent-1/delete"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"));
+
+    verify(entityService).delete("ent-1");
+  }
+
+  @Test
+  void entityInstanceViewRenders() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    var entity = new Entity();
+    entity.setId("ent-1");
+    entity.setEntityType(type);
+    entity.setValues(mapper.readTree("{\"name\":\"Alice\"}"));
+    given(entityService.read("ent-1")).willReturn(entity);
+
+    mockMvc
+        .perform(get("/ui/instances/ent-1"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-view"))
+        .andExpect(model().attributeExists("entity", "valuesJson"));
   }
 }

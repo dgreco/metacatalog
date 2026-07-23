@@ -44,4 +44,22 @@ public interface EntityRelationshipRepository extends JpaRepository<EntityRelati
    */
   Optional<EntityRelationship> findBySourceAndRelationTypeAndTarget(
       Entity source, RelationType relType, Entity target);
+
+  /**
+   * Finds all relationships in which the given entity is the source, regardless of relationship
+   * type.
+   *
+   * @param source the source entity
+   * @return list of matching relationships
+   */
+  List<EntityRelationship> findBySource(Entity source);
+
+  /**
+   * Finds all relationships in which the given entity is the target, regardless of relationship
+   * type.
+   *
+   * @param target the target entity
+   * @return list of matching relationships
+   */
+  List<EntityRelationship> findByTarget(Entity target);
 }
