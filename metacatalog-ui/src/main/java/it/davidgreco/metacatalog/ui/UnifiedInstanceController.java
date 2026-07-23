@@ -4,7 +4,9 @@ import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,7 +55,9 @@ class UnifiedInstanceController {
       form.setEntityType(type);
       model.addAttribute("instanceForm", form);
     }
-    model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+    var types = api.listEntityTypes().getBody();
+    model.addAttribute("entityTypes", types);
+    model.addAttribute("typeSchemas", schemaMap(types));
     return "instances-form";
   }
 
@@ -71,7 +75,9 @@ class UnifiedInstanceController {
       return "redirect:/ui/instances";
     } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
-      model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
       model.addAttribute("error", e.getMessage());
       return "instances-form";
     }
@@ -85,7 +91,9 @@ class UnifiedInstanceController {
     form.setValues(entity.getValues());
     model.addAttribute("instanceForm", form);
     model.addAttribute("instanceId", id);
-    model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+    var types = api.listEntityTypes().getBody();
+    model.addAttribute("entityTypes", types);
+    model.addAttribute("typeSchemas", schemaMap(types));
     return "instances-form";
   }
 
@@ -105,7 +113,9 @@ class UnifiedInstanceController {
     } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
       model.addAttribute("instanceId", id);
-      model.addAttribute("entityTypes", api.listEntityTypes().getBody());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
       model.addAttribute("error", e.getMessage());
       return "instances-form";
     }
@@ -143,5 +153,13 @@ class UnifiedInstanceController {
 
   private static String unwrap(java.util.Optional<String> opt) {
     return opt != null ? opt.orElse("") : "";
+  }
+
+  private Map<String, String> schemaMap(List<EntityType> types) {
+    var map = new LinkedHashMap<String, String>();
+    for (var t : types) {
+      map.put(t.getName(), t.getSchema());
+    }
+    return map;
   }
 }

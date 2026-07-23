@@ -67,6 +67,9 @@
     </form>
 </main>
 
+<script th:inline="javascript" th:if="${typeSchemas}">
+    window.__TYPE_SCHEMAS__ = /*[[${typeSchemas}]]*/ {};
+</script>
 <script th:src="@{/ui/js/instance-values-form.js}"></script>
 </body>
 </html>

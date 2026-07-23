@@ -305,32 +305,24 @@
         message("Select an entity type to build the values.", "empty");
         return;
       }
-      message("Loading schema for '" + name + "'…", "empty");
-
-      fetch("/metacatalog/v1/entity-type/" + encodeURIComponent(name), {
-        headers: { Accept: "application/json" },
-      })
-        .then(function (response) {
-          if (!response.ok) throw new Error("HTTP " + response.status);
-          return response.json();
-        })
-        .then(function (dto) {
-          var schema;
-          try {
-            schema = JSON.parse(dto.schema);
-          } catch (e) {
-            throw new Error("the schema is not valid JSON");
-          }
-          currentSchema = schema;
-          renderEditor(schema, existingValues);
-          if (rawTextarea && !rawTextarea.value && existingValues) {
-            rawTextarea.value = existingValues;
-          }
-        })
-        .catch(function (err) {
-          model = null;
-          message("Could not load schema for '" + name + "': " + err.message, "error");
-        });
+      var schemas = window.__TYPE_SCHEMAS__ || {};
+      var schemaStr = schemas[name];
+      if (!schemaStr) {
+        model = null;
+        message("Could not load schema for '" + name + "': not found", "error");
+        return;
+      }
+      try {
+        var schema = JSON.parse(schemaStr);
+        currentSchema = schema;
+        renderEditor(schema, existingValues);
+        if (rawTextarea && !rawTextarea.value && existingValues) {
+          rawTextarea.value = existingValues;
+        }
+      } catch (err) {
+        model = null;
+        message("Could not load schema for '" + name + "': " + err.message, "error");
+      }
     }
 
     function setMode(next) {
