@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${entityId != null} ? 'Edit Entity — Meta Catalog' : 'New Entity — Meta Catalog'">Entity Form</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1 th:text="${entityId != null} ? 'Edit Entity' : 'New Entity'">Entity</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances/entities}">Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <form method="post" th:action="${entityId != null} ? @{/ui/instances/entities/{id}(id=${entityId})} : @{/ui/instances/entities}"
+          th:object="${entityForm}">
+        <!-- Entity type selector -->
+        <div class="form-group">
+            <label for="entityType">Entity Type</label>
+            <select name="entityType" id="entityType" th:field="*{entityType}" required>
+                <option value="">— Select a type —</option>
+                <option th:each="et : ${entityTypes}"
+                        th:value="${et.name}"
+                        th:text="${et.name}"
+                        th:selected="${et.name == entityForm.entityType}">type</option>
+            </select>
+        </div>
+
+        <!-- Values (JSON) -->
+        <div class="form-group">
+            <label for="values">Values (JSON)</label>
+            <textarea id="values" name="values" th:field="*{values}"
+                      rows="15" required
+                      placeholder='{"name": "...", ...}'
+                      style="font-family: monospace; font-size: 0.9em; width: 100%;"></textarea>
+            <small class="hint">JSON validated against the entity type's derived schema.</small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Save</button>
+            <a class="btn" th:href="@{/ui/instances/entities}" th:text="Cancel">Cancel</a>
+        </div>
+    </form>
+</main>
+
+</body>
+</html>

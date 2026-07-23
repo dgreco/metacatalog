@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Aggregate Detail — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>Aggregate Detail</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances/aggregates}">Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <dl class="detail-grid">
+        <dt>ID</dt>
+        <dd th:text="${aggregate.entity.id}">id</dd>
+
+        <dt>Type</dt>
+        <dd><span class="tag" th:text="${aggregate.entity.entityType}">entityType</span></dd>
+    </dl>
+
+    <!-- Root entity values -->
+    <h2>Root Entity Values (JSON)</h2>
+    <pre class="js-entity-values" th:text="${valuesJson}">{}</pre>
+
+    <!-- Nested elements -->
+    <h2>Elements</h2>
+    <div th:if="${aggregate.elements != null and !aggregate.elements.isEmpty()}" class="nested-list">
+        <ul>
+            <li th:each="part : ${aggregate.elements}" th:utext="${part}">element</li>
+        </ul>
+    </div>
+    <p class="empty" th:if="${aggregate.elements == null or aggregate.elements.isEmpty()}">No nested elements.</p>
+</main>
+
+<script th:src="@{/ui/js/schema-view.js}"></script>
+</body>
+</html>

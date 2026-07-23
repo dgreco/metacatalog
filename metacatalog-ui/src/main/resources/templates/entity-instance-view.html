@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Entity Detail — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>Entity Detail</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances/entities}">Back</a>
+        <a class="btn" th:href="@{/ui/instances/entities/{id}/edit(id=${entity.id})}" title="Edit">Edit</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <dl class="detail-grid">
+        <dt>ID</dt>
+        <dd th:text="${entity.id}">id</dd>
+
+        <dt>Type</dt>
+        <dd><span class="tag" th:text="${entity.entityType}">entityType</span></dd>
+
+        <dt>Type Version</dt>
+        <dd th:text="${entity.entityTypeVersionId}">versionId</dd>
+    </dl>
+
+    <h2>Values (JSON)</h2>
+    <pre class="js-entity-values" th:text="${valuesJson}">{}</pre>
+</main>
+
+<script th:src="@{/ui/js/schema-view.js}"></script>
+</body>
+</html>
