@@ -415,7 +415,8 @@ class UiControllerTest {
     mockMvc
         .perform(get("/ui/instances/ent-1"))
         .andExpect(status().isOk())
-        .andExpect(view().name("instances-view"))
-        .andExpect(model().attributeExists("entity", "valuesJson", "entityId"));
+        .andExpect(view().name("instances-form"))
+        .andExpect(model().attribute("readOnly", true))
+        .andExpect(model().attributeExists("instanceForm", "entityTypes", "typeSchemas"));
   }
 }

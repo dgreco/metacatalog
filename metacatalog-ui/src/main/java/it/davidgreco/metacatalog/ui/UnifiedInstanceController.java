@@ -136,23 +136,20 @@ class UnifiedInstanceController {
   public String view(@PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
     try {
       var entity = (Entity) api.getEntity(id).getBody();
-      model.addAttribute("entity", entity);
-      model.addAttribute("entityId", unwrap(entity.getId()));
-      model.addAttribute(
-          "entityTypeVersionId",
-          entity.getEntityTypeVersionId() != null
-              ? entity.getEntityTypeVersionId().orElse("latest")
-              : "latest");
-      model.addAttribute("valuesJson", entity.getValues());
-      return "instances-view";
+      var form = new InstanceForm();
+      form.setEntityType(entity.getEntityType());
+      form.setValues(entity.getValues());
+      var types = api.listEntityTypes().getBody();
+      model.addAttribute("instanceForm", form);
+      model.addAttribute("instanceId", id);
+      model.addAttribute("entityTypes", types);
+      model.addAttribute("typeSchemas", schemaMap(types));
+      model.addAttribute("readOnly", true);
+      return "instances-form";
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
       return "redirect:/ui/instances";
     }
-  }
-
-  private static String unwrap(java.util.Optional<String> opt) {
-    return opt != null ? opt.orElse("") : "";
   }
 
   private Map<String, String> schemaMap(List<EntityType> types) {

@@ -20,6 +20,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("instance-form");
     if (!form) return;
+    var READ_ONLY = window.__READ_ONLY__ === true;
 
     var typeSelect = document.getElementById("entityType");
     var container = document.getElementById("instance-values-editor");
@@ -115,8 +116,8 @@
         input.type = "text";
       }
       input.className = "mv-input";
-      if (isReadOnly) input.disabled = true;
-      if (isRequired && type !== "boolean" && !isReadOnly) input.required = true;
+      if (isReadOnly || READ_ONLY) input.disabled = true;
+      if (isRequired && type !== "boolean" && !isReadOnly && !READ_ONLY) input.required = true;
       return { kind: "leaf", input: input, type: type, required: isRequired, readOnly: isReadOnly };
     }
 
@@ -205,30 +206,34 @@
         var itemModel = renderItem(itemsSchema, itemRow);
         if (value !== undefined) setModelValue(itemModel, value);
 
-        var removeBtn = document.createElement("button");
-        removeBtn.type = "button";
-        removeBtn.className = "link-remove";
-        removeBtn.title = "Remove";
-        removeBtn.textContent = "×";
-        removeBtn.addEventListener("click", function () {
-          itemRow.remove();
-          var idx = itemNodes.indexOf(itemModel);
-          if (idx !== -1) itemNodes.splice(idx, 1);
-        });
-        itemRow.appendChild(removeBtn);
+        if (!READ_ONLY) {
+          var removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "link-remove";
+          removeBtn.title = "Remove";
+          removeBtn.textContent = "×";
+          removeBtn.addEventListener("click", function () {
+            itemRow.remove();
+            var idx = itemNodes.indexOf(itemModel);
+            if (idx !== -1) itemNodes.splice(idx, 1);
+          });
+          itemRow.appendChild(removeBtn);
+        }
 
         listEl.appendChild(itemRow);
         itemNodes.push(itemModel);
       }
 
-      var addBtn = document.createElement("button");
-      addBtn.type = "button";
-      addBtn.className = "btn";
-      addBtn.textContent = "+ Add item";
-      addBtn.addEventListener("click", function () {
-        addItem();
-      });
-      parentEl.appendChild(addBtn);
+      if (!READ_ONLY) {
+        var addBtn = document.createElement("button");
+        addBtn.type = "button";
+        addBtn.className = "btn";
+        addBtn.textContent = "+ Add item";
+        addBtn.addEventListener("click", function () {
+          addItem();
+        });
+        parentEl.appendChild(addBtn);
+      }
 
       return { kind: "array", items: itemNodes, addItem: addItem };
     }

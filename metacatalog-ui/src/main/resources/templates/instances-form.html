@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title th:text="${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog'">Instance Form</title>
+    <title th:text="${readOnly} ? 'View Instance — Meta Catalog' : (${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog')">Instance Form</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
 </head>
 <body>
 <header class="topbar">
-    <h1 th:text="${instanceId != null} ? 'Edit Instance' : 'New Instance'">Instance</h1>
+    <h1 th:text="${readOnly} ? 'View Instance' : (${instanceId != null} ? 'Edit Instance' : 'New Instance')">Instance</h1>
     <nav>
         <a class="btn" th:href="@{/ui/instances}">Back</a>
+        <a class="btn" th:if="${readOnly and instanceId != null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
     </nav>
 </header>
 
@@ -27,7 +28,7 @@
         <div class="form-group">
             <label for="entityType">Entity Type</label>
             <select name="entityType" id="entityType" th:field="*{entityType}" required
-                    th:disabled="${instanceId != null}">
+                    th:disabled="${instanceId != null or readOnly}">
                 <option value="">— Select a type —</option>
                 <option th:each="et : ${entityTypes}"
                         th:value="${et.name}"
@@ -39,7 +40,7 @@
 
         <!-- Schema-driven values editor -->
         <div class="form-group">
-            <div class="tabs">
+            <div class="tabs" th:unless="${readOnly}">
                 <button type="button" class="tab active" data-tab="builder">Builder</button>
                 <button type="button" class="tab" data-tab="raw">Raw JSON</button>
             </div>
@@ -50,7 +51,7 @@
                 </div>
             </div>
 
-            <div class="tab-panel hidden" data-panel="raw">
+            <div class="tab-panel hidden" data-panel="raw" th:unless="${readOnly}">
                 <textarea id="instance-raw-values" class="raw-schema" rows="16" spellcheck="false"
                           style="font-family: monospace; font-size: 0.9em; width: 100%;"
                           placeholder='{"name": "...", ...}'></textarea>
@@ -60,15 +61,21 @@
             <input type="hidden" th:field="*{values}" id="values"/>
         </div>
 
-        <div class="form-actions">
+        <div class="form-actions" th:unless="${readOnly}">
             <button type="submit" class="btn">Save</button>
             <a class="btn" th:href="@{/ui/instances}">Cancel</a>
+        </div>
+        <div class="form-actions" th:if="${readOnly}">
+            <a class="btn" th:href="@{/ui/instances}">Back</a>
         </div>
     </form>
 </main>
 
 <script th:inline="javascript" th:if="${typeSchemas}">
     window.__TYPE_SCHEMAS__ = /*[[${typeSchemas}]]*/ {};
+</script>
+<script th:inline="javascript" th:if="${readOnly}">
+    window.__READ_ONLY__ = true;
 </script>
 <script th:src="@{/ui/js/instance-values-form.js}"></script>
 </body>
