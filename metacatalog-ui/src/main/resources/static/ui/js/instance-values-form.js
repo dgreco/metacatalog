@@ -27,7 +27,7 @@
     var hidden = document.getElementById("values");
     var rawTextarea = document.getElementById("instance-raw-values");
     var validation = document.getElementById("instance-validation");
-    if (!typeSelect || !container || !hidden || !rawTextarea) return;
+    if (!typeSelect || !container || !hidden) return;
 
     var model = null; // current builder tree; null while no schema is loaded
     var currentSchema = null; // last fetched schema object (for Raw->Builder rebuild)
