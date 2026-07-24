@@ -209,12 +209,15 @@ public class SparqlEndpointController {
   private static void writeGraph(
       GraphQuery gq, String accept, HttpServletResponse response, java.io.OutputStream out)
       throws Exception {
-    if (accepts(accept, RDF_XML)) {
-      response.setContentType(RDF_XML + ";charset=UTF-8");
-      gq.evaluate(new RDFXMLWriter(out));
+    if (accepts(accept, TURTLE)) {
+      response.setContentType(TURTLE + ";charset=UTF-8");
+      gq.evaluate(new TurtleWriter(out));
     } else if (accepts(accept, N_TRIPLES)) {
       response.setContentType(N_TRIPLES + ";charset=UTF-8");
       gq.evaluate(new NTriplesWriter(out));
+    } else if (accepts(accept, RDF_XML)) {
+      response.setContentType(RDF_XML + ";charset=UTF-8");
+      gq.evaluate(new RDFXMLWriter(out));
     } else {
       response.setContentType(TURTLE + ";charset=UTF-8");
       gq.evaluate(new TurtleWriter(out));
