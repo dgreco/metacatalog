@@ -252,8 +252,6 @@ class UnifiedInstanceController {
   private List<EntityLinkView> linksFor(String entityId) {
     var allRels = entityService.listAllRelationships();
     var instanceRows = allInstanceRows();
-    return EntityLinkView.listFrom(allRels, instanceRows).stream()
-        .filter(v -> v.sourceId().equals(entityId) || v.targetId().equals(entityId))
-        .toList();
+    return EntityLinkView.listFrom(allRels, instanceRows, entityId);
   }
 }

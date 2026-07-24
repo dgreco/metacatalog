@@ -419,4 +419,63 @@ class UiControllerTest {
         .andExpect(model().attribute("readOnly", true))
         .andExpect(model().attributeExists("instanceForm", "entityTypes", "typeSchemas"));
   }
+
+  // --- entity links -----------------------------------------------------------
+
+  @Test
+  void entityLinkFormRenders() throws Exception {
+    mockMvc
+        .perform(get("/ui/instances/ent-1/links"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("entity-link-form"))
+        .andExpect(
+            model()
+                .attributeExists(
+                    "entityLinkForm", "instances", "relationTypes", "entityLinks", "sourceId"));
+  }
+
+  @Test
+  void createEntityLinkSubmitsToApiAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/instances/ent-1/links")
+                .param("sourceEntityId", "ent-1")
+                .param("relationshipType", "DEPENDS_ON")
+                .param("targetEntityId", "ent-2"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
+
+    verify(api).linkEntity(any());
+  }
+
+  @Test
+  void createEntityLinkReRendersFormOnApiError() throws Exception {
+    doThrow(apiError("Loops are not allowed")).when(api).linkEntity(any());
+
+    mockMvc
+        .perform(
+            post("/ui/instances/ent-1/links")
+                .param("sourceEntityId", "ent-1")
+                .param("relationshipType", "DEPENDS_ON")
+                .param("targetEntityId", "ent-2"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("entity-link-form"))
+        .andExpect(
+            model()
+                .attribute("error", org.hamcrest.Matchers.containsString("Loops are not allowed")));
+  }
+
+  @Test
+  void deleteEntityLinkSubmitsToApiAndRedirects() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/instances/ent-1/links/delete")
+                .param("sourceEntityId", "ent-1")
+                .param("relationshipType", "HAS_PART")
+                .param("targetEntityId", "ent-2"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
+
+    verify(api).unlinkEntity("ent-1", "HAS_PART", "ent-2");
+  }
 }

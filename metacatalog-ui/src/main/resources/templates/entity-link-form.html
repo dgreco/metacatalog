@@ -31,35 +31,43 @@
           th:object="${entityLinkForm}" id="entity-link-form"
           th:if="${instances.size() >= 2}">
 
-        <label>
-            Source entity
-            <select th:field="*{sourceEntityId}" required>
-                <option value="" disabled selected>— select —</option>
-                <option th:each="inst : ${instances}"
-                        th:value="${inst.id}"
-                        th:text="${inst.name}">entity</option>
-            </select>
-        </label>
+        <div class="link-row">
+            <label>
+                Source entity
+                <select th:field="*{sourceEntityId}" required id="source-select">
+                    <option value="" disabled selected>— select —</option>
+                    <option th:each="inst : ${instances}"
+                            th:value="${inst.id}"
+                            th:text="${inst.name}"
+                            th:selected="${inst.id == sourceId}">entity</option>
+                </select>
+            </label>
 
-        <label>
-            Relationship
-            <select th:field="*{relationshipType}" required>
-                <option value="" disabled selected>— select —</option>
-                <option th:each="rt : ${relationTypes}"
-                        th:value="${rt}"
-                        th:text="${rt}">DEPENDS_ON</option>
-            </select>
-        </label>
+            <span class="arrow">→</span>
 
-        <label>
-            Target entity
-            <select th:field="*{targetEntityId}" required>
-                <option value="" disabled selected>— select —</option>
-                <option th:each="inst : ${instances}"
-                        th:value="${inst.id}"
-                        th:text="${inst.name}">entity</option>
-            </select>
-        </label>
+            <label>
+                Relationship
+                <select th:field="*{relationshipType}" required>
+                    <option value="" disabled selected>— select —</option>
+                    <option th:each="rt : ${relationTypes}"
+                            th:value="${rt}"
+                            th:text="${rt}">DEPENDS_ON</option>
+                </select>
+            </label>
+
+            <label>
+                Target entity
+                <select th:field="*{targetEntityId}" required id="target-select">
+                    <option value="" disabled selected>— select —</option>
+                    <option th:each="inst : ${instances}"
+                            th:value="${inst.id}"
+                            th:text="${inst.name}">entity</option>
+                </select>
+            </label>
+
+            <button type="button" class="btn-sm swap" id="swap-direction" title="Swap source and target"
+                    onclick="swapSourceTarget()">⇄</button>
+        </div>
 
         <p class="hint">
             The inverse relationship is created automatically. A link may not be duplicated or form a
@@ -73,7 +81,7 @@
     </form>
 
     <section th:if="${!entityLinks.isEmpty()}">
-        <h2>Existing relationships</h2>
+        <h2>Relationships</h2>
         <table>
             <thead>
             <tr>
@@ -84,10 +92,21 @@
             </tr>
             </thead>
             <tbody>
-            <tr th:each="link : ${entityLinks}">
-                <td th:text="${link.sourceName}">source</td>
-                <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
-                <td th:text="${link.targetName}">target</td>
+            <tr th:each="link : ${entityLinks}" th:classappend="${link.role == 'source' ? 'row-source' : 'row-target'}">
+                <td>
+                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.sourceId})}"
+                       th:text="${link.sourceName}" th:title="'View ' + ${link.sourceName}">source</a>
+                    <span class="role-badge" th:if="${link.role == 'source'}" title="This entity is the source">you</span>
+                </td>
+                <td>
+                    <span class="tag" th:text="${link.relationType}">DEPENDS_ON</span>
+                    <span class="arrow">→</span>
+                </td>
+                <td>
+                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.targetId})}"
+                       th:text="${link.targetName}" th:title="'View ' + ${link.targetName}">target</a>
+                    <span class="role-badge" th:if="${link.role == 'target'}" title="This entity is the target">you</span>
+                </td>
                 <td>
                     <form method="post"
                           th:action="@{/ui/instances/{id}/links/delete(id=${sourceId})}"
@@ -103,5 +122,18 @@
         </table>
     </section>
 </main>
+
+<script>
+function swapSourceTarget() {
+    var src = document.getElementById('source-select');
+    var tgt = document.getElementById('target-select');
+    var tmp = src.value;
+    src.value = tgt.value;
+    tgt.value = tmp;
+    // Swap selected attribute for Thymeleaf consistency
+    src.selectedOptions[0]?.setAttribute('selected', '');
+    tgt.selectedOptions[0]?.setAttribute('selected', '');
+}
+</script>
 </body>
 </html>

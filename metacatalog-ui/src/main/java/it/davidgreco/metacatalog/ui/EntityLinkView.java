@@ -17,13 +17,15 @@ import java.util.List;
  * @param relationType the primary relation type from source to target
  * @param targetId the id of the target entity
  * @param targetName a human-readable name for the target entity
+ * @param role the role of the current entity in this relationship ("source" or "target")
  */
 public record EntityLinkView(
     String sourceId,
     String sourceName,
     RelationType relationType,
     String targetId,
-    String targetName) {
+    String targetName,
+    String role) {
 
   /**
    * Builds {@link EntityLinkView} rows from the domain {@link EntityRelationship}s, keeping only
@@ -32,18 +34,23 @@ public record EntityLinkView(
    * @param relationships the raw relationships from {@link
    *     it.davidgreco.metacatalog.service.EntityService}
    * @param instanceRows the instance rows for name resolution (id -> name)
+   * @param entityId the current entity id — used to set {@code role} and {@code direction}
    */
   public static List<EntityLinkView> listFrom(
-      List<EntityRelationship> relationships, List<InstanceRowView> instanceRows) {
+      List<EntityRelationship> relationships, List<InstanceRowView> instanceRows, String entityId) {
     var views = new ArrayList<EntityLinkView>();
     for (var rel : relationships) {
       var rt = rel.getRelationType();
       if (CatalogGraphService.PRIMARY_RELATION_TYPES.contains(rt)) {
         var srcId = rel.getSource().getId();
         var tgtId = rel.getTarget().getId();
+        var isSource = srcId.equals(entityId);
+        var isTarget = tgtId.equals(entityId);
+        if (!isSource && !isTarget) continue;
+        var role = isSource ? "source" : "target";
         views.add(
             new EntityLinkView(
-                srcId, nameOf(instanceRows, srcId), rt, tgtId, nameOf(instanceRows, tgtId)));
+                srcId, nameOf(instanceRows, srcId), rt, tgtId, nameOf(instanceRows, tgtId), role));
       }
     }
     return views;
