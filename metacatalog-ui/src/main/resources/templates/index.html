@@ -19,6 +19,7 @@
         <a class="btn" th:href="@{/ui/bulk}">↥ Upload YAML</a>
         <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
         <a class="btn" th:href="@{/sparql}">◇ SPARQL</a>
+        <a class="btn" th:href="@{/swagger-ui.html}">⚙ Swagger</a>
     </nav>
     <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
         <span class="user" th:text="${username}">user</span>
