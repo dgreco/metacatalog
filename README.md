@@ -18,13 +18,14 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
+- **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
 - **Web UI**: Server-side rendered pages for creating traits and entity types, with an interactive JSON Schema builder
 
 ## Technology Stack
 
 - **Java 25**
-- **Spring Boot 4.0.1**
-- **PostgreSQL 42.7.5**
+- **Spring Boot 4.1.0**
+- **PostgreSQL** (JDBC driver 42.7.13, server 18+)
 - **Maven 3.9.9+**
 - **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 5.3.0** (SPARQL protocol + result serialisation)
 
@@ -252,7 +253,7 @@ and is configured under the `application.sparql.*` prefix in `application.yaml`:
 |`application.sparql.ontology`|`classpath:ontop/ontology.owl`|Location of the OWL ontology file.|
 |`application.sparql.endpoint`|`/sparql/query`|Path of the SPARQL Protocol endpoint (the Yasgui UI is pointed at this).|
 |`application.sparql.ontology-iri`|`http://metacatalog/`|Default IRI prefix used by the UI and the pre-filled query.|
-|`application.sparql.default-query`|`SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50`|Query pre-filled into the Yasgui editor on first load.|
+|`application.sparql.default-query`|`PREFIX mt: <http://metacatalog/>`<br>`SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 50`|Query pre-filled into the Yasgui editor on first load.|
 
 ### Shading
 
@@ -550,9 +551,52 @@ events, but no mapped entities are produced until the flag is flipped on (or unt
 
 ## Configuration
 
-Application configuration is managed through:
-- `application.properties` / `application.yml`
-- `CoreConfigProperties` class for custom properties
+Application configuration lives in `metacatalog-application/src/main/resources/application.yaml`. Profile-specific overrides are in `application-docker.yaml` and `application-kubernetes.yaml` (selected via `SPRING_PROFILES_ACTIVE` / `spring.profiles.active`). Custom properties bind under the `application.config` prefix into `CoreConfigProperties`:
+
+| Property | Default | Description |
+| --- | --- | --- |
+| `application.config.automaticEntitiesMapping` | `true` | Enable the scheduled mapping updater (see [Mappings](#mappings)) |
+| `application.config.updateMappedEntitiesSchedulingInterval` | `1s` | How often to drain pending lifecycle events |
+| `application.config.entityPathResolutionMaxAttempts` | `3` | Retries for entity-path resolution |
+| `application.config.cacheExpireAfterWrite` | `1h` | Spring cache (Traits, EntityTypes) TTL |
+| `application.config.taskScheduleCacheMaxSize` | `100` | `TaskManager` schedule-result cache capacity |
+| `application.config.taskScheduleCacheExpireAfterWrite` | `1h` | `TaskManager` schedule-result cache TTL |
+
+Security properties bind under `application.config.security` (see [Security](#security)) and the
+SPARQL endpoint under `application.sparql.*` (see [SPARQL / Ontology Access](#sparql--ontology-access)).
+
+## Security
+
+The `metacatalog-security` module provides pluggable authentication for the REST API. The active
+mechanism is selected with `application.config.security.auth-mode` and wired with
+`@ConditionalOnAuthMode` so exactly one `SecurityFilterChain` is registered. CSRF is disabled and
+sessions are stateless — the API is meant to be consumed programmatically. Only authentication is
+enforced at the API level (no role-based authorization); roles configured under
+`basic.users[].roles` are still attached to the `Authentication` principal for finer-grained checks
+later.
+
+| `auth-mode` | What it does | Required sub-config |
+| --- | --- | --- |
+| `none` (default) | Security disabled: every request is permitted. Intended for local dev / tests. | — |
+| `basic` | HTTP Basic with users defined statically in config. Passwords use the `DelegatingPasswordEncoder` scheme (`{noop}secret`, `{bcrypt}$2a$...`). | `application.config.security.basic.users[]` |
+| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` |
+| `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
+
+`basic` and `ldap` additionally enable a browser form-login flow for the server-side rendered UI
+(`/ui/**`, `/sparql`); `oauth2` relies on a JWT bearer token a browser cannot obtain through a form
+POST, so the UI is not login-protected in that mode.
+
+URL authorization (shared by all non-`none` modes):
+- `/metacatalog/v1/**` and `/sparql/query` require authentication
+- `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`,
+  `/javadoc/**` are public
+- Everything else (e.g. the UI under `/ui/**`, the SPARQL query UI at `/sparql`) is public
+
+### Fail-fast on open deployments
+
+To guard against accidentally shipping an open API, when `auth-mode = none` the application
+**refuses to start** if any profile listed in `application.config.security.protected-profiles`
+(default: `kubernetes`, `docker`) is active. Override the list to add or remove guarded profiles.
 
 ## Quality Gates
 
@@ -593,18 +637,30 @@ Notes:
 ## Database Migrations
 
 Database schema is managed by Flyway. Migration scripts are located in:
+
 ```
-src/main/resources/db/migration/
+metacatalog-core/src/main/resources/db/migration/
 ```
 
-Migrations run automatically on application startup.
+| Migration | Purpose |
+| --- | --- |
+| `V1__create_tables.sql` | Base schema: `entity_type`, `entity`, `trait`, `type_traits`, relationship tables, mapping tables, `entity_lifecycle_event` |
+| `V2__insert_base_traits_and_relationships.sql` | Seeds the built-in traits (`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`) and the `RelationType` vocabulary |
+| `V3__add_type_versioning.sql` | Append-only `entity_type_version` / `trait_version` history tables + version columns (see [Type Versioning](#type-versioning)) |
+| `V4__pin_entity_to_type_version.sql` | Pins each `entity` to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
+| `V5__provisioning_fields_readonly.sql` | Marks `provisioningStatus` / `provisioningResult` as `readOnly` on the `ProvisionableResource` trait |
+
+Migrations run automatically on application startup. Add new `V*__*.sql` files; never edit an
+already-applied one.
 
 ## Monitoring & Management
 
-Spring Boot Actuator endpoints are enabled for monitoring:
+Spring Boot Actuator endpoints are enabled for monitoring (exposed set: `health`, `info`, `flyway`, `metrics`, `caches` — `env`/`configprops`/`beans`/`loggers` are intentionally excluded because they leak DB passwords and auth hashes):
 - `/actuator/health` - Health check
 - `/actuator/info` - Application info, including the running build's version, git commit and build time
 - `/actuator/metrics` - Metrics
+- `/actuator/flyway` - Flyway migration history
+- `/actuator/caches` - Cache inspection (backed by the Spring cache abstraction)
 
 ## Contributing
 
@@ -625,4 +681,4 @@ For issues and questions, please use the project's issue tracker.
 
 ## Additional Documentation
 
-For detailed project information, see [CLAUDE.MD](CLAUDE.MD) which contains comprehensive documentation for developers and AI assistants.
+For detailed project information, see [CLAUDE.md](CLAUDE.md) (also available as `AGENTS.md`) which contains comprehensive documentation for developers and AI assistants.
