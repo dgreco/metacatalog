@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title th:text="${readOnly} ? 'View Instance — Meta Catalog' : (${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog')">Instance Form</title>
+    <title th:text="${readOnly != null and readOnly} ? 'View Instance — Meta Catalog' : (${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog')">Instance Form</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
 </head>
 <body>
 <header class="topbar">
-    <h1 th:text="${readOnly} ? 'View Instance' : (${instanceId != null} ? 'Edit Instance' : 'New Instance')">Instance</h1>
+    <h1 th:text="${readOnly != null and readOnly} ? 'View Instance' : (${instanceId != null} ? 'Edit Instance' : 'New Instance')">Instance</h1>
     <nav>
         <a class="btn" th:href="@{/ui/instances}">Back</a>
         <a class="btn" th:if="${readOnly == true and instanceId != null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
@@ -28,7 +28,7 @@
         <div class="form-group">
             <label for="entityType">Entity Type</label>
             <select name="entityType" id="entityType" th:field="*{entityType}" required
-                    th:disabled="${instanceId != null or readOnly}">
+                    th:disabled="${instanceId != null or (readOnly != null and readOnly)}">
                 <option value="">— Select a type —</option>
                 <option th:each="et : ${entityTypes}"
                         th:value="${et.name}"
