@@ -59,6 +59,7 @@
             <td>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
+                <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
                 <form method="post" th:action="@{/ui/instances/{id}/delete(id=${inst.id})}"
                       class="inline-form" data-confirm="Delete this instance?">
                     <button type="submit" class="link-remove" title="Delete">×</button>

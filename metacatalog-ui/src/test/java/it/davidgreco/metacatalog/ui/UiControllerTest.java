@@ -75,7 +75,7 @@ class UiControllerTest {
                 new EntityTypeUiController(api),
                 new MappingUiController(api, mapper),
                 new BulkUiController(api),
-                new UnifiedInstanceController(api))
+                new UnifiedInstanceController(api, entityService))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))

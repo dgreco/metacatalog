@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Entity Relationships — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>Entity Relationships</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances}">← Back</a>
+    </nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
+</header>
+
+<main>
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <p class="empty" th:if="${instances.size() < 2}">
+        You need at least two entities before you can relate them.
+    </p>
+
+    <form method="post" th:action="@{/ui/instances/{id}/links(id=${sourceId})}"
+          th:object="${entityLinkForm}" id="entity-link-form"
+          th:if="${instances.size() >= 2}">
+
+        <label>
+            Source entity
+            <select th:field="*{sourceEntityId}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="inst : ${instances}"
+                        th:value="${inst.id}"
+                        th:text="${inst.name}">entity</option>
+            </select>
+        </label>
+
+        <label>
+            Relationship
+            <select th:field="*{relationshipType}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="rt : ${relationTypes}"
+                        th:value="${rt}"
+                        th:text="${rt}">DEPENDS_ON</option>
+            </select>
+        </label>
+
+        <label>
+            Target entity
+            <select th:field="*{targetEntityId}" required>
+                <option value="" disabled selected>— select —</option>
+                <option th:each="inst : ${instances}"
+                        th:value="${inst.id}"
+                        th:text="${inst.name}">entity</option>
+            </select>
+        </label>
+
+        <p class="hint">
+            The inverse relationship is created automatically. A link may not be duplicated or form a
+            loop within the same relationship type; an entity may relate to itself.
+        </p>
+
+        <div class="actions">
+            <button type="submit" class="btn primary" id="submit-link">Create relationship</button>
+            <a class="btn" th:href="@{/ui/instances}">Cancel</a>
+        </div>
+    </form>
+
+    <section th:if="${!entityLinks.isEmpty()}">
+        <h2>Existing relationships</h2>
+        <table>
+            <thead>
+            <tr>
+                <th>Source</th>
+                <th>Relationship</th>
+                <th>Target</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="link : ${entityLinks}">
+                <td th:text="${link.sourceName}">source</td>
+                <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
+                <td th:text="${link.targetName}">target</td>
+                <td>
+                    <form method="post"
+                          th:action="@{/ui/instances/{id}/links/delete(id=${sourceId})}"
+                          class="inline-form">
+                        <input type="hidden" name="sourceEntityId" th:value="${link.sourceId}"/>
+                        <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
+                        <input type="hidden" name="targetEntityId" th:value="${link.targetId}"/>
+                        <button type="submit" class="link-remove" title="Remove relationship">×</button>
+                    </form>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+</body>
+</html>

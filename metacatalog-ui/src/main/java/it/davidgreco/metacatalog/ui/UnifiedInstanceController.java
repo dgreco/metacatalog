@@ -1,8 +1,11 @@
 package it.davidgreco.metacatalog.ui;
 
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
+import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
+import it.davidgreco.metacatalog.service.EntityService;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,9 +29,11 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 class UnifiedInstanceController {
 
   private final MetacatalogApiDelegate api;
+  private final EntityService entityService;
 
-  UnifiedInstanceController(MetacatalogApiDelegate api) {
+  UnifiedInstanceController(MetacatalogApiDelegate api, EntityService entityService) {
     this.api = api;
+    this.entityService = entityService;
   }
 
   @GetMapping
@@ -158,5 +163,97 @@ class UnifiedInstanceController {
       map.put(t.getName(), t.getSchema());
     }
     return map;
+  }
+
+  // --- entity links ----------------------------------------------------------
+
+  @GetMapping("/{id}/links")
+  public String linkForm(@PathVariable String id, Model model) {
+    if (!model.containsAttribute("entityLinkForm")) {
+      var form = new EntityLinkForm();
+      form.setSourceEntityId(id);
+      model.addAttribute("entityLinkForm", form);
+    }
+    model.addAttribute("instances", allInstanceRows());
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("entityLinks", linksFor(id));
+    model.addAttribute("sourceId", id);
+    return "entity-link-form";
+  }
+
+  @PostMapping("/{id}/links")
+  public String createLink(
+      @PathVariable String id,
+      @ModelAttribute("entityLinkForm") EntityLinkForm form,
+      Model model,
+      RedirectAttributes redirectAttributes) {
+    try {
+      var relType = RelationType.parse(form.getRelationshipType());
+      var req = new LinkEntityRequest();
+      req.setSourceEntityId(form.getSourceEntityId());
+      req.setRelationshipTypeName(relType.name());
+      req.setTargetEntityId(form.getTargetEntityId());
+      api.linkEntity(req);
+      redirectAttributes.addFlashAttribute(
+          "message",
+          "Linked '"
+              + form.getSourceEntityId()
+              + "' "
+              + relType
+              + " '"
+              + form.getTargetEntityId()
+              + "' (inverse created too).");
+      return "redirect:/ui/instances/" + id + "/links";
+    } catch (IllegalArgumentException e) {
+      return renderLinkError(id, model, "Invalid relationship type.");
+    } catch (RuntimeException e) {
+      return renderLinkError(id, model, e.getMessage());
+    }
+  }
+
+  @PostMapping("/{id}/links/delete")
+  public String deleteLink(
+      @PathVariable String id,
+      @RequestParam String sourceEntityId,
+      @RequestParam String relationshipType,
+      @RequestParam String targetEntityId,
+      RedirectAttributes redirectAttributes) {
+    try {
+      api.unlinkEntity(sourceEntityId, relationshipType, targetEntityId);
+      redirectAttributes.addFlashAttribute(
+          "message",
+          "Removed relationship between '" + sourceEntityId + "' and '" + targetEntityId + "'.");
+    } catch (IllegalArgumentException e) {
+      redirectAttributes.addFlashAttribute("error", "Invalid relationship type.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return "redirect:/ui/instances/" + id + "/links";
+  }
+
+  private String renderLinkError(String id, Model model, String message) {
+    model.addAttribute("error", message);
+    model.addAttribute("instances", allInstanceRows());
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("entityLinks", linksFor(id));
+    model.addAttribute("sourceId", id);
+    return "entity-link-form";
+  }
+
+  private List<InstanceRowView> allInstanceRows() {
+    var types = api.listEntityTypes().getBody();
+    var entities = new ArrayList<it.davidgreco.metacatalog.openapi.model.Entity>();
+    for (var t : types) {
+      entities.addAll(api.getEntities(t.getName(), "").getBody());
+    }
+    return InstanceRowView.listFrom(entities);
+  }
+
+  private List<EntityLinkView> linksFor(String entityId) {
+    var allRels = entityService.listAllRelationships();
+    var instanceRows = allInstanceRows();
+    return EntityLinkView.listFrom(allRels, instanceRows).stream()
+        .filter(v -> v.sourceId().equals(entityId) || v.targetId().equals(entityId))
+        .toList();
   }
 }
