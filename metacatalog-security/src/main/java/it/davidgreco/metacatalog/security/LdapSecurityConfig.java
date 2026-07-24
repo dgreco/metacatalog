@@ -6,6 +6,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.ldap.DefaultSpringSecurityContextSource;
 import org.springframework.security.ldap.authentication.BindAuthenticator;
 import org.springframework.security.ldap.authentication.LdapAuthenticationProvider;
@@ -43,6 +44,11 @@ public class LdapSecurityConfig {
   /**
    * The {@link SecurityFilterChain} for LDAP-backed Basic auth.
    *
+   * <p>Uses {@link SessionCreationPolicy#NEVER} so that a browser session established by the UI
+   * form-login flow is honoured (Swagger "Try it out" and Yasgui XHRs are authenticated without
+   * re-authentication), while programmatic clients sending Basic credentials on every request stay
+   * effectively stateless — no session is ever created on this chain.
+   *
    * @param http the security builder
    * @param authenticationManager the LDAP-based authentication manager
    * @return the configured security filter chain
@@ -52,7 +58,7 @@ public class LdapSecurityConfig {
   @Order(100)
   public SecurityFilterChain securityFilterChain(
       final HttpSecurity http, final AuthenticationManager authenticationManager) throws Exception {
-    customizer.customize(http);
+    customizer.customize(http, SessionCreationPolicy.NEVER);
     http.httpBasic(org.springframework.security.config.Customizer.withDefaults())
         .authenticationManager(authenticationManager);
     return http.build();

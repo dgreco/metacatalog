@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -41,6 +42,11 @@ public class BasicAuthSecurityConfig {
   /**
    * The {@link SecurityFilterChain} for Basic auth.
    *
+   * <p>Uses {@link SessionCreationPolicy#NEVER} so that a browser session established by the UI
+   * form-login flow is honoured (Swagger "Try it out" and Yasgui XHRs are authenticated without
+   * re-authentication), while programmatic clients sending Basic credentials on every request stay
+   * effectively stateless — no session is ever created on this chain.
+   *
    * @param http the security builder
    * @return the configured security filter chain
    * @throws Exception if the security builder cannot be configured
@@ -48,7 +54,7 @@ public class BasicAuthSecurityConfig {
   @Bean
   @Order(100)
   public SecurityFilterChain securityFilterChain(final HttpSecurity http) throws Exception {
-    customizer.customize(http);
+    customizer.customize(http, SessionCreationPolicy.NEVER);
     http.httpBasic(org.springframework.security.config.Customizer.withDefaults());
     return http.build();
   }

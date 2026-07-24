@@ -269,7 +269,7 @@ Data JPA / metacatalog-core use at runtime. RDF4J is managed separately at
 When the application is running, access the documentation:
 
 - **Web UI**: http://localhost:8080/ui
-- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **Swagger UI**: http://localhost:8080/swagger-ui.html — in `basic`/`ldap` mode, "Try it out" reuses the UI form-login session (no re-authentication); open it from the UI topbar after logging in
 - **SPARQL UI**: http://localhost:8080/sparql — Yasgui query editor pointed at the protocol endpoint below
 - **SPARQL Protocol**: http://localhost:8080/sparql/query — SPARQL 1.1 endpoint (GET `?query=`, POST `application/sparql-query`, POST `application/x-www-form-urlencoded`)
 - **OpenAPI Spec**: http://localhost:8080/api/interface-specification.yaml
@@ -569,22 +569,26 @@ SPARQL endpoint under `application.sparql.*` (see [SPARQL / Ontology Access](#sp
 
 The `metacatalog-security` module provides pluggable authentication for the REST API. The active
 mechanism is selected with `application.config.security.auth-mode` and wired with
-`@ConditionalOnAuthMode` so exactly one `SecurityFilterChain` is registered. CSRF is disabled and
-sessions are stateless — the API is meant to be consumed programmatically. Only authentication is
-enforced at the API level (no role-based authorization); roles configured under
-`basic.users[].roles` are still attached to the `Authentication` principal for finer-grained checks
-later.
+`@ConditionalOnAuthMode` so exactly one `SecurityFilterChain` is registered. CSRF is disabled on
+the API chain. Sessions are `STATELESS` for `oauth2` without SSO (JWT bearer tokens only) and
+`NEVER` for `basic`/`ldap` and `oauth2` with SSO: an existing UI session is reused so the
+Swagger UI "Try it out" XHRs and Yasgui SPARQL XHRs are authenticated without re-authentication,
+but no session is ever created on the API chain — programmatic clients stay effectively stateless.
+Only authentication is enforced at the API level (no role-based authorization); roles configured
+under `basic.users[].roles` are still attached to the `Authentication` principal for finer-grained
+checks later.
 
 | `auth-mode` | What it does | Required sub-config |
 | --- | --- | --- |
 | `none` (default) | Security disabled: every request is permitted. Intended for local dev / tests. | — |
 | `basic` | HTTP Basic with users defined statically in config. Passwords use the `DelegatingPasswordEncoder` scheme (`{noop}secret`, `{bcrypt}$2a$...`). | `application.config.security.basic.users[]` |
-| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` |
+| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). When `client-id` (and `client-secret`) is additionally set, browser SSO is enabled via the OIDC authorization-code flow — the UI redirects to the IdP, and after login the session is reused by the API chain (Swagger "Try it out" works without re-authentication, mirroring `basic`/`ldap`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` + optional `{client-id, client-secret}` for SSO |
 | `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
 
 `basic` and `ldap` additionally enable a browser form-login flow for the server-side rendered UI
-(`/ui/**`, `/sparql`); `oauth2` relies on a JWT bearer token a browser cannot obtain through a form
-POST, so the UI is not login-protected in that mode.
+(`/ui/**`, `/sparql`). In `oauth2` mode, setting `client-id` + `client-secret` enables browser
+SSO via the OIDC authorization-code flow (redirect to IdP, session reuse); without `client-id`
+the UI is not login-protected (JWT bearer tokens are for API clients, not browser sessions).
 
 URL authorization (shared by all non-`none` modes):
 - `/metacatalog/v1/**` and `/sparql/query` require authentication

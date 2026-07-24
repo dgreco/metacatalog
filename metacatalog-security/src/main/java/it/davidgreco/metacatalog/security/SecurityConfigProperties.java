@@ -63,12 +63,25 @@ public record SecurityConfigProperties(
   /**
    * OAuth2 / OIDC resource server configuration.
    *
+   * <p>When {@code issuerUri} is set (instead of {@code jwkSetUri}), the JWK set is discovered via
+   * the issuer's OpenID Connect metadata. Setting {@code clientId} (and {@code clientSecret})
+   * additionally enables browser SSO via the OIDC authorization-code flow: unauthenticated browser
+   * requests to the UI are redirected to the IdP, and after a successful login the resulting
+   * session is reused by the API chain (Swagger "Try it out" and SPARQL XHRs are authenticated
+   * without re-authentication). Programmatic clients continue to authenticate with JWT bearer
+   * tokens on every request.
+   *
    * @param jwkSetUri the JSON Web Key Set URL exposed by the IdP (e.g. Keycloak's {@code
-   *     /protocol/openid-connect/certs} endpoint)
+   *     /protocol/openid-connect/certs} endpoint). Mutually exclusive with {@code issuerUri}.
    * @param issuerUri the issuer URI, used to discover the JWK set and to validate the {@code iss}
-   *     claim. Exactly one of {@code jwkSetUri} and {@code issuerUri} must be set.
+   *     claim. Exactly one of {@code jwkSetUri} and {@code issuerUri} must be set. Required for SSO
+   *     ({@code clientId}).
+   * @param clientId the OAuth2 client ID registered at the IdP. When set (along with {@code
+   *     clientSecret}), browser SSO is enabled. Optional — when omitted, the resource server
+   *     validates JWT bearer tokens only (no browser login flow).
+   * @param clientSecret the OAuth2 client secret. Required when {@code clientId} is set.
    */
-  public record Oauth2(String jwkSetUri, String issuerUri) {}
+  public record Oauth2(String jwkSetUri, String issuerUri, String clientId, String clientSecret) {}
 
   /**
    * LDAP bind authentication configuration.

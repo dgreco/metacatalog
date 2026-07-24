@@ -17,10 +17,11 @@ import org.springframework.security.web.SecurityFilterChain;
  *
  * <p>This chain is ordered with higher priority than the API chain so that requests to {@code
  * /ui/**} and {@code /sparql} are handled here (form login + stateful sessions) instead of falling
- * through to the API chain (Basic/LDAP + stateless). The {@code /sparql/query} protocol endpoint is
- * handled by a dedicated {@link SparqlSecurityConfig} chain (also stateful, so the browser session
- * established here carries over to Yasgui's XHR). Static resources under {@code /ui/css/**} and
- * /ui/js/**} are permitted so the login page can be styled before the user authenticates.
+ * through to the API chain (Basic/LDAP, which reuses this session via {@code NEVER} but never
+ * creates one). The {@code /sparql/query} protocol endpoint is handled by a dedicated {@link
+ * SparqlSecurityConfig} chain (also stateful, so the browser session established here carries over
+ * to Yasgui's XHR). Static resources under {@code /ui/css/**} and /ui/js/**} are permitted so the
+ * login page can be styled before the user authenticates.
  *
  * <p>CSRF is left enabled (Spring Security default) because the UI uses state-changing POST forms;
  * Thymeleaf auto-injects the CSRF token into every {@code <form th:action>}.

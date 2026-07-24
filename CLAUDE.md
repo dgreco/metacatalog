@@ -107,14 +107,18 @@ application's component scan.
 | --- | --- | --- |
 | `none` (default) | Security disabled: every request is permitted. Intended for local dev / tests. | — |
 | `basic` | HTTP Basic with users defined statically in config. Passwords use the DelegatingPasswordEncoder scheme (`{noop}secret`, `{bcrypt}$2a$...`). | `application.config.security.basic.users[]` |
-| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` |
+| `oauth2` | Spring Security OAuth2 resource server validating JWT bearer tokens. Resolves the JWK set from `jwk-set-uri` or `issuer-uri` (e.g. Keycloak's `/protocol/openid-connect/certs`). When `client-id` (and `client-secret`) is additionally set, browser SSO is enabled via the OIDC authorization-code flow — the UI redirects to the IdP, and after login the session is reused by the API chain (Swagger "Try it out" works without re-authentication, mirroring `basic`/`ldap`). | `application.config.security.oauth2.{jwk-set-uri \| issuer-uri}` + optional `{client-id, client-secret}` for SSO |
 | `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
 
 URL authorization (shared by all non-`none` modes, see `SecurityFilterChainCustomizer`):
 - `/metacatalog/v1/**` and `/sparql/query` require authentication
 - `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`, `/javadoc/**` are public
 - Everything else (e.g. the server-side rendered UI under `/ui/**`, the SPARQL query UI at `/sparql`) is public
-- CSRF is disabled and sessions are stateless (API is meant to be consumed programmatically)
+- CSRF is disabled on the API chain. Sessions are `STATELESS` for `oauth2` without SSO (JWT
+  bearer tokens only) and `NEVER` for `basic`/`ldap` and `oauth2` with SSO: an existing UI session
+  is reused so the Swagger UI "Try it out" XHRs and Yasgui SPARQL XHRs are authenticated without
+  re-authentication, but no session is ever created on the API chain — programmatic clients stay
+  effectively stateless
 
 Only authentication is enforced at the API level — no role-based authorization. Roles configured
 under `basic.users[].roles` are still attached to the `Authentication` principal and can be used

@@ -23,9 +23,12 @@ import org.springframework.stereotype.Component;
  * auth-mode: oauth2}. A browser without a JWT bearer token gets a 401 — the safe default for a JWT
  * resource-server that has no form login.
  *
- * <p>CSRF is disabled and sessions are stateless because the API is meant to be consumed
- * programmatically (Basic credentials, JWT bearer tokens or LDAP-backed Basic credentials are sent
- * on every request).
+ * <p>CSRF is always disabled on this chain. Sessions are {@link SessionCreationPolicy#STATELESS
+ * stateless} for {@link AuthMode#OAUTH2} (JWT bearer tokens, no session) and {@link
+ * SessionCreationPolicy#NEVER NEVER} for {@link AuthMode#BASIC} / {@link AuthMode#LDAP}: an
+ * existing UI form-login session is reused (so Swagger "Try it out" and Yasgui XHRs are
+ * authenticated without re-authentication) but no session is ever created on the API chain, keeping
+ * it stateless for programmatic Basic-auth clients.
  *
  * <p>This customizer does <strong>not</strong> configure a specific authentication mechanism. Each
  * mode-specific {@code *SecurityConfig} class is responsible for adding its own authentication
@@ -68,18 +71,40 @@ public class SecurityFilterChainCustomizer {
   static final String SPARQL_QUERY_PATH = "/sparql/query";
 
   /**
-   * Applies the common URL rules and session/CSRF settings to the given {@link HttpSecurity}.
+   * Applies the common URL rules and a stateless session policy to the given {@link HttpSecurity}.
    *
-   * <p>The caller is responsible for adding the mode-specific authentication mechanism (e.g. {@code
-   * .httpBasic(...)} or {@code .oauth2ResourceServer(...)}) after this method returns.
+   * <p>Equivalent to {@link #customize(HttpSecurity, SessionCreationPolicy) customize(http,}{@link
+   * SessionCreationPolicy#STATELESS STATELESS)}. Use this overload for modes whose API is consumed
+   * programmatically with a bearer token on every request (e.g. {@link AuthMode#OAUTH2}).
    *
    * @param http the security builder to customize
    * @throws Exception if the security builder cannot be configured
    */
   public void customize(final HttpSecurity http) throws Exception {
+    customize(http, SessionCreationPolicy.STATELESS);
+  }
+
+  /**
+   * Applies the common URL rules and the given session policy to the {@link HttpSecurity}.
+   *
+   * <p>The caller is responsible for adding the mode-specific authentication mechanism (e.g. {@code
+   * .httpBasic(...)} or {@code .oauth2ResourceServer(...)}) after this method returns.
+   *
+   * <p>For {@link AuthMode#BASIC} / {@link AuthMode#LDAP} the caller passes {@link
+   * SessionCreationPolicy#NEVER}: an existing UI form-login session is honoured (so the Swagger UI
+   * "Try it out" XHRs and the Yasgui SPARQL XHRs are authenticated without re-authentication), but
+   * no session is ever created on the API chain — programmatic clients sending Basic credentials on
+   * every request stay effectively stateless. For {@link AuthMode#OAUTH2} the no-arg overload
+   * ({@link SessionCreationPolicy#STATELESS}) is used because JWT bearer tokens have no session.
+   *
+   * @param http the security builder to customize
+   * @param sessionPolicy the session-creation policy to apply
+   * @throws Exception if the security builder cannot be configured
+   */
+  public void customize(final HttpSecurity http, final SessionCreationPolicy sessionPolicy)
+      throws Exception {
     http.csrf(csrf -> csrf.disable())
-        .sessionManagement(
-            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .sessionManagement(session -> session.sessionCreationPolicy(sessionPolicy))
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(PUBLIC_PATHS)

@@ -72,6 +72,12 @@ application:
       #   # Either jwk-set-uri or issuer-uri must be set.
       #   jwk-set-uri: http://localhost:8090/realms/metacatalog/protocol/openid-connect/certs
       #   issuer-uri: http://localhost:8090/realms/metacatalog
+      #   # Setting client-id (and client-secret) enables browser SSO via the OIDC
+      #   # authorization-code flow: the UI redirects to the IdP, and after login the
+      #   # session is reused by the API chain (Swagger "Try it out" works without
+      #   # re-authentication, mirroring basic/ldap). Requires issuer-uri (not jwk-set-uri).
+      #   # client-id: metacatalog
+      #   # client-secret: secret
       # ldap:
       #   url: ldap://localhost:389
       #   base: dc=example,dc=com
