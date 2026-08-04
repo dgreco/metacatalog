@@ -14,28 +14,27 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
-import it.davidgreco.metacatalog.service.AggregateSchemaService;
-import it.davidgreco.metacatalog.service.ServiceError;
+import it.davidgreco.metacatalog.openapi.model.EntityType;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /**
  * Route / model / API-interaction tests for {@link AggregateUiController} using a standalone
- * MockMvc setup with a mocked {@link MetacatalogApiDelegate} and {@link AggregateSchemaService} (no
- * Spring context or database required).
+ * MockMvc setup with a mocked {@link MetacatalogApiDelegate} (no Spring context or database
+ * required).
  */
 class AggregateUiControllerTest {
 
   private final MetacatalogApiDelegate api = mock(MetacatalogApiDelegate.class);
-  private final AggregateSchemaService aggregateSchemaService = mock(AggregateSchemaService.class);
   private final ObjectMapper jsonMapper = new ObjectMapper();
   private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
   private MockMvc mockMvc;
@@ -60,20 +59,20 @@ class AggregateUiControllerTest {
     return type;
   }
 
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> schemaMap() throws Exception {
+    return jsonMapper.readValue(SCHEMA_JSON, Map.class);
+  }
+
   @BeforeEach
   void setUp() throws Exception {
-    given(aggregateSchemaService.aggregateRootTypes())
-        .willReturn(List.of(entityType("ProductType")));
-    given(aggregateSchemaService.aggregateSchema("ProductType"))
-        .willReturn(jsonMapper.readTree(SCHEMA_JSON));
+    given(api.listAggregateRootTypes())
+        .willReturn(ResponseEntity.ok(List.of(entityType("ProductType"))));
+    given(api.getAggregateSchema("ProductType")).willReturn(ResponseEntity.ok(schemaMap()));
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new AggregateUiController(
-                    api,
-                    aggregateSchemaService,
-                    jsonMapper,
-                    yamlMapper,
-                    new HtmlSafeJsonSerializer(jsonMapper)))
+                    api, jsonMapper, yamlMapper, new HtmlSafeJsonSerializer(jsonMapper)))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -104,8 +103,8 @@ class AggregateUiControllerTest {
   /** A type that is not an aggregate root surfaces as a form error rather than a 500. */
   @Test
   void formShowsAnErrorWhenTheSchemaCannotBeBuilt() throws Exception {
-    given(aggregateSchemaService.aggregateSchema("LonelyType"))
-        .willThrow(new ServiceError("EntityType LonelyType is not an aggregate root"));
+    given(api.getAggregateSchema("LonelyType"))
+        .willThrow(new RuntimeException("EntityType LonelyType is not an aggregate root"));
 
     mockMvc
         .perform(get("/ui/aggregates/new").param("rootType", "LonelyType"))

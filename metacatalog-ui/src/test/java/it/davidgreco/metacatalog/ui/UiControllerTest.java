@@ -20,10 +20,6 @@ import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
 import it.davidgreco.metacatalog.openapi.model.Trait;
-import it.davidgreco.metacatalog.service.EntityService;
-import it.davidgreco.metacatalog.service.EntityTypeService;
-import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.TraitService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,16 +31,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Route / model / API-interaction tests for the UI controllers using a standalone MockMvc setup
  * with a mocked {@link MetacatalogApiDelegate} (no Spring context or database required).
  *
- * <p>The graph-page tests still mock the core services because {@link CatalogGraphService} uses
- * them directly (TODO: move to REST API once the spec has list-all endpoints).
+ * <p>The delegate is the only collaborator that needs mocking: every UI read and write goes through
+ * the REST API, including the catalog graph.
  */
 class UiControllerTest {
 
   private final MetacatalogApiDelegate api = mock(MetacatalogApiDelegate.class);
-  private final TraitService traitService = mock(TraitService.class);
-  private final EntityTypeService entityTypeService = mock(EntityTypeService.class);
-  private final EntityService entityService = mock(EntityService.class);
-  private final MappingService mappingService = mock(MappingService.class);
   private final ObjectMapper mapper = new ObjectMapper();
   private MockMvc mockMvc;
 
@@ -54,20 +46,13 @@ class UiControllerTest {
     given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listMappings()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listTraitRelationships()).willReturn(ResponseEntity.ok(List.of()));
-    given(entityTypeService.list()).willReturn(List.of());
-    given(entityTypeService.listAllVersions()).willReturn(List.of());
-    given(traitService.listAllVersions()).willReturn(List.of());
-    given(entityService.listAll()).willReturn(List.of());
-    given(entityService.listAllRelationships()).willReturn(List.of());
-    given(mappingService.listAllEntityRelationships()).willReturn(List.of());
+    given(api.listAllTraitVersions()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listAllEntityTypeVersions()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listEntityRelationships()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listMappingEntityRelationships()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
-        new CatalogGraphService(
-            traitService,
-            entityTypeService,
-            entityService,
-            mappingService,
-            new HtmlSafeJsonSerializer(mapper),
-            mapper);
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new GraphUiController(api, catalogGraphService),
@@ -75,7 +60,7 @@ class UiControllerTest {
                 new EntityTypeUiController(api),
                 new MappingUiController(api, mapper),
                 new BulkUiController(api),
-                new UnifiedInstanceController(api, entityService))
+                new UnifiedInstanceController(api))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))

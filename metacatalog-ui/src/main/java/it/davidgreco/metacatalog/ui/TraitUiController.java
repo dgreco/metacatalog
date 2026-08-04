@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.ui;
 
-import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.LinkTraitRequest;
 import it.davidgreco.metacatalog.openapi.model.Trait;
@@ -83,7 +82,7 @@ public class TraitUiController {
       model.addAttribute("traitLinkForm", new TraitLinkForm());
     }
     model.addAttribute("traits", api.listTraits().getBody());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
     model.addAttribute(
         "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";
@@ -97,10 +96,11 @@ public class TraitUiController {
     try {
       var source = form.getSourceTrait();
       var target = form.getTargetTrait();
-      var relType = RelationType.parse(form.getRelationshipType());
+      // The relation type is validated by the API, which rejects an unknown name with a 400.
+      var relType = form.getRelationshipType();
       var req = new LinkTraitRequest();
       req.setSourceTrait(source);
-      req.setRelationshipTypeName(relType.name());
+      req.setRelationshipTypeName(relType);
       req.setTargetTrait(target);
       api.linkTrait(req);
       redirectAttributes.addFlashAttribute(
@@ -136,7 +136,7 @@ public class TraitUiController {
   private String renderTraitLinkError(Model model, String message) {
     model.addAttribute("error", message);
     model.addAttribute("traits", api.listTraits().getBody());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
     model.addAttribute(
         "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";

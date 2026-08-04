@@ -1,15 +1,13 @@
 package it.davidgreco.metacatalog.ui;
 
-import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
-import it.davidgreco.metacatalog.service.EntityService;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,24 +27,18 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 class UnifiedInstanceController {
 
   private final MetacatalogApiDelegate api;
-  private final EntityService entityService;
 
-  UnifiedInstanceController(MetacatalogApiDelegate api, EntityService entityService) {
+  UnifiedInstanceController(MetacatalogApiDelegate api) {
     this.api = api;
-    this.entityService = entityService;
   }
 
   @GetMapping
   public String list(@RequestParam(required = false) String type, Model model) {
     List<EntityType> types = api.listEntityTypes().getBody();
-    List<Entity> entities = new ArrayList<>();
-    if (type != null && !type.isBlank()) {
-      entities.addAll(api.getEntities(type, "").getBody());
-    } else {
-      for (var t : types) {
-        entities.addAll(api.getEntities(t.getName(), "").getBody());
-      }
-    }
+    // An absent type lists every type's entities.
+    List<Entity> entities =
+        api.getEntities(Optional.ofNullable(type).filter(t -> !t.isBlank()), Optional.empty())
+            .getBody();
     model.addAttribute("instances", InstanceRowView.listFrom(entities));
     model.addAttribute("selectedType", type);
     model.addAttribute("entityTypes", types);
@@ -175,7 +167,7 @@ class UnifiedInstanceController {
       model.addAttribute("entityLinkForm", form);
     }
     model.addAttribute("instances", allInstanceRows());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
     model.addAttribute("entityLinks", linksFor(id));
     model.addAttribute("sourceId", id);
     return "entity-link-form";
@@ -188,10 +180,11 @@ class UnifiedInstanceController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      var relType = RelationType.parse(form.getRelationshipType());
+      // The relation type is validated by the API, which rejects an unknown name with a 400.
+      var relType = form.getRelationshipType();
       var req = new LinkEntityRequest();
       req.setSourceEntityId(form.getSourceEntityId());
-      req.setRelationshipTypeName(relType.name());
+      req.setRelationshipTypeName(relType);
       req.setTargetEntityId(form.getTargetEntityId());
       api.linkEntity(req);
       redirectAttributes.addFlashAttribute(
@@ -234,23 +227,18 @@ class UnifiedInstanceController {
   private String renderLinkError(String id, Model model, String message) {
     model.addAttribute("error", message);
     model.addAttribute("instances", allInstanceRows());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPES);
+    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
     model.addAttribute("entityLinks", linksFor(id));
     model.addAttribute("sourceId", id);
     return "entity-link-form";
   }
 
   private List<InstanceRowView> allInstanceRows() {
-    var types = api.listEntityTypes().getBody();
-    var entities = new ArrayList<it.davidgreco.metacatalog.openapi.model.Entity>();
-    for (var t : types) {
-      entities.addAll(api.getEntities(t.getName(), "").getBody());
-    }
-    return InstanceRowView.listFrom(entities);
+    return InstanceRowView.listFrom(api.getEntities(Optional.empty(), Optional.empty()).getBody());
   }
 
   private List<EntityLinkView> linksFor(String entityId) {
-    var allRels = entityService.listAllRelationships();
+    var allRels = api.listEntityRelationships().getBody();
     var instanceRows = allInstanceRows();
     return EntityLinkView.listFrom(allRels, instanceRows, entityId);
   }

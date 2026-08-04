@@ -1,13 +1,14 @@
 package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
-import it.davidgreco.metacatalog.service.AggregateSchemaService;
+import it.davidgreco.metacatalog.openapi.model.EntityType;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,35 +16,34 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
  * Aggregate authoring: pick an aggregate root type, fill in the tree the combined JSON Schema
  * describes, and create the whole aggregate in one submit.
  *
- * <p>The schema comes from {@link AggregateSchemaService}, which derives it from the type-level
- * {@code HAS_PART} composition graph. The browser builds the document against that schema and posts
- * it as JSON; this controller converts it to YAML — the format {@code POST
- * /metacatalog/v1/aggregate/yaml} consumes — and hands it to the API delegate.
+ * <p>The root types and the combined schema come from the REST API ({@code GET
+ * /aggregate/root-type} and {@code .../{name}/schema}), which derives the schema from the
+ * type-level {@code HAS_PART} composition graph. The browser builds the document against that
+ * schema and posts it as JSON; this controller converts it to YAML — the format {@code POST
+ * /metacatalog/v1/aggregate/yaml} consumes — and hands it back to the API.
  */
 @Controller
 @RequestMapping("/ui/aggregates")
 public class AggregateUiController {
 
   private final MetacatalogApiDelegate api;
-  private final AggregateSchemaService aggregateSchemaService;
   private final ObjectMapper jsonMapper;
   private final ObjectMapper yamlMapper;
   private final HtmlSafeJsonSerializer jsonSerializer;
 
   public AggregateUiController(
       MetacatalogApiDelegate api,
-      AggregateSchemaService aggregateSchemaService,
       ObjectMapper jsonMapper,
       @Qualifier("yamlMapper") ObjectMapper yamlMapper,
       HtmlSafeJsonSerializer jsonSerializer) {
     this.api = api;
-    this.aggregateSchemaService = aggregateSchemaService;
     this.jsonMapper = jsonMapper;
     this.yamlMapper = yamlMapper;
     this.jsonSerializer = jsonSerializer;
@@ -101,14 +101,14 @@ public class AggregateUiController {
    */
   private void populate(Model model, String rootType) {
     List<String> rootTypes =
-        aggregateSchemaService.aggregateRootTypes().stream().map(EntityType::getName).toList();
+        api.listAggregateRootTypes().getBody().stream().map(EntityType::getName).toList();
     model.addAttribute("rootTypes", rootTypes);
     model.addAttribute("selectedRootType", rootType);
 
     if (rootType != null && !rootType.isBlank()) {
       try {
-        var schema = aggregateSchemaService.aggregateSchema(rootType);
-        model.addAttribute("aggregateSchema", jsonSerializer.write(schema, "{}"));
+        model.addAttribute(
+            "aggregateSchema", jsonSerializer.write(api.getAggregateSchema(rootType).getBody()));
       } catch (RuntimeException e) {
         model.addAttribute("error", e.getMessage());
       }
@@ -117,8 +117,8 @@ public class AggregateUiController {
 
   /** Serves the combined schema so the page can switch root type without a full reload. */
   @GetMapping("/schema")
-  @org.springframework.web.bind.annotation.ResponseBody
-  public String schema(@RequestParam String rootType) {
-    return aggregateSchemaService.aggregateSchema(rootType).toString();
+  @ResponseBody
+  public ResponseEntity<Map<String, Object>> schema(@RequestParam String rootType) {
+    return api.getAggregateSchema(rootType);
   }
 }

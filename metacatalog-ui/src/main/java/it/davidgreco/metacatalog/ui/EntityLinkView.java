@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.ui;
 
-import it.davidgreco.metacatalog.entity.EntityRelationship;
-import it.davidgreco.metacatalog.entity.RelationType;
+import it.davidgreco.metacatalog.openapi.model.EntityRelationship;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,17 +21,17 @@ import java.util.List;
 public record EntityLinkView(
     String sourceId,
     String sourceName,
-    RelationType relationType,
+    String relationType,
     String targetId,
     String targetName,
     String role) {
 
   /**
-   * Builds {@link EntityLinkView} rows from the domain {@link EntityRelationship}s, keeping only
-   * the primary-direction relationships so each bidirectional link appears exactly once.
+   * Builds {@link EntityLinkView} rows from the {@link EntityRelationship} DTOs returned by {@code
+   * GET /entity/relationships}, keeping only the primary-direction relationships so each
+   * bidirectional link appears exactly once.
    *
-   * @param relationships the raw relationships from {@link
-   *     it.davidgreco.metacatalog.service.EntityService}
+   * @param relationships the relationships as returned by the REST API
    * @param instanceRows the instance rows for name resolution (id -> name)
    * @param entityId the current entity id — used to set {@code role} and {@code direction}
    */
@@ -40,10 +39,11 @@ public record EntityLinkView(
       List<EntityRelationship> relationships, List<InstanceRowView> instanceRows, String entityId) {
     var views = new ArrayList<EntityLinkView>();
     for (var rel : relationships) {
-      var rt = rel.getRelationType();
-      if (CatalogGraphService.PRIMARY_RELATION_TYPES.contains(rt)) {
-        var srcId = rel.getSource().getId();
-        var tgtId = rel.getTarget().getId();
+      var rt = rel.getRelationType().orElse(null);
+      if (rt != null && CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES.contains(rt)) {
+        var srcId = rel.getSourceEntityId().orElse(null);
+        var tgtId = rel.getTargetEntityId().orElse(null);
+        if (srcId == null || tgtId == null) continue;
         var isSource = srcId.equals(entityId);
         var isTarget = tgtId.equals(entityId);
         if (!isSource && !isTarget) continue;

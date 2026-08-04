@@ -16,16 +16,16 @@
     <name>Meta Catalog UI</name>
 
     <dependencies>
-        <!-- OpenAPI generated client: the UI calls the REST API exclusively -->
+        <!--
+          OpenAPI module: the UI calls the REST API exclusively, through MetacatalogApiDelegate.
+          metacatalog-core is deliberately NOT a dependency here — the UI must not reach past the
+          API into the service layer, and leaving it off makes the compiler enforce that rather
+          than relying on convention. Core still arrives transitively at runtime (the app module
+          assembles both), so anything the UI needs must first be exposed as an endpoint.
+        -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
             <artifactId>metacatalog-openapi</artifactId>
-        </dependency>
-
-        <!-- Core module: needed for CatalogGraphService (graph page TODO: move to REST API) -->
-        <dependency>
-            <groupId>it.davidgreco.metacatalog</groupId>
-            <artifactId>metacatalog-core</artifactId>
         </dependency>
 
         <!-- Spring MVC controllers + server-side rendering with Thymeleaf -->

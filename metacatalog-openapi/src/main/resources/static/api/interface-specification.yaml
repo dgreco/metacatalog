@@ -582,6 +582,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/trait/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List every trait version snapshot
+      description: >
+        Returns the frozen version snapshots of every trait, across all traits. Live rows are
+        not included — list them with GET /trait. Intended for clients that need the whole
+        version history at once, such as the catalog graph.
+      operationId: listAllTraitVersions
+      responses:
+        200:
+          description: If successful, return every trait version snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Trait'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity-type:
     get:
       tags:
@@ -910,6 +935,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity-type/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List every entity type version snapshot
+      description: >
+        Returns the frozen version snapshots of every entity type, across all types. Live rows
+        are not included — list them with GET /entity-type. Intended for clients that need the
+        whole version history at once, such as the catalog graph.
+      operationId: listAllEntityTypeVersions
+      responses:
+        200:
+          description: If successful, return every entity type version snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/mapping:
     get:
       tags:
@@ -969,6 +1019,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/mapping/entity-relationships:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all mapping relationships between entity instances
+      description: >
+        Returns the instance-level MAPPED_TO / IS_MAPPED_BY relationships produced by the
+        mapping engine, together with the mapping rule that generated each one. These are
+        entity-to-entity links, unlike GET /mapping which lists the type-level mapping rules.
+      operationId: listMappingEntityRelationships
+      responses:
+        200:
+          description: If successful, return all mapping relationships between entities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MappingEntityRelationship'
         500:
           description: System problem
           content:
@@ -1045,20 +1120,24 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Get a list of entities
+      description: >
+        Lists entities, optionally narrowed to a single entity type and filtered by a JSON path
+        expression. Omit entityTypeName to list entities of every type.
       operationId: getEntities
       parameters:
         - in: query
           name: entityTypeName
-          required: true
-          description: EntityType name
+          required: false
+          description: EntityType name. Omit to list entities of every type.
           schema:
             type: string
         - in: query
           name: queryPath
-          required: true
-          description: Query path expression
+          required: false
+          description: Query path expression. Omit or leave empty to apply no filter.
           schema:
             type: string
+            default: ''
       responses:
         200:
           description: If successful, return a list of entities
@@ -1224,6 +1303,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/relationships:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all relationships between entity instances
+      description: >
+        Returns every entity-to-entity relationship, in both directions (each link is stored
+        with its inverse). Use GET /entity/link/{sourceEntityId}/{relationshipTypeName} to
+        traverse from a single entity instead.
+      operationId: listEntityRelationships
+      responses:
+        200:
+          description: If successful, return all entity relationships
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityRelationship'
         500:
           description: System problem
           content:
@@ -1594,6 +1698,12 @@ components:
           type: string
           readOnly: true
           description: Stable identifier grouping every version of the same logical trait.
+        previousVersionId:
+          type: string
+          readOnly: true
+          description: >
+            For a version snapshot, the id of the snapshot it succeeds, or null for the first
+            version. Always null for a live row.
     EntityType:
       type: object
       description: A type definition for entities, with a JSON Schema and optional traits.
@@ -1627,6 +1737,12 @@ components:
           type: string
           readOnly: true
           description: Stable identifier grouping every version of the same logical entity type.
+        previousVersionId:
+          type: string
+          readOnly: true
+          description: >
+            For a version snapshot, the id of the snapshot it succeeds, or null for the first
+            version. Always null for a live row.
     Aggregate:
       type: object
       description: >
@@ -1725,6 +1841,48 @@ components:
         relationType:
           type: string
           description: The relationship type name (DEPENDS_ON, HAS_PART, MAPPED_TO, IS_REQUIRED_BY, IS_PART_OF, IS_MAPPED_BY).
+    EntityRelationship:
+      type: object
+      description: A directed relationship between two entity instances.
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Server-generated unique identifier for the relationship.
+        sourceEntityId:
+          type: string
+          description: Id of the source entity.
+        targetEntityId:
+          type: string
+          description: Id of the target entity.
+        relationType:
+          type: string
+          description: The relationship type name (DEPENDS_ON, HAS_PART, IS_REQUIRED_BY, IS_PART_OF).
+    MappingEntityRelationship:
+      type: object
+      description: >
+        An instance-level mapping relationship, linking a source entity to the entity derived
+        from it, together with the mapping rule that produced it.
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Server-generated unique identifier for the relationship.
+        sourceEntityId:
+          type: string
+          description: Id of the source entity.
+        targetEntityId:
+          type: string
+          description: Id of the mapped (target) entity.
+        relationType:
+          type: string
+          description: The relationship type name (MAPPED_TO, IS_MAPPED_BY).
+        mappingValues:
+          type: string
+          description: The mapping rule's SpEL expressions, as a JSON string. Null when the rule is no longer available.
+        entityPathReferences:
+          type: string
+          description: The mapping rule's entity path references, as a JSON string. Null when the rule is no longer available.
     ValidationError:
       type: object
       description: Error response for client-side errors (4xx), listing all validation errors.

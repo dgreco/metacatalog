@@ -26,7 +26,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
 | `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
-| `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Controllers drive the REST API through `MetacatalogApiDelegate` rather than calling core services. See [UI](#ui-metacatalog-ui). |
+| `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Drives the REST API through `MetacatalogApiDelegate`; does not depend on `metacatalog-core`. See [UI](#ui-metacatalog-ui). |
 | `metacatalog-sparql` | Embedded Ontop SPARQL endpoint over the metacatalog DB. See [Ontop](#ontop-embedded-sparql-endpoint). |
 
 Package root everywhere: `it.davidgreco.metacatalog`.
@@ -118,6 +118,10 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
 - `MetacatalogApiImpl` is the delegate implementation binding endpoints to core services.
 - Base path prefix: `/metacatalog/v1/...`. Resource groups: `trait`, `entity-type`, `entity`,
   `aggregate`, `bulk-creation`, plus `.../link/...` sub-resources for relationships.
+- List-all reads (used by the catalog graph, and by any client needing a full snapshot):
+  `GET /trait/relationships`, `/entity/relationships`, `/mapping/entity-relationships`,
+  `/trait/versions`, `/entity-type/versions`. `GET /entity` lists every entity when
+  `entityTypeName` is omitted.
 - Aggregate authoring: `GET /aggregate/root-type` lists the aggregate root types and
   `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
   [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
@@ -134,9 +138,11 @@ A server-side rendered admin UI mounted at `/ui`, built with Thymeleaf templates
 (`src/main/resources/templates`) and plain ES5 JavaScript (`src/main/resources/static/ui/js`) — no
 npm, bundler, or front-end build step.
 
-Controllers go through the REST API delegate (`MetacatalogApiDelegate`), not the core services
-directly, so the UI exercises the same contract external clients do. `CatalogGraphService` is the
-exception: it reads core services because the spec has no list-all endpoints yet.
+**Everything goes through the REST API.** Controllers call `MetacatalogApiDelegate`, never the core
+services, so the UI exercises the same contract external clients do. This is enforced by the build,
+not by convention: `metacatalog-ui/pom.xml` deliberately does **not** depend on `metacatalog-core`,
+so reaching into the service layer fails to compile. If a page needs data the API doesn't expose,
+add the endpoint to the spec first — don't add the core dependency back.
 
 Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, version history, the
 catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and

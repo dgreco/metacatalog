@@ -61,6 +61,7 @@ public class DtoMapper {
     dto.setInheritsFrom(Optional.ofNullable(v.getFatherName()));
     dto.setVersion(Optional.of(v.getVersion()));
     dto.setVersionGroupId(Optional.of(v.getVersionGroupId()));
+    dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
     return dto;
   }
 
@@ -87,6 +88,7 @@ public class DtoMapper {
     dto.setInheritsFrom(Optional.ofNullable(v.getFatherName()));
     dto.setVersion(Optional.of(v.getVersion()));
     dto.setVersionGroupId(Optional.of(v.getVersionGroupId()));
+    dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
     return dto;
   }
 
@@ -115,6 +117,37 @@ public class DtoMapper {
           java.util.Optional.of(entity.getEntityTypeVersion().getId()));
     dtoEntity.setValues(entity.getValues().toPrettyString());
     return dtoEntity;
+  }
+
+  public it.davidgreco.metacatalog.openapi.model.EntityRelationship entityRelationshipToDto(
+      it.davidgreco.metacatalog.entity.EntityRelationship rel) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.EntityRelationship();
+    dto.setId(Optional.ofNullable(rel.getId()));
+    dto.setSourceEntityId(Optional.of(rel.getSource().getId()));
+    dto.setTargetEntityId(Optional.of(rel.getTarget().getId()));
+    dto.setRelationType(Optional.of(rel.getRelationType().name()));
+    return dto;
+  }
+
+  /**
+   * Maps an instance-level mapping relationship, carrying along the mapping rule that produced it.
+   * The rule is optional: a relationship outlives the rule that created it if the rule is later
+   * deleted, in which case the expression fields are left empty rather than failing the mapping.
+   */
+  public it.davidgreco.metacatalog.openapi.model.MappingEntityRelationship
+      mappingEntityRelationshipToDto(
+          it.davidgreco.metacatalog.entity.MappingEntityRelationship rel) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.MappingEntityRelationship();
+    dto.setId(Optional.ofNullable(rel.getId()));
+    dto.setSourceEntityId(Optional.of(rel.getSource().getId()));
+    dto.setTargetEntityId(Optional.of(rel.getTarget().getId()));
+    dto.setRelationType(Optional.of(rel.getRelationType().name()));
+    var rule = rel.getMappingEntityTypeRelationship();
+    dto.setMappingValues(Optional.ofNullable(rule).map(r -> r.getMappingValues().toPrettyString()));
+    dto.setEntityPathReferences(
+        Optional.ofNullable(rule)
+            .map(r -> jsonMapper.valueToTree(r.getEntityPathReferences()).toPrettyString()));
+    return dto;
   }
 
   public it.davidgreco.metacatalog.openapi.model.TraitRelationship traitRelationshipToDto(

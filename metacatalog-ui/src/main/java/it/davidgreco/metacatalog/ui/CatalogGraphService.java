@@ -1,61 +1,97 @@
 package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.entity.EntityType;
-import it.davidgreco.metacatalog.entity.EntityTypeVersion;
-import it.davidgreco.metacatalog.entity.RelationType;
-import it.davidgreco.metacatalog.entity.Trait;
-import it.davidgreco.metacatalog.entity.TraitVersion;
-import it.davidgreco.metacatalog.service.EntityService;
-import it.davidgreco.metacatalog.service.EntityTypeService;
-import it.davidgreco.metacatalog.service.MappingService;
-import it.davidgreco.metacatalog.service.TraitService;
+import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Entity;
+import it.davidgreco.metacatalog.openapi.model.EntityType;
+import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Builds the interactive catalog graph consumed by the UI. Delegates to the service layer to
- * project traits, entity types, their version chains, and (optionally) entity instances into a
- * {@link GraphModel}. Extracted from {@code UiController} so the controller keeps only
- * request/response wiring while this service concentrates the graph-assembly responsibility.
+ * Builds the interactive catalog graph consumed by the UI, projecting traits, entity types, their
+ * version chains, and (optionally) entity instances into a {@link GraphModel}.
+ *
+ * <p>Every read goes through the REST API delegate, like the rest of the UI, so the page exercises
+ * the same contract external clients do.
  */
 @Service
 public class CatalogGraphService {
-
-  private static final Logger log = LoggerFactory.getLogger(CatalogGraphService.class);
 
   /**
    * The relation types shown in the canonical (primary) direction. Trait relationships are stored
    * bidirectionally, so listing only these directions avoids showing each relationship twice.
    */
-  public static final List<RelationType> PRIMARY_RELATION_TYPES =
-      List.of(RelationType.DEPENDS_ON, RelationType.HAS_PART, RelationType.MAPPED_TO);
+  public static final List<String> PRIMARY_RELATION_TYPE_NAMES =
+      List.of("DEPENDS_ON", "HAS_PART", "MAPPED_TO");
 
-  private final TraitService traitService;
-  private final EntityTypeService entityTypeService;
-  private final EntityService entityService;
-  private final MappingService mappingService;
+  private static final String TRAIT_PREFIX = "trait:";
+  private static final String TYPE_PREFIX = "type:";
+  private static final String TRAIT_VERSION_PREFIX = "trait-version:";
+  private static final String TYPE_VERSION_PREFIX = "type-version:";
+  private static final String SUCCESSOR_OF = "successor-of";
+  private static final String EXTENDS = "extends";
+  private static final String MAPPING = "mapping";
+
+  private final MetacatalogApiDelegate api;
   private final HtmlSafeJsonSerializer jsonSerializer;
   private final ObjectMapper jsonMapper;
 
   public CatalogGraphService(
-      TraitService traitService,
-      EntityTypeService entityTypeService,
-      EntityService entityService,
-      MappingService mappingService,
-      HtmlSafeJsonSerializer jsonSerializer,
-      ObjectMapper jsonMapper) {
-    this.traitService = traitService;
-    this.entityTypeService = entityTypeService;
-    this.entityService = entityService;
-    this.mappingService = mappingService;
+      MetacatalogApiDelegate api, HtmlSafeJsonSerializer jsonSerializer, ObjectMapper jsonMapper) {
+    this.api = api;
     this.jsonSerializer = jsonSerializer;
     this.jsonMapper = jsonMapper;
+  }
+
+  /**
+   * A trait or entity-type row reduced to the fields the graph needs. {@link Trait} and {@link
+   * EntityType} are unrelated generated classes, so normalising them here lets the version-chaining
+   * logic be written once.
+   *
+   * @param id the row id — the snapshot id for a version, the live row's id otherwise
+   * @param name the type/trait name
+   * @param version the version number
+   * @param father the parent type/trait name, or null
+   * @param schema the schema as a string, or null
+   * @param versionGroupId groups a live row with every snapshot of the same logical type
+   * @param previousVersionId the snapshot this one succeeds, or null
+   */
+  private record VersionRow(
+      String id,
+      String name,
+      Integer version,
+      String father,
+      String schema,
+      String versionGroupId,
+      String previousVersionId) {
+
+    static VersionRow of(Trait t) {
+      return new VersionRow(
+          t.getId().orElse(null),
+          t.getName(),
+          t.getVersion().orElse(null),
+          t.getInheritsFrom().orElse(null),
+          t.getSchema().orElse(null),
+          t.getVersionGroupId().orElse(null),
+          t.getPreviousVersionId().orElse(null));
+    }
+
+    static VersionRow of(EntityType e) {
+      return new VersionRow(
+          e.getId().orElse(null),
+          e.getName(),
+          e.getVersion().orElse(null),
+          e.getInheritsFrom().orElse(null),
+          e.getSchema(),
+          e.getVersionGroupId().orElse(null),
+          e.getPreviousVersionId().orElse(null));
+    }
   }
 
   /**
@@ -66,10 +102,12 @@ public class CatalogGraphService {
    */
   public List<TraitLinkView> traitLinks() {
     var links = new ArrayList<TraitLinkView>();
-    for (var rel : traitService.listAllRelationships()) {
-      var rt = rel.getRelationType();
-      if (PRIMARY_RELATION_TYPES.contains(rt)) {
-        links.add(new TraitLinkView(rel.getSource().getName(), rt, rel.getTarget().getName()));
+    for (var rel : api.listTraitRelationships().getBody()) {
+      var rt = rel.getRelationType().orElse(null);
+      if (rt != null && PRIMARY_RELATION_TYPE_NAMES.contains(rt)) {
+        links.add(
+            new TraitLinkView(
+                rel.getSourceTrait().orElse(null), rt, rel.getTargetTrait().orElse(null)));
       }
     }
     return links;
@@ -96,14 +134,14 @@ public class CatalogGraphService {
    * entity-to-entity relationships and instance-level mappings.
    *
    * <p>When {@code showInverses} is set, a second edge is emitted for each trait relationship and
-   * mapping, swapping source/target and labelling it with the inverse relation type ({@link
-   * RelationType#inverse()}). Trait relationships are persisted bidirectionally, but the graph only
-   * traverses the primary direction ({@link #traitLinks()}); the inverse edge is synthesised here
-   * so the graph stays a single source of truth. Mapping type relationships are stored in the
-   * {@code MAPPED_TO} direction only, so the {@code IS_MAPPED_BY} inverse is synthesised the same
-   * way. Entity relationships and instance mappings are stored bidirectionally, so when inverses
-   * are shown the stored inverse rows are emitted directly (no synthesis needed); when hidden, only
-   * the primary direction rows are kept.
+   * mapping, swapping source/target and labelling it with the inverse relation type. Trait
+   * relationships are persisted bidirectionally, but the graph only traverses the primary direction
+   * ({@link #traitLinks()}); the inverse edge is synthesised here so the graph stays a single
+   * source of truth. Mapping type relationships are stored in the {@code MAPPED_TO} direction only,
+   * so the {@code IS_MAPPED_BY} inverse is synthesised the same way. Entity relationships and
+   * instance mappings are stored bidirectionally, so when inverses are shown the stored inverse
+   * rows are emitted directly (no synthesis needed); when hidden, only the primary direction rows
+   * are kept.
    *
    * @param showInverses whether to emit synthesised/stored inverse edges
    * @param showEntities whether to include entity instances
@@ -113,61 +151,62 @@ public class CatalogGraphService {
     var nodes = new ArrayList<GraphModel.Node>();
     var edges = new ArrayList<GraphModel.Edge>();
 
-    var traits = traitService.list();
-    var types = entityTypeService.list();
+    var traits = api.listTraits().getBody();
+    var types = api.listEntityTypes().getBody();
 
     for (var trait : traits) {
       nodes.add(
           new GraphModel.Node(
-              "trait:" + trait.getName(),
+              TRAIT_PREFIX + trait.getName(),
               trait.getName(),
               "trait",
-              trait.getFather() == null ? null : trait.getFather().getName(),
+              trait.getInheritsFrom().orElse(null),
               null,
-              trait.getSchema() == null ? null : trait.getSchema().toPrettyString()));
+              trait.getSchema().orElse(null)));
     }
     for (var type : types) {
       nodes.add(
           new GraphModel.Node(
-              "type:" + type.getName(),
+              TYPE_PREFIX + type.getName(),
               type.getName(),
               "entityType",
-              type.getFather() == null ? null : type.getFather().getName(),
-              type.getTraits() == null
-                  ? List.of()
-                  : type.getTraits().stream().map(Trait::getName).toList(),
-              type.getSchema() == null ? null : type.getSchema().toPrettyString()));
+              type.getInheritsFrom().orElse(null),
+              type.getTraits() == null ? List.of() : type.getTraits(),
+              type.getSchema()));
     }
 
     for (var trait : traits) {
-      if (trait.getFather() != null) {
-        edges.add(
-            new GraphModel.Edge(
-                "trait:" + trait.getName(),
-                "trait:" + trait.getFather().getName(),
-                "extends",
-                "extends",
-                null,
-                null));
-      }
+      trait
+          .getInheritsFrom()
+          .ifPresent(
+              father ->
+                  edges.add(
+                      new GraphModel.Edge(
+                          TRAIT_PREFIX + trait.getName(),
+                          TRAIT_PREFIX + father,
+                          EXTENDS,
+                          EXTENDS,
+                          null,
+                          null)));
     }
     for (var type : types) {
-      if (type.getFather() != null) {
-        edges.add(
-            new GraphModel.Edge(
-                "type:" + type.getName(),
-                "type:" + type.getFather().getName(),
-                "extends",
-                "extends",
-                null,
-                null));
-      }
+      type.getInheritsFrom()
+          .ifPresent(
+              father ->
+                  edges.add(
+                      new GraphModel.Edge(
+                          TYPE_PREFIX + type.getName(),
+                          TYPE_PREFIX + father,
+                          EXTENDS,
+                          EXTENDS,
+                          null,
+                          null)));
       if (type.getTraits() != null) {
         for (var trait : type.getTraits()) {
           edges.add(
               new GraphModel.Edge(
-                  "type:" + type.getName(),
-                  "trait:" + trait.getName(),
+                  TYPE_PREFIX + type.getName(),
+                  TRAIT_PREFIX + trait,
                   "has-trait",
                   "trait",
                   null,
@@ -178,49 +217,58 @@ public class CatalogGraphService {
     for (var link : traitLinks()) {
       edges.add(
           new GraphModel.Edge(
-              "trait:" + link.source(),
-              "trait:" + link.target(),
-              link.relationType().name(),
-              link.relationType().name(),
+              TRAIT_PREFIX + link.source(),
+              TRAIT_PREFIX + link.target(),
+              link.relationType(),
+              link.relationType(),
               null,
               null));
-      if (showInverses && link.relationType().hasInverse()) {
-        var inv = link.relationType().inverse();
+      if (showInverses) {
+        var inv = inverseOf(link.relationType());
         edges.add(
             new GraphModel.Edge(
-                "trait:" + link.target(),
-                "trait:" + link.source(),
-                inv.name(),
-                inv.name(),
-                null,
-                null));
+                TRAIT_PREFIX + link.target(), TRAIT_PREFIX + link.source(), inv, inv, null, null));
       }
     }
-    for (var mapping : mappingService.list()) {
-      var mv = mapping.getMappingValues().toPrettyString();
-      var epr = jsonMapper.valueToTree(mapping.getEntityPathReferences()).toPrettyString();
+    for (var mapping : api.listMappings().getBody()) {
+      var mv = mapping.getMappingValues();
+      var epr = mapping.getEntityPathReferences();
       edges.add(
           new GraphModel.Edge(
-              "type:" + mapping.getSource().getName(),
-              "type:" + mapping.getTarget().getName(),
-              "mapping",
+              TYPE_PREFIX + mapping.getSourceEntityType(),
+              TYPE_PREFIX + mapping.getTargetEntityType(),
+              MAPPING,
               "MAPPED_TO",
               mv,
               epr));
       if (showInverses) {
         edges.add(
             new GraphModel.Edge(
-                "type:" + mapping.getTarget().getName(),
-                "type:" + mapping.getSource().getName(),
-                "mapping",
+                TYPE_PREFIX + mapping.getTargetEntityType(),
+                TYPE_PREFIX + mapping.getSourceEntityType(),
+                MAPPING,
                 "IS_MAPPED_BY",
                 mv,
                 epr));
       }
     }
 
-    addEntityTypeVersionNodesAndEdges(types, nodes, edges);
-    addTraitVersionNodesAndEdges(traits, nodes, edges);
+    addVersionNodesAndEdges(
+        types.stream().map(VersionRow::of).toList(),
+        api.listAllEntityTypeVersions().getBody().stream().map(VersionRow::of).toList(),
+        TYPE_VERSION_PREFIX,
+        TYPE_PREFIX,
+        "entityTypeVersion",
+        nodes,
+        edges);
+    addVersionNodesAndEdges(
+        traits.stream().map(VersionRow::of).toList(),
+        api.listAllTraitVersions().getBody().stream().map(VersionRow::of).toList(),
+        TRAIT_VERSION_PREFIX,
+        TRAIT_PREFIX,
+        "traitVersion",
+        nodes,
+        edges);
 
     if (showEntities) {
       addEntityInstanceNodesAndEdges(nodes, edges, showInverses);
@@ -229,65 +277,84 @@ public class CatalogGraphService {
     return new GraphModel(nodes, edges);
   }
 
+  /**
+   * The inverse of a relation type name. Mirrors {@code RelationType.inverse()}; kept here as a
+   * name-level mapping so the UI stays on the REST contract rather than the core enum.
+   */
+  private static String inverseOf(String relationType) {
+    return switch (relationType) {
+      case "DEPENDS_ON" -> "IS_REQUIRED_BY";
+      case "IS_REQUIRED_BY" -> "DEPENDS_ON";
+      case "HAS_PART" -> "IS_PART_OF";
+      case "IS_PART_OF" -> "HAS_PART";
+      case "MAPPED_TO" -> "IS_MAPPED_BY";
+      case "IS_MAPPED_BY" -> "MAPPED_TO";
+      default -> relationType;
+    };
+  }
+
   private void addEntityInstanceNodesAndEdges(
       List<GraphModel.Node> nodes, List<GraphModel.Edge> edges, boolean showInverses) {
-    for (var entity : entityService.listAll()) {
-      var type = entity.getEntityType();
-      if (type == null) continue;
-      var typeName = type.getName();
-      var pinnedVersion = entity.getEntityTypeVersion();
+    var versionsById =
+        api.listAllEntityTypeVersions().getBody().stream()
+            .filter(v -> v.getId().isPresent())
+            .collect(Collectors.toMap(v -> v.getId().orElseThrow(), Function.identity()));
+
+    for (var entity : api.getEntities(Optional.empty(), Optional.empty()).getBody()) {
+      var typeName = entity.getEntityType();
+      if (typeName == null) continue;
+      var pinnedVersion =
+          entity.getEntityTypeVersionId().map(versionsById::get).filter(Objects::nonNull);
       var instanceOfTarget =
-          pinnedVersion != null ? "type-version:" + pinnedVersion.getId() : "type:" + typeName;
+          pinnedVersion
+              .flatMap(EntityType::getId)
+              .map(id -> TYPE_VERSION_PREFIX + id)
+              .orElse(TYPE_PREFIX + typeName);
       var instanceOfLabel =
-          pinnedVersion != null ? typeName + " (v" + pinnedVersion.getVersion() + ")" : typeName;
+          pinnedVersion
+              .flatMap(EntityType::getVersion)
+              .map(v -> typeName + " (v" + v + ")")
+              .orElse(typeName);
+      var entityNodeId = "entity:" + entity.getId().orElse("");
       nodes.add(
           new GraphModel.Node(
-              "entity:" + entity.getId(),
+              entityNodeId,
               entityLabel(entity),
               "entity",
               instanceOfLabel,
               null,
-              entity.getValues() == null ? null : entity.getValues().toPrettyString()));
+              entity.getValues()));
       edges.add(
           new GraphModel.Edge(
-              "entity:" + entity.getId(),
-              instanceOfTarget,
-              "instance-of",
-              "instance-of",
+              entityNodeId, instanceOfTarget, "instance-of", "instance-of", null, null));
+    }
+
+    for (var rel : api.listEntityRelationships().getBody()) {
+      var rt = rel.getRelationType().orElse(null);
+      if (rt == null) continue;
+      if (!showInverses && !PRIMARY_RELATION_TYPE_NAMES.contains(rt)) continue;
+      edges.add(
+          new GraphModel.Edge(
+              "entity:" + rel.getSourceEntityId().orElse(""),
+              "entity:" + rel.getTargetEntityId().orElse(""),
+              rt,
+              rt,
               null,
               null));
     }
 
-    for (var rel : entityService.listAllRelationships()) {
-      var rt = rel.getRelationType();
-      if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
+    for (var rel : api.listMappingEntityRelationships().getBody()) {
+      var rt = rel.getRelationType().orElse(null);
+      if (rt == null) continue;
+      if (!showInverses && !PRIMARY_RELATION_TYPE_NAMES.contains(rt)) continue;
       edges.add(
           new GraphModel.Edge(
-              "entity:" + rel.getSource().getId(),
-              "entity:" + rel.getTarget().getId(),
-              rt.name(),
-              rt.name(),
-              null,
-              null));
-    }
-
-    for (var rel : mappingService.listAllEntityRelationships()) {
-      var rt = rel.getRelationType();
-      if (!showInverses && !PRIMARY_RELATION_TYPES.contains(rt)) continue;
-      var mtr = rel.getMappingEntityTypeRelationship();
-      var mv = mtr == null ? null : mtr.getMappingValues().toPrettyString();
-      var epr =
-          mtr == null
-              ? null
-              : jsonMapper.valueToTree(mtr.getEntityPathReferences()).toPrettyString();
-      edges.add(
-          new GraphModel.Edge(
-              "entity:" + rel.getSource().getId(),
-              "entity:" + rel.getTarget().getId(),
-              "mapping",
-              rt.name(),
-              mv,
-              epr));
+              "entity:" + rel.getSourceEntityId().orElse(""),
+              "entity:" + rel.getTargetEntityId().orElse(""),
+              MAPPING,
+              rt,
+              rel.getMappingValues().orElse(null),
+              rel.getEntityPathReferences().orElse(null)));
     }
   }
 
@@ -295,124 +362,85 @@ public class CatalogGraphService {
    * Picks a readable label for an entity instance: the textual {@code name} field of its {@code
    * values} JSON if present, otherwise a short hash of its id so every node is distinguishable.
    */
-  private static String entityLabel(Entity entity) {
+  private String entityLabel(Entity entity) {
     var values = entity.getValues();
-    if (values != null && values.isObject()) {
-      var name = values.get("name");
-      if (name != null && name.isTextual()) return name.asText();
+    if (values != null && !values.isBlank()) {
+      try {
+        var parsed = jsonMapper.readTree(values);
+        var name = parsed.get("name");
+        if (name != null && name.isTextual()) return name.asText();
+      } catch (com.fasterxml.jackson.core.JsonProcessingException _) {
+        // fall through to the id-derived label
+      }
     }
-    var id = entity.getId();
+    var id = entity.getId().orElse(null);
     return "#" + (id == null ? "?" : id.substring(0, Math.min(8, id.length())));
   }
 
-  private void addEntityTypeVersionNodesAndEdges(
-      List<EntityType> liveTypes, List<GraphModel.Node> nodes, List<GraphModel.Edge> edges) {
-    addVersionNodesAndEdges(
-        liveTypes,
-        entityTypeService.listAllVersions(),
-        EntityType::getVersionGroupId,
-        EntityType::getName,
-        EntityTypeVersion::getId,
-        EntityTypeVersion::getName,
-        EntityTypeVersion::getVersion,
-        EntityTypeVersion::getPreviousVersionId,
-        EntityTypeVersion::getVersionGroupId,
-        EntityTypeVersion::getFatherName,
-        EntityTypeVersion::getSchema,
-        "type-version:",
-        "type:",
-        "entityTypeVersion",
-        nodes,
-        edges);
-  }
-
-  private void addTraitVersionNodesAndEdges(
-      List<Trait> liveTraits, List<GraphModel.Node> nodes, List<GraphModel.Edge> edges) {
-    addVersionNodesAndEdges(
-        liveTraits,
-        traitService.listAllVersions(),
-        Trait::getVersionGroupId,
-        Trait::getName,
-        TraitVersion::getId,
-        TraitVersion::getName,
-        TraitVersion::getVersion,
-        TraitVersion::getPreviousVersionId,
-        TraitVersion::getVersionGroupId,
-        TraitVersion::getFatherName,
-        TraitVersion::getSchema,
-        "trait-version:",
-        "trait:",
-        "traitVersion",
-        nodes,
-        edges);
-  }
-
   /**
-   * Generic helper that adds version-snapshot nodes and {@code successor-of} edges to the graph.
-   * Deduplicates the near-identical entity-type and trait version methods.
+   * Adds version-snapshot nodes and {@code successor-of} edges to the graph, chaining each snapshot
+   * to the one it succeeds and each live row to the head of its chain.
    */
-  private <L, S> void addVersionNodesAndEdges(
-      List<L> live,
-      List<S> snapshots,
-      java.util.function.Function<L, String> liveVersionGroupId,
-      java.util.function.Function<L, String> liveName,
-      java.util.function.Function<S, String> snapId,
-      java.util.function.Function<S, String> snapName,
-      java.util.function.Function<S, Integer> snapVersion,
-      java.util.function.Function<S, String> snapPreviousId,
-      java.util.function.Function<S, String> snapVersionGroupId,
-      java.util.function.Function<S, String> snapFatherName,
-      java.util.function.Function<S, com.fasterxml.jackson.databind.JsonNode> snapSchema,
+  private void addVersionNodesAndEdges(
+      List<VersionRow> live,
+      List<VersionRow> snapshots,
       String snapPrefix,
       String livePrefix,
       String nodeType,
       List<GraphModel.Node> nodes,
       List<GraphModel.Edge> edges) {
+    var snapshotIds =
+        snapshots.stream().map(VersionRow::id).filter(Objects::nonNull).collect(Collectors.toSet());
+
     for (var snap : snapshots) {
+      if (snap.id() == null) continue;
       nodes.add(
           new GraphModel.Node(
-              snapPrefix + snapId.apply(snap),
-              snapName.apply(snap) + " (v" + snapVersion.apply(snap) + ")",
+              snapPrefix + snap.id(),
+              snap.name() + " (v" + snap.version() + ")",
               nodeType,
-              snapFatherName.apply(snap),
+              snap.father(),
               null,
-              snapSchema.apply(snap) == null ? null : snapSchema.apply(snap).toPrettyString()));
+              snap.schema()));
     }
-    var liveByGroup = live.stream().collect(Collectors.toMap(liveVersionGroupId, t -> t));
-    var snapById = snapshots.stream().collect(Collectors.toMap(snapId, s -> s));
+
     for (var snap : snapshots) {
-      var successorId = snapPrefix + snapId.apply(snap);
-      var prevId = snapPreviousId.apply(snap);
-      if (prevId != null) {
-        var pred = snapById.get(prevId);
-        if (pred != null) {
-          edges.add(
-              new GraphModel.Edge(
-                  successorId,
-                  snapPrefix + snapId.apply(pred),
-                  "successor-of",
-                  "successor-of",
-                  null,
-                  null));
-        }
-      }
+      if (snap.id() == null
+          || snap.previousVersionId() == null
+          || !snapshotIds.contains(snap.previousVersionId())) continue;
+      edges.add(
+          new GraphModel.Edge(
+              snapPrefix + snap.id(),
+              snapPrefix + snap.previousVersionId(),
+              SUCCESSOR_OF,
+              SUCCESSOR_OF,
+              null,
+              null));
     }
+
+    var liveByGroup =
+        live.stream()
+            .filter(l -> l.versionGroupId() != null)
+            .collect(
+                Collectors.toMap(VersionRow::versionGroupId, Function.identity(), (a, _) -> a));
+    // A snapshot no other snapshot succeeds is the head of its chain; the live row follows it.
+    var succeeded =
+        snapshots.stream()
+            .map(VersionRow::previousVersionId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
     for (var snap : snapshots) {
-      var sid = snapId.apply(snap);
-      var isHead = snapshots.stream().noneMatch(s -> sid.equals(snapPreviousId.apply(s)));
-      if (isHead) {
-        var l = liveByGroup.get(snapVersionGroupId.apply(snap));
-        if (l != null) {
-          edges.add(
-              new GraphModel.Edge(
-                  livePrefix + liveName.apply(l),
-                  snapPrefix + sid,
-                  "successor-of",
-                  "successor-of",
-                  null,
-                  null));
-        }
-      }
+      if (snap.id() == null || succeeded.contains(snap.id())) continue;
+      var liveRow = snap.versionGroupId() == null ? null : liveByGroup.get(snap.versionGroupId());
+      if (liveRow == null) continue;
+      edges.add(
+          new GraphModel.Edge(
+              livePrefix + liveRow.name(),
+              snapPrefix + snap.id(),
+              SUCCESSOR_OF,
+              SUCCESSOR_OF,
+              null,
+              null));
     }
   }
 }

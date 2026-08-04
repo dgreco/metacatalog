@@ -279,12 +279,56 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
-  public ResponseEntity getEntities(String entityTypeName, String queryPath) {
+  public ResponseEntity getEntities(Optional<String> entityTypeName, Optional<String> queryPath) {
+    var path = queryPath.orElse("");
+    // An absent type name lists every type's entities; the JSON-path filter still applies.
     List<it.davidgreco.metacatalog.entity.Entity> entities =
-        entityService.list(entityTypeName, queryPath);
+        entityTypeName
+            .filter(name -> !name.isBlank())
+            .map(name -> entityService.list(name, path))
+            .orElseGet(
+                () ->
+                    entityTypeService.list().stream()
+                        .flatMap(type -> entityService.list(type.getName(), path).stream())
+                        .toList());
     return status(200)
         .contentType(MediaType.APPLICATION_JSON)
         .body(entities.stream().map(dtoMapper::entityToDto).toList());
+  }
+
+  @Override
+  public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.EntityRelationship>>
+      listEntityRelationships() {
+    var rels =
+        entityService.listAllRelationships().stream()
+            .map(dtoMapper::entityRelationshipToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(rels);
+  }
+
+  @Override
+  public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.MappingEntityRelationship>>
+      listMappingEntityRelationships() {
+    var rels =
+        mappingService.listAllEntityRelationships().stream()
+            .map(dtoMapper::mappingEntityRelationshipToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(rels);
+  }
+
+  @Override
+  public ResponseEntity<List<Trait>> listAllTraitVersions() {
+    var dtos = traitService.listAllVersions().stream().map(dtoMapper::traitVersionToDto).toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
+  }
+
+  @Override
+  public ResponseEntity<List<EntityType>> listAllEntityTypeVersions() {
+    var dtos =
+        entityTypeService.listAllVersions().stream()
+            .map(dtoMapper::entityTypeVersionToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
   }
 
   @Override

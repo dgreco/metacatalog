@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.ui;
 
-import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.openapi.model.TraitRelationship;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,7 +15,7 @@ import java.util.List;
  * @param relationType the primary relation type from source to target
  * @param target the name of the target trait
  */
-public record TraitLinkView(String source, RelationType relationType, String target) {
+public record TraitLinkView(String source, String relationType, String target) {
 
   /**
    * Builds {@link TraitLinkView} rows from the REST API {@link TraitRelationship} DTOs, keeping
@@ -25,8 +24,8 @@ public record TraitLinkView(String source, RelationType relationType, String tar
   public static List<TraitLinkView> listFrom(List<TraitRelationship> relationships) {
     var views = new ArrayList<TraitLinkView>();
     for (var rel : relationships) {
-      var rt = RelationType.parse(rel.getRelationType().orElse(null));
-      if (CatalogGraphService.PRIMARY_RELATION_TYPES.contains(rt)) {
+      var rt = rel.getRelationType().orElse(null);
+      if (rt != null && CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES.contains(rt)) {
         views.add(
             new TraitLinkView(
                 rel.getSourceTrait().orElse(null), rt, rel.getTargetTrait().orElse(null)));
