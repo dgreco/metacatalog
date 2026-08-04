@@ -139,10 +139,17 @@ A server-side rendered admin UI mounted at `/ui`, built with Thymeleaf templates
 npm, bundler, or front-end build step.
 
 **Everything goes through the REST API.** Controllers call `MetacatalogApiDelegate`, never the core
-services, so the UI exercises the same contract external clients do. This is enforced by the build,
-not by convention: `metacatalog-ui/pom.xml` deliberately does **not** depend on `metacatalog-core`,
-so reaching into the service layer fails to compile. If a page needs data the API doesn't expose,
-add the endpoint to the spec first — don't add the core dependency back.
+services, so the UI exercises the same contract external clients do.
+
+This is enforced by the build rather than by convention: `metacatalog-ui/pom.xml` declares no
+dependency on `metacatalog-core` **and** excludes it from `metacatalog-openapi`, which would
+otherwise drag it in transitively. Omitting the direct dependency alone is not enough — without the
+exclusion, `import it.davidgreco.metacatalog.service.*` still compiles. With it, that import is a
+compile error. The exclusion is compile-scope only: at runtime `metacatalog-application` assembles
+both modules, so the delegate still finds its services.
+
+If a page needs data the API doesn't expose, add the endpoint to the spec first — don't relax the
+exclusion.
 
 Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, version history, the
 catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and

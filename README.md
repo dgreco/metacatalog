@@ -160,8 +160,9 @@ metacatalog/
 
 The UI module is a library that is served by `metacatalog-application` on the same
 port (8080). Its controllers go through the REST API exclusively, so the UI exercises the
-same contract external clients do — the module does not depend on `metacatalog-core`, which
-makes that boundary a compile error rather than a convention. The trait / entity-type forms
+same contract external clients do — `metacatalog-core` is kept off the module's compile
+classpath (declared nowhere, and excluded from `metacatalog-openapi`), which makes that
+boundary a compile error rather than a convention. The trait / entity-type forms
 include a client-side JSON Schema builder that assembles the schema document, while the
 instance and aggregate forms work in the other direction — reading a schema and generating
 typed inputs from it.

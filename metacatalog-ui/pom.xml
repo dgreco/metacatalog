@@ -18,14 +18,25 @@
     <dependencies>
         <!--
           OpenAPI module: the UI calls the REST API exclusively, through MetacatalogApiDelegate.
-          metacatalog-core is deliberately NOT a dependency here — the UI must not reach past the
-          API into the service layer, and leaving it off makes the compiler enforce that rather
-          than relying on convention. Core still arrives transitively at runtime (the app module
-          assembles both), so anything the UI needs must first be exposed as an endpoint.
+          metacatalog-core is deliberately kept off this module's compile classpath: the UI must
+          not reach past the API into the service layer. Declaring no direct dependency is not
+          enough, because core arrives transitively through metacatalog-openapi — hence the
+          explicit exclusion below, which turns a stray `import ...metacatalog.service.*` into a
+          compile error instead of leaving the rule to convention.
+
+          The exclusion is compile-scope only. At runtime metacatalog-application assembles both
+          modules, so the delegate implementation still finds its services; the UI simply cannot
+          reference them itself. Anything a page needs must be exposed as an endpoint first.
         -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
             <artifactId>metacatalog-openapi</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>it.davidgreco.metacatalog</groupId>
+                    <artifactId>metacatalog-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Spring MVC controllers + server-side rendering with Thymeleaf -->
