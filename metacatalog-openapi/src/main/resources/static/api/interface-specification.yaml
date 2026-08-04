@@ -1134,10 +1134,13 @@ paths:
         - in: query
           name: queryPath
           required: false
+          # No `default:` here on purpose. The generator maps an optional query param to
+          # Optional<String>, and springdoc then holds the declared default as an Optional it
+          # cannot serialize — which makes GET /api-docs fail with 400 and breaks the Swagger UI.
+          # The implementation already treats an absent value as "no filter".
           description: Query path expression. Omit or leave empty to apply no filter.
           schema:
             type: string
-            default: ''
       responses:
         200:
           description: If successful, return a list of entities
