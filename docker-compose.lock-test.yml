@@ -1,0 +1,136 @@
+# Docker Compose for verifying that the PostgreSQL advisory lock serializes the
+# scheduled MappingUpdaterService across two application instances.
+#
+# What this does:
+#   1. Starts a shared PostgreSQL (same image as docker-compose.yml).
+#   2. Starts TWO application instances (app-1 on :8081, app-2 on :8082) against
+#      the same database. Both have automaticEntitiesMapping=true and the
+#      MappingUpdaterService scheduled at 1s, so both race to acquire
+#      pg_try_advisory_xact_lock(1) every second.
+#   3. A single `tester` container (started after both apps are healthy):
+#      a. POSTs the model + 200 aggregate instances (400 output ports) to app-1,
+#         producing 400 SOURCE_CREATED lifecycle events in one shot.
+#      b. Waits for the mapping updater to pick up the events. One instance
+#         acquires the advisory lock and spends several seconds creating mapped
+#         entities. During that window the other instance's @Scheduled(fixedRate=1s)
+#         fires repeatedly and each tick fails pg_try_advisory_xact_lock(1) ->
+#         logs "Advisory lock not acquired, another instance is running; skipping".
+#      c. Greps both instances' logs for the skip log line and the event-processing
+#         log lines. Exits 0 if the advisory lock correctly serialized the two
+#         instances, 1 otherwise.
+#
+# Usage:
+#   docker compose -f docker-compose.lock-test.yml up --build --abort-on-container-exit
+#
+#   `--abort-on-container-exit` tears everything down when the `tester` container
+#   finishes. The tester is the last container to exit (it loads data, waits for
+#   processing, then verifies), so the apps stay alive throughout the test. To
+#   inspect the apps by hand afterwards, drop `--abort-on-container-exit`.
+#
+# Debug logging on the metacatalog packages is enabled via LOGGING_LEVEL_* env
+# vars so the "Advisory lock not acquired" DEBUG line is visible in both apps'
+# logs.
+#
+# Flyway note: both instances run Flyway on startup. Flyway serializes concurrent
+# migrations via its own advisory lock on the schema-history table, so the
+# second instance waits for the first to finish migrating before proceeding.
+
+services:
+  postgres:
+    image: postgres:18.1-alpine
+    container_name: lock-test-postgres
+    environment:
+      POSTGRES_DB: metacatalog
+      POSTGRES_USER: metacatalog
+      POSTGRES_PASSWORD: metacatalog
+    ports:
+      - "5433:5432"
+    volumes:
+      - lock-test-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U metacatalog -d metacatalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: metacatalog:0.0.1-SNAPSHOT
+    container_name: app-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+      # Make the advisory-lock skip log (DEBUG) visible in both instances.
+      LOGGING_LEVEL_IT_DAVIDGRECO_METACATALOG: DEBUG
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  app-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: metacatalog:0.0.1-SNAPSHOT
+    container_name: app-2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+      LOGGING_LEVEL_IT_DAVIDGRECO_METACATALOG: DEBUG
+    ports:
+      - "8082:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+
+  # Single container that loads data and then verifies the lock behavior. It is
+  # the only one-shot container, so --abort-on-container-exit only triggers when
+  # verification is complete, keeping the apps alive throughout the test.
+  tester:
+    image: docker:27-cli
+    container_name: lock-test-tester
+    depends_on:
+      app-1:
+        condition: service_healthy
+      app-2:
+        condition: service_healthy
+    environment:
+      APP1: app-1
+      APP2: app-2
+      APP_URL: http://app-1:8080
+      METACATALOG_USER: admin
+      METACATALOG_PASSWORD: admin
+      MODEL_FILE: /bulk-model/bulk-model.yaml
+      INSTANCES_FILE: /bulk-instances/bulk-instances.yaml
+    volumes:
+      # The tester reads the app containers' logs via the docker CLI, so it
+      # needs the host docker socket mounted.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/bulk:/bulk-model:ro
+      - ./docker/lock-test:/bulk-instances:ro
+    # Install curl (not in docker:27-cli), then run the combined tester script.
+    entrypoint:
+      ["sh", "-c", "apk add --no-cache curl >/dev/null 2>&1 && exec sh /bulk-instances/tester.sh"]
+    restart: "no"
+
+volumes:
+  lock-test-postgres-data:

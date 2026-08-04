@@ -549,6 +549,71 @@ When `automaticEntitiesMapping` is `false`, source create/update still records l
 events, but no mapped entities are produced until the flag is flipped on (or until
 `MappingService.createMappedEntities` / `updateMappedEntities` are invoked directly).
 
+### Testing the advisory lock (two-instance Docker Compose)
+
+The `MappingUpdaterService` scheduler is serialized across application instances by a
+PostgreSQL transaction-scoped advisory lock (`pg_try_advisory_xact_lock(1)`, see
+`AdvisoryLockManager`). Only the instance that acquires the lock processes pending
+lifecycle events; every other instance's scheduler tick fails the try-lock immediately,
+logs `"Advisory lock not acquired, another instance is running; skipping"` and returns.
+This is what allows running multiple application replicas against the same database
+without duplicate mapping work.
+
+A dedicated Docker Compose file verifies that serialization end-to-end with **two real
+application instances** (not just a unit test with two transactions on one instance):
+
+```
+docker compose -f docker-compose.lock-test.yml up --build --abort-on-container-exit
+```
+
+What it does:
+
+1. Starts a shared PostgreSQL on `:5433` and **two** application instances (`app-1` on
+   `:8081`, `app-2` on `:8082`) against the same database. Both have
+   `automaticEntitiesMapping=true` and the mapping updater scheduled at `1s`, so both
+   race to acquire `pg_try_advisory_xact_lock(1)` every second. Both run with
+   `LOGGING_LEVEL_IT_DAVIDGRECO_METACATALOG=DEBUG` so the skip log line is visible.
+2. A single `tester` container (started once both apps are healthy) POSTs the model +
+   200 aggregate instances (400 output ports) in one batch, producing 400
+   `SOURCE_CREATED` lifecycle events. The 400 events take several seconds to process
+   (creating mapped entities + `MAPPED_TO`/`IS_MAPPED_BY` relationships), so the
+   instance that wins the lock on the next tick holds it for longer than the other
+   instance's scheduling interval. While it processes, the other instance's
+   `@Scheduled(fixedRate=1s)` fires repeatedly and each tick fails the try-lock and
+   logs the skip line.
+3. The `tester` then greps both instances' logs for:
+   - `Found N SOURCE_CREATED PENDING events` with `N > 0` (one instance picked the
+     events up),
+   - `Advisory lock not acquired` (the other instance was correctly denied the lock
+     while the first was processing), and
+   - the absence of `Error creating/updating mapped entities` (no processing failures).
+
+   It exits `0` on success / non-zero on failure. `--abort-on-container-exit` then tears
+   everything down. Because the `tester` is the only one-shot container and it loads
+   data + waits for processing + verifies before exiting, the apps stay alive
+   throughout the test.
+
+The 200 aggregate instances live in `docker/lock-test/bulk-instances.yaml` and are
+loaded against the same model as the regular `docker/bulk/bulk-instances.yaml`
+(`DataProductType` with `FileBasedOutputPortType` / `TableBasedOutputPortType` parts
+mapped to `S3FolderType` / `AthenaTableType`). The tester script is
+`docker/lock-test/tester.sh`.
+
+To inspect the apps by hand (e.g. to read the full scheduler logs), drop
+`--abort-on-container-exit`:
+
+```bash
+docker compose -f docker-compose.lock-test.yml up --build -d   # start in background
+docker logs app-1 | grep -E "Advisory|SOURCE_CREATED|task completed"
+docker logs app-2 | grep -E "Advisory|SOURCE_CREATED|task completed"
+docker compose -f docker-compose.lock-test.yml down -v         # cleanup
+```
+
+> Flyway note: both instances run Flyway on startup. Flyway serializes concurrent
+> migrations via its own advisory lock on the `schema_history` table, so the second
+> instance simply waits for the first to finish migrating before proceeding — no extra
+> configuration is needed.
+
 ## Configuration
 
 Application configuration lives in `metacatalog-application/src/main/resources/application.yaml`. Profile-specific overrides are in `application-docker.yaml` and `application-kubernetes.yaml` (selected via `SPRING_PROFILES_ACTIVE` / `spring.profiles.active`). Custom properties bind under the `application.config` prefix into `CoreConfigProperties`:
