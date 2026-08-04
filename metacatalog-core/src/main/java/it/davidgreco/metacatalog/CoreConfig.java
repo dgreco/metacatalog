@@ -274,6 +274,28 @@ public class CoreConfig {
   }
 
   /**
+   * Creates the aggregate schema service bean, which derives the combined JSON schema of an
+   * aggregate from the type-level composition graph.
+   *
+   * @param entityTypeRepository the entity type repository
+   * @param traitRelationshipRepository the trait relationship repository
+   * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
+   * @return the aggregate schema service
+   */
+  @Bean
+  public AggregateSchemaService aggregateSchemaService(
+      EntityTypeRepository entityTypeRepository,
+      TraitRelationshipRepository traitRelationshipRepository,
+      MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      JsonUtils jsonUtils) {
+    return new AggregateSchemaService(
+        entityTypeRepository,
+        traitRelationshipRepository,
+        mappingEntityTypeRelationshipRepository,
+        jsonUtils);
+  }
+
+  /**
    * Creates the mapping updater service bean.
    *
    * @param advisoryLockManager the advisory lock manager

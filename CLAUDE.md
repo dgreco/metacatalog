@@ -26,6 +26,8 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
 | `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
+| `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Controllers drive the REST API through `MetacatalogApiDelegate` rather than calling core services. See [UI](#ui-metacatalog-ui). |
+| `metacatalog-sparql` | Embedded Ontop SPARQL endpoint over the metacatalog DB. See [Ontop](#ontop-embedded-sparql-endpoint). |
 
 Package root everywhere: `it.davidgreco.metacatalog`.
 
@@ -63,12 +65,39 @@ Located in `metacatalog-core/.../service`:
   `MappingService`, `MappingUpdaterService`, `BulkLoaderService`, `AggregateService`.
 - Shared contracts / helpers: `CommonService`, `CommonTypeService`, and error types
   `ServiceError` (checked), `ServiceRuntimeError`, `SchemaValidationError`.
+- **`AggregateSchemaService`** — derives the combined JSON Schema of a whole aggregate tree, so an
+  aggregate can be authored as a single document. See [Aggregate schemas](#aggregate-schemas).
 - **Task engine:** `TaskManager`, `Task`, `TaskFactory` — registers typed task factories, builds
   dependency graphs with **JGraphT**, detects cycles (`CycleDetector`), and executes schedules
   asynchronously (results cached with Caffeine). `AsyncTaskExecutor`-backed.
 - **`MappingUpdaterService`** — `@Scheduled` job that reacts to `EntityLifeCycleEvent`s to create /
   update mapped entities. Gated by `application.config.automaticEntitiesMapping` and guarded by an
   advisory lock so only one instance runs at a time.
+
+### Aggregate schemas
+
+`AggregateSchemaService` answers two questions the UI needs in order to author an aggregate:
+
+- **Which types can start one?** An *aggregate root type* has a `HAS_PART` relationship towards at
+  least one other type but is never itself a part. Note that `HAS_PART` is **not** stored between
+  entity types: composition is declared between *traits*, and a type participates by mixing them in
+  (the same rule `ServiceUtils.checkRelIsLegit` enforces when linking two instances). The service
+  projects those trait relationships onto the types carrying them to obtain the type-level graph.
+- **What does the whole tree look like?** `aggregateSchema(rootTypeName)` returns one self-contained
+  schema for everything reachable from the root, shaped like the aggregate YAML `BulkLoaderService`
+  already accepts (`entityType`, `values`, `ref`, `dependsOn`, `parts`).
+
+Two invariants worth preserving when touching this:
+
+- Each node's `values` come from the type's **`derivedSchema`**, never `baseSchema` (and not via the
+  `getSchema()` accessor, which falls back to the base schema). A type composed mostly of traits
+  typically has an empty base schema, so using it would render a form missing the very fields entity
+  creation validates against.
+- Reachable types are emitted under `$defs` and containment uses `$ref`. The trait model permits a
+  type to transitively contain its own kind, so inlining would not terminate.
+
+Mapping-target types are excluded: the mapping engine derives their instances and
+`EntityService.create` refuses to create them directly.
 
 ### Procedures (functions module)
 
@@ -89,11 +118,46 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
 - `MetacatalogApiImpl` is the delegate implementation binding endpoints to core services.
 - Base path prefix: `/metacatalog/v1/...`. Resource groups: `trait`, `entity-type`, `entity`,
   `aggregate`, `bulk-creation`, plus `.../link/...` sub-resources for relationships.
+- Aggregate authoring: `GET /aggregate/root-type` lists the aggregate root types and
+  `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
+  [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
+  `POST /aggregate/yaml`.
 
 When running:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - Spec: `http://localhost:8080/api/interface-specification.yaml`
 - Actuator: `/actuator/health`, `/actuator/info`, `/actuator/metrics`
+
+## UI (metacatalog-ui)
+
+A server-side rendered admin UI mounted at `/ui`, built with Thymeleaf templates
+(`src/main/resources/templates`) and plain ES5 JavaScript (`src/main/resources/static/ui/js`) — no
+npm, bundler, or front-end build step.
+
+Controllers go through the REST API delegate (`MetacatalogApiDelegate`), not the core services
+directly, so the UI exercises the same contract external clients do. `CatalogGraphService` is the
+exception: it reads core services because the spec has no list-all endpoints yet.
+
+Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, version history, the
+catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and
+aggregate authoring (`/ui/aggregates/new`).
+
+The two schema-driven editors are the substantial pieces:
+
+- `instance-values-form.js` builds a typed form for a single entity from its type's schema.
+- `aggregate-form.js` builds a **tree** from the combined aggregate schema, resolving `$ref` against
+  `$defs` and creating child parts only when the user adds one — which, together with the
+  `$defs`/`$ref` indirection, is what keeps a recursive composition from expanding forever. It
+  submits JSON; `AggregateUiController` converts it to the YAML `POST /aggregate/yaml` consumes.
+
+Both offer a Builder / Raw JSON tab pair and fall back to Raw JSON for anything they cannot render.
+
+JSON embedded into a page must go through `HtmlSafeJsonSerializer` (`<script type="application/json"
+th:utext="...">`), which escapes `<`, `>`, `&` and `/` so entity values cannot break out of the
+script block.
+
+Tests use standalone MockMvc with a mocked delegate — no Spring context or database
+(`UiControllerTest`, `AggregateUiControllerTest`).
 
 ## Security (metacatalog-security)
 

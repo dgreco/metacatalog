@@ -60,6 +60,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   private final NativeWebRequest request;
   private final AggregateService aggregateService;
 
+  private final AggregateSchemaService aggregateSchemaService;
+
   private final DtoMapper dtoMapper;
 
   private final JsonUtils jsonUtils;
@@ -303,6 +305,28 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
     } catch (java.io.IOException e) {
       throw new ServiceError(e.getMessage(), e);
     }
+  }
+
+  @Override
+  public ResponseEntity listAggregateRootTypes() {
+    var rootTypes =
+        aggregateSchemaService.aggregateRootTypes().stream()
+            .map(dtoMapper::entityTypeToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(rootTypes);
+  }
+
+  @Override
+  public ResponseEntity<java.util.Map<String, Object>> getAggregateSchema(String name) {
+    // The contract declares a free-form JSON object, so the schema tree is converted to a Map:
+    // handing Jackson the JsonNode itself against a declared Map type would serialize the node's
+    // bean properties (isArray, isObject, ...) instead of its contents.
+    var schema = aggregateSchemaService.aggregateSchema(name);
+    java.util.Map<String, Object> body =
+        jsonUtils
+            .jsonMapper()
+            .convertValue(schema, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(body);
   }
 
   @Override

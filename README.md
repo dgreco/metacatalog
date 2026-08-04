@@ -15,11 +15,12 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **JSON Schema Validation**: Validate entity attributes against schemas
 - **Graph Operations**: Advanced relationship traversal using JGraphT
 - **Ontology Integration**: Semantic web support via an embedded Ontop 5.5.0 virtual knowledge graph, exposed as a SPARQL 1.1 Protocol endpoint and a Yasgui query UI
+- **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved (see [Aggregates](#aggregates))
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
-- **Web UI**: Server-side rendered pages for creating traits and entity types, with an interactive JSON Schema builder
+- **Web UI**: Server-side rendered pages for creating traits, entity types, instances and aggregates, with interactive JSON Schema and schema-driven value builders
 
 ## Technology Stack
 
@@ -151,16 +152,17 @@ metacatalog/
 ├── metacatalog-core/           # Core domain, repositories, and services
 ├── metacatalog-functions/      # Procedures that run over entities (e.g. provisioning)
 ├── metacatalog-openapi/        # OpenAPI spec and generated controllers / client
-├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for creating traits and entity types
+├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for the whole catalog
 ├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
 ├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
 └── metacatalog-application/    # Spring Boot application (aggregates all modules)
 ```
 
 The UI module is a library that is served by `metacatalog-application` on the same
-port (8080); it calls the core domain services directly. The trait / entity-type
-creation forms include a client-side JSON Schema builder that assembles the schema
-document submitted to the services.
+port (8080); its controllers go through the REST API delegate, so the UI exercises the
+same contract external clients do. The trait / entity-type forms include a client-side
+JSON Schema builder that assembles the schema document, while the instance and aggregate
+forms work in the other direction — reading a schema and generating typed inputs from it.
 
 ## Development
 
@@ -613,6 +615,84 @@ docker compose -f docker-compose.lock-test.yml down -v         # cleanup
 > migrations via its own advisory lock on the `schema_history` table, so the second
 > instance simply waits for the first to finish migrating before proceeding — no extra
 > configuration is needed.
+
+## Aggregates
+
+An **aggregate** is a tree of entities: a root entity composed of parts, each of which may be
+an aggregate itself. Aggregates are created through `POST /metacatalog/v1/aggregate/yaml`
+(a YAML document), read back with `GET /metacatalog/v1/aggregate/{id}`, and provisioned in
+dependency order by the provisioning procedure in `metacatalog-functions`.
+
+### Aggregate root types
+
+Composition is **not** declared between entity types directly — it is declared once between
+*traits*, and an entity type takes part in it by mixing those traits in. This is the same rule
+that governs whether two entity instances may be linked at all. For example, the built-in
+`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (migration `V2`), so any type
+carrying `Aggregate` can contain any type carrying `AggregateElement`.
+
+An **aggregate root type** is a type that can start an aggregate: it has a `HAS_PART`
+relationship towards at least one other type, but is never itself a part of another type.
+
+```bash
+# Which types can start an aggregate?
+curl http://localhost:8080/metacatalog/v1/aggregate/root-type
+```
+
+### Combined schema
+
+Rather than looking up each entity type's schema separately, you can ask for **one schema that
+describes the whole aggregate**, starting from a root type:
+
+```bash
+curl http://localhost:8080/metacatalog/v1/aggregate/root-type/DataProductType/schema
+```
+
+Every entity type reachable from the root through composition contributes an entry under
+`$defs`, and containment is expressed with `$ref`:
+
+```jsonc
+{
+  "type": "object",
+  "properties": {
+    "entityType": { "type": "string", "enum": ["DataProductType"] },
+    "values":     { /* the derived schema of DataProductType */ },
+    "ref":        { "type": "string" },   // optional local id
+    "dependsOn":  { "type": "array", "items": { "type": "string" } },
+    "parts": {
+      "type": "array",
+      "items": { "anyOf": [{ "$ref": "#/$defs/FileBasedOutputPortType" }, /* ... */] }
+    }
+  },
+  "$defs": {
+    "DataProductType":         { /* ... */ },
+    "FileBasedOutputPortType": { /* ... */ }
+  }
+}
+```
+
+Notes on the generated schema:
+
+- Each node's `values` are described by the entity type's **derived** schema — the merge of its
+  whole ancestry, father chain and mixed-in traits included. That is the same schema entity
+  creation validates against, so a conforming document is accepted by the API. (A type whose own
+  `baseSchema` is empty but which mixes in a `WithName` trait still shows `name` here.)
+- `$defs` + `$ref` rather than inlining is what keeps the output finite: the trait model permits
+  a type to transitively contain its own kind, which inlining could not represent.
+- Types that are the **target of a mapping** are excluded — the mapping engine derives their
+  instances, and creating them directly is rejected.
+- The node shape (`entityType`, `values`, `ref`, `dependsOn`, `parts`) is exactly what the
+  aggregate loader consumes, so a document written against this schema can be posted to
+  `POST /metacatalog/v1/aggregate/yaml` unchanged. `dependsOn` lists the `ref` values of other
+  nodes and becomes `DEPENDS_ON` relationships.
+
+### Authoring in the UI
+
+`/ui/aggregates/new` (**+ New Aggregate** on the dashboard) turns that schema into a form: pick
+an aggregate root type, and the page renders the tree — typed inputs for each entity's values,
+plus an *Add part* button per allowed part type. Parts are added on demand, so a self-composing
+type does not expand forever. A **Raw JSON** tab allows editing the document directly, and
+submitting creates the entire aggregate — nesting and dependencies included — in one call.
 
 ## Configuration
 

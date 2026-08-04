@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Aggregate — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>New Aggregate</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui}">← Back</a>
+        <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
+    </nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <form method="post" th:action="@{/ui/aggregates}" th:object="${aggregateForm}" id="aggregate-form">
+
+        <div class="form-group">
+            <label for="rootType">Aggregate Root Type</label>
+            <select name="rootType" id="rootType" th:field="*{rootType}" required>
+                <option value="">— Select a root type —</option>
+                <option th:each="rt : ${rootTypes}"
+                        th:value="${rt}"
+                        th:text="${rt}"
+                        th:selected="${rt == selectedRootType}">type</option>
+            </select>
+            <small class="hint">
+                A root type composes other types through <code>HAS_PART</code> but is never itself a part.
+                Its combined schema drives the whole tree below.
+            </small>
+            <p class="empty" th:if="${rootTypes.isEmpty()}">
+                No aggregate root types yet — define a <code>HAS_PART</code> trait relationship first.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="builder">Builder</button>
+                <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder">
+                <div id="aggregate-editor" class="iv-editor">
+                    <p class="empty">Select an aggregate root type to start building.</p>
+                </div>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="raw">
+                <textarea id="aggregate-raw" class="raw-schema" rows="20" spellcheck="false"
+                          style="font-family: monospace; font-size: 0.9em; width: 100%;"
+                          placeholder='{"entityType": "...", "values": {}, "parts": []}'></textarea>
+            </div>
+
+            <div id="aggregate-validation" class="validation"></div>
+            <input type="hidden" th:field="*{document}" id="document"/>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn primary">Create Aggregate</button>
+            <a class="btn" th:href="@{/ui}">Cancel</a>
+        </div>
+    </form>
+</main>
+
+<script type="application/json" id="aggregate-schema" th:utext="${aggregateSchema} ?: 'null'">null</script>
+<script th:src="@{/ui/js/aggregate-form.js}"></script>
+</body>
+</html>

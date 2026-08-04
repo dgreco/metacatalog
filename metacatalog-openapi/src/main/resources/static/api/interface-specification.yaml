@@ -1370,6 +1370,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/root-type:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the aggregate root entity types
+      description: >
+        Returns the entity types that can start an aggregate. A root type has a HAS_PART
+        relationship towards at least one other type but is never itself a part of another
+        type. Composition is declared between traits; a type participates by mixing them in.
+      operationId: listAggregateRootTypes
+      responses:
+        200:
+          description: The aggregate root entity types, ordered by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/root-type/{name}/schema:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get the combined JSON Schema of an aggregate
+      description: >
+        Returns a single self-contained JSON Schema describing the whole aggregate tree
+        reachable from the given root type. Every reachable entity type contributes an
+        entry under $defs and containment is expressed with $ref, so the schema stays
+        finite even when the composition graph is cyclic. A document written against this
+        schema can be submitted to POST /metacatalog/v1/aggregate/yaml.
+      operationId: getAggregateSchema
+      parameters:
+        - in: path
+          name: name
+          required: true
+          description: The name of the aggregate root entity type
+          schema:
+            type: string
+      responses:
+        200:
+          description: The combined JSON Schema for the aggregate
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        400:
+          description: The entity type is not an aggregate root
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/yaml:
     post:
       tags:
