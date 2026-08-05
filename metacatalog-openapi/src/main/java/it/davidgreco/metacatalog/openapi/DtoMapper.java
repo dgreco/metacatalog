@@ -112,9 +112,7 @@ public class DtoMapper {
     var dtoEntity = new it.davidgreco.metacatalog.openapi.model.Entity();
     dtoEntity.setId(Optional.ofNullable(entity.getId()));
     dtoEntity.setEntityType(entity.getEntityType().getName());
-    if (entity.getEntityTypeVersion() != null)
-      dtoEntity.setEntityTypeVersionId(
-          java.util.Optional.of(entity.getEntityTypeVersion().getId()));
+    dtoEntity.setEntityTypeVersionId(entity.getEntityTypeVersion().getId());
     dtoEntity.setValues(entity.getValues().toPrettyString());
     return dtoEntity;
   }

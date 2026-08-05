@@ -304,7 +304,9 @@ public class CatalogGraphService {
       var typeName = entity.getEntityType();
       if (typeName == null) continue;
       var pinnedVersion =
-          entity.getEntityTypeVersionId().map(versionsById::get).filter(Objects::nonNull);
+          Optional.ofNullable(entity.getEntityTypeVersionId())
+              .map(versionsById::get)
+              .filter(Objects::nonNull);
       var instanceOfTarget =
           pinnedVersion
               .flatMap(EntityType::getId)

@@ -1781,6 +1781,7 @@ components:
       required:
         - entityType
         - values
+        - entityTypeVersionId
       properties:
         id:
           type: string
@@ -1795,8 +1796,8 @@ components:
           description: >
             The id of the EntityTypeVersion snapshot this entity is pinned to. Set by the
             service on create; an entity stays pinned to the schema it was validated against
-            at creation time even after a new version of the type is created. Null for legacy
-            entities created before pinning was introduced.
+            at creation time even after a new version of the type is created. Always present
+            on read; must not be sent on create (readOnly).
         values:
           type: string
           description: JSON string containing the entity's values, validated against the entity type's schema.

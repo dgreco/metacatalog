@@ -422,7 +422,10 @@ with.
   entities. When a mapped entity is regenerated on source update, the new values are
   validated against the mapped entity's pinned snapshot.
 - `GET /metacatalog/v1/entity/{id}` returns the pinned version id as `entityTypeVersionId`
-  on the `Entity` DTO.
+  on the `Entity` DTO. The field is `required` **and** `readOnly` in the OpenAPI contract:
+  always present on read, and never sent by clients on create (the generator emits
+  `requiredMode = REQUIRED` for the docs but no `@NotNull`, so `POST /entity` still accepts
+  a body that omits it).
 - In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the
   `Name (vN)` version node it is pinned to, rather than the live type node.
 

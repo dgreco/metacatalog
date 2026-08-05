@@ -11,7 +11,7 @@ import java.util.List;
  *
  * @param id the unique identifier of the entity
  * @param entityType the name of the entity type
- * @param entityTypeVersionId the entity type version id used for validation, or "latest"
+ * @param entityTypeVersionId the id of the entity type version the entity is pinned to
  * @param name the entity name extracted from the {@code name} property in values, or the entity id
  */
 public record InstanceRowView(
@@ -38,8 +38,7 @@ public record InstanceRowView(
         }
       }
       views.add(
-          new InstanceRowView(
-              id, entity.getEntityType(), entity.getEntityTypeVersionId().orElse("latest"), name));
+          new InstanceRowView(id, entity.getEntityType(), entity.getEntityTypeVersionId(), name));
     }
     return views;
   }
