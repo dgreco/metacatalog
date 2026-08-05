@@ -132,10 +132,17 @@ public class MappedEntityService {
                 entityTypeVersionRepository
                     .findByVersionGroupIdAndVersion(
                         targetEntityType.getVersionGroupId(), targetEntityType.getVersion())
-                    .orElse(null);
+                    .orElseThrow(
+                        () ->
+                            new ServiceError(
+                                "Entity type "
+                                    + targetEntityType.getName()
+                                    + " has no snapshot for its live version "
+                                    + targetEntityType.getVersion()
+                                    + "; cannot pin the mapped entity to it"));
             var mappedEntity = new Entity();
             mappedEntity.setEntityType(targetEntityType);
-            if (targetVersion != null) mappedEntity.setEntityTypeVersion(targetVersion);
+            mappedEntity.setEntityTypeVersion(targetVersion);
             mappedEntity.setValues(mappedValues);
             entityRepository.save(mappedEntity);
             entityLifeCycleEventRepository.save(
@@ -242,11 +249,7 @@ public class MappedEntityService {
             additionalEntitiesValues.put(as, jn.getValues());
           }
           var mappedEntity = entityMappingRelationship.getTarget();
-          var pinnedTargetVersion = mappedEntity.getEntityTypeVersion();
-          var targetSchema =
-              pinnedTargetVersion != null
-                  ? pinnedTargetVersion.getSchema()
-                  : mappingTypeRelationship.getTarget().getSchema();
+          var targetSchema = mappedEntity.getEntityTypeVersion().getSchema();
           var mappedValues =
               MappingValueEvaluator.generateMappedValues(
                   sourceEntity.getValues(),

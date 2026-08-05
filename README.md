@@ -424,13 +424,12 @@ with.
 - `GET /metacatalog/v1/entity/{id}` returns the pinned version id as `entityTypeVersionId`
   on the `Entity` DTO.
 - In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the
-  `Name (vN)` version node it is pinned to, rather than the live type node. Legacy
-  entities with no pin still point at the live type node.
+  `Name (vN)` version node it is pinned to, rather than the live type node.
 
-`entity_type_version_id` is nullable: entities created before this column was introduced
-(migration `V4__pin_entity_to_type_version.sql`) have `NULL` and continue to follow the
-live type — the service treats `NULL` as "use the live type's schema". No backfill is
-performed; existing entities only start being pinned once they are re-created or updated.
+`entity_type_version_id` is `NOT NULL`: every entity is pinned. `EntityTypeService` creates
+an `EntityTypeVersion` snapshot for every live version — including the current one, not just
+history — so there is always a row to pin to, and both creation paths (`EntityService.create`
+and the mapped-entity generator) fail loudly rather than persisting an unpinned entity.
 
 Because entities now reference snapshots, deleting a version that is still referenced by
 an entity is refused with a `400` and a message reporting the number of referencing
@@ -788,22 +787,29 @@ Notes:
 
 ## Database Migrations
 
-Database schema is managed by Flyway. Migration scripts are located in:
+Database schema is created by Flyway from a single baseline script:
 
 ```
-metacatalog-core/src/main/resources/db/migration/
+metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql
 ```
 
-| Migration | Purpose |
+It runs automatically on application startup and creates everything in one shot:
+
+| Section | Contents |
 | --- | --- |
-| `V1__create_tables.sql` | Base schema: `entity_type`, `entity`, `trait`, `type_traits`, relationship tables, mapping tables, `entity_lifecycle_event` |
-| `V2__insert_base_traits_and_relationships.sql` | Seeds the built-in traits (`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`) and the `RelationType` vocabulary |
-| `V3__add_type_versioning.sql` | Append-only `entity_type_version` / `trait_version` history tables + version columns (see [Type Versioning](#type-versioning)) |
-| `V4__pin_entity_to_type_version.sql` | Pins each `entity` to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
-| `V5__provisioning_fields_readonly.sql` | Marks `provisioningStatus` / `provisioningResult` as `readOnly` on the `ProvisionableResource` trait |
+| Types | `entity_type`, `trait` (each with `version` / `version_group_id`) and the `type_traits` join table |
+| Version history | Append-only `entity_type_version` / `trait_version` snapshot tables (see [Type Versioning](#type-versioning)) |
+| Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
+| Relationships | `trait_relationship`, `entity_relationship`, `mapping_type_relationship`, `mapping_entity_relationship` |
+| Lifecycle | `entity_lifecycle_event` + its sequence |
+| Seed data | The built-in traits (`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`) and the `HAS_PART` composition between the first two |
 
-Migrations run automatically on application startup. Add new `V*__*.sql` files; never edit an
-already-applied one.
+**This project does not support migrating an existing database.** The schema is always created from
+scratch, which is why there is one baseline instead of an incremental chain. When the model changes,
+edit `V1__initial_schema.sql` in place and recreate the database — do not add `V2`, `V3`, … files
+unless the project starts needing real migrations again. Editing the baseline changes its checksum,
+so any database that already ran the previous version will fail validation on startup until it is
+dropped and recreated.
 
 ## Monitoring & Management
 

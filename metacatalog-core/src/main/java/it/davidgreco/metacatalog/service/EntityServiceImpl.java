@@ -68,17 +68,24 @@ public class EntityServiceImpl implements EntityService {
             "Creating an entity for a mapping target entity type is not allowed");
 
       var currentVersion =
-          entityTypeVersionRepository.findByVersionGroupIdAndVersion(
-              entityType.getVersionGroupId(), entityType.getVersion());
-      var validationSchema =
-          currentVersion.map(EntityTypeVersion::getSchema).orElse(entityType.getSchema());
+          entityTypeVersionRepository
+              .findByVersionGroupIdAndVersion(
+                  entityType.getVersionGroupId(), entityType.getVersion())
+              .orElseThrow(
+                  () ->
+                      new ServiceError(
+                          "Entity type "
+                              + typeName
+                              + " has no snapshot for its live version "
+                              + entityType.getVersion()
+                              + "; cannot pin a new entity to it"));
 
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       SchemaValidationError.validateOrThrow(
-          jsonUtils.jsonSchemaFactory().getSchema(validationSchema), valuesJsonNode);
+          jsonUtils.jsonSchemaFactory().getSchema(currentVersion.getSchema()), valuesJsonNode);
       var typedEntity = new Entity();
       typedEntity.setEntityType(entityType);
-      currentVersion.ifPresent(typedEntity::setEntityTypeVersion);
+      typedEntity.setEntityTypeVersion(currentVersion);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
       if (ServiceUtils.isMappingSourceEntityType(
@@ -148,9 +155,7 @@ public class EntityServiceImpl implements EntityService {
             ENTITY_WITH_ID + entityId + " is an instance of a mapping target entity type");
 
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
-      var pinnedVersion = entity.getEntityTypeVersion();
-      var schema =
-          pinnedVersion != null ? pinnedVersion.getSchema() : entity.getEntityType().getSchema();
+      var schema = entity.getEntityTypeVersion().getSchema();
       SchemaValidationError.validateOrThrow(
           jsonUtils.jsonSchemaFactory().getSchema(schema), valuesJsonNode);
       entity.setValues(valuesJsonNode);
@@ -198,9 +203,7 @@ public class EntityServiceImpl implements EntityService {
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
-      var pinnedVersion = entity.getEntityTypeVersion();
-      var schema =
-          pinnedVersion != null ? pinnedVersion.getSchema() : entity.getEntityType().getSchema();
+      var schema = entity.getEntityTypeVersion().getSchema();
       SchemaValidationError.validateOrThrow(
           jsonUtils.jsonSchemaFactory().getSchema(schema), valuesJsonNode);
       entity.setValues(valuesJsonNode);

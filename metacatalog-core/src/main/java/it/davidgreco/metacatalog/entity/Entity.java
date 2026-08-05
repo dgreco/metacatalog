@@ -45,19 +45,20 @@ public class Entity {
   /**
    * The frozen {@link EntityTypeVersion} snapshot this entity was created against.
    *
-   * <p>When set, schema validation of {@link #values} uses this snapshot's {@code getSchema()}
-   * instead of the live {@link EntityType#getSchema()}, so the entity stays pinned to the schema it
-   * was validated against at creation time even after {@code createVersion} mutates the live type.
+   * <p>Schema validation of {@link #values} uses this snapshot's {@code getSchema()} instead of the
+   * live {@link EntityType#getSchema()}, so the entity stays pinned to the schema it was validated
+   * against at creation time even after {@code createVersion} mutates the live type.
    *
-   * <p>Nullable for legacy rows created before this column existed; the service layer treats null
-   * as "follow the live type".
+   * <p>Mandatory: {@code EntityTypeService} creates a snapshot for every live version, so there is
+   * always a row to pin to, and an entity with no pin would have no record of which schema it was
+   * validated against.
    *
    * <p>Fetched lazily: the paths that need it (entity finders feeding the DTO / graph layers) pull
    * it in explicitly via an {@code @EntityGraph}, and the service paths access it inside their
    * transaction.
    */
   @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "entity_type_version_id")
+  @JoinColumn(name = "entity_type_version_id", nullable = false)
   private EntityTypeVersion entityTypeVersion;
 
   /**

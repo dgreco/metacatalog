@@ -63,8 +63,9 @@ Located in `metacatalog-core/.../service`:
 
 - CRUD + validation services: `EntityService`, `EntityTypeService`, `TraitService`,
   `MappingService`, `MappingUpdaterService`, `BulkLoaderService`, `AggregateService`.
-- Shared contracts / helpers: `CommonService`, `CommonTypeService`, and error types
-  `ServiceError` (checked), `ServiceRuntimeError`, `SchemaValidationError`.
+- Shared contracts / helpers: `CommonService`, `CommonTypeService`, and the error hierarchy
+  `ServiceError` (unchecked — extends `RuntimeException`) with subclasses `NotFoundException` and
+  `SchemaValidationError`.
 - **`AggregateSchemaService`** — derives the combined JSON Schema of a whole aggregate tree, so an
   aggregate can be authored as a single document. See [Aggregate schemas](#aggregate-schemas).
 - **Task engine:** `TaskManager`, `Task`, `TaskFactory` — registers typed task factories, builds
@@ -284,9 +285,15 @@ separately and not shaded. No Ontop CLI install is needed to build or run the ap
   `json-schema-validator` (helpers in `common/JsonUtils`).
 - **Vavr** (`Try`, `Tuple2`, …) is used for functional error handling in the task/procedure paths.
 - **Don't hand-edit generated OpenAPI code** — change the YAML spec and regenerate.
-- **DB schema** is owned by Flyway migrations in
-  `metacatalog-core/src/main/resources/db/migration/` (`V1__create_tables.sql`,
-  `V2__insert_base_traits_and_relationships.sql`). Add new `V*__*.sql` files; never edit applied ones.
+- **DB schema** is owned by a single Flyway baseline,
+  `metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql`, which creates every
+  table and seeds the built-in traits. The project does not support migrating an existing database:
+  edit the baseline in place and recreate the DB rather than adding `V2`, `V3`, … files. Editing it
+  changes its checksum, so any database that ran the previous version must be dropped. After
+  editing, run `mvn clean` before testing — a stale copy of a deleted migration left in
+  `target/classes` makes Flyway fail with "Found more than one migration with version 1".
+  The JPA entities are the source of truth for column names, nullability and index names; tests run
+  with `ddl-auto: validate`, which catches column drift but **not** index or nullability drift.
 - Java 25 + the JDK-internal compiler `--add-opens` args in the compiler plugin are required for the
   toolchain (Google Java Format / Lombok) — keep them when touching the parent `pom.xml`.
 ```
