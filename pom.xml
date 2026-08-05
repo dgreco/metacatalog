@@ -88,6 +88,11 @@
             </dependency>
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-functions</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-openapi</artifactId>
                 <version>${project.version}</version>
             </dependency>

@@ -60,6 +60,38 @@ This starts:
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
   traits, entity types and entities from `docker/bulk/` once the app is healthy
 
+Nothing is provisioned by starting the stack. Provisioning is something you ask for, and it runs
+the task registered for every `ProvisionableResource` in dependency order; unprovisioning tears
+them down in the reverse order, so nothing is removed while another resource still depends on it.
+The demo registers a task that reports what it would do instead of creating anything:
+
+```bash
+# the aggregate root seeded by the loader
+ROOT=$(curl -s -u admin:admin \
+  'http://localhost:8080/metacatalog/v1/entity?entityTypeName=DataProductType' \
+  | grep -o '"id":"[^"]*"' | head -1 | sed 's/.*:"//; s/"//')
+
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/provision
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/unprovision
+
+docker logs metacatalog-app | grep -E '\[(un)?provisioning\]'
+# [provisioning]   start S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
+# [provisioning]   done  S3FolderType id=0849185c…
+# [provisioning]   start AthenaTableType id=693457a7… {"table":"op2",…}
+# [provisioning]   done  AthenaTableType id=693457a7…
+# [unprovisioning] start AthenaTableType id=693457a7…      <- reversed
+# [unprovisioning] done  AthenaTableType id=693457a7…
+# [unprovisioning] start S3FolderType id=0849185c…
+# [unprovisioning] done  S3FolderType id=0849185c…
+```
+
+Provisioning a freshly seeded aggregate needs its resources to exist first — they are derived
+asynchronously by the mapping updater a second or so after the instances load. Provisioning before
+then does not fail, it just finds nothing to do.
+
+Both calls are synchronous: a 204 means every resource in the aggregate is done. Each one ends up
+`PROVISIONED` or `UNPROVISIONED`, or `FAILED` with the error in `provisioningResult`.
+
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui
 - **Swagger UI**: http://localhost:8080/swagger-ui.html

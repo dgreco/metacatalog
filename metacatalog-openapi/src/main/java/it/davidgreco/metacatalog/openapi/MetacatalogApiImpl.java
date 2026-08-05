@@ -4,6 +4,7 @@ import static org.springframework.http.ResponseEntity.*;
 
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.RelationType;
+import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.openapi.common.GlobalExceptionHandler;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
@@ -61,6 +62,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   private final AggregateService aggregateService;
 
   private final AggregateSchemaService aggregateSchemaService;
+
+  private final ProcedureExecutor procedureExecutor;
 
   private final DtoMapper dtoMapper;
 
@@ -262,6 +265,18 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity provisionAggregate(String aggregateId) {
+    procedureExecutor.executeProcedure("ProvisioningProcedure", aggregateId);
+    return status(204).build();
+  }
+
+  @Override
+  public ResponseEntity unprovisionAggregate(String aggregateId) {
+    procedureExecutor.executeProcedure("UnprovisioningProcedure", aggregateId);
+    return status(204).build();
+  }
+
+  @Override
   public ResponseEntity deleteAggregate(String aggregateId) {
     aggregateService.delete(aggregateId);
     return status(204).build();
@@ -364,6 +379,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             .map(dtoMapper::entityTypeToDto)
             .toList();
     return status(200).contentType(MediaType.APPLICATION_JSON).body(rootTypes);
+  }
+
+  @Override
+  public ResponseEntity listProvisionableTypes() {
+    var provisionableTypes =
+        aggregateSchemaService.provisionableTypes().stream()
+            .map(dtoMapper::entityTypeToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(provisionableTypes);
   }
 
   @Override

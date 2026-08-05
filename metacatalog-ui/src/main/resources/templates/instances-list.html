@@ -60,6 +60,18 @@
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
+                <form th:if="${inst.provisionable}" method="post"
+                      th:action="@{/ui/instances/{id}/provision(id=${inst.id})}"
+                      class="inline-form"
+                      data-confirm="Provision this aggregate? Every resource it contains will be provisioned, in dependency order.">
+                    <button type="submit" class="btn-sm" title="Provision the whole aggregate">Provision</button>
+                </form>
+                <form th:if="${inst.provisionable}" method="post"
+                      th:action="@{/ui/instances/{id}/unprovision(id=${inst.id})}"
+                      class="inline-form"
+                      data-confirm="Unprovision this aggregate? Every resource it contains will be torn down, in the reverse order.">
+                    <button type="submit" class="btn-sm" title="Unprovision the whole aggregate">Unprovision</button>
+                </form>
                 <form th:if="${inst.aggregateRoot}" method="post"
                       th:action="@{/ui/instances/{id}/delete-aggregate(id=${inst.id})}"
                       class="inline-form"

@@ -6,18 +6,18 @@ spring:
     url: jdbc:postgresql://postgres:5432/metacatalog
     username: "${SPRING_DATASOURCE_USERNAME:metacatalog}"
     password: "${SPRING_DATASOURCE_PASSWORD:metacatalog}"
-logging:
-  level:
-    root: INFO
-    org.flywaydb: INFO
-    org.springframework.boot.autoconfigure.flyway: INFO
-    org.springframework.boot.autoconfigure: INFO
-    org.springframework.data.jpa.repository: INFO
-    org.hibernate.SQL: INFO
-    org.hibernate.type.descriptor.sql: INFO
+# No logging overrides: application.yaml already sets root to ERROR, and this profile raising
+# everything to INFO is what made `make run` unreadable. The startup version line still comes
+# through — application.yaml keeps BuildInfoLogger at INFO — and the provisioning output is written
+# to standard output rather than logged, so it is unaffected by the level.
 application:
   config:
     updateMappedEntitiesSchedulingInterval: 1s
+    provisioning:
+      # The ProvisionableResource types of the demo model in docker/bulk/bulk-model.yaml. Listing
+      # them here rather than in application.yaml keeps the demo's types out of the shipped
+      # defaults: an installation with a different model names its own.
+      entity-types: [S3FolderType, AthenaTableType]
     security:
       auth-mode: basic
       basic:

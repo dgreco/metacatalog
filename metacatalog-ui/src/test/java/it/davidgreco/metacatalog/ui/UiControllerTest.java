@@ -53,6 +53,7 @@ class UiControllerTest {
     given(api.listMappingEntityRelationships()).willReturn(ResponseEntity.ok(List.of()));
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of()));
     given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
@@ -445,6 +446,71 @@ class UiControllerTest {
 
     org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).aggregateRoot());
     org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).aggregateRoot());
+  }
+
+  @Test
+  void provisionAggregateSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/agg-1/provision"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("message", "Aggregate provisioned."));
+
+    verify(api).provisionAggregate("agg-1");
+  }
+
+  @Test
+  void unprovisionAggregateSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/agg-1/unprovision"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("message", "Aggregate unprovisioned."));
+
+    verify(api).unprovisionAggregate("agg-1");
+  }
+
+  @Test
+  void provisionAggregateSurfacesTheApiError() throws Exception {
+    doThrow(apiError("No factory for name: S3FolderType")).when(api).provisionAggregate("agg-1");
+
+    mockMvc
+        .perform(post("/ui/instances/agg-1/provision"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(
+            flash()
+                .attribute("error", org.hamcrest.Matchers.containsString("No factory for name")));
+  }
+
+  @Test
+  void instancesListOffersProvisioningOnlyForProvisionableTypes() throws Exception {
+    var product = new Entity();
+    product.setId(java.util.Optional.of("agg-1"));
+    product.setEntityType("ProductType");
+    product.setValues("{\"name\":\"product\"}");
+    var port = new Entity();
+    port.setId(java.util.Optional.of("ent-2"));
+    port.setEntityType("OutputPortType");
+    port.setValues("{\"name\":\"port\"}");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(product, port)));
+    var provisionable = new EntityType();
+    provisionable.setName("ProductType");
+    given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of(provisionable)));
+
+    var rows =
+        (List<InstanceRowView>)
+            mockMvc
+                .perform(get("/ui/instances"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("instances");
+
+    // Which rows get the buttons comes from the API, not from a guess at the trait chain here.
+    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).provisionable());
+    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).provisionable());
   }
 
   @Test

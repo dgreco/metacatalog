@@ -22,7 +22,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | Module | Purpose |
 | --- | --- |
 | `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files. The heart of the system. |
-| `metacatalog-functions` | Pluggable **procedures** that run over entities — notably the `provisioning` package that provisions aggregate entities in dependency order. Depends on core. |
+| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse. Depends on core; assembled into the application. |
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
 | `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
@@ -102,11 +102,43 @@ Mapping-target types are excluded: the mapping engine derives their instances an
 
 ### Procedures (functions module)
 
-`AbstractEntityProcedure` / `EntityProcedure` / `EntityFunction` / `ProcedureExecutor` (in core)
-define the procedure abstraction. `metacatalog-functions` provides concrete ones — chiefly
-`ProvisioningProcedure` + `ProvisioningTask`, which read an aggregate, build a dependency graph of
-`ProvisionableResource` entities from mapping relationships, detect cycles, and schedule provisioning
-in dependency order.
+`AbstractEntityProcedure` / `EntityProcedure` / `ProcedureExecutor` (in core) define the procedure
+abstraction. `metacatalog-functions` provides the concrete ones: `ProvisioningProcedure` and
+`UnprovisioningProcedure`, which read an aggregate, build a dependency graph of
+`ProvisionableResource` entities from mapping relationships (`ResourceGraphBuilder`, shared by both
+so they cannot disagree), detect cycles, and schedule the work.
+
+**The two differ only in direction.** Provisioning makes a resource wait for what it is derived
+from; unprovisioning makes what it is derived from wait for *it*. An Athena table reading an S3
+folder is created after the folder and destroyed before it, so nothing is removed while something
+still depends on it. `ProvisioningProcedureTests` asserts both orders — that is the assertion to
+keep if the wiring is ever touched.
+
+Registering a function for a resource type means subclassing `ProvisioningTask` and registering a
+`TaskFactory` under the **entity type name**, which is the key both procedures look a task up by:
+
+```java
+taskManager.registerTaskFactory("S3FolderType", Entity.class,
+    entity -> new StdoutProvisioningTask(entity, entityService));
+```
+
+`ProvisioningTask` requires both `provision()` and `unprovision()`, so a type cannot end up with a
+way to create a resource and no way to remove it. Which one runs is set by the procedure through
+`setOperation`, and the base class records the outcome on the entity — `PROVISIONED`,
+`UNPROVISIONED`, or `FAILED` with the error in `provisioningResult`. A resource type with no
+registered factory fails the run (`No factory for name: <type>`) rather than being reported as
+provisioned by nothing.
+
+`StdoutProvisioningFunctions` registers `StdoutProvisioningTask` for each entity type listed under
+`application.config.provisioning.entity-types`, printing what it would do (lines prefixed
+`[provisioning]` / `[unprovisioning]`) instead of creating anything. It writes to standard output
+rather than the log on purpose: the application ships with `logging.level.root: ERROR`. The list is
+empty by default, so adding the module changes nothing until types are named.
+
+Both operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
+`.../unprovision`. They are **synchronous** — `ProcedureExecutor.executeProcedure` returns only
+once the schedule completes and throws if any task failed — so a 204 means the whole aggregate is
+done. Nothing provisions on its own; it happens when asked.
 
 ## REST API
 
@@ -167,10 +199,21 @@ Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, vers
 catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and
 aggregate authoring (`/ui/aggregates/new`).
 
-The instances list is also where an aggregate is deleted: a row gets a *Delete aggregate* action
-when its entity type is one of the `GET /aggregate/root-type` types. That test is enough to
-identify a root — an aggregate root type is by definition never contained in another, so no
-instance of one can be a part of a larger aggregate.
+The instances list is also where an aggregate is deleted, provisioned and unprovisioned. A row gets
+a *Delete aggregate* action when its entity type is one of the `GET /aggregate/root-type` types —
+that test is enough to identify a root, since an aggregate root type is by definition never
+contained in another, so no instance of one can be a part of a larger aggregate. It gets *Provision*
+and *Unprovision* when its type is one of the `GET /aggregate/provisionable-type` types.
+
+Both lists are asked of the API rather than worked out in the UI. Whether a type is provisionable
+depends on the type **and** trait inheritance chains, both lazily fetched, so the walk only works
+inside a transaction — `AggregateSchemaService.provisionableTypes()` does it there and the endpoint
+hands the UI the answer. The `traits` on the `EntityType` DTO are only the directly associated ones,
+so checking them here would miss an inherited `Provisionable`.
+
+Provisioning from the UI is synchronous: the POST does not return until the whole aggregate is
+done, so the page reloads showing the finished state. A slow real-world provisioning function would
+make that request hang, which is a reason to keep the UI action for demo-scale aggregates.
 
 The link forms distinguish two things that `CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES` does
 not: which relation types may be *authored* versus which direction of a bidirectional pair is
@@ -238,6 +281,11 @@ Custom properties bind under the `application.config` prefix into
 - `entityPathResolutionMaxAttempts` (int)
 - `taskScheduleCacheMaxSize` (int, default 100) — `TaskManager` schedule-result cache capacity
 - `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — `TaskManager` schedule-result cache TTL
+
+Provisioning properties bind under `application.config.provisioning` into
+`ProvisioningConfigProperties` (functions module): `entityTypes` (List&lt;String&gt;, default empty) —
+the entity types handled by the stdout provisioning task (see
+[Procedures](#procedures-functions-module)).
 
 Security properties bind under `application.config.security` into `SecurityConfigProperties`
 (see the [Security](#security-metacatalog-security) section). Defaults live in `application.yaml`;

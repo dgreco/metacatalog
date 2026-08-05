@@ -1502,6 +1502,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/provisionable-type:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the provisionable entity types
+      description: >
+        Returns the entity types whose instances can be provisioned — those carrying the
+        Provisionable trait, directly or through the type and trait inheritance chains. This is
+        the same test the provisioning procedure applies to an aggregate root, so a client can
+        tell in advance which entities offer provisioning rather than discovering it from a
+        rejected call.
+      operationId: listProvisionableTypes
+      responses:
+        200:
+          description: The provisionable entity types, ordered by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/root-type/{name}/schema:
     get:
       tags:
@@ -1693,6 +1720,90 @@ paths:
                 format: binary
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/provision:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Provision an aggregate
+      description: >-
+        Provisions every ProvisionableResource in the aggregate, running the task registered for
+        each resource's entity type in dependency order — a resource is provisioned only once
+        everything it is derived from exists. The aggregate root must carry the Provisionable
+        trait. Synchronous: the call returns once the whole aggregate is done, and fails if any
+        resource did. Each resource is left PROVISIONED, or FAILED with the error in
+        provisioningResult.
+      operationId: provisionAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+      responses:
+        204:
+          description: Aggregate provisioned
+        400:
+          description: >-
+            Invalid input, the root is not Provisionable, a resource type has no registered task,
+            or provisioning failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/unprovision:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Unprovision an aggregate
+      description: >-
+        The inverse of provisioning: tears down every ProvisionableResource in the aggregate, in
+        the reverse of the order they were provisioned, so nothing is removed while another
+        resource still depends on it. Synchronous, like provisioning. Each resource is left
+        UNPROVISIONED, or FAILED with the error in provisioningResult.
+      operationId: unprovisionAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+      responses:
+        204:
+          description: Aggregate unprovisioned
+        400:
+          description: >-
+            Invalid input, the root is not Provisionable, a resource type has no registered task,
+            or unprovisioning failed
           content:
             application/json:
               schema:

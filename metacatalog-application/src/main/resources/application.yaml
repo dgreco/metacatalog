@@ -56,6 +56,12 @@ application:
     # taskScheduleCacheMaxSize: 100           # TaskManager schedule-result cache capacity
     # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
     cacheExpireAfterWrite: 1h                 # Spring cache (Traits, EntityTypes) TTL
+    provisioning:
+      # Entity types whose provisioning is handled by the stdout task, which prints what it would
+      # provision and unprovision instead of creating or destroying anything. A ProvisionableResource
+      # type not listed here has no registered task, and provisioning it fails with
+      # "No factory for name: <type>" rather than being reported as provisioned by nothing.
+      entity-types: []
     security:
       # Authentication mechanism: none | basic | oauth2 | ldap
       # - none   : security disabled (default for local dev)

@@ -41,7 +41,9 @@ class UnifiedInstanceController {
     List<Entity> entities =
         api.getEntities(Optional.ofNullable(type).filter(t -> !t.isBlank()), Optional.empty())
             .getBody();
-    model.addAttribute("instances", InstanceRowView.listFrom(entities, aggregateRootTypeNames()));
+    model.addAttribute(
+        "instances",
+        InstanceRowView.listFrom(entities, aggregateRootTypeNames(), provisionableTypeNames()));
     model.addAttribute("selectedType", type);
     model.addAttribute("entityTypes", types);
     return "instances-list";
@@ -142,6 +144,36 @@ class UnifiedInstanceController {
     return "redirect:/ui/instances";
   }
 
+  /**
+   * Provisions the aggregate rooted at this entity.
+   *
+   * <p>Synchronous, like the API call behind it: the request does not come back until every
+   * resource in the aggregate has been provisioned, so the page reloads showing the finished state
+   * rather than work in progress.
+   */
+  @PostMapping("/{id}/provision")
+  public String provision(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    try {
+      api.provisionAggregate(id);
+      redirectAttributes.addFlashAttribute("message", "Aggregate provisioned.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return "redirect:/ui/instances";
+  }
+
+  /** Tears the aggregate rooted at this entity back down. Synchronous, like {@link #provision}. */
+  @PostMapping("/{id}/unprovision")
+  public String unprovision(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    try {
+      api.unprovisionAggregate(id);
+      redirectAttributes.addFlashAttribute("message", "Aggregate unprovisioned.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return "redirect:/ui/instances";
+  }
+
   @GetMapping("/{id}")
   public String view(@PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
     try {
@@ -164,6 +196,16 @@ class UnifiedInstanceController {
 
   private Set<String> aggregateRootTypeNames() {
     return api.listAggregateRootTypes().getBody().stream()
+        .map(EntityType::getName)
+        .collect(Collectors.toSet());
+  }
+
+  /**
+   * Which types can be provisioned. Asked of the API rather than worked out here: deciding it needs
+   * the type and trait inheritance chains, which this module has no access to by design.
+   */
+  private Set<String> provisionableTypeNames() {
+    return api.listProvisionableTypes().getBody().stream()
         .map(EntityType::getName)
         .collect(Collectors.toSet());
   }
@@ -274,6 +316,6 @@ class UnifiedInstanceController {
 
   private List<InstanceRowView> allInstanceRows() {
     return InstanceRowView.listFrom(
-        api.getEntities(Optional.empty(), Optional.empty()).getBody(), Set.of());
+        api.getEntities(Optional.empty(), Optional.empty()).getBody(), Set.of(), Set.of());
   }
 }

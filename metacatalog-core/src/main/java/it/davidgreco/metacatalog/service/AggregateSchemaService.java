@@ -6,6 +6,7 @@ import static it.davidgreco.metacatalog.service.CommonTypeService.loadInheritanc
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
@@ -106,6 +107,32 @@ public class AggregateSchemaService {
             .toList();
     log.info("Computed {} aggregate root type(s)", roots.size());
     return roots;
+  }
+
+  /**
+   * Returns the entity types whose instances can be provisioned, ordered by name.
+   *
+   * <p>Those are the types carrying the {@code Provisionable} trait, directly or through the type
+   * and trait inheritance chains — the same test the provisioning procedure applies to an aggregate
+   * root before it will act on it.
+   *
+   * <p>This is computed here rather than derived by callers because answering it needs the full
+   * ancestor walk, and both the type's father chain and its traits' father chains are lazily
+   * fetched: outside a transaction the walk would fail. Clients that need to know which entities
+   * offer provisioning — the UI, deciding which rows get the action — read it from here.
+   *
+   * @return the provisionable entity types, ordered by name
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public List<EntityType> provisionableTypes() {
+    log.info("Computing provisionable types");
+    var provisionable =
+        authorableTypes().stream()
+            .filter(type -> ServiceUtils.implementsTrait(type, BuiltInTraits.PROVISIONABLE))
+            .sorted(Comparator.comparing(EntityType::getName))
+            .toList();
+    log.info("Computed {} provisionable type(s)", provisionable.size());
+    return provisionable;
   }
 
   /**

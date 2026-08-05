@@ -22,6 +22,12 @@
             <artifactId>metacatalog-core</artifactId>
         </dependency>
 
+        <!-- Functions module: the provisioning / unprovisioning procedures -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-functions</artifactId>
+        </dependency>
+
         <!-- SpringBoot & Openapi -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
