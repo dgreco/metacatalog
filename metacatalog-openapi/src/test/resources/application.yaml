@@ -14,7 +14,11 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 5s
 server:
-  port: 54321
+  # 0 = let the OS pick a free port. A fixed one is not safe here: any port high enough to not need
+  # privileges is inside the ephemeral range, where the OS may already have handed it to an
+  # unrelated process as the local end of an outbound connection, and the test would fail to bind.
+  # MetacatalogApiTests reads the port actually bound back off the running server.
+  port: 0
 application:
   config:
     automaticEntitiesMapping: true

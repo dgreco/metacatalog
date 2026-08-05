@@ -17,10 +17,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.web.server.autoconfigure.ServerProperties;
+import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -42,16 +41,22 @@ class MetacatalogApiTests {
 
   static ConfigurableApplicationContext context;
 
-  @Autowired private ServerProperties serverProperties;
-
   private MetaCatalogManagerApi getMetaCatalogManagerApi() {
     var restTemplate = new RestTemplate();
     var msgConverters = restTemplate.getMessageConverters();
     msgConverters.add(new FileHttpMessageConverter());
     restTemplate.setMessageConverters(msgConverters);
     var apiClient = new ApiClient(restTemplate);
-    apiClient.setBasePath("http://localhost:" + serverProperties.getPort());
+    apiClient.setBasePath("http://localhost:" + boundPort());
     return new MetaCatalogManagerApi(apiClient);
+  }
+
+  /**
+   * The port the application under test actually bound. Configured as 0, so it is only known once
+   * the server is up — asking the configuration for it would just give back the 0.
+   */
+  private static int boundPort() {
+    return ((ServletWebServerApplicationContext) context).getWebServer().getPort();
   }
 
   @BeforeAll

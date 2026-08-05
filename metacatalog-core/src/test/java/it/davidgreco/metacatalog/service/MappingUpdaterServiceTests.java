@@ -1,12 +1,22 @@
 package it.davidgreco.metacatalog.service;
 
+import static it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.ENTITY_SOURCE_CREATED;
+import static it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.STATUS_FAILED;
+import static it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.STATUS_PENDING;
+import static it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.STATUS_PROCESSED;
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import org.awaitility.Durations;
+import org.awaitility.core.ThrowingRunnable;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
@@ -28,6 +38,47 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
     return getApplicationContext().getBean(MappingUpdaterService.class);
   }
 
+  /**
+   * The lifecycle events of the given type and status raised for {@code entityTypeName}.
+   *
+   * <p>Every assertion here has to be scoped to the types the test itself created. The database is
+   * reset once per class rather than per test, and the scheduler runs in the background throughout,
+   * so a repository-wide query would also see the other tests' events.
+   */
+  private List<EntityLifeCycleEvent> eventsFor(
+      String entityTypeName, String eventType, String eventStatus) {
+    return events().findByEventTypeAndEventStatus(eventType, eventStatus).stream()
+        .filter(event -> entityTypeName.equals(event.getEntityTypeName()))
+        .toList();
+  }
+
+  /**
+   * Runs one tick with automatic mapping enabled and waits for {@code expectations} to hold.
+   *
+   * <p>The direct call is what proves the transactional wiring: were the advisory lock not acquired
+   * inside a transaction ({@link
+   * org.springframework.transaction.annotation.Propagation#MANDATORY}), it would throw here rather
+   * than process anything.
+   *
+   * <p>Waiting afterwards is what makes the test independent of the scheduler, which is enabled in
+   * this module's test configuration and ticks every second. The lock is taken with {@code
+   * pg_try_advisory_xact_lock}, so whichever of the two callers arrives second gives up and returns
+   * without doing anything — asserting straight after the direct call would then read the state
+   * before any tick had finished. The wait stays inside the enabling block so the scheduler is
+   * still allowed to run while we wait for it.
+   */
+  private void tickAndAwait(ThrowingRunnable expectations) {
+    var updater = updater();
+    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
+    updater.setAutomaticEntitiesMapping(true);
+    try {
+      updater.updateMappedEntities();
+      await().atMost(Durations.TEN_SECONDS).untilAsserted(expectations);
+    } finally {
+      updater.setAutomaticEntitiesMapping(originalMappingFlag);
+    }
+  }
+
   @Test
   void processesPendingSourceCreatedEventAndCreatesMappedEntity() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
@@ -46,26 +97,22 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
     // Creating a source-typed entity enqueues a SOURCE_CREATED / PENDING lifecycle event.
     entityService.create("UpdSource", "{}");
 
-    var updater = updater();
-    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
-    updater.setAutomaticEntitiesMapping(true);
-    try {
-      // A direct call runs the scheduled body: had the advisory lock not been acquired inside a
-      // transaction (Propagation.MANDATORY), this would throw instead of processing the event.
-      updater.updateMappedEntities();
-    } finally {
-      updater.setAutomaticEntitiesMapping(originalMappingFlag);
-    }
+    tickAndAwait(
+        () -> {
+          assertEquals(
+              1,
+              entityService.list("UpdTarget", "").size(),
+              "a mapped target entity should have been created");
+          assertTrue(
+              eventsFor("UpdSource", ENTITY_SOURCE_CREATED, STATUS_PENDING).isEmpty(),
+              "the event must no longer be PENDING");
 
-    var mappedTargets = entityService.list("UpdTarget", "");
-    assertEquals(1, mappedTargets.size(), "a mapped target entity should have been created");
-    assertTrue(events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING").isEmpty());
-
-    var processed = events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PROCESSED");
-    assertEquals(1, processed.size());
-    assertTrue(
-        processed.getFirst().isProcessed(),
-        "a processed event must carry a real process timestamp, not the unprocessed sentinel");
+          var processed = eventsFor("UpdSource", ENTITY_SOURCE_CREATED, STATUS_PROCESSED);
+          assertEquals(1, processed.size());
+          assertTrue(
+              processed.getFirst().isProcessed(),
+              "a processed event must carry a real process timestamp, not the unprocessed sentinel");
+        });
   }
 
   @Test
@@ -91,23 +138,18 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
 
     entityService.create("PoisonSource", "{}");
 
-    var updater = updater();
-    var originalMappingFlag = updater.isAutomaticEntitiesMapping();
-    updater.setAutomaticEntitiesMapping(true);
-    try {
-      updater.updateMappedEntities();
-    } finally {
-      updater.setAutomaticEntitiesMapping(originalMappingFlag);
-    }
-
-    assertTrue(
-        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING").isEmpty(),
-        "the poison event must no longer be PENDING");
-    assertFalse(
-        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "FAILED").isEmpty(),
-        "the poison event must be marked FAILED");
-    assertTrue(
-        entityService.list("PoisonTarget", "").isEmpty(), "no invalid target entity should exist");
+    tickAndAwait(
+        () -> {
+          assertTrue(
+              eventsFor("PoisonSource", ENTITY_SOURCE_CREATED, STATUS_PENDING).isEmpty(),
+              "the poison event must no longer be PENDING");
+          assertFalse(
+              eventsFor("PoisonSource", ENTITY_SOURCE_CREATED, STATUS_FAILED).isEmpty(),
+              "the poison event must be marked FAILED");
+          assertTrue(
+              entityService.list("PoisonTarget", "").isEmpty(),
+              "no invalid target entity should exist");
+        });
   }
 
   /**
@@ -143,24 +185,85 @@ class MappingUpdaterServiceTests extends CommonServiceTestingSupport {
 
     entityService.create("RceSource", "{}");
 
+    tickAndAwait(
+        () -> {
+          assertTrue(
+              eventsFor("RceSource", ENTITY_SOURCE_CREATED, STATUS_PENDING).isEmpty(),
+              "the event must no longer be PENDING after the scheduler tick");
+          assertFalse(
+              eventsFor("RceSource", ENTITY_SOURCE_CREATED, STATUS_FAILED).isEmpty(),
+              "the event must be marked FAILED despite the unexpected RuntimeException");
+          assertTrue(
+              entityService.list("RceTarget", "").isEmpty(),
+              "no target entity should have been created from the failing mapping");
+        });
+  }
+
+  /**
+   * Pins the behaviour the other tests have to tolerate: the lock is taken with {@code
+   * pg_try_advisory_xact_lock}, so a tick that finds it held elsewhere returns immediately without
+   * touching a single event, rather than waiting its turn.
+   *
+   * <p>This is what made those tests flaky when they asserted straight after their own direct call
+   * — a concurrent scheduler tick holding the lock turned that call into a no-op, and the event was
+   * still PENDING when the assertions ran.
+   */
+  @Test
+  void skipsTheTickEntirelyWhenAnotherInstanceHoldsTheLock() throws SQLException {
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    entityTypeService.create(
+        "LockSource", List.of(), Optional.empty(), "{ \"type\": \"object\", \"properties\": {} }");
+    entityTypeService.create(
+        "LockTarget",
+        List.of(),
+        Optional.empty(),
+        "{ \"type\": \"object\", \"properties\": { \"greeting\": { \"type\": \"string\" } } }");
+    mappingService.create("LockSource", "LockTarget", "{ \"greeting\": \"'hello'\" }", List.of());
+
+    entityService.create("LockSource", "{}");
+
     var updater = updater();
     var originalMappingFlag = updater.isAutomaticEntitiesMapping();
     updater.setAutomaticEntitiesMapping(true);
     try {
-      updater.updateMappedEntities();
+      // A second connection standing in for another application instance. The blocking variant is
+      // safe here: the service only ever uses the try_ variant, so it cannot queue behind us.
+      try (var connection =
+          DriverManager.getConnection(
+              postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+        connection.setAutoCommit(false);
+        try (var lock = connection.prepareStatement("SELECT pg_advisory_xact_lock(1)")) {
+          lock.execute();
+        }
+
+        updater.updateMappedEntities();
+
+        assertFalse(
+            eventsFor("LockSource", ENTITY_SOURCE_CREATED, STATUS_PENDING).isEmpty(),
+            "the event must still be PENDING: the tick could not take the lock");
+        assertTrue(
+            entityService.list("LockTarget", "").isEmpty(),
+            "no mapped entity should have been created by a tick that never ran");
+
+        connection.rollback();
+      }
+
+      // Once the lock is free the work still gets done, so nothing is lost — only deferred. This
+      // has to stay inside the enabling block: a later tick is what picks the event up.
+      await()
+          .atMost(Durations.TEN_SECONDS)
+          .untilAsserted(
+              () ->
+                  assertEquals(
+                      1,
+                      entityService.list("LockTarget", "").size(),
+                      "the deferred event must be picked up by a later tick"));
     } finally {
       updater.setAutomaticEntitiesMapping(originalMappingFlag);
     }
-
-    assertTrue(
-        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "PENDING").isEmpty(),
-        "the event must no longer be PENDING after the scheduler tick");
-    assertFalse(
-        events().findByEventTypeAndEventStatus("SOURCE_CREATED", "FAILED").isEmpty(),
-        "the event must be marked FAILED despite the unexpected RuntimeException");
-    assertTrue(
-        entityService.list("RceTarget", "").isEmpty(),
-        "no target entity should have been created from the failing mapping");
   }
 
   private EntityLifeCycleEventRepository events() {
