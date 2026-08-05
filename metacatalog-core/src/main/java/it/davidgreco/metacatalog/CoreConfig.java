@@ -262,15 +262,20 @@ public class CoreConfig {
    * @param entityService the entity service
    * @param entityRelationshipRepository the entity relationship repository
    * @param mappingEntityRelationshipRepository the mapping entity relationship repository
+   * @param mappedEntityService the mapped entity service
    * @return the aggregate service
    */
   @Bean
   public AggregateService aggregateService(
       EntityService entityService,
       EntityRelationshipRepository entityRelationshipRepository,
-      MappingEntityRelationshipRepository mappingEntityRelationshipRepository) {
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
+      MappedEntityService mappedEntityService) {
     return new AggregateService(
-        entityService, entityRelationshipRepository, mappingEntityRelationshipRepository);
+        entityService,
+        entityRelationshipRepository,
+        mappingEntityRelationshipRepository,
+        mappedEntityService);
   }
 
   /**

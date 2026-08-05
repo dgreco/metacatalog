@@ -46,6 +46,21 @@ public interface EntityService extends CommonService<Entity, String> {
   void updateValues(String entityId, String values);
 
   /**
+   * Deletes an entity without enforcing the relationship and mapping-role restrictions applied by
+   * {@link #delete(String)}.
+   *
+   * <p>This is intended for internal system use (e.g. {@link AggregateService} tearing down a whole
+   * aggregate, whose members legitimately have links and may be mapping sources). The caller is
+   * responsible for having already removed every relationship referencing the entity: nothing else
+   * cleans them up and the database keeps foreign keys onto it.
+   *
+   * <p>User-facing deletes must go through {@link #delete(String)}.
+   *
+   * @param entityId the entity ID
+   */
+  void deleteInternal(String entityId);
+
+  /**
    * Lists entities of the specified type, optionally filtered by a JSON path query.
    *
    * @param typeName the entity type name

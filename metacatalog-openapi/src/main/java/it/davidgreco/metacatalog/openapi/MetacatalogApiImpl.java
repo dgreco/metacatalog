@@ -262,6 +262,12 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity deleteAggregate(String aggregateId) {
+    aggregateService.delete(aggregateId);
+    return status(204).build();
+  }
+
+  @Override
   public ResponseEntity unlinkEntity(
       String sourceEntityId, String relationshipTypeName, String targetEntityId) {
     RelationType relType;

@@ -81,7 +81,7 @@
     </form>
 
     <section th:if="${!entityLinks.isEmpty()}">
-        <h2>Relationships</h2>
+        <h2>Entity relationships</h2>
         <table>
             <thead>
             <tr>
@@ -108,7 +108,7 @@
                     <span class="role-badge" th:if="${link.role == 'target'}" title="This entity is the target">you</span>
                 </td>
                 <td>
-                    <form method="post"
+                    <form th:unless="${link.containment}" method="post"
                           th:action="@{/ui/instances/{id}/links/delete(id=${sourceId})}"
                           class="inline-form">
                         <input type="hidden" name="sourceEntityId" th:value="${link.sourceId}"/>
@@ -116,6 +116,43 @@
                         <input type="hidden" name="targetEntityId" th:value="${link.targetId}"/>
                         <button type="submit" class="link-remove" title="Remove relationship">×</button>
                     </form>
+                    <span th:if="${link.containment}" class="tag muted"
+                          title="Composition is structural: delete the aggregate as a whole instead">structural</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section th:if="${!mappingLinks.isEmpty()}">
+        <h2>Mapping relationships</h2>
+        <p class="hint">
+            Derived by the mapping engine from the mapping rules between entity types. They are shown
+            here for reference and cannot be created or removed by hand — change the mapping instead.
+        </p>
+        <table>
+            <thead>
+            <tr>
+                <th>Source</th>
+                <th>Relationship</th>
+                <th>Target</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="link : ${mappingLinks}" th:classappend="${link.role == 'source' ? 'row-source' : 'row-target'}">
+                <td>
+                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.sourceId})}"
+                       th:text="${link.sourceName}" th:title="'View ' + ${link.sourceName}">source</a>
+                    <span class="role-badge" th:if="${link.role == 'source'}" title="This entity is the source">you</span>
+                </td>
+                <td>
+                    <span class="tag muted" th:text="${link.relationType}">MAPPED_TO</span>
+                    <span class="arrow">→</span>
+                </td>
+                <td>
+                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.targetId})}"
+                       th:text="${link.targetName}" th:title="'View ' + ${link.targetName}">target</a>
+                    <span class="role-badge" th:if="${link.role == 'target'}" title="This entity is the target">you</span>
                 </td>
             </tr>
             </tbody>

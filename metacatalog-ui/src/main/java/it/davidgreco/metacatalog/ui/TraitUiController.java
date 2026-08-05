@@ -82,7 +82,7 @@ public class TraitUiController {
       model.addAttribute("traitLinkForm", new TraitLinkForm());
     }
     model.addAttribute("traits", api.listTraits().getBody());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
+    model.addAttribute("relationTypes", UiControllerHelper.LINKABLE_RELATION_TYPE_NAMES);
     model.addAttribute(
         "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";
@@ -136,7 +136,7 @@ public class TraitUiController {
   private String renderTraitLinkError(Model model, String message) {
     model.addAttribute("error", message);
     model.addAttribute("traits", api.listTraits().getBody());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
+    model.addAttribute("relationTypes", UiControllerHelper.LINKABLE_RELATION_TYPE_NAMES);
     model.addAttribute(
         "traitLinks", TraitLinkView.listFrom(api.listTraitRelationships().getBody()));
     return "trait-link-form";

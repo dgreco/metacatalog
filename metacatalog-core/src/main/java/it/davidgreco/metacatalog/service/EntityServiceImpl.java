@@ -5,6 +5,7 @@ import static it.davidgreco.metacatalog.service.ServiceUtils.NOT_FOUND;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
@@ -248,17 +249,43 @@ public class EntityServiceImpl implements EntityService {
                 + entityId
                 + " has relationships and cannot be deleted; remove all links first");
 
-      entityRepository.delete(entity);
-      entityLifeCycleEventRepository.save(
-          new EntityLifeCycleEvent(
-              entity.getId(),
-              entity.getEntityType().getName(),
-              EntityLifeCycleEvent.ENTITY_DELETED,
-              NO_PROCESSING));
+      deleteAndRecord(entity);
       log.info("Deleted entity with id {}", entityId);
     } catch (DataIntegrityViolationException e) {
       throw ServiceError.forDataIntegrity(e);
     }
+  }
+
+  /**
+   * Deletes an entity without the guards {@link #delete} applies, for callers that have already
+   * torn down the entity's relationships themselves.
+   *
+   * @param entityId the ID of the entity to delete
+   */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void deleteInternal(String entityId) {
+    log.info("Deleting entity with id {} without checks", entityId);
+    try {
+      var entity =
+          entityRepository
+              .findById(entityId)
+              .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+      deleteAndRecord(entity);
+      log.info("Deleted entity with id {} without checks", entityId);
+    } catch (DataIntegrityViolationException e) {
+      throw ServiceError.forDataIntegrity(e);
+    }
+  }
+
+  private void deleteAndRecord(Entity entity) {
+    entityRepository.delete(entity);
+    entityLifeCycleEventRepository.save(
+        new EntityLifeCycleEvent(
+            entity.getId(),
+            entity.getEntityType().getName(),
+            EntityLifeCycleEvent.ENTITY_DELETED,
+            NO_PROCESSING));
   }
 
   /**
@@ -360,6 +387,23 @@ public class EntityServiceImpl implements EntityService {
     log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
   }
 
+  /**
+   * Rejects the removal of a containment link whose containing side is an aggregate, in whichever
+   * direction it is expressed — the two rows are stored as a pair, and removing either takes both.
+   */
+  private void checkIsNotAggregateContainment(Entity source, RelationType relType, Entity target) {
+    if (relType != RelationType.HAS_PART && relType != RelationType.IS_PART_OF) return;
+    var whole = relType == RelationType.HAS_PART ? source : target;
+    var part = relType == RelationType.HAS_PART ? target : source;
+    if (ServiceUtils.implementsTrait(whole.getEntityType(), BuiltInTraits.AGGREGATE))
+      throw new ServiceError(
+          ENTITY_WITH_ID
+              + part.getId()
+              + " is a part of the aggregate entity with id "
+              + whole.getId()
+              + "; unlinking it would leave it unreachable. Delete the aggregate instead.");
+  }
+
   private void checkRelationshipExistenceAndSave(
       String sourceId, RelationType relType, String targetId, Entity source, Entity target) {
     if (entityRelationshipRepository
@@ -383,6 +427,15 @@ public class EntityServiceImpl implements EntityService {
   /**
    * Removes a link between two entities.
    *
+   * <p>Containment links inside an aggregate cannot be removed: they are what makes a part
+   * reachable from its root. Detaching one strands the part — {@link AggregateService#delete} only
+   * reaches what still hangs off the root, and {@link #delete} refuses anything that still has a
+   * link — so the aggregate can end up undeletable with the detached part left over. Delete the
+   * aggregate as a whole instead. (A stranded part can be recovered by linking it back with {@code
+   * HAS_PART}, but that is a repair, not a workflow.) Containment between entities that are not
+   * aggregates, and dependency links within an aggregate, are unaffected — neither determines
+   * reachability.
+   *
    * @param sourceId the ID of the source entity
    * @param relType the relation type of the link
    * @param targetId the ID of the target entity
@@ -398,6 +451,7 @@ public class EntityServiceImpl implements EntityService {
         entityRepository
             .findById(targetId)
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
+    checkIsNotAggregateContainment(source, relType, target);
     var directRel =
         entityRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(source, relType, target)

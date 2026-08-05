@@ -8,6 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,7 +41,7 @@ class UnifiedInstanceController {
     List<Entity> entities =
         api.getEntities(Optional.ofNullable(type).filter(t -> !t.isBlank()), Optional.empty())
             .getBody();
-    model.addAttribute("instances", InstanceRowView.listFrom(entities));
+    model.addAttribute("instances", InstanceRowView.listFrom(entities, aggregateRootTypeNames()));
     model.addAttribute("selectedType", type);
     model.addAttribute("entityTypes", types);
     return "instances-list";
@@ -129,6 +131,17 @@ class UnifiedInstanceController {
     return "redirect:/ui/instances";
   }
 
+  @PostMapping("/{id}/delete-aggregate")
+  public String deleteAggregate(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    try {
+      api.deleteAggregate(id);
+      redirectAttributes.addFlashAttribute("message", "Aggregate deleted.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return "redirect:/ui/instances";
+  }
+
   @GetMapping("/{id}")
   public String view(@PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
     try {
@@ -149,6 +162,12 @@ class UnifiedInstanceController {
     }
   }
 
+  private Set<String> aggregateRootTypeNames() {
+    return api.listAggregateRootTypes().getBody().stream()
+        .map(EntityType::getName)
+        .collect(Collectors.toSet());
+  }
+
   private Map<String, String> schemaMap(List<EntityType> types) {
     var map = new LinkedHashMap<String, String>();
     for (var t : types) {
@@ -166,10 +185,7 @@ class UnifiedInstanceController {
       form.setSourceEntityId(id);
       model.addAttribute("entityLinkForm", form);
     }
-    model.addAttribute("instances", allInstanceRows());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
-    model.addAttribute("entityLinks", linksFor(id));
-    model.addAttribute("sourceId", id);
+    populateLinkModel(id, model);
     return "entity-link-form";
   }
 
@@ -180,8 +196,16 @@ class UnifiedInstanceController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      // The relation type is validated by the API, which rejects an unknown name with a 400.
+      // The relation type is validated by the API, which rejects an unknown name with a 400. The
+      // form only offers the linkable ones, but nothing stops a hand-crafted POST naming a mapping
+      // type, which the API would happily store in the entity relationship table.
       var relType = form.getRelationshipType();
+      if (UiControllerHelper.MAPPING_RELATION_TYPE_NAMES.contains(relType)) {
+        return renderLinkError(
+            id,
+            model,
+            "Mapping relationships are derived from mapping rules and cannot be created by hand.");
+      }
       var req = new LinkEntityRequest();
       req.setSourceEntityId(form.getSourceEntityId());
       req.setRelationshipTypeName(relType);
@@ -226,20 +250,30 @@ class UnifiedInstanceController {
 
   private String renderLinkError(String id, Model model, String message) {
     model.addAttribute("error", message);
-    model.addAttribute("instances", allInstanceRows());
-    model.addAttribute("relationTypes", CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES);
-    model.addAttribute("entityLinks", linksFor(id));
-    model.addAttribute("sourceId", id);
+    populateLinkModel(id, model);
     return "entity-link-form";
   }
 
-  private List<InstanceRowView> allInstanceRows() {
-    return InstanceRowView.listFrom(api.getEntities(Optional.empty(), Optional.empty()).getBody());
+  /**
+   * Fills in everything the entity-link page renders. Mapping relationships get their own attribute
+   * because the page shows them without the create/remove controls the entity links have.
+   */
+  private void populateLinkModel(String id, Model model) {
+    var instanceRows = allInstanceRows();
+    model.addAttribute("instances", instanceRows);
+    model.addAttribute("relationTypes", UiControllerHelper.LINKABLE_RELATION_TYPE_NAMES);
+    model.addAttribute(
+        "entityLinks",
+        EntityLinkView.listFrom(api.listEntityRelationships().getBody(), instanceRows, id));
+    model.addAttribute(
+        "mappingLinks",
+        EntityLinkView.listFromMappings(
+            api.listMappingEntityRelationships().getBody(), instanceRows, id));
+    model.addAttribute("sourceId", id);
   }
 
-  private List<EntityLinkView> linksFor(String entityId) {
-    var allRels = api.listEntityRelationships().getBody();
-    var instanceRows = allInstanceRows();
-    return EntityLinkView.listFrom(allRels, instanceRows, entityId);
+  private List<InstanceRowView> allInstanceRows() {
+    return InstanceRowView.listFrom(
+        api.getEntities(Optional.empty(), Optional.empty()).getBody(), Set.of());
   }
 }

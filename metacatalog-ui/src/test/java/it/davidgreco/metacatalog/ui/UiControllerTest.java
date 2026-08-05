@@ -19,6 +19,7 @@ import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
+import it.davidgreco.metacatalog.openapi.model.MappingEntityRelationship;
 import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,6 +52,7 @@ class UiControllerTest {
     given(api.listEntityRelationships()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listMappingEntityRelationships()).willReturn(ResponseEntity.ok(List.of()));
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
@@ -391,6 +393,61 @@ class UiControllerTest {
   }
 
   @Test
+  void deleteAggregateSubmitsAndRedirects() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/agg-1/delete-aggregate"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("message", "Aggregate deleted."));
+
+    verify(api).deleteAggregate("agg-1");
+  }
+
+  @Test
+  void deleteAggregateSurfacesTheApiError() throws Exception {
+    doThrow(apiError("is linked to entity with id: other outside the aggregate"))
+        .when(api)
+        .deleteAggregate("agg-1");
+
+    mockMvc
+        .perform(post("/ui/instances/agg-1/delete-aggregate"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(
+            flash()
+                .attribute("error", org.hamcrest.Matchers.containsString("outside the aggregate")));
+  }
+
+  @Test
+  void instancesListMarksOnlyAggregateRootsAsDeletableAsAWhole() throws Exception {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("agg-1"));
+    root.setEntityType("ProductType");
+    root.setValues("{\"name\":\"product\"}");
+    var part = new Entity();
+    part.setId(java.util.Optional.of("ent-2"));
+    part.setEntityType("OutputPortType");
+    part.setValues("{\"name\":\"port\"}");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root, part)));
+    var rootType = new EntityType();
+    rootType.setName("ProductType");
+    given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of(rootType)));
+
+    var rows =
+        (List<InstanceRowView>)
+            mockMvc
+                .perform(get("/ui/instances"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("instances");
+
+    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).aggregateRoot());
+    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).aggregateRoot());
+  }
+
+  @Test
   void entityInstanceViewRenders() throws Exception {
     var entity = new Entity();
     entity.setEntityType("Person");
@@ -416,7 +473,87 @@ class UiControllerTest {
         .andExpect(
             model()
                 .attributeExists(
-                    "entityLinkForm", "instances", "relationTypes", "entityLinks", "sourceId"));
+                    "entityLinkForm",
+                    "instances",
+                    "relationTypes",
+                    "entityLinks",
+                    "mappingLinks",
+                    "sourceId"));
+  }
+
+  @Test
+  void entityLinkFormDoesNotOfferMappingRelationTypes() throws Exception {
+    var relationTypes =
+        (List<String>)
+            mockMvc
+                .perform(get("/ui/instances/ent-1/links"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("relationTypes");
+
+    org.junit.jupiter.api.Assertions.assertEquals(List.of("DEPENDS_ON", "HAS_PART"), relationTypes);
+  }
+
+  @Test
+  void traitLinkFormDoesNotOfferMappingRelationTypes() throws Exception {
+    var relationTypes =
+        (List<String>)
+            mockMvc
+                .perform(get("/ui/trait-links/new"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("relationTypes");
+
+    org.junit.jupiter.api.Assertions.assertEquals(List.of("DEPENDS_ON", "HAS_PART"), relationTypes);
+  }
+
+  @Test
+  void entityLinkFormShowsMappingRelationshipsReadOnly() throws Exception {
+    var mapped = new MappingEntityRelationship();
+    mapped.setSourceEntityId(java.util.Optional.of("ent-1"));
+    mapped.setTargetEntityId(java.util.Optional.of("ent-2"));
+    mapped.setRelationType(java.util.Optional.of("MAPPED_TO"));
+    var inverse = new MappingEntityRelationship();
+    inverse.setSourceEntityId(java.util.Optional.of("ent-2"));
+    inverse.setTargetEntityId(java.util.Optional.of("ent-1"));
+    inverse.setRelationType(java.util.Optional.of("IS_MAPPED_BY"));
+    given(api.listMappingEntityRelationships())
+        .willReturn(ResponseEntity.ok(List.of(mapped, inverse)));
+
+    var mappingLinks =
+        (List<EntityLinkView>)
+            mockMvc
+                .perform(get("/ui/instances/ent-1/links"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("mappingLinks");
+
+    // Only the primary direction, so the pair shows once.
+    org.junit.jupiter.api.Assertions.assertEquals(1, mappingLinks.size());
+    org.junit.jupiter.api.Assertions.assertEquals("MAPPED_TO", mappingLinks.get(0).relationType());
+    org.junit.jupiter.api.Assertions.assertEquals("source", mappingLinks.get(0).role());
+  }
+
+  @Test
+  void createEntityLinkRejectsAMappingRelationType() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/instances/ent-1/links")
+                .param("sourceEntityId", "ent-1")
+                .param("relationshipType", "MAPPED_TO")
+                .param("targetEntityId", "ent-2"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("entity-link-form"))
+        .andExpect(
+            model().attribute("error", org.hamcrest.Matchers.containsString("cannot be created")));
+
+    verify(api, org.mockito.Mockito.never()).linkEntity(any());
   }
 
   @Test

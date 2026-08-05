@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.ui;
 
 import it.davidgreco.metacatalog.openapi.model.EntityRelationship;
+import it.davidgreco.metacatalog.openapi.model.MappingEntityRelationship;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +26,21 @@ public record EntityLinkView(
     String targetId,
     String targetName,
     String role) {
+
+  /**
+   * Whether this link expresses containment, which the page renders without a remove control.
+   * Inside an aggregate, containment is what makes a part reachable from its root, and the API
+   * refuses to unlink it: detaching a part leaves it stranded outside the aggregate that owns it.
+   *
+   * <p>This keys off the relation type alone. Telling whether the containing entity really is an
+   * aggregate takes its type's whole trait chain, which this module cannot work out: it has no
+   * access to the core services by design. Read-only is the safe direction to err in — containment
+   * between entities that are not aggregates stays removable through the REST API, which applies
+   * the precise rule.
+   */
+  public boolean containment() {
+    return "HAS_PART".equals(relationType) || "IS_PART_OF".equals(relationType);
+  }
 
   /**
    * Builds {@link EntityLinkView} rows from the {@link EntityRelationship} DTOs returned by {@code
@@ -52,6 +68,43 @@ public record EntityLinkView(
             new EntityLinkView(
                 srcId, nameOf(instanceRows, srcId), rt, tgtId, nameOf(instanceRows, tgtId), role));
       }
+    }
+    return views;
+  }
+
+  /**
+   * Builds rows from the {@link MappingEntityRelationship} DTOs returned by {@code GET
+   * /mapping/entity-relationships}, keeping only the {@code MAPPED_TO} direction so each mapping
+   * appears once.
+   *
+   * <p>These are shown but never offered for creation or removal: the mapping engine derives them
+   * from a mapping rule, and they live in their own table rather than among the entity
+   * relationships.
+   *
+   * @param relationships the mapping relationships as returned by the REST API
+   * @param instanceRows the instance rows for name resolution (id -> name)
+   * @param entityId the current entity id — used to set {@code role}
+   */
+  public static List<EntityLinkView> listFromMappings(
+      List<MappingEntityRelationship> relationships,
+      List<InstanceRowView> instanceRows,
+      String entityId) {
+    var views = new ArrayList<EntityLinkView>();
+    for (var rel : relationships) {
+      if (!"MAPPED_TO".equals(rel.getRelationType().orElse(null))) continue;
+      var srcId = rel.getSourceEntityId().orElse(null);
+      var tgtId = rel.getTargetEntityId().orElse(null);
+      if (srcId == null || tgtId == null) continue;
+      var isSource = srcId.equals(entityId);
+      if (!isSource && !tgtId.equals(entityId)) continue;
+      views.add(
+          new EntityLinkView(
+              srcId,
+              nameOf(instanceRows, srcId),
+              "MAPPED_TO",
+              tgtId,
+              nameOf(instanceRows, tgtId),
+              isSource ? "source" : "target"));
     }
     return views;
   }

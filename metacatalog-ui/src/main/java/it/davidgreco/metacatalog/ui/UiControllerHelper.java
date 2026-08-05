@@ -21,6 +21,21 @@ final class UiControllerHelper {
   static final DateTimeFormatter INSTANT_FMT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC);
 
+  /**
+   * The relation types a user may create by hand, offered by the link forms.
+   *
+   * <p>Narrower than {@link CatalogGraphService#PRIMARY_RELATION_TYPE_NAMES}, which also lists
+   * {@code MAPPED_TO}: that one answers "which direction of a bidirectional pair do we display",
+   * whereas this one answers "what may be authored". Mapping relationships are derived by the
+   * mapping engine from a mapping rule, and live in their own table — hand-creating one would write
+   * a mapping-typed row into the entity relationship table, where the engine would never see it.
+   * They are shown read-only instead.
+   */
+  static final List<String> LINKABLE_RELATION_TYPE_NAMES = List.of("DEPENDS_ON", "HAS_PART");
+
+  /** Both directions of the mapping relation pair, which the link forms refuse to create. */
+  static final List<String> MAPPING_RELATION_TYPE_NAMES = List.of("MAPPED_TO", "IS_MAPPED_BY");
+
   private UiControllerHelper() {}
 
   /** Treats blank strings as absent, so an empty father / schema field becomes {@code empty()}. */

@@ -1624,6 +1624,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete an aggregate by id
+      description: >-
+        Deletes the aggregate as a whole: the root entity, every entity it contains through
+        HAS_PART, and the entities derived from those through MAPPED_TO. The request is refused
+        when a member of the aggregate is linked to an entity outside it.
+      operationId: deleteAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+      responses:
+        204:
+          description: Aggregate deleted
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}/yaml:
     get:
       tags:

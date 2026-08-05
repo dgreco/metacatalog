@@ -60,6 +60,12 @@
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
+                <form th:if="${inst.aggregateRoot}" method="post"
+                      th:action="@{/ui/instances/{id}/delete-aggregate(id=${inst.id})}"
+                      class="inline-form"
+                      data-confirm="Delete this whole aggregate? Every entity it contains, and everything mapped from them, will be removed.">
+                    <button type="submit" class="btn-sm" title="Delete the whole aggregate">Delete aggregate</button>
+                </form>
                 <form method="post" th:action="@{/ui/instances/{id}/delete(id=${inst.id})}"
                       class="inline-form" data-confirm="Delete this instance?">
                     <button type="submit" class="link-remove" title="Delete">×</button>

@@ -127,6 +127,17 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
   [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
   `POST /aggregate/yaml`.
+- Aggregate deletion: `DELETE /aggregate/{id}` removes an aggregate as a whole — the root, its
+  whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one
+  transaction. It is refused when a member is linked to an entity outside the aggregate (deleting
+  it would leave that outsider dangling) or when a member is itself a mapping target. `DELETE
+  /entity/{id}` stays deliberately strict — it refuses any entity that still has links — so it is
+  never a way to dismantle an aggregate piecemeal. For the same reason `DELETE /entity/link/...`
+  refuses to remove a `HAS_PART` / `IS_PART_OF` link whose containing side implements the
+  `Aggregate` trait: containment is what makes a part reachable from its root, so detaching one
+  strands it where the aggregate delete can no longer see it and the entity delete still refuses
+  it. Dependency (`DEPENDS_ON`) links within an aggregate, and containment between entities that
+  are not aggregates, stay removable — neither determines reachability.
 
 When running:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -155,6 +166,21 @@ exclusion.
 Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, version history, the
 catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and
 aggregate authoring (`/ui/aggregates/new`).
+
+The instances list is also where an aggregate is deleted: a row gets a *Delete aggregate* action
+when its entity type is one of the `GET /aggregate/root-type` types. That test is enough to
+identify a root — an aggregate root type is by definition never contained in another, so no
+instance of one can be a part of a larger aggregate.
+
+The link forms distinguish two things that `CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES` does
+not: which relation types may be *authored* versus which direction of a bidirectional pair is
+*displayed*. Only `DEPENDS_ON` and `HAS_PART` are offered for creation
+(`UiControllerHelper.LINKABLE_RELATION_TYPE_NAMES`); `MAPPED_TO` is derived by the mapping engine
+and lives in `mapping_entity_relationship`, so hand-creating one would write a mapping-typed row
+into `entity_relationship` where the engine would never see it. The entity-link page therefore
+lists mapping relationships in a separate read-only section (from
+`GET /mapping/entity-relationships`) with no create or remove controls, and `createLink` also
+rejects a mapping type server-side so a hand-crafted POST cannot bypass the dropdown.
 
 The two schema-driven editors are the substantial pieces:
 

@@ -9,7 +9,12 @@ import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +69,8 @@ public class AggregateService {
   private final EntityRelationshipRepository entityRelationshipRepository;
 
   private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+
+  private final MappedEntityService mappedEntityService;
 
   /**
    * Creates an aggregate entity (i.e. a collection of entities, each potentially being an aggregate
@@ -170,5 +177,92 @@ public class AggregateService {
 
     return result.orElseThrow(
         () -> new ServiceError("Entity with id: " + aggregateId + " is not an aggregate"));
+  }
+
+  /**
+   * Deletes an aggregate entity as a whole: the root, every entity reachable from it through {@code
+   * HAS_PART}, and the entities derived from those through {@code MAPPED_TO}.
+   *
+   * <p>Everything happens in one transaction, so either the whole aggregate goes or nothing does.
+   * The delete is refused up front when a member is linked to an entity outside the aggregate —
+   * deleting it would leave that outsider pointing at a row that no longer exists — or when a
+   * member is itself derived from a mapping source, in which case it belongs to the mapping engine
+   * rather than to this aggregate.
+   *
+   * @param aggregateId the ID of the aggregate root entity to delete
+   */
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void delete(String aggregateId) {
+    log.info("Deleting aggregate: {}", aggregateId);
+    var members = collectMembers(aggregateId);
+    checkMembersAreSelfContained(members);
+    // Children before parents: the reverse of the breadth-first order they were discovered in.
+    var ordered = new ArrayList<>(members.values());
+    Collections.reverse(ordered);
+    for (var member : ordered) {
+      if (!mappingEntityRelationshipRepository
+          .findBySourceAndRelationType(member, MAPPED_TO)
+          .isEmpty()) mappedEntityService.deleteMappedEntities(member.getId());
+      entityRelationshipRepository.deleteAll(entityRelationshipRepository.findBySource(member));
+      entityRelationshipRepository.deleteAll(entityRelationshipRepository.findByTarget(member));
+      entityService.deleteInternal(member.getId());
+    }
+    log.info("Aggregate deleted: {}", aggregateId);
+  }
+
+  /**
+   * Collects the aggregate root and everything below it, keyed by ID so an entity shared by two
+   * parents is visited once, in breadth-first order.
+   */
+  private Map<String, Entity> collectMembers(String aggregateId) {
+    var rootEntity = entityService.read(aggregateId);
+    if (!implementsTrait(rootEntity.getEntityType(), BuiltInTraits.AGGREGATE)
+        || !entityRelationshipRepository
+            .findByTargetAndRelationType(rootEntity, HAS_PART)
+            .isEmpty())
+      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
+
+    var members = new LinkedHashMap<String, Entity>();
+    members.put(rootEntity.getId(), rootEntity);
+    var pending = new ArrayDeque<>(List.of(rootEntity));
+    while (!pending.isEmpty()) {
+      var current = pending.poll();
+      for (var relationship :
+          entityRelationshipRepository.findBySourceAndRelationType(current, HAS_PART)) {
+        var part = relationship.getTarget();
+        if (members.putIfAbsent(part.getId(), part) == null) pending.add(part);
+      }
+    }
+    return members;
+  }
+
+  /** Rejects the delete unless the aggregate can be removed without leaving anything dangling. */
+  private void checkMembersAreSelfContained(Map<String, Entity> members) {
+    for (var member : members.values()) {
+      Stream.concat(
+              entityRelationshipRepository.findBySource(member).stream()
+                  .map(EntityRelationship::getTarget),
+              entityRelationshipRepository.findByTarget(member).stream()
+                  .map(EntityRelationship::getSource))
+          .filter(linked -> !members.containsKey(linked.getId()))
+          .findFirst()
+          .ifPresent(
+              outsider -> {
+                throw new ServiceError(
+                    "Entity with id: "
+                        + member.getId()
+                        + " is linked to entity with id: "
+                        + outsider.getId()
+                        + " outside the aggregate; remove that link first");
+              });
+
+      if (!mappingEntityRelationshipRepository
+          .findBySourceAndRelationType(member, IS_MAPPED_BY)
+          .isEmpty())
+        throw new ServiceError(
+            "Entity with id: "
+                + member.getId()
+                + " is mapped from another entity and cannot be deleted as part of an aggregate");
+    }
   }
 }
