@@ -56,12 +56,10 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
     return Optional.of(handle);
   }
 
-  private HashMap<String, Task<Entity>> createTasksForVertices(
+  private HashMap<String, Task> createTasksForVertices(
       Graph<Entity, DefaultEdge> provisioningGraph) {
-    var tasks = new HashMap<String, Task<Entity>>();
-    provisioningGraph
-        .vertexSet()
-        .forEach(e -> tasks.put(e.getId(), taskManager.createTask(e, e.getEntityType().getName())));
+    var tasks = new HashMap<String, Task>();
+    provisioningGraph.vertexSet().forEach(e -> tasks.put(e.getId(), taskManager.createTask(e)));
     return tasks;
   }
 
@@ -70,7 +68,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
    * provisioned only once everything it is built from exists.
    */
   private void wireDependencies(
-      Graph<Entity, DefaultEdge> provisioningGraph, HashMap<String, Task<Entity>> tasks) {
+      Graph<Entity, DefaultEdge> provisioningGraph, HashMap<String, Task> tasks) {
     tasks
         .values()
         .forEach(

@@ -1,6 +1,5 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.TaskManager;
 import jakarta.annotation.PostConstruct;
@@ -40,9 +39,7 @@ public class StdoutProvisioningFunctions {
   public void registerFunctions() {
     for (var entityTypeName : provisioningConfigProperties.entityTypes()) {
       taskManager.registerTaskFactory(
-          entityTypeName,
-          Entity.class,
-          entity -> new StdoutProvisioningTask(entity, entityService));
+          entityTypeName, entity -> new StdoutProvisioningTask(entity, entityService));
       log.info("Registered the stdout provisioning task for entity type {}", entityTypeName);
     }
   }

@@ -1,6 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
 import io.vavr.control.Try;
+import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.EntityType;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import org.junit.jupiter.api.Assertions;
@@ -15,6 +17,16 @@ class TaskManagerTests extends CommonServiceTestingSupport {
     super(applicationContext);
   }
 
+  /** A transient entity of the type the test factory is registered for. */
+  private static Entity testEntity(String id) {
+    var entityType = new EntityType();
+    entityType.setName("SimpleTaskType");
+    var entity = new Entity();
+    entity.setId(id);
+    entity.setEntityType(entityType);
+    return entity;
+  }
+
   @Test
   void testSchedulingWithDependencies() throws Exception {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
@@ -23,23 +35,18 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     taskManager.registerTaskFactory(
         "SimpleTaskType",
-        String.class,
         entity ->
-            new Task<String>(entity) {
+            new Task(entity) {
               public Void apply() {
-                list.add(entity);
+                list.add(entity.getId());
                 return null;
-              }
-
-              public String getId() {
-                return entity;
               }
             });
 
-    var task1 = taskManager.createTask("1", "SimpleTaskType");
-    var task2 = taskManager.createTask("2", "SimpleTaskType");
-    var task3 = taskManager.createTask("3", "SimpleTaskType");
-    var task4 = taskManager.createTask("4", "SimpleTaskType");
+    var task1 = taskManager.createTask(testEntity("1"));
+    var task2 = taskManager.createTask(testEntity("2"));
+    var task3 = taskManager.createTask(testEntity("3"));
+    var task4 = taskManager.createTask(testEntity("4"));
 
     var schedule = taskManager.createSchedule();
 
@@ -65,25 +72,20 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     taskManager.registerTaskFactory(
         "SimpleTaskType",
-        String.class,
         entity ->
-            new Task<String>(entity) {
+            new Task(entity) {
               public Void apply() {
-                list.add(entity);
-                if (entity.equals("2")) {
+                list.add(entity.getId());
+                if (entity.getId().equals("2")) {
                   throw new RuntimeException("Error");
                 }
                 return null;
               }
-
-              public String getId() {
-                return entity;
-              }
             });
 
-    var task1 = taskManager.createTask("1", "SimpleTaskType");
-    var task2 = taskManager.createTask("2", "SimpleTaskType");
-    var task3 = taskManager.createTask("3", "SimpleTaskType");
+    var task1 = taskManager.createTask(testEntity("1"));
+    var task2 = taskManager.createTask(testEntity("2"));
+    var task3 = taskManager.createTask(testEntity("3"));
 
     var schedule = taskManager.createSchedule();
 
@@ -104,5 +106,19 @@ class TaskManagerTests extends CommonServiceTestingSupport {
             .flatMap(java.util.Optional::stream)
             .map(Try::isFailure)
             .toList());
+  }
+
+  @Test
+  void createTaskFailsWhenNoFactoryIsRegisteredForTheEntityType() {
+    var taskManager = getApplicationContext().getBean(TaskManager.class);
+
+    var entityType = new EntityType();
+    entityType.setName("UnregisteredType");
+    var entity = new Entity();
+    entity.setId("orphan");
+    entity.setEntityType(entityType);
+
+    var error = Assertions.assertThrows(ServiceError.class, () -> taskManager.createTask(entity));
+    Assertions.assertEquals("No factory for name: UnregisteredType", error.getMessage());
   }
 }

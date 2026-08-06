@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import io.vavr.control.Try;
+import it.davidgreco.metacatalog.entity.Entity;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -15,15 +16,18 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * Abstract base class for asynchronous tasks that operate on entities.
  *
+ * <p>A task is always performed on an {@link Entity} belonging to a specific {@link
+ * it.davidgreco.metacatalog.entity.EntityType}: tasks are created through the {@link TaskFactory}
+ * registered against the entity's type name, so the entity's type determines which task
+ * implementation runs.
+ *
  * <p>Tasks can have dependencies on other tasks and are executed asynchronously. The task framework
  * ensures that dependent tasks complete before a task begins execution.
- *
- * @param <T> the type of entity this task operates on
  */
 @Slf4j
 @Getter
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-public abstract class Task<T> {
+public abstract class Task {
 
   private final AtomicReference<CompletableFuture<Try<Void>>> runningTaskFuture =
       new AtomicReference<>();
@@ -33,16 +37,16 @@ public abstract class Task<T> {
   // read during schedule(); COW gives safe publication without extra synchronisation on the read
   // path. dependsOn() may be called concurrently with schedule() in principle, and the previous
   // plain ArrayList was not safe for that.
-  private final List<Task<T>> dependsOnTasks = new CopyOnWriteArrayList<>();
+  private final List<Task> dependsOnTasks = new CopyOnWriteArrayList<>();
 
-  private final T entity;
+  private final Entity entity;
 
   /**
    * Creates a task operating on the given entity.
    *
    * @param entity the entity this task operates on
    */
-  protected Task(T entity) {
+  protected Task(Entity entity) {
     this.entity = entity;
   }
 
@@ -117,7 +121,7 @@ public abstract class Task<T> {
    *
    * @param task the task that must complete before this task runs
    */
-  public void dependsOn(Task<T> task) {
+  public void dependsOn(Task task) {
     dependsOnTasks.add(task);
   }
 
@@ -126,7 +130,7 @@ public abstract class Task<T> {
    *
    * @param tasks the tasks that must complete before this task runs
    */
-  public void dependsOn(Collection<Task<T>> tasks) {
+  public void dependsOn(Collection<? extends Task> tasks) {
     dependsOnTasks.addAll(tasks);
   }
 
@@ -138,12 +142,15 @@ public abstract class Task<T> {
   public abstract Void apply();
 
   /**
-   * Gets the unique identifier for this task. Used for equality comparison and cycle detection.
+   * Gets the unique identifier for this task, used for equality comparison and cycle detection.
+   * Since a task is always performed on exactly one entity, the entity's id identifies the task.
    *
-   * @return the task's unique identifier
+   * @return the id of the entity this task operates on
    */
   @EqualsAndHashCode.Include
-  public abstract String getId();
+  public String getId() {
+    return entity.getId();
+  }
 
   /**
    * Gets the result of this task after completion.

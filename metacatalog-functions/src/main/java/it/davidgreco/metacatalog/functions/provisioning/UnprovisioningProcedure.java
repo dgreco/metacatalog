@@ -60,14 +60,13 @@ public class UnprovisioningProcedure extends AbstractEntityProcedure {
    *     ProvisioningTask} — the operation could not then be selected, and the task would silently
    *     provision instead of tearing down
    */
-  private HashMap<String, Task<Entity>> createTasksForVertices(
-      Graph<Entity, DefaultEdge> resourceGraph) {
-    var tasks = new HashMap<String, Task<Entity>>();
+  private HashMap<String, Task> createTasksForVertices(Graph<Entity, DefaultEdge> resourceGraph) {
+    var tasks = new HashMap<String, Task>();
     resourceGraph
         .vertexSet()
         .forEach(
             e -> {
-              var task = taskManager.createTask(e, e.getEntityType().getName());
+              var task = taskManager.createTask(e);
               if (!(task instanceof ProvisioningTask provisioningTask)) {
                 throw new ServiceError(
                     "The task registered for entity type "
@@ -85,7 +84,7 @@ public class UnprovisioningProcedure extends AbstractEntityProcedure {
    * of provisioning — so dependents are torn down first.
    */
   private void wireReverseDependencies(
-      Graph<Entity, DefaultEdge> resourceGraph, HashMap<String, Task<Entity>> tasks) {
+      Graph<Entity, DefaultEdge> resourceGraph, HashMap<String, Task> tasks) {
     tasks
         .values()
         .forEach(

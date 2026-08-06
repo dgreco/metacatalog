@@ -51,7 +51,7 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
     // S3FolderType. So the S3 folder must be created first and destroyed last.
     var order = Collections.synchronizedList(new ArrayList<String>());
 
-    TaskFactory<Entity> factory =
+    TaskFactory factory =
         (Entity entity) ->
             new ProvisioningTask(entity, entityService) {
               @Override
@@ -67,8 +67,8 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
               }
             };
 
-    taskManager.registerTaskFactory("S3FolderType", Entity.class, factory);
-    taskManager.registerTaskFactory("AthenaTableType", Entity.class, factory);
+    taskManager.registerTaskFactory("S3FolderType", factory);
+    taskManager.registerTaskFactory("AthenaTableType", factory);
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
 

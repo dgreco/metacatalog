@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Getter
-public abstract class ProvisioningTask extends Task<Entity> {
+public abstract class ProvisioningTask extends Task {
 
   private static final String PROVISIONING_STATUS = "provisioningStatus";
   private static final String PROVISIONING_RESULT = "provisioningResult";
@@ -117,11 +117,6 @@ public abstract class ProvisioningTask extends Task<Entity> {
     values.put(PROVISIONING_STATUS, status);
     values.put(PROVISIONING_RESULT, result);
     getEntityService().updateValues(getEntity().getId(), values.toPrettyString());
-  }
-
-  @Override
-  public String getId() {
-    return getEntity().getId();
   }
 
   /**

@@ -68,7 +68,9 @@ Located in `metacatalog-core/.../service`:
   `SchemaValidationError`.
 - **`AggregateSchemaService`** — derives the combined JSON Schema of a whole aggregate tree, so an
   aggregate can be authored as a single document. See [Aggregate schemas](#aggregate-schemas).
-- **Task engine:** `TaskManager`, `Task`, `TaskFactory` — registers typed task factories, builds
+- **Task engine:** `TaskManager`, `Task`, `TaskFactory` — a `Task` always operates on an `Entity`
+  of a specific `EntityType`; factories are registered per entity type name and resolved from the
+  entity's own type. Builds
   dependency graphs with **JGraphT**, detects cycles (`CycleDetector`), and executes schedules
   asynchronously (results cached with Caffeine). `AsyncTaskExecutor`-backed.
 - **`MappingUpdaterService`** — `@Scheduled` job that reacts to `EntityLifeCycleEvent`s to create /
@@ -115,10 +117,11 @@ still depends on it. `ProvisioningProcedureTests` asserts both orders — that i
 keep if the wiring is ever touched.
 
 Registering a function for a resource type means subclassing `ProvisioningTask` and registering a
-`TaskFactory` under the **entity type name**, which is the key both procedures look a task up by:
+`TaskFactory` under the **entity type name** — `TaskManager.createTask(entity)` resolves the
+factory from the entity's own type, so a resource can never be handed to another type's task:
 
 ```java
-taskManager.registerTaskFactory("S3FolderType", Entity.class,
+taskManager.registerTaskFactory("S3FolderType",
     entity -> new StdoutProvisioningTask(entity, entityService));
 ```
 

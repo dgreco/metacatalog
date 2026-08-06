@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.service;
 
 import io.vavr.control.Try;
 import it.davidgreco.metacatalog.CoreConfigProperties;
+import it.davidgreco.metacatalog.entity.Entity;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -52,39 +53,35 @@ public class TaskManager {
   }
 
   /**
-   * Registers a task factory under the given name. Procedures look factories up by entity type
-   * name, so {@code name} is conventionally the name of the entity type the factory handles.
+   * Registers a task factory for entities of a specific entity type. Tasks are created from the
+   * factory registered against the entity's type name, so registering under any other name makes
+   * the factory unreachable.
    *
-   * @param <T> the type of entity the factory creates tasks for
-   * @param name the name to register the factory under
-   * @param type the class of entities this factory handles, used to type-check lookups
+   * @param entityTypeName the name of the entity type the factory handles
    * @param factory the task factory implementation
    */
-  public <T> void registerTaskFactory(String name, Class<T> type, TaskFactory<T> factory) {
-    taskFactoryRegistry.registerTaskFactory(name, type, factory);
+  public void registerTaskFactory(String entityTypeName, TaskFactory factory) {
+    taskFactoryRegistry.registerTaskFactory(entityTypeName, factory);
   }
 
   /**
-   * Unregisters the task factory registered under the given name, if any.
+   * Unregisters the task factory registered for the given entity type, if any.
    *
-   * @param entityTypeName the name the factory was registered under
+   * @param entityTypeName the name of the entity type whose factory to unregister
    */
   public void unregisterTaskFactory(String entityTypeName) {
     taskFactoryRegistry.unregisterTaskFactory(entityTypeName);
   }
 
   /**
-   * Creates a task for the given entity using the factory registered under {@code factoryName}.
+   * Creates a task for the given entity using the factory registered under the entity's type name.
    *
-   * @param <T> the type of the entity
    * @param entity the entity to create a task for
-   * @param factoryName the name of the registered factory to use
    * @return the created task
-   * @throws ServiceError if no factory is registered under the name or the entity is not an
-   *     instance of the factory's registered type
+   * @throws ServiceError if no factory is registered for the entity's type
    */
-  public <T> Task<T> createTask(T entity, String factoryName) {
-    return taskFactoryRegistry.createTask(entity, factoryName);
+  public Task createTask(Entity entity) {
+    return taskFactoryRegistry.createTask(entity);
   }
 
   /**

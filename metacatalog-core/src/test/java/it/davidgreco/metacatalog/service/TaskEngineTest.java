@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.davidgreco.metacatalog.CoreConfigProperties;
+import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.EntityType;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
@@ -30,14 +32,22 @@ class TaskEngineTest {
   private final TaskManager taskManager =
       new TaskManager(new SimpleAsyncTaskExecutor(), testConfigProperties());
 
+  /** A transient entity of a synthetic type, enough for the engine to identify a task. */
+  private static Entity testEntity(String id) {
+    var entityType = new EntityType();
+    entityType.setName("SimpleTaskType");
+    var entity = new Entity();
+    entity.setId(id);
+    entity.setEntityType(entityType);
+    return entity;
+  }
+
   /** A minimal concrete {@link Task} that runs an arbitrary action. */
-  private static final class SimpleTask extends Task<String> {
-    private final String id;
+  private static final class SimpleTask extends Task {
     private final Runnable action;
 
     SimpleTask(String id, Runnable action) {
-      super(id);
-      this.id = id;
+      super(testEntity(id));
       this.action = action;
     }
 
@@ -45,11 +55,6 @@ class TaskEngineTest {
     public Void apply() {
       action.run();
       return null;
-    }
-
-    @Override
-    public String getId() {
-      return id;
     }
   }
 

@@ -26,7 +26,7 @@ import org.springframework.core.task.AsyncTaskExecutor;
 public class Schedule {
 
   private final String id;
-  private final List<Task<?>> tasks = new ArrayList<>();
+  private final List<Task> tasks = new ArrayList<>();
 
   /** Creates a schedule with a random UUID as its ID. */
   public Schedule() {
@@ -47,20 +47,18 @@ public class Schedule {
    * schedules its own dependencies — but only tasks added here contribute their result to the
    * outcome of {@link #schedule(AsyncTaskExecutor)}.
    *
-   * @param <T> the type of entity the task operates on
    * @param task the task to add
    */
-  public <T> void addTask(Task<T> task) {
+  public void addTask(Task task) {
     tasks.add(task);
   }
 
   /**
    * Adds all of the given tasks to this schedule.
    *
-   * @param <T> the type of entity the tasks operate on
    * @param tsks the tasks to add
    */
-  public <T> void addTasks(Collection<Task<T>> tsks) {
+  public void addTasks(Collection<? extends Task> tsks) {
     tasks.addAll(tsks);
   }
 
@@ -76,7 +74,7 @@ public class Schedule {
    * @return a future that completes with the first task failure, or success if all tasks succeed
    */
   public CompletableFuture<Try<Void>> schedule(AsyncTaskExecutor executor) {
-    Graph<Task<?>, DefaultEdge> taskGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
+    Graph<Task, DefaultEdge> taskGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
     tasks.forEach(
         t -> {
           if (!taskGraph.containsVertex(t)) taskGraph.addVertex(t);
