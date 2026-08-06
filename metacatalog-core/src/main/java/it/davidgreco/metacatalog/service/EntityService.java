@@ -69,6 +69,11 @@ public interface EntityService extends CommonService<Entity, String> {
    */
   List<Entity> list(String typeName, String queryPath);
 
+  /**
+   * Lists every entity in the catalog, regardless of type.
+   *
+   * @return all entities
+   */
   List<Entity> listAll();
 
   /**

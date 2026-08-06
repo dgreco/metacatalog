@@ -34,6 +34,11 @@ public class AggregateService {
 
   /** Marker interface for aggregate parts (either elements or nested aggregates). */
   public sealed interface AggregatePart permits AggregateElement, Aggregate {
+    /**
+     * Returns the entity this part wraps.
+     *
+     * @return the entity
+     */
     Entity entity();
   }
 
@@ -45,6 +50,11 @@ public class AggregateService {
    */
   public record AggregateElement(Entity entity, List<Entity> dependencies)
       implements AggregatePart {
+    /**
+     * Creates an element with no dependencies.
+     *
+     * @param entity the entity for this element
+     */
     public AggregateElement(Entity entity) {
       this(entity, List.of());
     }
@@ -59,6 +69,12 @@ public class AggregateService {
    */
   public record Aggregate(Entity entity, List<Entity> dependencies, List<AggregatePart> elements)
       implements AggregatePart {
+    /**
+     * Creates an aggregate with no dependencies.
+     *
+     * @param entity the root entity for this aggregate
+     * @param elements the child aggregate parts contained in this aggregate
+     */
     public Aggregate(Entity entity, List<AggregatePart> elements) {
       this(entity, List.of(), elements);
     }

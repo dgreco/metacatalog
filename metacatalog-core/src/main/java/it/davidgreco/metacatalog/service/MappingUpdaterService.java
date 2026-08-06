@@ -30,6 +30,15 @@ public class MappingUpdaterService {
 
   private final TransactionTemplate markFailedTx;
 
+  /**
+   * Creates the service, building a {@code REQUIRES_NEW} {@link TransactionTemplate} used by {@code
+   * markFailed} so failure markers persist even when the surrounding transaction rolls back.
+   *
+   * @param advisoryLockManager the advisory lock manager serializing runs across instances
+   * @param entityLifeCycleEventRepository the repository of lifecycle events to process
+   * @param mappedEntityService the service that creates/updates mapped entities
+   * @param transactionManager the transaction manager backing the {@code REQUIRES_NEW} template
+   */
   public MappingUpdaterService(
       AdvisoryLockManager advisoryLockManager,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,

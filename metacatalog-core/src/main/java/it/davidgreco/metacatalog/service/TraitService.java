@@ -71,6 +71,11 @@ public interface TraitService extends CommonTypeService<Trait, String> {
    */
   List<Trait> list();
 
+  /**
+   * Lists every historical snapshot of every trait.
+   *
+   * @return all trait versions
+   */
   List<it.davidgreco.metacatalog.entity.TraitVersion> listAllVersions();
 
   /**

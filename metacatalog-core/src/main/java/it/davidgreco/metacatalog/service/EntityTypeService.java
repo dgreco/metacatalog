@@ -73,6 +73,11 @@ public interface EntityTypeService extends CommonTypeService<EntityType, String>
    */
   List<EntityType> list();
 
+  /**
+   * Lists every historical snapshot of every entity type.
+   *
+   * @return all entity type versions
+   */
   List<it.davidgreco.metacatalog.entity.EntityTypeVersion> listAllVersions();
 
   /**

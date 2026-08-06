@@ -137,6 +137,13 @@ public final class ServiceUtils {
   /** Functional interface for computing the neighbours of a node, allowing checked exceptions. */
   @FunctionalInterface
   public interface Neighbours {
+    /**
+     * Returns the neighbours of the given node.
+     *
+     * @param node the node whose neighbours to compute
+     * @return the neighbouring nodes
+     * @throws ServiceError if the neighbours cannot be computed
+     */
     List<String> apply(String node) throws ServiceError;
   }
 

@@ -28,18 +28,38 @@ public class Schedule {
   private final String id;
   private final List<Task<?>> tasks = new ArrayList<>();
 
+  /** Creates a schedule with a random UUID as its ID. */
   public Schedule() {
     this(UUID.randomUUID().toString());
   }
 
+  /**
+   * Creates a schedule with the given ID.
+   *
+   * @param id the schedule identifier
+   */
   public Schedule(String id) {
     this.id = id;
   }
 
+  /**
+   * Adds a task to this schedule. Dependencies of the task need not be added explicitly — each task
+   * schedules its own dependencies — but only tasks added here contribute their result to the
+   * outcome of {@link #schedule(AsyncTaskExecutor)}.
+   *
+   * @param <T> the type of entity the task operates on
+   * @param task the task to add
+   */
   public <T> void addTask(Task<T> task) {
     tasks.add(task);
   }
 
+  /**
+   * Adds all of the given tasks to this schedule.
+   *
+   * @param <T> the type of entity the tasks operate on
+   * @param tsks the tasks to add
+   */
   public <T> void addTasks(Collection<Task<T>> tsks) {
     tasks.addAll(tsks);
   }

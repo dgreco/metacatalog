@@ -37,6 +37,11 @@ public abstract class Task<T> {
 
   private final T entity;
 
+  /**
+   * Creates a task operating on the given entity.
+   *
+   * @param entity the entity this task operates on
+   */
   protected Task(T entity) {
     this.entity = entity;
   }

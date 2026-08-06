@@ -24,11 +24,25 @@ public class TaskManager {
   private final TaskFactoryRegistry taskFactoryRegistry;
   private final AsyncTaskExecutor asyncTaskExecutor;
 
+  /**
+   * Creates a task manager with a fresh, empty {@link TaskFactoryRegistry}.
+   *
+   * @param asyncTaskExecutor the executor tasks are submitted to
+   * @param coreConfigProperties the core configuration properties
+   */
   public TaskManager(
       AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
     this(new TaskFactoryRegistry(), asyncTaskExecutor, coreConfigProperties);
   }
 
+  /**
+   * Creates a task manager backed by the given registry. Useful when the registry is shared or
+   * pre-populated (e.g. in tests).
+   *
+   * @param taskFactoryRegistry the registry used to look up task factories
+   * @param asyncTaskExecutor the executor tasks are submitted to
+   * @param coreConfigProperties the core configuration properties
+   */
   public TaskManager(
       TaskFactoryRegistry taskFactoryRegistry,
       AsyncTaskExecutor asyncTaskExecutor,
@@ -37,18 +51,48 @@ public class TaskManager {
     this.asyncTaskExecutor = asyncTaskExecutor;
   }
 
+  /**
+   * Registers a task factory under the given name. Procedures look factories up by entity type
+   * name, so {@code name} is conventionally the name of the entity type the factory handles.
+   *
+   * @param <T> the type of entity the factory creates tasks for
+   * @param name the name to register the factory under
+   * @param type the class of entities this factory handles, used to type-check lookups
+   * @param factory the task factory implementation
+   */
   public <T> void registerTaskFactory(String name, Class<T> type, TaskFactory<T> factory) {
     taskFactoryRegistry.registerTaskFactory(name, type, factory);
   }
 
+  /**
+   * Unregisters the task factory registered under the given name, if any.
+   *
+   * @param entityTypeName the name the factory was registered under
+   */
   public void unregisterTaskFactory(String entityTypeName) {
     taskFactoryRegistry.unregisterTaskFactory(entityTypeName);
   }
 
+  /**
+   * Creates a task for the given entity using the factory registered under {@code factoryName}.
+   *
+   * @param <T> the type of the entity
+   * @param entity the entity to create a task for
+   * @param factoryName the name of the registered factory to use
+   * @return the created task
+   * @throws ServiceError if no factory is registered under the name or the entity is not an
+   *     instance of the factory's registered type
+   */
   public <T> Task<T> createTask(T entity, String factoryName) {
     return taskFactoryRegistry.createTask(entity, factoryName);
   }
 
+  /**
+   * Creates a new, empty schedule to which tasks can be added before submitting it via {@link
+   * #schedule(Schedule)}.
+   *
+   * @return a new schedule with a random ID
+   */
   public Schedule createSchedule() {
     return new Schedule();
   }
