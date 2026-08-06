@@ -12,7 +12,9 @@
  * what stops a recursive schema from expanding forever.
  *
  * On submit the tree is serialized into the hidden `document` field. A "Raw JSON" tab lets the
- * document be edited directly; switching back to the Builder tab re-parses it and rebuilds the tree.
+ * document be edited directly; switching back to the Builder tab re-parses it and rebuilds the
+ * tree. A read-only "YAML" tab shows the same document rendered server-side (POST
+ * /ui/aggregates/yaml-preview) as the YAML the aggregate endpoint consumes.
  */
 (function () {
   "use strict";
@@ -496,11 +498,57 @@
       });
     }
 
+    // The raw textarea is the single source of truth whenever the builder is left: entering the
+    // raw OR yaml tab from the builder syncs it, so coming back to the builder always rebuilds
+    // from current content and hand-edits made in the raw tab survive a detour through yaml.
     function switchTab(next) {
       if (next === mode) return;
       if (next === "raw") {
-        if (rootNode) rawTextarea.value = JSON.stringify(serializeNode(rootNode), null, 2);
+        if (mode === "builder" && rootNode) {
+          rawTextarea.value = JSON.stringify(serializeNode(rootNode), null, 2);
+        }
         setMode("raw");
+      } else if (next === "yaml") {
+        if (mode === "builder" && rootNode) {
+          rawTextarea.value = JSON.stringify(serializeNode(rootNode), null, 2);
+        }
+        var yamlPre = document.getElementById("aggregate-yaml");
+        if (!rawTextarea.value.trim()) {
+          yamlPre.textContent = "Nothing to preview yet — build or paste a document first.";
+          setMode("yaml");
+          return;
+        }
+        try {
+          JSON.parse(rawTextarea.value);
+        } catch (e) {
+          showValidation("Raw JSON is invalid: " + e.message, false);
+          return;
+        }
+        yamlPre.textContent = "Rendering…";
+        setMode("yaml");
+        // With security enabled the UI chain enforces CSRF; Thymeleaf injects the token into the
+        // form as a hidden _csrf field, and this fetch must forward it as the header the filter
+        // checks. With auth-mode none there is no field and no header is sent.
+        var csrfInput = form.querySelector("input[name='_csrf']");
+        var headers = { "Content-Type": "application/json" };
+        if (csrfInput) headers["X-CSRF-TOKEN"] = csrfInput.value;
+        fetch("yaml-preview", {
+          method: "POST",
+          headers: headers,
+          body: rawTextarea.value,
+        })
+          .then(function (res) {
+            return res.text().then(function (text) {
+              if (!res.ok) throw new Error(text || "HTTP " + res.status);
+              return text;
+            });
+          })
+          .then(function (text) {
+            yamlPre.textContent = text;
+          })
+          .catch(function (err) {
+            yamlPre.textContent = "Could not render YAML: " + err.message;
+          });
       } else {
         try {
           var parsed = rawTextarea.value.trim() ? JSON.parse(rawTextarea.value) : null;
@@ -542,7 +590,9 @@
     });
 
     form.addEventListener("submit", function (e) {
-      if (mode === "raw") {
+      // In yaml mode the raw textarea already holds the current document (synced on tab entry),
+      // so both non-builder modes submit it.
+      if (mode === "raw" || mode === "yaml") {
         try {
           JSON.parse(rawTextarea.value);
           hidden.value = rawTextarea.value;

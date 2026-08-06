@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Aggregates — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>Aggregates</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui}">Back</a>
+        <a class="btn" th:href="@{/ui/aggregates/new}">+ New Aggregate</a>
+        <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
+    </nav>
+</header>
+
+<main>
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <table th:if="${!aggregates.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Root type</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="a : ${aggregates}">
+            <td>
+                <a th:href="@{/ui/aggregates/{id}(id=${a.id})}" th:text="${a.name}">name</a>
+            </td>
+            <td th:text="${a.entityType}">type</td>
+            <td>
+                <a class="btn" th:href="@{/ui/aggregates/{id}(id=${a.id})}">View</a>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="empty" th:if="${aggregates.isEmpty()}">No aggregates yet.</p>
+</main>
+</body>
+</html>

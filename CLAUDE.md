@@ -254,6 +254,8 @@ The two schema-driven editors are the substantial pieces:
   submits JSON; `AggregateUiController` converts it to the YAML `POST /aggregate/yaml` consumes.
 
 Both offer a Builder / Raw JSON tab pair and fall back to Raw JSON for anything they cannot render.
+The aggregate form adds a read-only YAML tab (rendered server-side via `POST
+/ui/aggregates/yaml-preview`) showing the exact document the aggregate endpoint would receive.
 
 JSON embedded into a page must go through `HtmlSafeJsonSerializer` (`<script type="application/json"
 th:utext="...">`), which escapes `<`, `>`, `&` and `/` so entity values cannot break out of the

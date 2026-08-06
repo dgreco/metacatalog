@@ -79,6 +79,105 @@ class AggregateUiControllerTest {
             .build();
   }
 
+  /** The list page shows every instance of the aggregate root types with its actual type. */
+  @Test
+  void listShowsAggregatesWithTheirType() throws Exception {
+    var root = new it.davidgreco.metacatalog.openapi.model.Entity();
+    root.setId(java.util.Optional.of("agg-1"));
+    root.setEntityType("ProductType");
+    root.setValues("{\"name\":\"Widget\"}");
+    given(api.getEntities(java.util.Optional.of("ProductType"), java.util.Optional.empty()))
+        .willReturn(ResponseEntity.ok(List.of(root)));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/aggregates"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("aggregates-list"))
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<InstanceRowView>) result.getModelAndView().getModel().get("aggregates");
+    Assertions.assertEquals(1, rows.size());
+    Assertions.assertEquals("Widget", rows.getFirst().name());
+    Assertions.assertEquals("ProductType", rows.getFirst().entityType());
+  }
+
+  /**
+   * The view page renders the whole aggregate in both formats, derived from the one canonical
+   * document {@code GET /aggregate/{id}/yaml} serves.
+   */
+  @Test
+  void viewOffersTheAggregateAsJsonAndYaml() throws Exception {
+    var yaml =
+        """
+        ---
+        entityType: "ProductType"
+        values:
+          name: "Widget"
+        parts: []
+        """;
+    given(api.getAggregateAsYaml("agg-1", true))
+        .willReturn(
+            (ResponseEntity)
+                ResponseEntity.ok(
+                    (Resource)
+                        new org.springframework.core.io.ByteArrayResource(
+                            yaml.getBytes(StandardCharsets.UTF_8))));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/aggregates/agg-1"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("aggregate-view"))
+            .andReturn();
+
+    var modelMap = result.getModelAndView().getModel();
+    Assertions.assertEquals("ProductType", modelMap.get("rootType"));
+    var json = (String) modelMap.get("aggregateJson");
+    Assertions.assertTrue(
+        json.contains("\"name\" : \"Widget\"") || json.contains("\"name\": \"Widget\""));
+    var yamlOut = (String) modelMap.get("aggregateYaml");
+    Assertions.assertTrue(yamlOut.startsWith("entityType:"), "the document marker is stripped");
+    Assertions.assertTrue(yamlOut.contains("name: \"Widget\""));
+  }
+
+  /**
+   * The YAML-preview helper turns the builder's JSON document into the block-style YAML the
+   * aggregate endpoint consumes, with the document marker stripped.
+   */
+  @Test
+  void yamlPreviewRendersTheDocumentAsYaml() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/aggregates/yaml-preview")
+                .contentType("application/json")
+                .content("{\"entityType\":\"ProductType\",\"values\":{\"name\":\"Widget\"}}"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.startsWith("entityType:")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("name: \"Widget\"")));
+  }
+
+  /** A malformed document comes back as a 400 with the parse error, not a 500. */
+  @Test
+  void yamlPreviewRejectsMalformedJson() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/aggregates/yaml-preview").contentType("application/json").content("{oops"))
+        .andExpect(status().isBadRequest());
+  }
+
+  /** A failing aggregate read redirects back to the list with the error flashed. */
+  @Test
+  void viewRedirectsToListOnError() throws Exception {
+    given(api.getAggregateAsYaml("missing", true)).willThrow(new RuntimeException("not found"));
+
+    mockMvc
+        .perform(get("/ui/aggregates/missing"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/aggregates"));
+  }
+
   @Test
   void formRendersWithRootTypes() throws Exception {
     mockMvc

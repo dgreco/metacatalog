@@ -47,6 +47,7 @@
             <div class="tabs">
                 <button type="button" class="tab active" data-tab="builder">Builder</button>
                 <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+                <button type="button" class="tab" data-tab="yaml">YAML</button>
             </div>
 
             <div class="tab-panel" data-panel="builder">
@@ -59,6 +60,14 @@
                 <textarea id="aggregate-raw" class="raw-schema" rows="20" spellcheck="false"
                           style="font-family: monospace; font-size: 0.9em; width: 100%;"
                           placeholder='{"entityType": "...", "values": {}, "parts": []}'></textarea>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="yaml">
+                <p class="hint">
+                    Read-only preview of the document as the YAML the aggregate endpoint consumes.
+                    Edit in the Builder or Raw JSON tabs.
+                </p>
+                <pre id="aggregate-yaml" class="schema"></pre>
             </div>
 
             <div id="aggregate-validation" class="validation"></div>

@@ -2,10 +2,15 @@ package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.ResponseEntity;
@@ -47,6 +52,60 @@ public class AggregateUiController {
     this.jsonMapper = jsonMapper;
     this.yamlMapper = yamlMapper;
     this.jsonSerializer = jsonSerializer;
+  }
+
+  /**
+   * Lists every aggregate instance — the entities whose type is an aggregate root type — with the
+   * type each one actually belongs to. Reuses {@link InstanceRowView} for the human-readable name
+   * derivation; the aggregate/provisionable distinctions are irrelevant here, so empty sets are
+   * passed.
+   */
+  @GetMapping
+  public String list(Model model) {
+    var rows = new ArrayList<InstanceRowView>();
+    for (var rootType :
+        api.listAggregateRootTypes().getBody().stream().map(EntityType::getName).toList()) {
+      List<Entity> entities = api.getEntities(Optional.of(rootType), Optional.empty()).getBody();
+      rows.addAll(InstanceRowView.listFrom(entities, Set.of(), Set.of()));
+    }
+    model.addAttribute("aggregates", rows);
+    return "aggregates-list";
+  }
+
+  /**
+   * Shows one whole aggregate — root, parts, dependencies and values — as pretty-printed JSON or
+   * YAML.
+   *
+   * <p>Both renderings derive from the single canonical document {@code GET /aggregate/{id}/yaml}
+   * serves (the same format {@code POST /aggregate/yaml} consumes, with each node's {@code values}
+   * inlined as a real object rather than an embedded JSON string): the YAML tab shows it verbatim
+   * minus the document marker, the JSON tab re-serializes the same tree.
+   */
+  @GetMapping("/{id}")
+  public String view(
+      @org.springframework.web.bind.annotation.PathVariable String id,
+      Model model,
+      RedirectAttributes redirectAttributes) {
+    try {
+      var resource =
+          (org.springframework.core.io.Resource) api.getAggregateAsYaml(id, true).getBody();
+      byte[] yamlBytes;
+      try (var in = resource.getInputStream()) {
+        yamlBytes = in.readAllBytes();
+      }
+      var tree = yamlMapper.readTree(yamlBytes);
+      model.addAttribute("aggregateId", id);
+      model.addAttribute("rootType", tree.path("entityType").asText(null));
+      model.addAttribute(
+          "aggregateJson", jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(tree));
+      var yaml = new String(yamlBytes, StandardCharsets.UTF_8);
+      model.addAttribute(
+          "aggregateYaml", yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
+      return "aggregate-view";
+    } catch (RuntimeException | java.io.IOException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+      return "redirect:/ui/aggregates";
+    }
   }
 
   @GetMapping("/new")
@@ -112,6 +171,23 @@ public class AggregateUiController {
       } catch (RuntimeException e) {
         model.addAttribute("error", e.getMessage());
       }
+    }
+  }
+
+  /**
+   * Renders the JSON document the builder currently holds as YAML, for the read-only YAML tab of
+   * the authoring page. The conversion is the same one {@link #create} applies before handing the
+   * document to {@code POST /aggregate/yaml}, so the preview is exactly what would be submitted.
+   */
+  @PostMapping(value = "/yaml-preview", produces = "text/plain")
+  @ResponseBody
+  public ResponseEntity<String> yamlPreview(
+      @org.springframework.web.bind.annotation.RequestBody String document) {
+    try {
+      var yaml = new String(toYaml(document), StandardCharsets.UTF_8);
+      return ResponseEntity.ok(yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
+    } catch (RuntimeException | java.io.IOException e) {
+      return ResponseEntity.badRequest().body(e.getMessage());
     }
   }
 

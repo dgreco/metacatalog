@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>View Aggregate — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>View Aggregate</h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/aggregates}">Back</a>
+    </nav>
+</header>
+
+<main>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <p>
+        <strong th:text="${rootType}">root type</strong>
+        <span class="hint" th:text="${aggregateId}">id</span>
+    </p>
+
+    <div class="tabs">
+        <button type="button" class="tab active view-tab" data-view="json">JSON</button>
+        <button type="button" class="tab view-tab" data-view="yaml">YAML</button>
+    </div>
+
+    <div class="tab-panel" data-view-panel="json">
+        <pre class="schema" th:text="${aggregateJson}">{}</pre>
+    </div>
+    <div class="tab-panel hidden" data-view-panel="yaml">
+        <pre class="schema" th:text="${aggregateYaml}"></pre>
+    </div>
+</main>
+
+<script>
+    // Same JSON / YAML toggle the instance view uses: one active tab, one visible panel.
+    document.querySelectorAll(".view-tab").forEach(function (tab) {
+        tab.addEventListener("click", function () {
+            document.querySelectorAll(".view-tab").forEach(function (b) {
+                b.classList.toggle("active", b === tab);
+            });
+            document.querySelectorAll("[data-view-panel]").forEach(function (p) {
+                p.classList.toggle("hidden",
+                    p.getAttribute("data-view-panel") !== tab.getAttribute("data-view"));
+            });
+        });
+    });
+</script>
+</body>
+</html>
