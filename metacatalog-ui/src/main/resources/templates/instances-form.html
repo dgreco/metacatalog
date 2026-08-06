@@ -62,11 +62,11 @@
 
             <div class="tab-panel hidden" data-view-panel="json"
                  th:if="${readOnly != null and readOnly and valuesJson != null}">
-                <pre class="schema" th:text="${valuesJson}">{}</pre>
+                <pre class="schema document-pane" th:text="${valuesJson}">{}</pre>
             </div>
             <div class="tab-panel hidden" data-view-panel="yaml"
                  th:if="${readOnly != null and readOnly and valuesYaml != null}">
-                <pre class="schema" th:text="${valuesYaml}"></pre>
+                <pre class="schema document-pane" th:text="${valuesYaml}"></pre>
             </div>
 
             <div class="tab-panel hidden" data-panel="raw" th:unless="${readOnly}">

@@ -172,6 +172,20 @@ pre.schema {
     border: 1px solid var(--border);
 }
 
+/* Full-width document panes (the aggregate / instance JSON-YAML views): unlike the compact
+   pre.schema previews embedded in tables, these are the page's main content — tall by default
+   and vertically resizable by dragging the handle. Declared after pre.schema so the overrides
+   win at equal specificity. */
+pre.document-pane {
+    max-width: none;
+    width: 100%;
+    box-sizing: border-box;
+    max-height: none;
+    height: 65vh;
+    resize: vertical;
+    font-size: 0.85rem;
+}
+
 .empty { color: var(--muted); font-style: italic; }
 
 /* --- tags / badges -------------------------------------------------------- */
