@@ -23,6 +23,7 @@ import org.springframework.boot.web.server.servlet.context.ServletWebServerAppli
 import org.springframework.context.ConfigurableApplicationContext;
 import org.testcontainers.containers.BrowserWebDriverContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Browser-level smoke tests for the plain-JS front end, which has no JS test harness of its own —
@@ -67,7 +68,14 @@ class UiJavascriptSmokeTest {
     org.testcontainers.Testcontainers.exposeHostPorts(port);
     baseUrl = "http://host.testcontainers.internal:" + port;
 
-    chrome = new BrowserWebDriverContainer<>().withCapabilities(new ChromeOptions());
+    // Pinned to the -chromium image rather than the Testcontainers default (-chrome): only the
+    // chromium flavor is published multi-arch, and the default's amd64-only image dies with
+    // "exec format error" on ARM64 runners (e.g. the GitLab CI host).
+    chrome =
+        new BrowserWebDriverContainer<>(
+                DockerImageName.parse("selenium/standalone-chromium:4.43.0")
+                    .asCompatibleSubstituteFor("selenium/standalone-chrome"))
+            .withCapabilities(new ChromeOptions());
     chrome.start();
     driver = new RemoteWebDriver(chrome.getSeleniumAddress(), new ChromeOptions());
   }
