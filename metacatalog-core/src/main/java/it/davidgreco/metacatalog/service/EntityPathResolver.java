@@ -53,6 +53,24 @@ public class EntityPathResolver {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) {
+    return retrieveEntityByPath(startEntityId, pathString, null);
+  }
+
+  /**
+   * Same as {@link #retrieveEntityByPath(String, String)}, additionally recording every
+   * entity-relationship row the traversal walks into {@code traversedEntityLinks} (mapping-category
+   * steps traverse mapping rows and are not recorded). Rows walked before a failure are recorded
+   * even when the resolution then dead-ends or throws, so a caller asking whether a path leans on a
+   * particular link still sees them.
+   *
+   * @param startEntityId the ID of the starting entity
+   * @param pathString the path string to traverse
+   * @param traversedEntityLinks collector for the entity-relationship rows walked, or null
+   * @return an Optional containing the entity at the end of the path, or empty if not found
+   */
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Optional<Entity> retrieveEntityByPath(
+      String startEntityId, String pathString, List<EntityRelationship> traversedEntityLinks) {
 
     var pathSegments = pathString.split("/");
 
@@ -83,6 +101,10 @@ public class EntityPathResolver {
       var relType = RelationType.parse(relTypeStr);
       var pathExpression = pathExpressions.getFirst().trim();
 
+      List<EntityRelationship> entityRows =
+          relType.category() == RelationType.Category.ENTITY
+              ? entityRelationshipRepository.findByTargetAndRelationType(currentEntity, relType)
+              : List.of();
       List<Entity> relationSources =
           switch (relType.category()) {
             case MAPPING ->
@@ -91,20 +113,15 @@ public class EntityPathResolver {
                     .stream()
                     .map(MappingEntityRelationship::getSource)
                     .toList();
-            case ENTITY ->
-                entityRelationshipRepository
-                    .findByTargetAndRelationType(currentEntity, relType)
-                    .stream()
-                    .map(EntityRelationship::getSource)
-                    .toList();
+            case ENTITY -> entityRows.stream().map(EntityRelationship::getSource).toList();
           };
 
       if (relationSources.isEmpty()) return Optional.empty();
 
+      int chosenIndex = -1;
       if (!pathExpression.equalsIgnoreCase("$")) {
-        var found = false;
-        for (var relationSource : relationSources) {
-          var json = relationSource.getValues().toPrettyString();
+        for (int i = 0; i < relationSources.size(); i++) {
+          var json = relationSources.get(i).getValues().toPrettyString();
           var dc = JsonPath.using(jsonPathConfiguration).parse(json);
           Object res = dc.read(pathExpression);
           int matchCount;
@@ -118,16 +135,18 @@ public class EntityPathResolver {
           }
           if (matchCount > 1) throw new ServiceError("Ambiguous path expression: " + segment);
           if (matchCount == 1) {
-            currentEntity = relationSource;
-            found = true;
+            chosenIndex = i;
             break;
           }
         }
-        if (!found) return Optional.empty();
+        if (chosenIndex < 0) return Optional.empty();
       } else {
         if (relationSources.size() > 1) throw new ServiceError("Ambiguous path: " + segment);
-        currentEntity = relationSources.getFirst();
+        chosenIndex = 0;
       }
+      if (traversedEntityLinks != null && !entityRows.isEmpty())
+        traversedEntityLinks.add(entityRows.get(chosenIndex));
+      currentEntity = relationSources.get(chosenIndex);
     }
 
     if (currentEntity.getId().equals(startEntityId)) return Optional.empty();

@@ -189,7 +189,12 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   `Aggregate` trait: containment is what makes a part reachable from its root, so detaching one
   strands it where the aggregate delete can no longer see it and the entity delete still refuses
   it. Dependency (`DEPENDS_ON`) links within an aggregate, and containment between entities that
-  are not aggregates, stay removable — neither determines reachability.
+  are not aggregates, stay removable — neither determines reachability. One more refusal applies
+  to any entity link: if an existing mapping resolves an entity path reference through it, removing
+  it would make the mapped entities derived through that path fail every later update —
+  asynchronously, as FAILED lifecycle events. The check is exact (each candidate mapping's path is
+  re-resolved and only a traversal that actually walks the link blocks the removal); delete or
+  re-create the mapping first.
 
 When running:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`

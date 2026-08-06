@@ -1393,6 +1393,11 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Delete a link between two entities by a relation
+      description: >
+        Removes the link and its inverse. Refused when the link is the containment of a part in an
+        aggregate (delete the aggregate instead), or when an existing mapping resolves one of its
+        entity path references through the link — removing it would break the derivation of the
+        mapped entities. Delete or re-create the mapping first.
       operationId: unlinkEntity
       parameters:
         - in: path

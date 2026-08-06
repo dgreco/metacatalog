@@ -158,7 +158,11 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository
    * @param traitRelationshipRepository the trait relationship repository
    * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
+   * @param mappingEntityRelationshipRepository the mapping entity relationship repository, used to
+   *     refuse the removal of a link a mapping resolves a path reference through
    * @param entityLifeCycleEventRepository the lifecycle event repository
+   * @param entityPathResolver the path resolver, used to re-resolve mapping path references when
+   *     checking whether a link about to be removed is traversed by one
    * @return the entity service
    */
   @Bean
@@ -169,7 +173,9 @@ public class CoreConfig {
       EntityRelationshipRepository entityRelationshipRepository,
       TraitRelationshipRepository traitRelationshipRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
+      EntityPathResolver entityPathResolver,
       JsonUtils jsonUtils) {
     return new EntityServiceImpl(
         entityTypeRepository,
@@ -178,7 +184,9 @@ public class CoreConfig {
         entityRelationshipRepository,
         traitRelationshipRepository,
         mappingEntityTypeRelationshipRepository,
+        mappingEntityRelationshipRepository,
         entityLifeCycleEventRepository,
+        entityPathResolver,
         jsonUtils);
   }
 

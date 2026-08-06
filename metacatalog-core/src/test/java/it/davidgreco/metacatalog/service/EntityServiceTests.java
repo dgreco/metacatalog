@@ -502,4 +502,84 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     traitService.delete("RelTargetTrait");
     traitService.delete("RelSourceTrait");
   }
+
+  /**
+   * Verifies that a DEPENDS_ON link a mapping resolves a path reference through cannot be removed
+   * (in either direction of the pair) while a mapped entity is derived through it: removing it
+   * would make every later update of that mapped entity fail asynchronously. The check is exact —
+   * an identical link no mapping traverses stays removable, and once the mapped entities are gone
+   * the guarded link becomes removable too.
+   */
+  @Test
+  void testDependsOnLinkReferredByAMappingCannotBeRemoved() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappedEntityService = getApplicationContext().getBean(MappedEntityService.class);
+
+    var emptySchema =
+        """
+        { "type": "object", "properties": {} }
+        """;
+
+    traitService.create("PathSrcTrait", Optional.empty(), Optional.empty());
+    traitService.create("PathDepTrait", Optional.empty(), Optional.empty());
+    traitService.link("PathSrcTrait", DEPENDS_ON, "PathDepTrait");
+
+    entityTypeService.create("PathSource", List.of("PathSrcTrait"), Optional.empty(), emptySchema);
+    entityTypeService.create("PathDep", List.of("PathDepTrait"), Optional.empty(), emptySchema);
+    entityTypeService.create("PathMapped", List.of(), Optional.empty(), emptySchema);
+
+    // The mapping resolves an extra entity by walking IS_REQUIRED_BY from the source — i.e.
+    // through the source's DEPENDS_ON link.
+    mappingService.create(
+        "PathSource",
+        "PathMapped",
+        "{}",
+        List.of(
+            new it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference(
+                "dep", "IS_REQUIRED_BY{$}")));
+
+    var source = entityService.create("PathSource", "{}");
+    var dependency = entityService.create("PathDep", "{}");
+    entityService.link(source.getId(), DEPENDS_ON, dependency.getId());
+    mappedEntityService.createMappedEntities(source.getId());
+
+    // The traversed link is not removable, whichever row of the pair is named.
+    var ex =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () -> entityService.unlink(source.getId(), DEPENDS_ON, dependency.getId()));
+    Assertions.assertTrue(
+        ex.getMessage().contains("path reference") && ex.getMessage().contains("PathMapped"),
+        "the error must name the mapping and its path reference, got: " + ex.getMessage());
+    Assertions.assertThrows(
+        ServiceError.class,
+        () -> entityService.unlink(dependency.getId(), IS_REQUIRED_BY, source.getId()));
+
+    // An identical link no mapping traverses (its source has no mapped entity) stays removable.
+    var otherSource = entityService.create("PathSource", "{}");
+    var otherDependency = entityService.create("PathDep", "{}");
+    entityService.link(otherSource.getId(), DEPENDS_ON, otherDependency.getId());
+    entityService.unlink(otherSource.getId(), DEPENDS_ON, otherDependency.getId());
+
+    // Once the mapped entities are gone, nothing resolves through the link any more.
+    mappedEntityService.deleteMappedEntities(source.getId());
+    entityService.unlink(source.getId(), DEPENDS_ON, dependency.getId());
+
+    // Cleanup — the mapping first: entities of a mapping-source type refuse a direct delete
+    // while the rule exists.
+    mappingService.list().forEach(m -> mappingService.delete(m.getId()));
+    entityService.delete(otherSource.getId());
+    entityService.delete(otherDependency.getId());
+    entityService.delete(source.getId());
+    entityService.delete(dependency.getId());
+    entityTypeService.delete("PathSource");
+    entityTypeService.delete("PathDep");
+    entityTypeService.delete("PathMapped");
+    traitService.unlink("PathSrcTrait", DEPENDS_ON, "PathDepTrait");
+    traitService.delete("PathDepTrait");
+    traitService.delete("PathSrcTrait");
+  }
 }

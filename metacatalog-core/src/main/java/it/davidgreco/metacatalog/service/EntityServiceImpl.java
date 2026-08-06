@@ -12,6 +12,7 @@ import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +40,11 @@ public class EntityServiceImpl implements EntityService {
 
   private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
+
   private final EntityLifeCycleEventRepository entityLifeCycleEventRepository;
+
+  private final EntityPathResolver entityPathResolver;
 
   private final JsonUtils jsonUtils;
 
@@ -436,6 +441,13 @@ public class EntityServiceImpl implements EntityService {
    * aggregates, and dependency links within an aggregate, are unaffected — neither determines
    * reachability.
    *
+   * <p>A link a mapping resolves a path reference through cannot be removed either: the mapped
+   * entities derived through that path would fail to update from then on — asynchronously, as
+   * FAILED lifecycle events, with nothing pointing back at the unlink that caused it. The check is
+   * exact, not type-level: each existing mapping instance whose rule names the link's relation type
+   * in a path reference has that path re-resolved, and only a traversal that actually walks this
+   * link blocks the removal. Delete or re-create the mapping first.
+   *
    * @param sourceId the ID of the source entity
    * @param relType the relation type of the link
    * @param targetId the ID of the target entity
@@ -464,10 +476,10 @@ public class EntityServiceImpl implements EntityService {
                             + relType
                             + " with entity with id "
                             + target.getId()));
-    entityRelationshipRepository.delete(directRel);
+    EntityRelationship inverseRel = null;
     if (relType.hasInverse()) {
       var inverseRelType = relType.inverse();
-      var inverseRel =
+      inverseRel =
           entityRelationshipRepository
               .findBySourceAndRelationTypeAndTarget(target, inverseRelType, source)
               .orElseThrow(
@@ -479,10 +491,63 @@ public class EntityServiceImpl implements EntityService {
                               + inverseRelType
                               + " with entity with id "
                               + source.getId()));
-      entityRelationshipRepository.delete(inverseRel);
     }
+    checkIsNotReferredByMapping(directRel, inverseRel);
+    entityRelationshipRepository.delete(directRel);
+    if (inverseRel != null) entityRelationshipRepository.delete(inverseRel);
 
     log.info("Unlinked entity with id {} from entity with id {}", sourceId, targetId);
+  }
+
+  /**
+   * Rejects the removal of a link that some existing mapping resolves a path reference through.
+   *
+   * <p>For every mapped instance ({@code MAPPED_TO} row) whose rule carries a path reference naming
+   * this link's relation type (or its inverse — the traversal may walk either row of the pair), the
+   * path is re-resolved from the mapping's source entity with the traversed rows recorded. Rows
+   * walked before a resolution dead-ends still count: a path that currently leans on this link is a
+   * path this unlink breaks.
+   */
+  private void checkIsNotReferredByMapping(
+      EntityRelationship directRel, EntityRelationship inverseRel) {
+    var relTypeName = directRel.getRelationType().name();
+    var inverseName = directRel.getRelationType().inverse().name();
+    for (var mapping : mappingEntityRelationshipRepository.findAll()) {
+      if (mapping.getRelationType() != RelationType.MAPPED_TO) continue;
+      var rule = mapping.getMappingEntityTypeRelationship();
+      for (var reference : rule.getEntityPathReferences()) {
+        var path = reference.referencePath();
+        if (!path.contains(relTypeName) && !path.contains(inverseName)) continue;
+        var traversed = new ArrayList<EntityRelationship>();
+        try {
+          entityPathResolver.retrieveEntityByPath(mapping.getSource().getId(), path, traversed);
+        } catch (RuntimeException e) {
+          // an ambiguous or invalid path stops the traversal; whatever it walked first still counts
+        }
+        for (var row : traversed) {
+          if (!row.getId().equals(directRel.getId())
+              && (inverseRel == null || !row.getId().equals(inverseRel.getId()))) continue;
+          throw new ServiceError(
+              "Cannot remove the "
+                  + directRel.getRelationType()
+                  + " link between entity with id "
+                  + directRel.getSource().getId()
+                  + " and entity with id "
+                  + directRel.getTarget().getId()
+                  + ": the mapping "
+                  + rule.getSource().getName()
+                  + " MAPPED_TO "
+                  + rule.getTarget().getName()
+                  + " resolves its path reference '"
+                  + reference.alias()
+                  + "' ("
+                  + path
+                  + ") through it, so the mapped entity with id "
+                  + mapping.getTarget().getId()
+                  + " could no longer be derived. Delete or re-create the mapping first.");
+        }
+      }
+    }
   }
 
   /**
