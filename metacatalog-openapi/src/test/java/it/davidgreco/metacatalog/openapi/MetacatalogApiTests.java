@@ -111,6 +111,55 @@ class MetacatalogApiTests {
     Assertions.assertEquals(404, ex2.getStatusCode().value());
   }
 
+  /**
+   * Round-trips a mapping through the API: the read side exposes the type versions the mapping was
+   * defined against (stamped by the service, absent from the create payload), and the
+   * create-or-replace contract keeps a single mapping per (source, target) pair with a stable id.
+   */
+  @Test
+  void testMappingRoundTripExposesVersionStampsAndReplaces() {
+    var api = getMetaCatalogManagerApi();
+
+    var src = new EntityType();
+    src.setName("ApiMapSrc");
+    src.setSchema("{ \"type\": \"object\", \"properties\": { \"a\": { \"type\": \"integer\" } } }");
+    api.createEntityType(src);
+
+    var dst = new EntityType();
+    dst.setName("ApiMapDst");
+    dst.setSchema("{ \"type\": \"object\", \"properties\": { \"b\": { \"type\": \"integer\" } } }");
+    api.createEntityType(dst);
+
+    var mapping = new Mapping();
+    mapping.setSourceEntityType("ApiMapSrc");
+    mapping.setTargetEntityType("ApiMapDst");
+    mapping.setMappingValues("{\"b\": \"#source.getValue('$.a').intValue()\"}");
+    mapping.setEntityPathReferences("[]");
+    api.createMapping(mapping);
+
+    var mine =
+        api.listMappings().stream()
+            .filter(m -> "ApiMapSrc".equals(m.getSourceEntityType()))
+            .toList();
+    Assertions.assertEquals(1, mine.size());
+    var created = mine.getFirst();
+    Assertions.assertEquals(1, created.getSourceEntityTypeVersion());
+    Assertions.assertEquals(1, created.getTargetEntityTypeVersion());
+
+    // Creating the pair again replaces the mapping in place — same id, still exactly one.
+    api.createMapping(mapping);
+    var afterReplace =
+        api.listMappings().stream()
+            .filter(m -> "ApiMapSrc".equals(m.getSourceEntityType()))
+            .toList();
+    Assertions.assertEquals(1, afterReplace.size());
+    Assertions.assertEquals(created.getId(), afterReplace.getFirst().getId());
+
+    api.deleteMapping(created.getId());
+    api.deleteEntityType("ApiMapSrc");
+    api.deleteEntityType("ApiMapDst");
+  }
+
   @Test
   void testListTraits() {
     var api = getMetaCatalogManagerApi();

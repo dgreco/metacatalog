@@ -163,6 +163,8 @@ public class DtoMapper {
     mapping.setId(Optional.ofNullable(m.getId()));
     mapping.setSourceEntityType(m.getSource().getName());
     mapping.setTargetEntityType(m.getTarget().getName());
+    mapping.setSourceEntityTypeVersion(Optional.ofNullable(m.getSourceEntityTypeVersion()));
+    mapping.setTargetEntityTypeVersion(Optional.ofNullable(m.getTargetEntityTypeVersion()));
     mapping.setMappingValues(m.getMappingValues().toPrettyString());
     mapping.setEntityPathReferences(
         jsonMapper.valueToTree(m.getEntityPathReferences()).toPrettyString());

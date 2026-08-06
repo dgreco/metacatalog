@@ -21,10 +21,13 @@ public class MappingUiController {
 
   private final MetacatalogApiDelegate api;
   private final ObjectMapper jsonMapper;
+  private final HtmlSafeJsonSerializer jsonSerializer;
 
-  public MappingUiController(MetacatalogApiDelegate api, ObjectMapper jsonMapper) {
+  public MappingUiController(
+      MetacatalogApiDelegate api, ObjectMapper jsonMapper, HtmlSafeJsonSerializer jsonSerializer) {
     this.api = api;
     this.jsonMapper = jsonMapper;
+    this.jsonSerializer = jsonSerializer;
   }
 
   @GetMapping("/mappings/new")
@@ -33,8 +36,19 @@ public class MappingUiController {
       model.addAttribute("mappingForm", new MappingForm());
     }
     model.addAttribute("entityTypes", api.listEntityTypes().getBody());
-    model.addAttribute("mappings", MappingView.listFrom(api.listMappings().getBody()));
+    addMappings(model);
     return "mapping-form";
+  }
+
+  /**
+   * Adds the existing mappings twice: as view objects for the table, and as embedded JSON so the
+   * client-side editor can propose the values of a previous mapping with the same source and target
+   * types.
+   */
+  private void addMappings(Model model) {
+    var mappings = MappingView.listFrom(api.listMappings().getBody());
+    model.addAttribute("mappings", mappings);
+    model.addAttribute("mappingsJson", jsonSerializer.write(mappings, "[]"));
   }
 
   @PostMapping("/mappings")
@@ -55,7 +69,7 @@ public class MappingUiController {
               + form.getSourceEntityType()
               + "' to '"
               + form.getTargetEntityType()
-              + "' created.");
+              + "' saved (an existing mapping for the pair is replaced).");
       return "redirect:/ui";
     } catch (RuntimeException e) {
       return renderMappingError(model, e.getMessage());
@@ -65,7 +79,7 @@ public class MappingUiController {
   private String renderMappingError(Model model, String message) {
     model.addAttribute("error", message);
     model.addAttribute("entityTypes", api.listEntityTypes().getBody());
-    model.addAttribute("mappings", MappingView.listFrom(api.listMappings().getBody()));
+    addMappings(model);
     return "mapping-form";
   }
 

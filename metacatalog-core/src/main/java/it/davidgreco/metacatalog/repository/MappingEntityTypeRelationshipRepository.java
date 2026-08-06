@@ -29,4 +29,16 @@ public interface MappingEntityTypeRelationshipRepository
    * @return list of mapping rules to this target type
    */
   List<MappingEntityTypeRelationship> findMappingEntityTypeRelationshipByTarget(EntityType target);
+
+  /**
+   * Finds the mapping rules between the given source and target entity types. A pair has at most
+   * one mapping under the create-or-replace contract of {@code MappingService.create}; the list
+   * form tolerates rows predating that contract.
+   *
+   * @param source the source entity type
+   * @param target the target entity type
+   * @return the mapping rules between the two types
+   */
+  List<MappingEntityTypeRelationship> findMappingEntityTypeRelationshipBySourceAndTarget(
+      EntityType source, EntityType target);
 }

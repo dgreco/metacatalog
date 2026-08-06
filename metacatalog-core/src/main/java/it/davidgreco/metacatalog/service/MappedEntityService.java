@@ -122,24 +122,13 @@ public class MappedEntityService {
                               .orElseThrow(() -> new NotFoundException("Entity not found")));
               additionalEntitiesValues.put(as, jn.getValues());
             }
+            var targetVersion = resolveMappingTargetVersion(mappingRelationship);
             var mappedValues =
                 MappingValueEvaluator.generateMappedValues(
                     sourceEntity.getValues(),
                     additionalEntitiesValues,
                     mappingRelationship.getMappingValues(),
-                    jsonUtils.jsonSchemaFactory().getSchema(targetEntityType.getSchema()));
-            var targetVersion =
-                entityTypeVersionRepository
-                    .findByVersionGroupIdAndVersion(
-                        targetEntityType.getVersionGroupId(), targetEntityType.getVersion())
-                    .orElseThrow(
-                        () ->
-                            new ServiceError(
-                                "Entity type "
-                                    + targetEntityType.getName()
-                                    + " has no snapshot for its live version "
-                                    + targetEntityType.getVersion()
-                                    + "; cannot pin the mapped entity to it"));
+                    jsonUtils.jsonSchemaFactory().getSchema(targetVersion.getSchema()));
             var mappedEntity = new Entity();
             mappedEntity.setEntityType(targetEntityType);
             mappedEntity.setEntityTypeVersion(targetVersion);
@@ -249,14 +238,15 @@ public class MappedEntityService {
             additionalEntitiesValues.put(as, jn.getValues());
           }
           var mappedEntity = entityMappingRelationship.getTarget();
-          var targetSchema = mappedEntity.getEntityTypeVersion().getSchema();
+          var targetVersion = resolveMappingTargetVersion(mappingTypeRelationship);
           var mappedValues =
               MappingValueEvaluator.generateMappedValues(
                   sourceEntity.getValues(),
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
-                  jsonUtils.jsonSchemaFactory().getSchema(targetSchema));
+                  jsonUtils.jsonSchemaFactory().getSchema(targetVersion.getSchema()));
           mappedEntity.setValues(mappedValues);
+          mappedEntity.setEntityTypeVersion(targetVersion);
           entityRepository.save(mappedEntity);
           entityLifeCycleEventRepository.save(
               new EntityLifeCycleEvent(
@@ -288,6 +278,39 @@ public class MappedEntityService {
               new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
             });
     log.info("Updated mapped entities for source entity with ID: {}", sourceEntityId);
+  }
+
+  /**
+   * Resolves the {@link EntityTypeVersion} snapshot of the target type version the given mapping
+   * was defined against.
+   *
+   * <p>Mapped entities are validated against — and pinned to — this snapshot, rather than the live
+   * type or their own creation-time pin: a mapped entity is fully derived, so its schema version
+   * follows the mapping that derives it. Replacing a mapping (which re-stamps it against the
+   * current target version) therefore moves its mapped entities forward on their next update, while
+   * an untouched mapping keeps them exactly where they were even after the target type is
+   * versioned.
+   *
+   * @param mappingRelationship the mapping whose stamped target version to resolve
+   * @return the snapshot of the target type version the mapping was defined against
+   * @throws ServiceError if that version's snapshot no longer exists (e.g. deleted via
+   *     deleteVersion)
+   */
+  private EntityTypeVersion resolveMappingTargetVersion(
+      MappingEntityTypeRelationship mappingRelationship) {
+    var targetEntityType = mappingRelationship.getTarget();
+    var version = mappingRelationship.getTargetEntityTypeVersion();
+    return entityTypeVersionRepository
+        .findByVersionGroupIdAndVersion(targetEntityType.getVersionGroupId(), version)
+        .orElseThrow(
+            () ->
+                new ServiceError(
+                    "Entity type "
+                        + targetEntityType.getName()
+                        + " has no snapshot for version "
+                        + version
+                        + ", the version its mapping was defined against; cannot validate the"
+                        + " mapped entity"));
   }
 
   /**

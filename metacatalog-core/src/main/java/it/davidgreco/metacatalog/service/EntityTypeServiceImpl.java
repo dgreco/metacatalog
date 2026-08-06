@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
@@ -10,6 +11,7 @@ import it.davidgreco.metacatalog.entity.TypeLinearization;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
+import it.davidgreco.metacatalog.repository.MappingEntityTypeRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import java.time.Instant;
 import java.util.HashSet;
@@ -37,6 +39,8 @@ public class EntityTypeServiceImpl implements EntityTypeService {
   private final EntityTypeVersionRepository entityTypeVersionRepository;
 
   private final EntityRepository entityRepository;
+
+  private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
 
   private final JsonUtils jsonUtils;
 
@@ -151,6 +155,7 @@ public class EntityTypeServiceImpl implements EntityTypeService {
         live.setFather(null);
       }
       live.setDerivedSchema(computeDerivedSchema(live));
+      checkTargetMappingsAgainstNewSchema(live);
       live.setVersion(live.getVersion() + 1);
       var saved = entityTypeRepository.save(live);
       var latestSnapshot =
@@ -161,6 +166,52 @@ public class EntityTypeServiceImpl implements EntityTypeService {
       return saved;
     } catch (DataIntegrityViolationException e) {
       throw ServiceError.forDataIntegrity(e);
+    }
+  }
+
+  /**
+   * Refuses a version change that would break an existing mapping targeting this type.
+   *
+   * <p>A mapping's values are validated against the mapping schema derived from the target type's
+   * schema only when the mapping is created; nothing re-validates them later. Without this check, a
+   * new version whose schema an existing mapping no longer satisfies would be accepted, and the
+   * breakage would surface only asynchronously — as FAILED lifecycle events — the next time the
+   * mapping engine tried to create a mapped entity. Validating here turns that silent, deferred
+   * failure into an immediate refusal of the version, while the mapping can still be updated or
+   * deleted first.
+   *
+   * <p>Only the target side can be checked statically: a mapping's SpEL expressions read the
+   * <em>values</em> of source entities, so a source-type schema change cannot be validated against
+   * the mapping document.
+   *
+   * @param live the live entity type, already mutated to the candidate new version's state
+   * @throws ServiceError if a mapping targeting this type does not satisfy the new schema
+   */
+  private void checkTargetMappingsAgainstNewSchema(EntityType live) {
+    var mappings =
+        mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipByTarget(live);
+    if (mappings.isEmpty()) return;
+    var validatingSchemaEither =
+        jsonUtils.convertToMappingSchema(jsonUtils.jsonSchemaFactory().getSchema(live.getSchema()));
+    if (validatingSchemaEither.isLeft())
+      throw new SchemaValidationError(validatingSchemaEither.getLeft());
+    var validatingSchema = validatingSchemaEither.get();
+    for (var mapping : mappings) {
+      var messages = validatingSchema.validate(mapping.getMappingValues());
+      if (!messages.isEmpty()) {
+        throw new ServiceError(
+            "Cannot create a new version of EntityType "
+                + live.getName()
+                + ": the mapping from "
+                + mapping.getSource().getName()
+                + " to "
+                + live.getName()
+                + " does not satisfy the new schema ("
+                + messages.stream()
+                    .map(ValidationMessage::getMessage)
+                    .collect(java.util.stream.Collectors.joining("; "))
+                + "). Update or delete the mapping first.");
+      }
     }
   }
 

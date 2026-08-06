@@ -54,6 +54,7 @@ class UiControllerTest {
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of()));
     given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listEntityTypeVersions(any())).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
@@ -61,7 +62,7 @@ class UiControllerTest {
                 new GraphUiController(api, catalogGraphService),
                 new TraitUiController(api, catalogGraphService),
                 new EntityTypeUiController(api),
-                new MappingUiController(api, mapper),
+                new MappingUiController(api, mapper, new HtmlSafeJsonSerializer(mapper)),
                 new BulkUiController(api),
                 new UnifiedInstanceController(api))
             .setViewResolvers(
@@ -149,7 +150,29 @@ class UiControllerTest {
         .perform(get("/ui/mappings/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("mapping-form"))
-        .andExpect(model().attributeExists("mappingForm", "entityTypes", "mappings"));
+        .andExpect(
+            model().attributeExists("mappingForm", "entityTypes", "mappings", "mappingsJson"));
+  }
+
+  @Test
+  void mappingFormEmbedsExistingMappingsForProposals() throws Exception {
+    var existing = new Mapping();
+    existing.setSourceEntityType("Source");
+    existing.setTargetEntityType("Target");
+    existing.setSourceEntityTypeVersion(java.util.Optional.of(1));
+    existing.setTargetEntityTypeVersion(java.util.Optional.of(2));
+    existing.setMappingValues("{\"n\":\"#source.n\"}");
+    existing.setEntityPathReferences("[{\"alias\":\"a\",\"referencePath\":\"HAS_PART{$}\"}]");
+    given(api.listMappings()).willReturn(ResponseEntity.ok(List.of(existing)));
+
+    var result = mockMvc.perform(get("/ui/mappings/new")).andExpect(status().isOk()).andReturn();
+
+    var mappingsJson = (String) result.getModelAndView().getModel().get("mappingsJson");
+    org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("\"source\":\"Source\""));
+    org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("\"target\":\"Target\""));
+    org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("\"sourceVersion\":1"));
+    org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("\"targetVersion\":2"));
+    org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("#source.n"));
   }
 
   @Test
@@ -368,6 +391,108 @@ class UiControllerTest {
         .andExpect(view().name("instances-form"))
         .andExpect(model().attribute("instanceId", "ent-1"))
         .andExpect(model().attributeExists("instanceForm", "entityTypes"));
+  }
+
+  /**
+   * An instance pinned to an older version of its type must be edited against that version's
+   * schema, not the live one — the API validates the update against the pinned snapshot, so showing
+   * the latest schema would let the user author values the update then rejects.
+   */
+  @Test
+  void editUsesPinnedVersionSchemaWhenInstanceIsOnAnOlderVersion() throws Exception {
+    var liveType = new EntityType();
+    liveType.setName("Person");
+    liveType.setSchema("{\"live\":true}");
+    given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(liveType)));
+
+    var snapshot = new EntityType();
+    snapshot.setId(java.util.Optional.of("snap-1"));
+    snapshot.setName("Person");
+    snapshot.setSchema("{\"pinned\":true}");
+    snapshot.setVersion(java.util.Optional.of(1));
+    given(api.listEntityTypeVersions("Person"))
+        .willReturn(ResponseEntity.ok(List.of(snapshot, liveType)));
+
+    var entity = new Entity();
+    entity.setEntityType("Person");
+    entity.setEntityTypeVersionId("snap-1");
+    entity.setValues("{\"name\":\"Alice\"}");
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+
+    var result =
+        mockMvc.perform(get("/ui/instances/ent-1/edit")).andExpect(status().isOk()).andReturn();
+
+    var model = result.getModelAndView().getModel();
+    @SuppressWarnings("unchecked")
+    var typeSchemas = (java.util.Map<String, String>) model.get("typeSchemas");
+    org.junit.jupiter.api.Assertions.assertEquals("{\"pinned\":true}", typeSchemas.get("Person"));
+    org.junit.jupiter.api.Assertions.assertEquals(1, model.get("pinnedVersion"));
+  }
+
+  /**
+   * An instance pinned to the current live version matches no snapshot in the versions list (the
+   * list carries the live row, whose id is the type's, not a snapshot's) and keeps the live schema,
+   * with no pinned-version notice.
+   */
+  @Test
+  void editKeepsLiveSchemaWhenInstanceIsOnTheCurrentVersion() throws Exception {
+    var liveType = new EntityType();
+    liveType.setId(java.util.Optional.of("type-row-id"));
+    liveType.setName("Person");
+    liveType.setSchema("{\"live\":true}");
+    given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(liveType)));
+    given(api.listEntityTypeVersions("Person")).willReturn(ResponseEntity.ok(List.of(liveType)));
+
+    var entity = new Entity();
+    entity.setEntityType("Person");
+    entity.setEntityTypeVersionId("snapshot-of-current-version");
+    entity.setValues("{\"name\":\"Alice\"}");
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+
+    var result =
+        mockMvc.perform(get("/ui/instances/ent-1/edit")).andExpect(status().isOk()).andReturn();
+
+    var model = result.getModelAndView().getModel();
+    @SuppressWarnings("unchecked")
+    var typeSchemas = (java.util.Map<String, String>) model.get("typeSchemas");
+    org.junit.jupiter.api.Assertions.assertEquals("{\"live\":true}", typeSchemas.get("Person"));
+    org.junit.jupiter.api.Assertions.assertNull(model.get("pinnedVersion"));
+  }
+
+  /**
+   * The read-only view page must show the pinned version's schema exactly like the edit page — it
+   * renders the same values form, so the live schema would misrepresent an instance on an older
+   * version.
+   */
+  @Test
+  void viewUsesPinnedVersionSchemaWhenInstanceIsOnAnOlderVersion() throws Exception {
+    var liveType = new EntityType();
+    liveType.setName("Person");
+    liveType.setSchema("{\"live\":true}");
+    given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(liveType)));
+
+    var snapshot = new EntityType();
+    snapshot.setId(java.util.Optional.of("snap-1"));
+    snapshot.setName("Person");
+    snapshot.setSchema("{\"pinned\":true}");
+    snapshot.setVersion(java.util.Optional.of(1));
+    given(api.listEntityTypeVersions("Person"))
+        .willReturn(ResponseEntity.ok(List.of(snapshot, liveType)));
+
+    var entity = new Entity();
+    entity.setEntityType("Person");
+    entity.setEntityTypeVersionId("snap-1");
+    entity.setValues("{\"name\":\"Alice\"}");
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+
+    var result = mockMvc.perform(get("/ui/instances/ent-1")).andExpect(status().isOk()).andReturn();
+
+    var model = result.getModelAndView().getModel();
+    org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, model.get("readOnly"));
+    @SuppressWarnings("unchecked")
+    var typeSchemas = (java.util.Map<String, String>) model.get("typeSchemas");
+    org.junit.jupiter.api.Assertions.assertEquals("{\"pinned\":true}", typeSchemas.get("Person"));
+    org.junit.jupiter.api.Assertions.assertEquals(1, model.get("pinnedVersion"));
   }
 
   @Test

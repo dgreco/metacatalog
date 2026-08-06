@@ -74,6 +74,25 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Browser-level UI smoke tests: headless Chrome in a Testcontainers container driven by
+             Selenium. This is the only place the plain-JS front end (no npm, no JS test runner)
+             gets executed under test. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>selenium</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Flyway for database migrations (Spring Boot 4.x requires the starter) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

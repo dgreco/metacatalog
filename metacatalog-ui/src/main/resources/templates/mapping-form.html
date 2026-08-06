@@ -89,13 +89,15 @@
             </thead>
             <tbody>
             <tr th:each="m : ${mappings}">
-                <td th:text="${m.source}">source</td>
-                <td th:text="${m.target}">target</td>
+                <td th:text="${m.source} + (${m.sourceVersion} != null ? ' (v' + ${m.sourceVersion} + ')' : '')">source</td>
+                <td th:text="${m.target} + (${m.targetVersion} != null ? ' (v' + ${m.targetVersion} + ')' : '')">target</td>
             </tr>
             </tbody>
         </table>
     </section>
 </main>
+
+<script type="application/json" id="existing-mappings" th:utext="${mappingsJson} ?: '[]'">[]</script>
 
 <template id="path-ref-row">
     <div class="field field-head">

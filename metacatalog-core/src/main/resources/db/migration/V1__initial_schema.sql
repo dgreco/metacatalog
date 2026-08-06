@@ -199,12 +199,14 @@ ALTER TABLE entity_relationship
 
 CREATE TABLE mapping_type_relationship
 (
-    id                     VARCHAR(255) NOT NULL,
-    source_id              VARCHAR(255) NOT NULL,
-    target_id              VARCHAR(255) NOT NULL,
-    relation_type          VARCHAR(255) NOT NULL,
-    mapping_values         JSONB        NOT NULL,
-    entity_path_references JSONB        NOT NULL,
+    id                         VARCHAR(255) NOT NULL,
+    source_id                  VARCHAR(255) NOT NULL,
+    target_id                  VARCHAR(255) NOT NULL,
+    relation_type              VARCHAR(255) NOT NULL,
+    mapping_values             JSONB        NOT NULL,
+    entity_path_references     JSONB        NOT NULL,
+    source_entity_type_version INTEGER      NOT NULL,
+    target_entity_type_version INTEGER      NOT NULL,
     CONSTRAINT pk_mapping_type_relationship PRIMARY KEY (id)
 );
 

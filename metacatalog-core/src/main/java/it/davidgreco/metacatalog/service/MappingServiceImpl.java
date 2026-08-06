@@ -33,8 +33,8 @@ public class MappingServiceImpl implements MappingService {
   private final JsonUtils jsonUtils;
 
   /**
-   * Creates a new MappingEntityTypeRelationship between the specified source and target entity
-   * types.
+   * Creates a MappingEntityTypeRelationship between the specified source and target entity types,
+   * replacing the existing one in place if the pair already has a mapping.
    *
    * <p>This overload parses the entity path references from a JSON string, keeping the parsing in
    * the service layer instead of leaking it to callers.
@@ -71,14 +71,15 @@ public class MappingServiceImpl implements MappingService {
   }
 
   /**
-   * Creates a new MappingEntityTypeRelationship between the specified source and target entity
-   * types.
+   * Creates a MappingEntityTypeRelationship between the specified source and target entity types,
+   * replacing the existing one in place if the pair already has a mapping (see {@link
+   * MappingService#create(String, String, String, List)} for the contract).
    *
    * @param sourceEntityTypeName the name of the source entity type
    * @param targetEntityTypeName the name of the target entity type
    * @param mappingValues a JSON string representing the mapping values
    * @param entityPathReferences a list of entity path references used in the mapping
-   * @return the created MappingEntityTypeRelationship
+   * @return the created or replaced MappingEntityTypeRelationship
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public MappingEntityTypeRelationship create(
@@ -98,8 +99,6 @@ public class MappingServiceImpl implements MappingService {
           new HashSet<>(),
           sourceEntityTypeName)) throw new ServiceError("Loops are not allowed");
 
-      var mapping = new MappingEntityTypeRelationship();
-
       var sourceEntityType =
           entityTypeRepository
               .findByName(sourceEntityTypeName)
@@ -114,9 +113,24 @@ public class MappingServiceImpl implements MappingService {
                   () ->
                       new NotFoundException("EntityType " + targetEntityTypeName + DOES_NOT_EXIST));
 
+      // Create-or-replace: a (source, target) pair holds at most one mapping. Re-creating the
+      // pair updates the existing relationship in place — same id, so mapped entities already
+      // derived through it stay attached and are re-evaluated with the new values on the next
+      // source update. Two mappings of the same pair would otherwise each derive their own
+      // mapped entity, duplicating instances of the target type.
+      var existing =
+          mappingEntityTypeRelationshipRepository
+              .findMappingEntityTypeRelationshipBySourceAndTarget(
+                  sourceEntityType, targetEntityType)
+              .stream()
+              .findFirst();
+      var mapping = existing.orElseGet(MappingEntityTypeRelationship::new);
+
       mapping.setSource(sourceEntityType);
       mapping.setRelationType(MAPPED_TO);
       mapping.setTarget(targetEntityType);
+      mapping.setSourceEntityTypeVersion(sourceEntityType.getVersion());
+      mapping.setTargetEntityTypeVersion(targetEntityType.getVersion());
       var mappingValuesNode = jsonUtils.jsonMapper().readTree(mappingValues);
       var validatingSchemaEither =
           jsonUtils.convertToMappingSchema(
@@ -129,7 +143,8 @@ public class MappingServiceImpl implements MappingService {
       mapping.setEntityPathReferences(entityPathReferences);
       var saved = mappingEntityTypeRelationshipRepository.save(mapping);
       log.info(
-          "Created MappingEntityTypeRelationship from {} to {}",
+          "{} MappingEntityTypeRelationship from {} to {}",
+          existing.isPresent() ? "Replaced" : "Created",
           sourceEntityTypeName,
           targetEntityTypeName);
       return saved;

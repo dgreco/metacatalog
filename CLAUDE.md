@@ -76,6 +76,23 @@ Located in `metacatalog-core/.../service`:
 - **`MappingUpdaterService`** — `@Scheduled` job that reacts to `EntityLifeCycleEvent`s to create /
   update mapped entities. Gated by `application.config.automaticEntitiesMapping` and guarded by an
   advisory lock so only one instance runs at a time.
+- **One mapping per (source, target) pair** — `MappingService.create` is create-or-replace:
+  re-creating an already-mapped pair updates the existing relationship in place (same id, values
+  re-validated, type versions re-stamped), so mapped entities stay attached and the engine never
+  derives a duplicate instance of the target type. The UI mapping form pre-fills from the existing
+  mapping and submitting replaces it.
+- **Versioning a mapped target type** — `EntityTypeService.createVersion` re-validates every
+  mapping *targeting* the type against the candidate schema and refuses the version if a mapping no
+  longer satisfies it (update or delete the mapping first). Otherwise the breakage would surface
+  only asynchronously, as FAILED lifecycle events. Existing mapped entities stay pinned to the
+  snapshot of the version their *mapping* was defined against — mapped entities are derived, so
+  they are validated against and pinned to the mapping's stamped target version: an untouched
+  mapping keeps them on the old version even after the type is versioned, and replacing the
+  mapping (re-stamped against the live version) moves them forward on their next update. Only
+  the target side can be checked statically — a mapping's SpEL reads source *values*, not the
+  source schema. Each mapping also records the source/target type versions it was defined against
+  (`sourceEntityTypeVersion` / `targetEntityTypeVersion`, frozen at mapping creation and exposed
+  read-only on the `Mapping` DTO); the UI shows them next to the type names in its mapping lists.
 
 ### Aggregate schemas
 
@@ -322,6 +339,11 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   daemon**. In CI (GitLab) this runs against Docker-in-Docker; the Postgres container is a shared
   singleton (not stopped per test class) and the JDBC URL is resolved dynamically for DinD.
 - Test data lives under each module's `src/test/resources` (e.g. `bulk/`, `jsons/`).
+- The plain-JS front end has no JS test runner; it is exercised by
+  `UiJavascriptSmokeTest` in `metacatalog-application` — the full app booted against a
+  Testcontainers PostgreSQL, driven by Selenium against a headless Chrome container (the browser
+  reaches the app via `host.testcontainers.internal`). Add scenarios there when UI JavaScript
+  behavior needs coverage.
 - Coverage via JaCoCo (report generated in the `test` phase).
 
 ## CI / Deployment

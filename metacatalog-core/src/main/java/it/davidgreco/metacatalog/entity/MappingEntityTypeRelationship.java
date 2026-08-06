@@ -51,6 +51,25 @@ public class MappingEntityTypeRelationship extends CommonRelationship<EntityType
   private JsonNode entityPathReferences;
 
   /**
+   * The version of the source entity type this mapping was defined against, frozen at mapping
+   * creation. Informational: the mapping itself always applies to the live type row.
+   */
+  @Column(name = "source_entity_type_version", nullable = false)
+  @ToString.Include
+  private Integer sourceEntityTypeVersion;
+
+  /**
+   * The version of the target entity type this mapping was defined — and its {@code mappingValues}
+   * validated — against, frozen at mapping creation. Informational: new versions of the target type
+   * are refused unless the mapping still satisfies them (see {@code
+   * EntityTypeService.createVersion}), so the live target schema is always compatible even when
+   * newer than this version.
+   */
+  @Column(name = "target_entity_type_version", nullable = false)
+  @ToString.Include
+  private Integer targetEntityTypeVersion;
+
+  /**
    * Represents a reference to an entity path used in mapping expressions.
    *
    * @param alias the alias used to reference this path in mapping expressions

@@ -128,6 +128,8 @@ public class CoreConfig {
    * @param traitRepository the trait repository
    * @param entityTypeVersionRepository the entity type version repository
    * @param entityRepository the entity repository
+   * @param mappingEntityTypeRelationshipRepository the mapping relationship repository, used to
+   *     refuse a new version that would break a mapping targeting the type
    * @return the entity type service
    */
   @Bean
@@ -136,12 +138,14 @@ public class CoreConfig {
       TraitRepository traitRepository,
       EntityTypeVersionRepository entityTypeVersionRepository,
       EntityRepository entityRepository,
+      MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       JsonUtils jsonUtils) {
     return new EntityTypeServiceImpl(
         entityTypeRepository,
         traitRepository,
         entityTypeVersionRepository,
         entityRepository,
+        mappingEntityTypeRelationshipRepository,
         jsonUtils);
   }
 

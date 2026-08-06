@@ -17,14 +17,14 @@ public interface MappingService extends CommonService<MappingEntityTypeRelations
 
   /**
    * Creates a mapping between two entity types, parsing the entity path references from a JSON
-   * string.
+   * string. If the pair already has a mapping, it is replaced in place (same id).
    *
    * @param sourceEntityTypeName the source entity type name
    * @param targetEntityTypeName the target entity type name
    * @param mappingValues a JSON string representing the mapping values
    * @param entityPathReferencesJson a JSON string representing the entity path references, or
    *     {@code null}/{@code ""} for an empty list
-   * @return the created mapping
+   * @return the created or replaced mapping
    */
   MappingEntityTypeRelationship create(
       String sourceEntityTypeName,
@@ -33,13 +33,17 @@ public interface MappingService extends CommonService<MappingEntityTypeRelations
       String entityPathReferencesJson);
 
   /**
-   * Creates a mapping between two entity types.
+   * Creates a mapping between two entity types. A (source, target) pair holds at most one mapping:
+   * if one already exists, it is replaced in place — same id, new values and path references,
+   * re-validated against the target schema and re-stamped with the current type versions — so
+   * mapped entities already derived through it stay attached instead of a second instance being
+   * derived alongside them.
    *
    * @param sourceEntityTypeName the source entity type name
    * @param targetEntityTypeName the target entity type name
    * @param mappingValues a JSON string representing the mapping values
    * @param entityPathReferences a list of entity path references
-   * @return the created mapping
+   * @return the created or replaced mapping
    */
   MappingEntityTypeRelationship create(
       String sourceEntityTypeName,

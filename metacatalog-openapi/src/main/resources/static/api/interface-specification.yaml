@@ -990,12 +990,15 @@ paths:
     post:
       tags:
         - Meta Catalog Manager
-      summary: Create a mapping
+      summary: Create or replace a mapping
       description: >
         Creates a mapping between two entity types, defining how entities of the source type
         are derived from entities of the target type. The mapping values are SpEL expressions
         evaluated against the source entity; entity path references describe how to traverse
-        from source to target via relationships.
+        from source to target via relationships. A (source, target) pair holds at most one
+        mapping: if one already exists it is replaced in place — same id, new values, re-validated
+        against the target schema and re-stamped with the current type versions — so entities
+        already derived through it stay attached instead of a second instance being derived.
       operationId: createMapping
       requestBody:
         description: A Mapping spec
@@ -1970,6 +1973,19 @@ components:
         targetEntityType:
           type: string
           description: Name of the target entity type.
+        sourceEntityTypeVersion:
+          type: integer
+          readOnly: true
+          description: >
+            The version of the source entity type this mapping was defined against, frozen at
+            mapping creation. Set by the service; must not be sent on create.
+        targetEntityTypeVersion:
+          type: integer
+          readOnly: true
+          description: >
+            The version of the target entity type this mapping was defined — and its values
+            validated — against, frozen at mapping creation. Set by the service; must not be
+            sent on create.
         mappingValues:
           type: string
           description: JSON string of SpEL expressions mapping source fields to target fields.

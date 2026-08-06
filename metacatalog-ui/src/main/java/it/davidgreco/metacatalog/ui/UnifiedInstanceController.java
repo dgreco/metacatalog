@@ -94,7 +94,7 @@ class UnifiedInstanceController {
     model.addAttribute("instanceId", id);
     var types = api.listEntityTypes().getBody();
     model.addAttribute("entityTypes", types);
-    model.addAttribute("typeSchemas", schemaMap(types));
+    addInstanceSchemaModel(types, entity, model);
     return "instances-form";
   }
 
@@ -116,7 +116,11 @@ class UnifiedInstanceController {
       model.addAttribute("instanceId", id);
       var types = api.listEntityTypes().getBody();
       model.addAttribute("entityTypes", types);
-      model.addAttribute("typeSchemas", schemaMap(types));
+      try {
+        addInstanceSchemaModel(types, (Entity) api.getEntity(id).getBody(), model);
+      } catch (RuntimeException lookupFailure) {
+        model.addAttribute("typeSchemas", schemaMap(types));
+      }
       model.addAttribute("error", e.getMessage());
       return "instances-form";
     }
@@ -185,7 +189,7 @@ class UnifiedInstanceController {
       model.addAttribute("instanceForm", form);
       model.addAttribute("instanceId", id);
       model.addAttribute("entityTypes", types);
-      model.addAttribute("typeSchemas", schemaMap(types));
+      addInstanceSchemaModel(types, entity, model);
       model.addAttribute("readOnly", true);
       return "instances-form";
     } catch (RuntimeException e) {
@@ -216,6 +220,33 @@ class UnifiedInstanceController {
       map.put(t.getName(), t.getSchema());
     }
     return map;
+  }
+
+  /**
+   * Adds the schema map for a page showing one existing instance, replacing the instance's own type
+   * entry with the schema of the version snapshot the instance is pinned to. The editor then
+   * renders — and the user edits against — the same schema the API validates an update with, rather
+   * than the latest version's.
+   *
+   * <p>Snapshots are matched by id: {@code GET /entity-type/{name}/versions} returns the historical
+   * snapshots (carrying their snapshot ids) plus the live row, whose DTO id is the entity-type row
+   * id. An instance pinned to the current live version therefore matches nothing and keeps the live
+   * schema, which is the correct one. When an older snapshot matches, its version number is exposed
+   * as {@code pinnedVersion} so the page can say so.
+   */
+  @SuppressWarnings("unchecked")
+  private void addInstanceSchemaModel(List<EntityType> types, Entity entity, Model model) {
+    var map = schemaMap(types);
+    List<EntityType> versions =
+        (List<EntityType>) api.listEntityTypeVersions(entity.getEntityType()).getBody();
+    for (var version : versions) {
+      if (version.getId().map(id -> id.equals(entity.getEntityTypeVersionId())).orElse(false)) {
+        map.put(entity.getEntityType(), version.getSchema());
+        version.getVersion().ifPresent(v -> model.addAttribute("pinnedVersion", v));
+        break;
+      }
+    }
+    model.addAttribute("typeSchemas", map);
   }
 
   // --- entity links ----------------------------------------------------------
