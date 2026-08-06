@@ -45,17 +45,34 @@ class UnifiedInstanceController {
   }
 
   @GetMapping
-  public String list(@RequestParam(required = false) String type, Model model) {
+  public String list(
+      @RequestParam(required = false) String type,
+      @RequestParam(required = false) String query,
+      Model model) {
     List<EntityType> types = api.listEntityTypes().getBody();
-    // An absent type lists every type's entities.
-    List<Entity> entities =
-        api.getEntities(Optional.ofNullable(type).filter(t -> !t.isBlank()), Optional.empty())
-            .getBody();
+    // An absent type lists every type's entities; the query path filters within whatever the
+    // type narrows the list to. An invalid jsonpath expression is a user typo, not a system
+    // failure, so it renders as an error on the page with an empty result list.
+    List<Entity> entities;
+    try {
+      entities =
+          api.getEntities(
+                  Optional.ofNullable(type).filter(t -> !t.isBlank()),
+                  Optional.ofNullable(query).filter(q -> !q.isBlank()))
+              .getBody();
+    } catch (RuntimeException e) {
+      entities = List.of();
+      model.addAttribute("error", e.getMessage());
+    }
     model.addAttribute(
         "instances",
         InstanceRowView.listFrom(entities, aggregateRootTypeNames(), provisionableTypeNames()));
     model.addAttribute("selectedType", type);
+    model.addAttribute("query", query);
     model.addAttribute("entityTypes", types);
+    // The query builder enumerates a type's fields client-side, so the page carries every type's
+    // effective schema the same way the instance editor does.
+    model.addAttribute("typeSchemas", schemaMap(types));
     return "instances-list";
   }
 

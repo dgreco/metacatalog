@@ -230,4 +230,115 @@ class UiJavascriptSmokeTest {
         driver.findElement(By.cssSelector("[data-view-panel='builder']")).isDisplayed(),
         "the builder panel must hide while the YAML view is active");
   }
+
+  /**
+   * The instances search must offer a guided way to write the query path once a type is chosen: the
+   * condition builder lists the type's schema fields, composes a jsonpath predicate into the query
+   * input, combines further conditions with and / or / not (parenthesizing the existing filter when
+   * an {@code &&} lands on a top-level {@code ||}), and the search actually filters the list.
+   */
+  @Test
+  void instancesSearchBuilderComposesJsonpathFromTheTypeSchema() {
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    var entityService = context.getBean(EntityService.class);
+
+    entityTypeService.create(
+        "SearchUiType",
+        List.of(),
+        Optional.empty(),
+        """
+        {
+          "type": "object",
+          "properties": { "name": { "type": "string" }, "size": { "type": "integer" } }
+        }
+        """);
+    entityService.create("SearchUiType", "{\"name\": \"big\", \"size\": 500}");
+    entityService.create("SearchUiType", "{\"name\": \"small\", \"size\": 5}");
+
+    driver.get(baseUrl + "/ui/instances?type=SearchUiType");
+
+    // With a type selected, the builder appears listing the schema's fields.
+    await().until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("#query-builder")));
+    var fieldSelect = new Select(driver.findElement(By.id("qp-field")));
+    var fieldLabels = fieldSelect.getOptions().stream().map(o -> o.getText()).toList();
+    Assertions.assertTrue(
+        fieldLabels.containsAll(List.of("name", "size")),
+        "the builder must list the type's schema fields, got: " + fieldLabels);
+
+    // size > 100 → the numeric operators appear and the composed predicate lands in the input.
+    fieldSelect.selectByVisibleText("size");
+    new Select(driver.findElement(By.id("qp-op"))).selectByVisibleText(">");
+    driver.findElement(By.id("qp-value")).sendKeys("100");
+    driver.findElement(By.id("qp-add")).click();
+    Assertions.assertEquals(
+        "$ ? (@.size > 100)",
+        driver.findElement(By.id("query")).getDomProperty("value"),
+        "the builder must write the jsonpath predicate into the query input");
+
+    // A second condition merges into the same root filter with the default "and".
+    fieldSelect.selectByVisibleText("name");
+    new Select(driver.findElement(By.id("qp-op"))).selectByVisibleText("equals");
+    driver.findElement(By.id("qp-value")).sendKeys("big");
+    driver.findElement(By.id("qp-add")).click();
+    Assertions.assertEquals(
+        "$ ? (@.size > 100 && @.name == \"big\")",
+        driver.findElement(By.id("query")).getDomProperty("value"),
+        "a second condition must merge into the existing filter");
+
+    // "or" joins with ||.
+    new Select(driver.findElement(By.id("qp-join"))).selectByVisibleText("or");
+    fieldSelect.selectByVisibleText("name");
+    new Select(driver.findElement(By.id("qp-op"))).selectByVisibleText("equals");
+    driver.findElement(By.id("qp-value")).sendKeys("small");
+    driver.findElement(By.id("qp-add")).click();
+    Assertions.assertEquals(
+        "$ ? (@.size > 100 && @.name == \"big\" || @.name == \"small\")",
+        driver.findElement(By.id("query")).getDomProperty("value"),
+        "an or-condition must join with ||");
+
+    // An "and" onto a filter with a top-level || parenthesizes the existing filter first, so the
+    // new condition applies to the whole disjunction rather than its last branch.
+    new Select(driver.findElement(By.id("qp-join"))).selectByVisibleText("and");
+    fieldSelect.selectByVisibleText("size");
+    new Select(driver.findElement(By.id("qp-op"))).selectByVisibleText("<");
+    driver.findElement(By.id("qp-value")).sendKeys("10");
+    driver.findElement(By.id("qp-add")).click();
+    Assertions.assertEquals(
+        "$ ? ((@.size > 100 && @.name == \"big\" || @.name == \"small\") && @.size < 10)",
+        driver.findElement(By.id("query")).getDomProperty("value"),
+        "an and-condition onto a top-level || must parenthesize the existing filter");
+
+    // Searching applies the composed filter server-side: only "small" satisfies it. The wait
+    // demands exactly one matching row — the pre-search page lists both instances, so a weaker
+    // condition could pass before the reload lands.
+    driver.findElement(By.cssSelector(".filter-bar button[type=submit]")).click();
+    await()
+        .until(
+            d -> {
+              var trs = d.findElements(By.cssSelector("main table tbody tr"));
+              return trs.size() == 1 && trs.getFirst().getText().contains("small");
+            });
+
+    // "not" negates a condition: !(name == "small") matches only "big" — a result set distinct
+    // from the previous search's, so the wait below cannot pass against the pre-reload page. The
+    // page reloaded on search, so the controls are re-located and the query rebuilt from scratch.
+    driver.findElement(By.id("query")).clear();
+    driver.findElement(By.id("qp-not")).click();
+    new Select(driver.findElement(By.id("qp-field"))).selectByVisibleText("name");
+    new Select(driver.findElement(By.id("qp-op"))).selectByVisibleText("equals");
+    driver.findElement(By.id("qp-value")).sendKeys("small");
+    driver.findElement(By.id("qp-add")).click();
+    Assertions.assertEquals(
+        "$ ? (!(@.name == \"small\"))",
+        driver.findElement(By.id("query")).getDomProperty("value"),
+        "a not-condition must be wrapped in !(...)");
+
+    driver.findElement(By.cssSelector(".filter-bar button[type=submit]")).click();
+    await()
+        .until(
+            d -> {
+              var trs = d.findElements(By.cssSelector("main table tbody tr"));
+              return trs.size() == 1 && trs.getFirst().getText().contains("big");
+            });
+  }
 }

@@ -343,6 +343,61 @@ class UiControllerTest {
   }
 
   @Test
+  void instancesListCarriesTypeSchemasForTheQueryBuilder() throws Exception {
+    var type = new EntityType();
+    type.setName("Person");
+    type.setSchema("{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}");
+    given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(type)));
+
+    mockMvc
+        .perform(get("/ui/instances"))
+        .andExpect(status().isOk())
+        .andExpect(
+            model()
+                .attribute(
+                    "typeSchemas", org.hamcrest.Matchers.hasEntry("Person", type.getSchema())));
+  }
+
+  @Test
+  void instancesSearchForwardsTypeAndQueryPathToApi() throws Exception {
+    mockMvc
+        .perform(
+            get("/ui/instances").param("type", "Person").param("query", "$.name ? (@ == \"x\")"))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-list"))
+        .andExpect(model().attribute("selectedType", "Person"))
+        .andExpect(model().attribute("query", "$.name ? (@ == \"x\")"));
+
+    verify(api)
+        .getEntities(
+            eq(java.util.Optional.of("Person")),
+            eq(java.util.Optional.of("$.name ? (@ == \"x\")")));
+  }
+
+  @Test
+  void instancesSearchWithBlankParamsAppliesNoFilter() throws Exception {
+    mockMvc
+        .perform(get("/ui/instances").param("type", "").param("query", " "))
+        .andExpect(status().isOk());
+
+    verify(api).getEntities(eq(java.util.Optional.empty()), eq(java.util.Optional.empty()));
+  }
+
+  @Test
+  void instancesSearchWithInvalidQueryPathRendersErrorNotFailure() throws Exception {
+    given(api.getEntities(any(), eq(java.util.Optional.of("$["))))
+        .willThrow(apiError("Invalid json path"));
+
+    mockMvc
+        .perform(get("/ui/instances").param("query", "$["))
+        .andExpect(status().isOk())
+        .andExpect(view().name("instances-list"))
+        .andExpect(model().attribute("instances", List.of()))
+        .andExpect(
+            model().attribute("error", org.hamcrest.Matchers.containsString("Invalid json path")));
+  }
+
+  @Test
   void instancesNewFormRenders() throws Exception {
     mockMvc
         .perform(get("/ui/instances/new"))

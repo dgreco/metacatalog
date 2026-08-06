@@ -20,10 +20,10 @@
     <div class="flash" th:if="${message}" th:text="${message}"></div>
     <div class="error" th:if="${error}" th:text="${error}"></div>
 
-    <!-- Filter -->
+    <!-- Search -->
     <div class="filter-bar">
         <form method="get" th:action="@{/ui/instances}">
-            <label for="type">Filter by type:</label>
+            <label for="type">Type:</label>
             <select name="type" id="type" onchange="this.form.submit()">
                 <option value="">All types</option>
                 <option th:each="et : ${entityTypes}"
@@ -31,8 +31,36 @@
                         th:text="${et.name}"
                         th:selected="${selectedType != null && selectedType == et.name}">type</option>
             </select>
+            <label for="query">Query path:</label>
+            <input type="search" name="query" id="query" class="query-input"
+                   placeholder='e.g. $ ? (@.name == "orders")'
+                   th:value="${query}"/>
+            <button type="submit" class="btn-sm">Search</button>
+            <a class="btn-sm" th:if="${(selectedType != null && !selectedType.isBlank()) || (query != null && !query.isBlank())}"
+               th:href="@{/ui/instances}">Clear</a>
         </form>
     </div>
+    <!-- Guided condition builder: shown by query-path-builder.js when the selected type's
+         schema can be enumerated; composes jsonpath predicates into the query input above. -->
+    <div class="query-builder" id="query-builder" hidden>
+        <label for="qp-field">Add condition:</label>
+        <select id="qp-join" title="How to combine with the current query">
+            <option value="&amp;&amp;">and</option>
+            <option value="||">or</option>
+        </select>
+        <label class="qp-not" title="Negate this condition">
+            <input type="checkbox" id="qp-not"/> not
+        </label>
+        <select id="qp-field" title="Field from the selected type's schema"></select>
+        <select id="qp-op" title="Operator"></select>
+        <span id="qp-value-slot"></span>
+        <button type="button" class="btn-sm" id="qp-add">Add to query</button>
+    </div>
+    <p class="hint">The query path is a PostgreSQL <code>jsonpath</code> expression matched against
+        each instance's values, e.g. <code>$ ? (@.owner == "sales")</code> or
+        <code>$ ? (@.size > 100 || !(@.archived == true))</code>. Leave it empty to list
+        everything. Choosing a type adds a condition builder listing that type's fields;
+        conditions combine with <em>and</em> / <em>or</em> and can be negated with <em>not</em>.</p>
 
     <!-- Instances table -->
     <table th:if="${!instances.isEmpty()}">
@@ -86,9 +114,14 @@
         </tr>
         </tbody>
     </table>
-    <p class="empty" th:if="${instances.isEmpty()}">No instances yet.</p>
+    <p class="empty" th:if="${instances.isEmpty()}"
+       th:text="${query != null && !query.isBlank()} ? 'No instances match the query.' : 'No instances yet.'">No instances yet.</p>
 </main>
 
+<script th:inline="javascript" th:if="${typeSchemas}">
+    window.__TYPE_SCHEMAS__ = /*[[${typeSchemas}]]*/ {};
+</script>
+<script th:src="@{/ui/js/query-path-builder.js}"></script>
 <script>
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {
         form.addEventListener('submit', function (e) {
