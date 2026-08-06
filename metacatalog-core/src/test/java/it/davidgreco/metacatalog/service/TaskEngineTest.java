@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.vavr.control.Try;
 import it.davidgreco.metacatalog.CoreConfigProperties;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -74,13 +73,11 @@ class TaskEngineTest {
     var schedule = taskManager.createSchedule();
     schedule.addTask(new SimpleTask("t1", counter::incrementAndGet));
 
-    var id = taskManager.schedule(schedule);
-    taskManager.joinSchedule(id);
+    var handle = taskManager.schedule(schedule);
+    handle.future().get();
 
     assertEquals(1, counter.get());
-    var future = taskManager.getRunningScheduleFuture(id).orElseThrow();
-    assertTrue(future.get().isSuccess());
-    assertTrue(taskManager.getScheduleResults(id).stream().allMatch(Try::isSuccess));
+    assertTrue(handle.future().get().isSuccess());
   }
 
   @Test
@@ -94,12 +91,10 @@ class TaskEngineTest {
               throw new RuntimeException("boom");
             }));
 
-    var id = taskManager.schedule(schedule);
-    taskManager.joinSchedule(id);
+    var handle = taskManager.schedule(schedule);
 
-    var future = taskManager.getRunningScheduleFuture(id).orElseThrow();
-    assertFalse(future.get().isSuccess(), "a failing task must make the schedule future fail");
-    assertTrue(taskManager.getScheduleResults(id).stream().anyMatch(Try::isFailure));
+    assertFalse(
+        handle.future().get().isSuccess(), "a failing task must make the schedule future fail");
   }
 
   @Test
@@ -129,9 +124,9 @@ class TaskEngineTest {
         previous = task;
       }
 
-      var id = boundedTaskManager.schedule(schedule);
+      var handle = boundedTaskManager.schedule(schedule);
       // A deadlock would hang here; the timeout turns it into a failure instead.
-      boundedTaskManager.getRunningScheduleFuture(id).orElseThrow().get(25, TimeUnit.SECONDS);
+      handle.future().get(25, TimeUnit.SECONDS);
 
       assertEquals(40, order.size());
       assertEquals(IntStream.range(0, 40).boxed().toList(), order.stream().toList());
@@ -150,8 +145,8 @@ class TaskEngineTest {
     schedule.addTask(dependent);
     schedule.addTask(dependency);
 
-    var id = taskManager.schedule(schedule);
-    taskManager.joinSchedule(id);
+    var handle = taskManager.schedule(schedule);
+    handle.future().get();
 
     assertTrue(order.indexOf("dep") < order.indexOf("main"), "dependency must run first");
   }
@@ -164,11 +159,9 @@ class TaskEngineTest {
    * <p>The task engine decorates every scheduled task with a {@code .handle()} stage that must
    * populate the per-task result slot whether the task succeeded, failed, or was never accepted by
    * the executor. If the handle stage is skipped on rejection, the result for the rejected task is
-   * silently dropped and {@code getScheduleResults} returns a shorter list than the number of
-   * submitted tasks, which in turn breaks any caller that joins results by index. This test forces
-   * a rejection by sizing the pool (1) and queue (1) so the third submitted task cannot be
-   * accepted, then asserts that all three tasks have an entry in the results and that at least one
-   * entry is a failure.
+   * silently dropped and {@code Task.getResult()} returns empty. This test forces a rejection by
+   * sizing the pool (1) and queue (1) so the third submitted task cannot be accepted, then asserts
+   * that the schedule future completes with a failure.
    */
   @Test
   void executorRejectionStillSetsResult() throws Exception {
@@ -196,54 +189,14 @@ class TaskEngineTest {
       schedule.addTask(new SimpleTask("queued1", () -> {}));
       schedule.addTask(new SimpleTask("rejected", () -> {}));
 
-      var id = boundedTaskManager.schedule(schedule);
+      var handle = boundedTaskManager.schedule(schedule);
       // Release the blocker so the pool can drain.
       latch.countDown();
-      boundedTaskManager.joinSchedule(id);
 
-      // The rejected task's result must be present (Try.failure), not Optional.empty().
-      var results = boundedTaskManager.getScheduleResults(id);
-      assertEquals(
-          3, results.size(), "all three task results must be present, even the rejected one");
-      assertTrue(
-          results.stream().anyMatch(Try::isFailure),
-          "at least the rejected task must report a failure");
+      // The schedule future must complete with a failure (the rejected task).
+      assertFalse(handle.future().get().isSuccess(), "rejected task must make the schedule fail");
     } finally {
       pool.shutdown();
     }
-  }
-
-  /**
-   * Verifies that the schedule-result cache is bounded by the configured TTL and maximum size.
-   *
-   * <p>{@link TaskManager} keeps completed schedules in a Caffeine cache so that callers can read
-   * results and the running future shortly after a schedule finishes. The cache must not grow
-   * unboundedly, so its expiry-after-write and maximum size are taken from {@link
-   * CoreConfigProperties}. This test builds a {@link TaskManager} with a 100 ms TTL, schedules a
-   * trivial task, waits for the cache entry to expire, and asserts that both {@code
-   * getScheduleResults} and {@code getRunningScheduleFuture} return empty for the expired schedule
-   * id. This guards against accidental hard-coding of the cache policy.
-   */
-  @Test
-  void evictedScheduleReturnsEmptyResults() throws Exception {
-    var tinyConfig =
-        new CoreConfigProperties(
-            false, Duration.ofSeconds(1), 3, 1, Duration.ofMillis(100), Duration.ofHours(1));
-    var tinyTaskManager = new TaskManager(new SimpleAsyncTaskExecutor(), tinyConfig);
-    var schedule = tinyTaskManager.createSchedule();
-    schedule.addTask(new SimpleTask("t1", () -> {}));
-
-    var id = tinyTaskManager.schedule(schedule);
-    tinyTaskManager.joinSchedule(id);
-
-    // Wait for the cache entry to expire.
-    Thread.sleep(300);
-
-    assertTrue(
-        tinyTaskManager.getScheduleResults(id).isEmpty(),
-        "evicted schedule must return an empty result list");
-    assertTrue(
-        tinyTaskManager.getRunningScheduleFuture(id).isEmpty(),
-        "evicted schedule must not have a running future");
   }
 }

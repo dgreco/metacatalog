@@ -16,7 +16,7 @@ class TaskManagerTests extends CommonServiceTestingSupport {
   }
 
   @Test
-  void testSchedulingWithDependencies() {
+  void testSchedulingWithDependencies() throws Exception {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();
@@ -51,15 +51,14 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     task4.dependsOn(task1);
 
-    taskManager.schedule(schedule);
-
-    taskManager.joinSchedule(schedule.getId());
+    var handle = taskManager.schedule(schedule);
+    handle.future().get();
 
     Assertions.assertEquals(List.of("3", "1", "4", "2"), list.stream().toList());
   }
 
   @Test
-  void testSchedulingWithExceptions() {
+  void testSchedulingWithExceptions() throws Exception {
     var taskManager = getApplicationContext().getBean(TaskManager.class);
 
     var list = new ConcurrentLinkedDeque<String>();
@@ -92,12 +91,18 @@ class TaskManagerTests extends CommonServiceTestingSupport {
 
     task1.dependsOn(task2);
 
-    var scheduleId = taskManager.schedule(schedule);
+    var handle = taskManager.schedule(schedule);
 
-    taskManager.joinSchedule(scheduleId);
+    // The schedule future must complete with a failure (task 2 throws).
+    Assertions.assertFalse(handle.future().get().isSuccess());
 
+    // Verify task results directly — task 2's result is recorded on the task itself.
     Assertions.assertEquals(
         List.of(true, true, false),
-        taskManager.getScheduleResults(scheduleId).stream().map(Try::isFailure).toList());
+        List.of(task1, task2, task3).stream()
+            .map(Task::getResult)
+            .flatMap(java.util.Optional::stream)
+            .map(Try::isFailure)
+            .toList());
   }
 }

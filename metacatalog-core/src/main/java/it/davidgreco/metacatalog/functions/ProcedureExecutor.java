@@ -96,13 +96,12 @@ public class ProcedureExecutor {
     if (procedure == null) {
       throw new ServiceError("Procedure not found: " + procedureName);
     }
-    var scheduleId = executeInTransaction(entityId, procedure);
-    if (scheduleId.isPresent()) {
-      joinAndCheck(scheduleId.get());
-    }
+    var scheduleHandle = executeInTransaction(entityId, procedure);
+    scheduleHandle.ifPresent(this::joinAndCheck);
   }
 
-  private Optional<String> executeInTransaction(String entityId, EntityProcedure procedure) {
+  private Optional<TaskManager.ScheduleHandle> executeInTransaction(
+      String entityId, EntityProcedure procedure) {
     return transactionTemplate.execute(
         status -> {
           var entity = entityService.read(entityId);
@@ -110,19 +109,9 @@ public class ProcedureExecutor {
         });
   }
 
-  private void joinAndCheck(String scheduleId) {
-    // Fetch the future ONCE and use this single reference for both blocking and result
-    // inspection. Two independent cache lookups (joinSchedule then getRunningScheduleFuture)
-    // race against Caffeine eviction: if the entry evicts between them, a failed schedule is
-    // silently reported as success.
-    var runningScheduleFuture = taskManager.getRunningScheduleFuture(scheduleId);
-    if (runningScheduleFuture.isEmpty()) {
-      // The schedule already evicted from the cache. We can't inspect its result, so there is
-      // nothing to check — the schedule completed (or was evicted) and we have no handle.
-      return;
-    }
+  private void joinAndCheck(TaskManager.ScheduleHandle handle) {
     try {
-      var res = runningScheduleFuture.get().get();
+      var res = handle.future().get();
       if (res.isFailure()) {
         var cause = res.getCause();
         throw new ServiceError(

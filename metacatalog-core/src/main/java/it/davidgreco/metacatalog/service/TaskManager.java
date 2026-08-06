@@ -1,12 +1,8 @@
 package it.davidgreco.metacatalog.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import io.vavr.control.Try;
 import it.davidgreco.metacatalog.CoreConfigProperties;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.task.AsyncTaskExecutor;
 
@@ -14,21 +10,18 @@ import org.springframework.core.task.AsyncTaskExecutor;
  * Manages asynchronous task execution and scheduling.
  *
  * <p>This service is a facade over {@link TaskFactoryRegistry} (factory registration and task
- * creation) and a Caffeine-backed schedule cache. {@link Schedule} is a first-class class that
- * handles JGraphT cycle detection and CompletableFuture-based execution.
+ * creation) and the {@link Schedule} class, which handles JGraphT cycle detection and
+ * CompletableFuture-based execution.
  *
- * <p>The schedule-result cache size and TTL are configurable via {@link CoreConfigProperties}
- * ({@code taskScheduleCacheMaxSize}, {@code taskScheduleCacheExpireAfterWrite}). A single cache
- * holds {@link RunningSchedule} entries that pair each {@link Schedule} with its {@link Future}, so
- * the two are always evicted together. When an entry is evicted, {@link #joinSchedule} and {@link
- * #getScheduleResults} return empty results — callers should not assume a schedule is cached
- * indefinitely.
+ * <p>Procedures call {@link #schedule(Schedule)} to submit work. The method returns a {@link
+ * ScheduleHandle} carrying both the schedule ID and the future for its result. Callers should await
+ * the result via {@code handle.future().get()} rather than looking it up by ID — the future is
+ * passed directly, so there is no cache to evict and no race to lose failures.
  */
 @Slf4j
 public class TaskManager {
 
   private final TaskFactoryRegistry taskFactoryRegistry;
-  private final Cache<String, RunningSchedule> runningSchedules;
   private final AsyncTaskExecutor asyncTaskExecutor;
 
   public TaskManager(
@@ -42,11 +35,6 @@ public class TaskManager {
       CoreConfigProperties coreConfigProperties) {
     this.taskFactoryRegistry = taskFactoryRegistry;
     this.asyncTaskExecutor = asyncTaskExecutor;
-    this.runningSchedules =
-        Caffeine.newBuilder()
-            .maximumSize(coreConfigProperties.taskScheduleCacheMaxSize())
-            .expireAfterWrite(coreConfigProperties.taskScheduleCacheExpireAfterWrite())
-            .build();
   }
 
   public <T> void registerTaskFactory(String name, Class<T> type, TaskFactory<T> factory) {
@@ -65,40 +53,26 @@ public class TaskManager {
     return new Schedule();
   }
 
-  public String schedule(Schedule schedule) {
-    runningSchedules.put(
-        schedule.getId(), new RunningSchedule(schedule, schedule.schedule(asyncTaskExecutor)));
-    return schedule.getId();
+  /**
+   * Submits a schedule for asynchronous execution.
+   *
+   * <p>Tasks are executed in dependency order via {@code CompletableFuture} chains — no worker
+   * thread blocks while awaiting dependencies, so wide or deep graphs cannot starve the pool.
+   *
+   * @param schedule the schedule to submit
+   * @return a handle carrying the schedule ID and the future for its result; await via {@code
+   *     handle.future().get()}
+   */
+  public ScheduleHandle schedule(Schedule schedule) {
+    var future = schedule.schedule(asyncTaskExecutor);
+    return new ScheduleHandle(schedule.getId(), future);
   }
 
-  public void joinSchedule(String id) {
-    var rs = runningSchedules.getIfPresent(id);
-    if (rs != null) {
-      try {
-        rs.future().get();
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        throw new ServiceError("Schedule execution interrupted: " + e.getMessage());
-      } catch (java.util.concurrent.ExecutionException e) {
-        throw new ServiceError("Schedule execution failed: " + e.getMessage());
-      }
-    }
-  }
-
-  public List<Try<Void>> getScheduleResults(String id) {
-    var rs = runningSchedules.getIfPresent(id);
-    if (rs == null) {
-      return List.of();
-    }
-    return rs.schedule().getTasks().stream()
-        .map(Task::getResult)
-        .flatMap(Optional::stream)
-        .toList();
-  }
-
-  public Optional<Future<Try<Void>>> getRunningScheduleFuture(String id) {
-    return Optional.ofNullable(runningSchedules.getIfPresent(id)).map(RunningSchedule::future);
-  }
-
-  private record RunningSchedule(Schedule schedule, Future<Try<Void>> future) {}
+  /**
+   * Handle returned by {@link #schedule(Schedule)} carrying the schedule ID and the future for its
+   * result. Callers should await the result via {@code handle.future().get()} rather than looking
+   * it up by ID — the future is passed directly, so there is no cache to evict and no race to lose
+   * failures.
+   */
+  public record ScheduleHandle(String id, CompletableFuture<Try<Void>> future) {}
 }

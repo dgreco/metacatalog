@@ -40,7 +40,7 @@ public class UnprovisioningProcedure extends AbstractEntityProcedure {
   private final TaskManager taskManager;
 
   @Override
-  protected Optional<String> execute(Entity entity) {
+  protected Optional<TaskManager.ScheduleHandle> execute(Entity entity) {
     var aggregate = aggregateService.read(entity.getId(), true);
     var resourceGraph = resourceGraphBuilder.buildResourceGraph(aggregate);
     var tasks = createTasksForVertices(resourceGraph);
@@ -49,8 +49,8 @@ public class UnprovisioningProcedure extends AbstractEntityProcedure {
     for (var task : tasks.values()) {
       schedule.addTask(task);
     }
-    taskManager.schedule(schedule);
-    return Optional.of(schedule.getId());
+    var handle = taskManager.schedule(schedule);
+    return Optional.of(handle);
   }
 
   /**
