@@ -77,6 +77,71 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
         "error must mention the undeclared ref; got: " + ex.getMessage());
   }
 
+  /**
+   * Replays the docker demo flow against the real files under {@code docker/bulk}: load the model,
+   * load the aggregate, let the mapping engine derive the resources, delete the aggregate from the
+   * catalog (as the UI does), and load the aggregate file again. The reload is what the compose
+   * bulk-loader does after a restart when the demo aggregate was deleted, and must succeed.
+   */
+  @Test
+  void testDockerDemoFilesReloadAfterAggregateDeletion() throws java.io.IOException {
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var bulkDir = java.nio.file.Path.of("..", "docker", "bulk");
+    // The same model also ships as the bulk1.yaml test fixture, so another test in this class may
+    // have loaded it already — mirror the compose loader and only load it when it is missing.
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    boolean modelLoaded;
+    try {
+      traitService.read("WithName");
+      modelLoaded = true;
+    } catch (NotFoundException e) {
+      modelLoaded = false;
+    }
+    if (!modelLoaded) {
+      try (var model = java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-model.yaml"))) {
+        bulkLoaderService.bulkModelCreation(model);
+      }
+    }
+    var s3Before = entityService.list("S3FolderType", "").size();
+    var athenaBefore = entityService.list("AthenaTableType", "").size();
+    java.util.List<String> ids;
+    try (var instances =
+        java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-instances.yaml"))) {
+      ids = bulkLoaderService.bulkAggregateCreation(instances);
+    }
+
+    // The scheduled mapping engine derives the S3 folder and the Athena table asynchronously;
+    // the aggregate delete below must see them to remove them with the tree. Counted as deltas:
+    // other tests' aggregates may already have derived instances of the same types.
+    await()
+        .atMost(java.time.Duration.ofSeconds(30))
+        .until(
+            () ->
+                entityService.list("S3FolderType", "").size() == s3Before + 1
+                    && entityService.list("AthenaTableType", "").size() == athenaBefore + 1);
+
+    aggregateService.delete(ids.getFirst());
+
+    // Mimic an app restart followed by a read probe, which is what the compose bulk-loader does:
+    // clear the Spring caches (a restart empties them) and list entities of the root type. The
+    // list caches the EntityType via findByName — an instance detached from the probe's session.
+    // The reload below must still work: its create must not attach that detached instance to the
+    // new entity, or linking the parts walks a dead lazy proxy and dies mid-transaction.
+    var cacheManager =
+        getApplicationContext().getBean(org.springframework.cache.CacheManager.class);
+    cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
+    entityService.list("DataProductType", "");
+
+    try (var instances =
+        java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-instances.yaml"))) {
+      ids = bulkLoaderService.bulkAggregateCreation(instances);
+    }
+    assertTrue(ids.size() == 1, "the demo aggregate must load again after being deleted");
+  }
+
   /** Malformed top-level section (non-array) must throw ServiceError, not silently skip. */
   @Test
   void bulkModelCreationRejectsNonArraySection() {

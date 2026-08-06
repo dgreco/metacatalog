@@ -360,7 +360,11 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
 - **CI:** `.gitlab-ci.yml` — `build` stage on `maven:3-eclipse-temurin-25` with a `docker:dind`
   service: runs `mvn clean install spotless:check test`, then on `main`/`master`/`develop` builds
   and pushes a Docker image (tags: short SHA, `latest`, and version on main).
-- **Docker Compose:** `docker-compose.yml` — Postgres 18.1 (`:5432`) + app (`:8080`, `docker` profile).
+- **Docker Compose:** `docker-compose.yml` — Postgres 18.1 (`:5432`) + app (`:8080`, `docker`
+  profile) + a one-shot `bulk-loader` that seeds the demo model and aggregate from `docker/bulk/`.
+  The loader is idempotent across restarts (the postgres volume persists): each step probes the API
+  first and only loads what is missing, so deleting the demo aggregate from the UI and restarting
+  re-creates just the aggregate.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).
