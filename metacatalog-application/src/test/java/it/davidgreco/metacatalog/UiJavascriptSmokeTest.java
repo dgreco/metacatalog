@@ -216,5 +216,18 @@ class UiJavascriptSmokeTest {
     Assertions.assertTrue(
         driver.getPageSource().contains("pinned to schema version 1"),
         "the page must say which version the instance is pinned to");
+
+    // The read-only view page offers the same values as JSON and YAML: clicking the YAML tab
+    // hides the builder and shows the YAML rendering.
+    driver.get(baseUrl + "/ui/instances/" + instance.getId());
+    await().until(ExpectedConditions.elementToBeClickable(By.cssSelector("[data-view='yaml']")));
+    driver.findElement(By.cssSelector("[data-view='yaml']")).click();
+    var yamlPanel = driver.findElement(By.cssSelector("[data-view-panel='yaml']"));
+    await().until(d -> yamlPanel.isDisplayed());
+    Assertions.assertTrue(
+        yamlPanel.getText().contains("a: 7"), "the YAML tab must render the stored values");
+    Assertions.assertFalse(
+        driver.findElement(By.cssSelector("[data-view-panel='builder']")).isDisplayed(),
+        "the builder panel must hide while the YAML view is active");
   }
 }

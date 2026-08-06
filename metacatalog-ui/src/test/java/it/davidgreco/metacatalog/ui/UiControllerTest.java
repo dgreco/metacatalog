@@ -64,7 +64,10 @@ class UiControllerTest {
                 new EntityTypeUiController(api),
                 new MappingUiController(api, mapper, new HtmlSafeJsonSerializer(mapper)),
                 new BulkUiController(api),
-                new UnifiedInstanceController(api))
+                new UnifiedInstanceController(
+                    api,
+                    mapper,
+                    new ObjectMapper(new com.fasterxml.jackson.dataformat.yaml.YAMLFactory())))
             .setViewResolvers(
                 new org.springframework.web.servlet.view.InternalResourceViewResolver(
                     "/WEB-INF/views/", ".jsp"))
@@ -457,6 +460,32 @@ class UiControllerTest {
     var typeSchemas = (java.util.Map<String, String>) model.get("typeSchemas");
     org.junit.jupiter.api.Assertions.assertEquals("{\"live\":true}", typeSchemas.get("Person"));
     org.junit.jupiter.api.Assertions.assertNull(model.get("pinnedVersion"));
+  }
+
+  /**
+   * The view page must offer the stored values in both JSON (pretty-printed) and YAML renderings,
+   * produced server-side from the entity's values.
+   */
+  @Test
+  void viewOffersValuesAsJsonAndYaml() throws Exception {
+    var entity = new Entity();
+    entity.setEntityType("Person");
+    entity.setValues("{\"name\":\"Alice\",\"age\":42}");
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+
+    var result = mockMvc.perform(get("/ui/instances/ent-1")).andExpect(status().isOk()).andReturn();
+
+    var model = result.getModelAndView().getModel();
+    var valuesJson = (String) model.get("valuesJson");
+    var valuesYaml = (String) model.get("valuesYaml");
+    org.junit.jupiter.api.Assertions.assertTrue(
+        valuesJson.contains("\"name\" : \"Alice\"") || valuesJson.contains("\"name\": \"Alice\""),
+        "JSON rendering must be pretty-printed, got: " + valuesJson);
+    org.junit.jupiter.api.Assertions.assertTrue(
+        valuesYaml.contains("name:") && valuesYaml.contains("age: 42"),
+        "YAML rendering must carry the values, got: " + valuesYaml);
+    org.junit.jupiter.api.Assertions.assertFalse(
+        valuesYaml.startsWith("---"), "the YAML document marker is stripped for display");
   }
 
   /**

@@ -1,5 +1,7 @@
 package it.davidgreco.metacatalog.ui;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
@@ -29,9 +31,17 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 class UnifiedInstanceController {
 
   private final MetacatalogApiDelegate api;
+  private final ObjectMapper jsonMapper;
+  private final ObjectMapper yamlMapper;
 
-  UnifiedInstanceController(MetacatalogApiDelegate api) {
+  UnifiedInstanceController(
+      MetacatalogApiDelegate api,
+      ObjectMapper jsonMapper,
+      @org.springframework.beans.factory.annotation.Qualifier("yamlMapper")
+          ObjectMapper yamlMapper) {
     this.api = api;
+    this.jsonMapper = jsonMapper;
+    this.yamlMapper = yamlMapper;
   }
 
   @GetMapping
@@ -190,6 +200,7 @@ class UnifiedInstanceController {
       model.addAttribute("instanceId", id);
       model.addAttribute("entityTypes", types);
       addInstanceSchemaModel(types, entity, model);
+      addValueRenderings(entity.getValues(), model);
       model.addAttribute("readOnly", true);
       return "instances-form";
     } catch (RuntimeException e) {
@@ -247,6 +258,24 @@ class UnifiedInstanceController {
       }
     }
     model.addAttribute("typeSchemas", map);
+  }
+
+  /**
+   * Adds pretty-printed JSON and YAML renderings of the stored values, backing the JSON / YAML tabs
+   * of the read-only view page. Values that fail to parse (which the API should never return) fall
+   * back to the raw string under the JSON tab, and the YAML tab is not offered.
+   */
+  private void addValueRenderings(String values, Model model) {
+    try {
+      var tree = jsonMapper.readTree(values);
+      model.addAttribute(
+          "valuesJson", jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(tree));
+      var yaml = yamlMapper.writeValueAsString(tree);
+      model.addAttribute(
+          "valuesYaml", yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
+    } catch (JsonProcessingException e) {
+      model.addAttribute("valuesJson", values);
+    }
   }
 
   // --- entity links ----------------------------------------------------------

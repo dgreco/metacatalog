@@ -47,10 +47,26 @@
                 <button type="button" class="tab" data-tab="raw">Raw JSON</button>
             </div>
 
-            <div class="tab-panel" data-panel="builder">
+            <!-- Read-only view: the stored values as a form, or as raw JSON / YAML. -->
+            <div class="tabs" th:if="${readOnly != null and readOnly and valuesJson != null}">
+                <button type="button" class="tab active view-tab" data-view="builder">Builder</button>
+                <button type="button" class="tab view-tab" data-view="json">JSON</button>
+                <button type="button" class="tab view-tab" data-view="yaml" th:if="${valuesYaml != null}">YAML</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder" data-view-panel="builder">
                 <div id="instance-values-editor" class="iv-editor">
                     <p class="empty">Select an entity type to build the values.</p>
                 </div>
+            </div>
+
+            <div class="tab-panel hidden" data-view-panel="json"
+                 th:if="${readOnly != null and readOnly and valuesJson != null}">
+                <pre class="schema" th:text="${valuesJson}">{}</pre>
+            </div>
+            <div class="tab-panel hidden" data-view-panel="yaml"
+                 th:if="${readOnly != null and readOnly and valuesYaml != null}">
+                <pre class="schema" th:text="${valuesYaml}"></pre>
             </div>
 
             <div class="tab-panel hidden" data-panel="raw" th:unless="${readOnly}">
@@ -78,6 +94,21 @@
 </script>
 <script th:inline="javascript" th:if="${readOnly}">
     window.__READ_ONLY__ = true;
+</script>
+<script th:if="${readOnly}">
+    // JSON / YAML read-only views of the stored values. Independent of the edit-mode
+    // builder/raw switching in instance-values-form.js, which does not bind when read-only.
+    document.querySelectorAll(".view-tab").forEach(function (tab) {
+        tab.addEventListener("click", function () {
+            document.querySelectorAll(".view-tab").forEach(function (b) {
+                b.classList.toggle("active", b === tab);
+            });
+            document.querySelectorAll("[data-view-panel]").forEach(function (p) {
+                p.classList.toggle("hidden",
+                    p.getAttribute("data-view-panel") !== tab.getAttribute("data-view"));
+            });
+        });
+    });
 </script>
 <script th:src="@{/ui/js/instance-values-form.js}"></script>
 </body>

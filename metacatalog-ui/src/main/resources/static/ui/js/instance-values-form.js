@@ -356,11 +356,15 @@
       }
     }
 
-    form.querySelectorAll(".tab").forEach(function (t) {
-      t.addEventListener("click", function () {
-        switchTab(t.dataset.tab);
+    // Builder/raw switching is an edit-mode concern; in read-only mode the page has its own
+    // Builder / JSON / YAML tabs with their own (inline) toggle, so binding here would fight it.
+    if (!READ_ONLY) {
+      form.querySelectorAll(".tab").forEach(function (t) {
+        t.addEventListener("click", function () {
+          switchTab(t.dataset.tab);
+        });
       });
-    });
+    }
 
     typeSelect.addEventListener("change", function () {
       buildEditor(typeSelect.value, null);
