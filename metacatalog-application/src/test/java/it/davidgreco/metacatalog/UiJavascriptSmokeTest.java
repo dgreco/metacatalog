@@ -50,10 +50,15 @@ class UiJavascriptSmokeTest {
   static void beforeAll() {
     postgres.start();
 
+    // The SPARQL endpoint is disabled: in a full reactor build the metacatalog-sparql dependency
+    // is its UNSHADED target/classes (relocation of org.jgrapht happens only when the jar is
+    // packaged), so Ontop would clash with the modern JGraphT the core module uses. The UI pages
+    // under test do not involve SPARQL.
     context =
         SpringApplication.run(
             Application.class,
             "--server.port=0",
+            "--application.sparql.enabled=false",
             "--spring.datasource.url=" + postgres.getJdbcUrl(),
             "--spring.datasource.username=" + postgres.getUsername(),
             "--spring.datasource.password=" + postgres.getPassword());

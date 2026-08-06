@@ -343,7 +343,9 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   `UiJavascriptSmokeTest` in `metacatalog-application` — the full app booted against a
   Testcontainers PostgreSQL, driven by Selenium against a headless Chrome container (the browser
   reaches the app via `host.testcontainers.internal`). Add scenarios there when UI JavaScript
-  behavior needs coverage.
+  behavior needs coverage. It boots with `application.sparql.enabled=false`: in a reactor build
+  the sparql dependency is its unshaded `target/classes` (JGraphT relocation happens only at jar
+  packaging), so Ontop cannot start there.
 - Coverage via JaCoCo (report generated in the `test` phase).
 
 ## CI / Deployment

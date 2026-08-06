@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.sparql;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,6 +15,11 @@ import org.springframework.web.bind.annotation.GetMapping;
  * query are injected into the model so the template can render them server-side.
  */
 @Controller
+@ConditionalOnProperty(
+    prefix = "application.sparql",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true)
 public class SparqlUiController {
   private final String sparqlEndpoint;
   private final String ontologyIri;

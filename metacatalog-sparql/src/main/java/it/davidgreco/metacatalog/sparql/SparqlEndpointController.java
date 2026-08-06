@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,6 +52,11 @@ import org.springframework.web.bind.annotation.RestController;
  * / TSV for SELECT, ASK; Turtle / RDF/XML / N-Triples for CONSTRUCT / DESCRIBE).
  */
 @RestController
+@ConditionalOnProperty(
+    prefix = "application.sparql",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true)
 public class SparqlEndpointController {
 
   private static final Logger LOG = LoggerFactory.getLogger(SparqlEndpointController.class);
