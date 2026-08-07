@@ -13,10 +13,6 @@ Traits:
 ---
 Relationships:
 
-  - sourceTrait: DataProduct
-    relationshipType: HAS_PART
-    targetTrait: DataProductComponent
-
   - sourceTrait: DataProductComponent
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
