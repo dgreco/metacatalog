@@ -114,6 +114,10 @@ make up-d       # docker compose up --build -d          (detached)
 make rebuild    # docker compose build --no-cache app   (force a full rebuild) + up -d
 make logs       # follow the application logs
 make down       # stop (make down ARGS=-v to drop the DB volume)
+
+make run-keycloak     # the stack with Keycloak / oauth2 auth incl. browser SSO (foreground)
+make up-keycloak-d    # same, detached
+make down-keycloak    # stop the Keycloak stack (ARGS=-v drops the DB volume)
 ```
 
 To run detached, or to stop, without the Makefile:
