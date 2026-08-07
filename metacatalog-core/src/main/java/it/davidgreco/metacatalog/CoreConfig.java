@@ -109,6 +109,10 @@ public class CoreConfig {
    *
    * @param traitRepository the trait repository
    * @param traitRelationshipRepository the trait relationship repository
+   * @param traitVersionRepository the trait version repository
+   * @param entityRelationshipRepository the entity relationship repository, used to refuse removing
+   *     a trait relationship that existing instance links rely on
+   * @param jsonUtils the JSON helpers
    * @return the trait service
    */
   @Bean
@@ -116,9 +120,14 @@ public class CoreConfig {
       TraitRepository traitRepository,
       TraitRelationshipRepository traitRelationshipRepository,
       TraitVersionRepository traitVersionRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
       JsonUtils jsonUtils) {
     return new TraitServiceImpl(
-        traitRepository, traitRelationshipRepository, traitVersionRepository, jsonUtils);
+        traitRepository,
+        traitRelationshipRepository,
+        traitVersionRepository,
+        entityRelationshipRepository,
+        jsonUtils);
   }
 
   /**

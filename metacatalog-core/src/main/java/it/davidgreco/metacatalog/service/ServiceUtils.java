@@ -33,14 +33,26 @@ public final class ServiceUtils {
    * @return true if the entity type implements the trait, false otherwise
    */
   public static boolean implementsTrait(EntityType entityType, String traitName) {
-    var allTheTraitsForTheType =
-        loadInheritanceChain(entityType).stream()
-            .flatMap(
-                et ->
-                    et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
-            .map(Trait::getName)
-            .collect(Collectors.toSet());
-    return allTheTraitsForTheType.contains(traitName);
+    return traitNamesOf(entityType).contains(traitName);
+  }
+
+  /**
+   * Every trait an entity type carries: the traits associated with each type of its inheritance
+   * chain, plus each of those traits' own ancestors.
+   *
+   * @param entityType the entity type to collect the traits of
+   * @return the traits, with duplicates preserved (a trait reachable twice appears twice)
+   */
+  private static List<Trait> allTraitsOf(EntityType entityType) {
+    return loadInheritanceChain(entityType).stream()
+        .flatMap(
+            et -> et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+        .toList();
+  }
+
+  /** The names of {@link #allTraitsOf(EntityType)}. */
+  private static Set<String> traitNamesOf(EntityType entityType) {
+    return allTraitsOf(entityType).stream().map(Trait::getName).collect(Collectors.toSet());
   }
 
   /**
@@ -68,40 +80,47 @@ public final class ServiceUtils {
         entityRepository
             .findById(targetEntityId)
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetEntityId + NOT_FOUND));
-    var sourceEntityType = sourceEntity.getEntityType();
-    var targetEntityType = targetEntity.getEntityType();
 
-    var allTheTraitsForTheSourceType =
-        loadInheritanceChain(sourceEntityType).stream()
-            .flatMap(
-                entityType ->
-                    entityType.getTraits().stream()
-                        .flatMap(trait -> loadInheritanceChain(trait).stream()))
-            .toList();
+    return relIsLegit(
+        traitRelationshipRepository,
+        sourceEntity.getEntityType(),
+        relType,
+        targetEntity.getEntityType(),
+        Set.of());
+  }
 
-    var allTheTraitsNamesForTheTargetType =
-        loadInheritanceChain(targetEntityType).stream()
-            .flatMap(
-                entityType ->
-                    entityType.getTraits().stream()
-                        .flatMap(trait -> loadInheritanceChain(trait).stream()))
-            .map(Trait::getName)
-            .collect(Collectors.toSet());
-
-    var sourceRelationships =
-        allTheTraitsForTheSourceType.stream()
-            .flatMap(
-                sourceTrait ->
-                    traitRelationshipRepository
-                        .findBySourceAndRelationType(sourceTrait, relType)
-                        .stream())
-            .toList();
-
-    for (var sourceRelationship : sourceRelationships) {
-      var targetTrait = sourceRelationship.getTarget();
-      if (allTheTraitsNamesForTheTargetType.contains(targetTrait.getName())) return true;
-    }
-    return false;
+  /**
+   * Whether a {@code relType} link between instances of the two given types is sanctioned by a
+   * trait relationship, ignoring the trait relationships whose ids are in {@code
+   * excludedTraitRelationshipIds}.
+   *
+   * <p>The exclusion set answers the question the plain check cannot: whether an existing link
+   * would <em>still</em> be sanctioned if a particular trait relationship were removed. Since a
+   * type participates by mixing traits in, several trait relationships can sanction the same link —
+   * so a link only loses its justification when the one being removed is its last.
+   *
+   * @param traitRelationshipRepository the trait relationship repository
+   * @param sourceEntityType the type on the source side of the link
+   * @param relType the type of relationship
+   * @param targetEntityType the type on the target side of the link
+   * @param excludedTraitRelationshipIds ids of trait relationships to treat as absent
+   * @return true if the link is sanctioned by a trait relationship outside the exclusion set
+   */
+  public static boolean relIsLegit(
+      TraitRelationshipRepository traitRelationshipRepository,
+      EntityType sourceEntityType,
+      RelationType relType,
+      EntityType targetEntityType,
+      Set<String> excludedTraitRelationshipIds) {
+    var targetTraitNames = traitNamesOf(targetEntityType);
+    return allTraitsOf(sourceEntityType).stream()
+        .flatMap(
+            sourceTrait ->
+                traitRelationshipRepository
+                    .findBySourceAndRelationType(sourceTrait, relType)
+                    .stream())
+        .filter(rel -> !excludedTraitRelationshipIds.contains(rel.getId()))
+        .anyMatch(rel -> targetTraitNames.contains(rel.getTarget().getName()));
   }
 
   /**
@@ -270,11 +289,6 @@ public final class ServiceUtils {
    * @return true if the entity has the trait, false otherwise
    */
   public static boolean hasTrait(Entity entity, String traitName) {
-    return loadInheritanceChain(entity.getEntityType()).stream()
-        .flatMap(
-            et -> et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
-        .map(Trait::getName)
-        .collect(Collectors.toSet())
-        .contains(traitName);
+    return implementsTrait(entity.getEntityType(), traitName);
   }
 }

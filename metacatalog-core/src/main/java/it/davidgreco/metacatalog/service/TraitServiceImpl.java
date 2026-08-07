@@ -8,6 +8,7 @@ import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.entity.TraitVersion;
+import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import it.davidgreco.metacatalog.repository.TraitVersionRepository;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,9 @@ public class TraitServiceImpl implements TraitService {
   private final TraitRelationshipRepository traitRelationshipRepository;
 
   private final TraitVersionRepository traitVersionRepository;
+
+  /** Used to refuse removing a trait relationship that existing instance links rely on. */
+  private final EntityRelationshipRepository entityRelationshipRepository;
 
   private final JsonUtils jsonUtils;
 
@@ -413,8 +418,10 @@ public class TraitServiceImpl implements TraitService {
   /**
    * Unlinks two Traits with a given relation type.
    *
-   * <p>This method validates that the two Traits exist, and that the link does not already exist.
-   * It also checks for loops before creating the link.
+   * <p>This method validates that the two Traits exist and that the link exists.
+   *
+   * <p>A trait relationship that existing instance links rely on cannot be removed — see {@link
+   * #checkNoInstanceLinkReliesOn}.
    *
    * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
@@ -443,9 +450,11 @@ public class TraitServiceImpl implements TraitService {
                             + relType
                             + " with "
                             + targetTraitName));
-    traitRelationshipRepository.delete(rel);
+    // Both rows of the pair are resolved before anything is deleted: the guard below has to see the
+    // whole of what this unlink removes in order to decide whether a link keeps a justification.
+    TraitRelationship inverseRel = null;
     if (relType.hasInverse()) {
-      var inverseRel =
+      inverseRel =
           traitRelationshipRepository
               .findBySourceAndRelationTypeAndTarget(targetTrait, relType.inverse(), sourceTrait)
               .orElseThrow(
@@ -457,9 +466,68 @@ public class TraitServiceImpl implements TraitService {
                               + relType
                               + " with "
                               + sourceTraitName));
-      traitRelationshipRepository.delete(inverseRel);
     }
+    checkNoInstanceLinkReliesOn(rel, inverseRel);
+    traitRelationshipRepository.delete(rel);
+    if (inverseRel != null) traitRelationshipRepository.delete(inverseRel);
     log.info("Unlinked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
+  }
+
+  /**
+   * Rejects the removal of a trait relationship that an existing link between instances relies on.
+   *
+   * <p>Composition and dependency are declared between <em>traits</em>; a link between two entities
+   * is admitted by {@link ServiceUtils#checkRelIsLegit} only because some trait relationship
+   * sanctions it. Removing the last one that sanctions an existing link would leave that link in
+   * the graph with nothing justifying it: it could no longer be re-created, and {@code
+   * AggregateSchemaService} — which derives the aggregate model by projecting trait relationships
+   * onto the types carrying them — would stop describing the composition the link is part of.
+   * Remove the instance link first.
+   *
+   * <p>The check is exact rather than type-level. A type participates by mixing traits in, so
+   * several trait relationships can sanction the same link; each candidate link is tested for
+   * legitimacy both with and without the rows being removed, and only a link that loses its
+   * <em>last</em> justification blocks the removal. A link that is already unsanctioned (nothing
+   * justifies it even now) is not attributed to this unlink either.
+   *
+   * @param rel the relationship being removed
+   * @param inverseRel the paired inverse row, or {@code null} when the relation type has no inverse
+   */
+  private void checkNoInstanceLinkReliesOn(TraitRelationship rel, TraitRelationship inverseRel) {
+    var removedIds =
+        inverseRel == null ? Set.of(rel.getId()) : Set.of(rel.getId(), inverseRel.getId());
+    var removedRows = inverseRel == null ? List.of(rel) : List.of(rel, inverseRel);
+    for (var row : removedRows) {
+      var rowRelType = row.getRelationType();
+      for (var link : entityRelationshipRepository.findByRelationType(rowRelType)) {
+        var linkSourceType = link.getSource().getEntityType();
+        var linkTargetType = link.getTarget().getEntityType();
+        // Only a link whose two ends actually carry this row's traits can be relying on it.
+        if (!ServiceUtils.implementsTrait(linkSourceType, row.getSource().getName())
+            || !ServiceUtils.implementsTrait(linkTargetType, row.getTarget().getName())) continue;
+        if (!ServiceUtils.relIsLegit(
+            traitRelationshipRepository, linkSourceType, rowRelType, linkTargetType, Set.of()))
+          continue;
+        if (ServiceUtils.relIsLegit(
+            traitRelationshipRepository, linkSourceType, rowRelType, linkTargetType, removedIds))
+          continue;
+        throw new ServiceError(
+            "The "
+                + rowRelType
+                + " link between entity with id "
+                + link.getSource().getId()
+                + " and entity with id "
+                + link.getTarget().getId()
+                + " is sanctioned by the "
+                + row.getRelationType()
+                + " relationship between trait "
+                + row.getSource().getName()
+                + " and trait "
+                + row.getTarget().getName()
+                + " and by no other; removing it would leave that link unjustified. Remove the link"
+                + " first.");
+      }
+    }
   }
 
   /**

@@ -225,6 +225,82 @@ class MetacatalogApiTests {
     Assertions.assertEquals(404, ex.getStatusCode().value());
   }
 
+  /**
+   * Over HTTP, removing a trait relationship that an existing instance link relies on is refused
+   * with a 400 naming the link, and succeeds once the link is gone. The service-level rule and its
+   * exactness are covered by {@code TraitServiceTests}; what this pins down is the status code and
+   * that the message reaches the client.
+   */
+  @Test
+  void testUnlinkTraitIsRefusedWhileAnInstanceLinkReliesOnIt() {
+    var api = getMetaCatalogManagerApi();
+
+    var upstream = new Trait();
+    upstream.setName("ApiRelyUpstream");
+    api.createTrait(upstream);
+    var downstream = new Trait();
+    downstream.setName("ApiRelyDownstream");
+    api.createTrait(downstream);
+
+    var linkSpec = new LinkTraitRequest();
+    linkSpec.sourceTrait("ApiRelyUpstream");
+    linkSpec.targetTrait("ApiRelyDownstream");
+    linkSpec.relationshipTypeName("DEPENDS_ON");
+    api.linkTrait(linkSpec);
+
+    var emptySchema =
+        """
+        { "type": "object", "properties": { } }""";
+    var sourceType = new EntityType();
+    sourceType.setName("ApiRelySourceType");
+    sourceType.setSchema(emptySchema);
+    sourceType.setTraits(List.of("ApiRelyUpstream"));
+    api.createEntityType(sourceType);
+    var targetType = new EntityType();
+    targetType.setName("ApiRelyTargetType");
+    targetType.setSchema(emptySchema);
+    targetType.setTraits(List.of("ApiRelyDownstream"));
+    api.createEntityType(targetType);
+
+    var source = new Entity();
+    source.setEntityType("ApiRelySourceType");
+    source.setValues("{}");
+    var sourceId = api.createEntity(source);
+    var target = new Entity();
+    target.setEntityType("ApiRelyTargetType");
+    target.setValues("{}");
+    var targetId = api.createEntity(target);
+
+    var entityLink = new LinkEntityRequest();
+    entityLink.sourceEntityId(sourceId);
+    entityLink.relationshipTypeName("DEPENDS_ON");
+    entityLink.targetEntityId(targetId);
+    api.linkEntity(entityLink);
+
+    var ex =
+        Assertions.assertThrows(
+            HttpClientErrorException.class,
+            () -> api.unlinkTrait("ApiRelyUpstream", "DEPENDS_ON", "ApiRelyDownstream"));
+    Assertions.assertEquals(400, ex.getStatusCode().value());
+    var error = Objects.requireNonNull(ex.getResponseBodyAs(ValidationError.class));
+    Assertions.assertTrue(
+        error.toString().contains(sourceId) && error.toString().contains(targetId),
+        "the 400 body must name the link that relies on the relationship, got: " + error);
+
+    // The relationship is still there — the refusal did not half-apply.
+    api.existsLinkTrait("ApiRelyUpstream", "DEPENDS_ON", "ApiRelyDownstream");
+
+    api.unlinkEntity(sourceId, "DEPENDS_ON", targetId);
+    api.unlinkTrait("ApiRelyUpstream", "DEPENDS_ON", "ApiRelyDownstream");
+
+    api.deleteEntity(sourceId);
+    api.deleteEntity(targetId);
+    api.deleteEntityType("ApiRelySourceType");
+    api.deleteEntityType("ApiRelyTargetType");
+    api.deleteTrait("ApiRelyUpstream");
+    api.deleteTrait("ApiRelyDownstream");
+  }
+
   @Test
   void testCreateReadExistsDeleteType() {
     var api = getMetaCatalogManagerApi();

@@ -433,6 +433,12 @@ paths:
       tags:
         - Meta Catalog Manager
       summary: Delete a link between two traits by a relation
+      description: >
+        Removes the relationship and its inverse. Refused with 400 when an existing link
+        between entity instances relies on it: such a link is only admitted because a trait
+        relationship sanctions it, so removing the last one that does would leave the link
+        with nothing justifying it. Remove the instance link first. A link that another trait
+        relationship also sanctions does not block the removal.
       operationId: unlinkTrait
       parameters:
         - in: path

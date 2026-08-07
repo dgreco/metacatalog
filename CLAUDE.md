@@ -195,6 +195,14 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   asynchronously, as FAILED lifecycle events. The check is exact (each candidate mapping's path is
   re-resolved and only a traversal that actually walks the link blocks the removal); delete or
   re-create the mapping first.
+- Trait links: `DELETE /trait/link/...` refuses to remove a trait relationship that an existing
+  entity link relies on. A link between two instances is only admitted because a trait relationship
+  sanctions it (`ServiceUtils.checkRelIsLegit`), so removing the last one that does would leave the
+  link in the graph with nothing justifying it — un-recreatable, and dropped from the aggregate
+  schema derived from the trait graph. The check is exact, not type-level: since a type participates
+  by mixing traits in, several trait relationships can sanction the same link, and each candidate
+  link is re-tested for legitimacy with the removed pair excluded — only a link losing its *last*
+  justification blocks the removal. Remove the instance link first.
 
 When running:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
