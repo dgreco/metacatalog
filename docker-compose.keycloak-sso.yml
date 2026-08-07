@@ -1,0 +1,62 @@
+# Overlay on top of docker-compose.keycloak.yml that enables browser SSO, so the
+# server-side rendered UI at http://localhost:8080/ui is reachable via a Keycloak
+# login (demo / demo). Use all three files:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.keycloak.yml \
+#     -f docker-compose.keycloak-sso.yml up --build -d
+#
+# SSO needs one issuer URL that resolves to Keycloak from BOTH the browser and the
+# app container: the app discovers it at startup and validates token `iss` claims,
+# and the browser is redirected to it to log in. That URL is http://localhost:8081
+# here, made to mean the same thing on both sides without any DNS tricks:
+#   * the browser's localhost:8081 is Keycloak's published port;
+#   * the app container's localhost:8081 is a socat sidecar sharing the app's
+#     network namespace, forwarding to keycloak:8080 over the compose network.
+#
+# Bearer-token API testing keeps working exactly as in docker-compose.keycloak.yml:
+# KC_HOSTNAME pins the token issuer to localhost:8081, which is what the app
+# validates, regardless of where the token request came from.
+
+services:
+  keycloak:
+    environment:
+      KC_HOSTNAME: http://localhost:8081
+      KC_HEALTH_ENABLED: "true"
+    # The app performs OIDC discovery at startup (unlike the lazy jwk-set-uri mode),
+    # so it must wait for Keycloak to be ready. The image ships no curl/wget; probe
+    # the management-port health endpoint with bash's /dev/tcp instead.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost:localhost\r\nConnection:close\r\n\r\n' >&3 && grep -q '"UP"' <&3
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+
+  app:
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      # Blank overrides the jwk-set-uri from docker-compose.keycloak.yml — the two
+      # are mutually exclusive and blank counts as unset (SecurityConfigSupport.isSet).
+      APPLICATION_CONFIG_SECURITY_OAUTH2_JWKSETURI: ""
+      APPLICATION_CONFIG_SECURITY_OAUTH2_ISSUERURI: http://localhost:8081/realms/metacatalog
+      APPLICATION_CONFIG_SECURITY_OAUTH2_CLIENTID: metacatalog
+      APPLICATION_CONFIG_SECURITY_OAUTH2_CLIENTSECRET: metacatalog-secret
+
+  # Makes localhost:8081 inside the app container reach Keycloak, mirroring the
+  # published port the browser uses. Starts in milliseconds while Spring takes
+  # seconds to reach OIDC discovery, so ordering is not a problem in practice.
+  # Caveat of network_mode sharing: after `docker compose restart app` the sidecar
+  # is left in the old network namespace — recreate the stack (`up -d`) instead.
+  keycloak-loopback:
+    image: alpine/socat
+    container_name: metacatalog-keycloak-loopback
+    network_mode: "service:app"
+    depends_on:
+      app:
+        condition: service_started
+    command: ["tcp-listen:8081,fork,reuseaddr", "tcp:keycloak:8080"]
+    restart: unless-stopped

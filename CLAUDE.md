@@ -285,9 +285,11 @@ application's component scan.
 | `ldap` | LDAP bind authentication. Locates the user either by `user-dn-pattern` or by `(user-search-base, user-search-filter)`. Optional `manager-dn` / `manager-password` for non-anonymous search. | `application.config.security.ldap.url` + DN pattern or search filter |
 
 URL authorization (shared by all non-`none` modes, see `SecurityFilterChainCustomizer`):
-- `/metacatalog/v1/**` and `/sparql/query` require authentication
+- `/metacatalog/v1/**`, `/sparql/query`, the server-side rendered UI under `/ui/**` and the SPARQL
+  query UI at `/sparql` require authentication (in `oauth2` mode without SSO there is no browser
+  login flow, so a browser hitting the UI gets a plain 401)
 - `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`, `/javadoc/**` are public
-- Everything else (e.g. the server-side rendered UI under `/ui/**`, the SPARQL query UI at `/sparql`) is public
+- Everything else is public
 - CSRF is disabled on the API chain. Sessions are `STATELESS` for `oauth2` without SSO (JWT
   bearer tokens only) and `NEVER` for `basic`/`ldap` and `oauth2` with SSO: an existing UI session
   is reused so the Swagger UI "Try it out" XHRs and Yasgui SPARQL XHRs are authenticated without
@@ -360,11 +362,18 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
 - **CI:** `.gitlab-ci.yml` — `build` stage on `maven:3-eclipse-temurin-25` with a `docker:dind`
   service: runs `mvn clean install spotless:check test`, then on `main`/`master`/`develop` builds
   and pushes a Docker image (tags: short SHA, `latest`, and version on main).
-- **Docker Compose:** `docker-compose.yml` — Postgres 18.1 (`:5432`) + app (`:8080`, `docker`
+- **Docker Compose:** `docker-compose.yml` — Postgres 18.4 (`:5432`) + app (`:8080`, `docker`
   profile) + a one-shot `bulk-loader` that seeds the demo model and aggregate from `docker/bulk/`.
   The loader is idempotent across restarts (the postgres volume persists): each step probes the API
   first and only loads what is missing, so deleting the demo aggregate from the UI and restarting
-  re-creates just the aggregate.
+  re-creates just the aggregate. `docker-compose.keycloak.yml` is an overlay (`-f` both files)
+  that adds a Keycloak with a pre-imported realm (`docker/keycloak/`) and switches the app to
+  `auth-mode: oauth2` in jwk-set-uri mode (client `metacatalog`/`metacatalog-secret`, user
+  `demo`/`demo`, password grant for curl-friendly token fetching); the bulk-loader is disabled
+  there because it only speaks HTTP Basic. `docker-compose.keycloak-sso.yml` stacks on top of
+  that to enable browser SSO for the UI: issuer `http://localhost:8081` works from both sides
+  because the browser hits Keycloak's published port while a socat sidecar in the app container's
+  network namespace forwards its `localhost:8081` to Keycloak.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).

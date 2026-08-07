@@ -55,7 +55,7 @@ docker compose up --build
 ```
 
 This starts:
-- **PostgreSQL 18.1** on port 5432
+- **PostgreSQL 18.4** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
   traits, entity types and entities from `docker/bulk/` once the app is healthy
@@ -770,13 +770,58 @@ checks later.
 `basic` and `ldap` additionally enable a browser form-login flow for the server-side rendered UI
 (`/ui/**`, `/sparql`). In `oauth2` mode, setting `client-id` + `client-secret` enables browser
 SSO via the OIDC authorization-code flow (redirect to IdP, session reuse); without `client-id`
-the UI is not login-protected (JWT bearer tokens are for API clients, not browser sessions).
+there is no browser login flow at all — the UI still requires authentication, so a browser gets
+a plain 401 (the safe default for a JWT resource server: JWT bearer tokens are for API clients,
+not browser sessions).
 
 URL authorization (shared by all non-`none` modes):
-- `/metacatalog/v1/**` and `/sparql/query` require authentication
+- `/metacatalog/v1/**`, `/sparql/query`, the UI under `/ui/**` and the SPARQL query UI at
+  `/sparql` require authentication
 - `/actuator/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/interface-specification.yaml`,
   `/javadoc/**` are public
-- Everything else (e.g. the UI under `/ui/**`, the SPARQL query UI at `/sparql`) is public
+- Everything else is public
+
+### Testing OAuth2 with Keycloak (Docker Compose)
+
+`docker-compose.keycloak.yml` is an overlay that adds a Keycloak instance and switches the app
+to `auth-mode: oauth2`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.keycloak.yml up --build -d
+```
+
+Keycloak runs on <http://localhost:8081> (admin console: `admin` / `admin`) and imports the
+`metacatalog` realm from `docker/keycloak/metacatalog-realm.json` at startup, containing a
+confidential client `metacatalog` / `metacatalog-secret` (password grant enabled) and a user
+`demo` / `demo`. The app validates bearer tokens against Keycloak's JWK set, fetched
+container-to-container — no issuer validation, so tokens minted via `localhost:8081` are accepted:
+
+```bash
+TOKEN=$(curl -s http://localhost:8081/realms/metacatalog/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=metacatalog -d client_secret=metacatalog-secret \
+  -d username=demo -d password=demo | jq -r .access_token)
+
+curl http://localhost:8080/metacatalog/v1/entity-type                            # 401
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/metacatalog/v1/entity-type  # 200
+```
+
+The demo-data `bulk-loader` only speaks HTTP Basic, so the overlay disables it; to have the demo
+data available, run the base compose file once first — the postgres volume is shared.
+
+In this mode the UI at `/ui` answers 401 (it requires authentication, and without SSO there is no
+browser login flow). To log in to the UI through Keycloak, stack the SSO overlay on top:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.keycloak.yml \
+  -f docker-compose.keycloak-sso.yml up --build -d
+```
+
+Then open <http://localhost:8080/ui> and log in as `demo` / `demo`. SSO needs one issuer URL that
+means Keycloak from both the browser and the app container; the overlay uses
+`http://localhost:8081` for both — the browser reaches Keycloak's published port, while a socat
+sidecar sharing the app container's network namespace forwards its `localhost:8081` to Keycloak
+(see the comments in `docker-compose.keycloak-sso.yml`). Bearer-token API testing keeps working
+unchanged.
 
 ### Fail-fast on open deployments
 

@@ -1,0 +1,56 @@
+# Overlay that switches the stack to OAuth2 (JWT) authentication backed by a local
+# Keycloak. Use together with the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.keycloak.yml up --build
+#
+# Keycloak admin console: http://localhost:8081 (admin / admin). The "metacatalog"
+# realm is imported at startup from docker/keycloak/metacatalog-realm.json with:
+#   * client  metacatalog / metacatalog-secret  (confidential, password grant enabled)
+#   * user    demo / demo
+#
+# Get a token and call the API:
+#
+#   TOKEN=$(curl -s http://localhost:8081/realms/metacatalog/protocol/openid-connect/token \
+#     -d grant_type=password -d client_id=metacatalog -d client_secret=metacatalog-secret \
+#     -d username=demo -d password=demo | jq -r .access_token)
+#   curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/metacatalog/v1/entity-type
+#
+# The app validates tokens against Keycloak's JWK set, fetched container-to-container
+# (jwk-set-uri mode — no issuer validation), so tokens minted through localhost:8081
+# are accepted even though the app knows Keycloak as http://keycloak:8080. The JWK set
+# is fetched lazily on the first request, so startup order doesn't matter.
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: metacatalog-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
+
+  app:
+    depends_on:
+      keycloak:
+        condition: service_started
+    environment:
+      # Environment variables take precedence over the docker profile's
+      # `auth-mode: basic` in application-docker.yaml (Spring relaxed binding:
+      # AUTHMODE -> auth-mode, JWKSETURI -> jwk-set-uri).
+      APPLICATION_CONFIG_SECURITY_AUTHMODE: oauth2
+      APPLICATION_CONFIG_SECURITY_OAUTH2_JWKSETURI: http://keycloak:8080/realms/metacatalog/protocol/openid-connect/certs
+      # Browser SSO (needed to log in to the UI, which requires authentication in
+      # every non-`none` mode): stack docker-compose.keycloak-sso.yml on top of this
+      # file — see the comments there for how the issuer hostname is made to resolve
+      # from both the browser and the app container.
+
+  bulk-loader:
+    # The demo-data loader authenticates with HTTP Basic only, which the oauth2 mode
+    # rejects — assign it to a profile nothing activates so it is not started here.
+    # To seed the demo data, run the base compose file once first: the postgres
+    # volume is shared, so the data is still there when this overlay is up.
+    profiles: ["basic-auth-only"]
