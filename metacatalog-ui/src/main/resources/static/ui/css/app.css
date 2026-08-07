@@ -468,6 +468,11 @@ select[multiple].traits-select {
     border-radius: var(--radius-sm);
     margin-bottom: 1rem;
     box-shadow: var(--shadow-sm);
+    transition: opacity 0.5s ease;
+}
+/* Added by flash.js after a few seconds; the element is removed on transitionend. */
+.flash-dismissed {
+    opacity: 0;
 }
 .error {
     background: var(--error-bg);

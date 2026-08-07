@@ -232,6 +232,43 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * Success flashes confirm an action that already happened, so they dismiss themselves: a few
+   * seconds after the page loads, {@code flash.js} fades the banner out and removes it from the DOM
+   * with no user interaction. (Error banners carry information the user still has to act on and are
+   * exempt — only {@code .flash} is dismissed.)
+   */
+  @Test
+  void successFlashMessagesDismissThemselves() {
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    var entityService = context.getBean(EntityService.class);
+
+    entityTypeService.create(
+        "FlashUiType",
+        List.of(),
+        Optional.empty(),
+        """
+        { "type": "object", "properties": { "a": { "type": "integer" } } }""");
+    entityService.create("FlashUiType", "{\"a\": 1}");
+
+    driver.get(baseUrl + "/ui/instances?type=FlashUiType");
+    await()
+        .until(
+            ExpectedConditions.elementToBeClickable(
+                By.cssSelector("form[data-confirm] .link-remove")));
+    driver.findElement(By.cssSelector("form[data-confirm] .link-remove")).click();
+    await().until(ExpectedConditions.alertIsPresent());
+    driver.switchTo().alert().accept();
+
+    // The redirected list page shows the success flash...
+    await().until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".flash")));
+    Assertions.assertEquals(
+        "Entity deleted.", driver.findElement(By.cssSelector(".flash")).getText());
+
+    // ...and a few seconds later it is gone on its own.
+    await().until(ExpectedConditions.numberOfElementsToBe(By.cssSelector(".flash"), 0));
+  }
+
+  /**
    * The instances search must offer a guided way to write the query path once a type is chosen: the
    * condition builder lists the type's schema fields, composes a jsonpath predicate into the query
    * input, combines further conditions with and / or / not (parenthesizing the existing filter when
