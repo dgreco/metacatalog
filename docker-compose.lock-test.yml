@@ -37,7 +37,7 @@
 
 services:
   postgres:
-    image: postgres:18.1-alpine
+    image: postgres:18.4-alpine
     container_name: lock-test-postgres
     environment:
       POSTGRES_DB: metacatalog

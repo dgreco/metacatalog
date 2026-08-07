@@ -37,7 +37,7 @@ import org.testcontainers.utility.DockerImageName;
  */
 class UiJavascriptSmokeTest {
 
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1");
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
 
   static BrowserWebDriverContainer<?> chrome;
 

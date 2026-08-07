@@ -1,11 +1,15 @@
 services:
   postgres:
-    image: postgres:18.1-alpine
+    image: postgres:18.4-alpine
     container_name: metacatalog-postgres
     environment:
       POSTGRES_DB: metacatalog
       POSTGRES_USER: metacatalog
       POSTGRES_PASSWORD: metacatalog
+      # The 18.x images moved the default data dir to /var/lib/postgresql/<major>/docker
+      # mid-line; the postgres-data volume predates that, so pin PGDATA to the old
+      # location or the entrypoint refuses to start on the existing cluster.
+      PGDATA: /var/lib/postgresql/data
     ports:
       - "5432:5432"
     volumes:

@@ -28,7 +28,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 class SparqlEndpointIntegrationTest {
 
   // Reused singleton container (started once, cleaned on JVM shutdown).
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.1");
+  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
 
   @BeforeAll
   static void beforeAll() {
