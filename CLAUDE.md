@@ -10,8 +10,8 @@ validation of entity attributes, graph-based relationship traversal, an asynchro
 engine, and optional ontology-based data access via Ontop.
 
 - **Group / artifact:** `it.davidgreco:metacatalog` — version `0.0.1-SNAPSHOT`
-- **Packaging:** Maven multi-module (`pom` parent + 4 modules)
-- **Java:** 25 · **Spring Boot:** 4.0.1 · **PostgreSQL** (JDBC 42.7.x) · **Maven:** 3.9.9+ (enforced)
+- **Packaging:** Maven multi-module (`pom` parent + 7 modules)
+- **Java:** 25 · **Spring Boot:** 4.1.0 · **PostgreSQL** (JDBC 42.7.x) · **Maven:** 3.9.9+ (enforced)
 - **Persistence:** Spring Data JPA / Hibernate, JSON stored in `jsonb` columns via Hypersistence Utils
 - **Schema migrations:** Flyway (auto-run on startup)
 
@@ -52,7 +52,7 @@ Located in `metacatalog-core/.../entity`:
 - **`AdvisoryLockManager`** — PostgreSQL advisory locks used to serialize scheduled work across
   application instances.
 
-### Built-in traits (seeded by migration V2)
+### Built-in traits (seeded by the Flyway baseline `V1__initial_schema.sql`)
 
 `Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`. These underpin the
 aggregate model (`AggregateService`) and the provisioning procedure.

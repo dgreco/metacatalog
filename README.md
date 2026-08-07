@@ -15,12 +15,14 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **JSON Schema Validation**: Validate entity attributes against schemas
 - **Graph Operations**: Advanced relationship traversal using JGraphT
 - **Ontology Integration**: Semantic web support via an embedded Ontop 5.5.0 virtual knowledge graph, exposed as a SPARQL 1.1 Protocol endpoint and a Yasgui query UI
-- **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved (see [Aggregates](#aggregates))
+- **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved, and deleted as a whole (see [Aggregates](#aggregates))
+- **Provisioning**: Run a registered task for every `ProvisionableResource` of an aggregate in dependency order, and tear it down in reverse (see [Aggregates](#aggregates))
+- **Referential Safety**: Deletions that would strand an entity, dangle a link or break a mapping's path resolution are refused, with an exact per-link check rather than a type-level one (see [Deleting entities and links](#deleting-entities-and-links))
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
-- **Web UI**: Server-side rendered pages for creating traits, entity types, instances and aggregates, with interactive JSON Schema and schema-driven value builders
+- **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, and instance search by type and JSONPath
 
 ## Technology Stack
 
@@ -453,10 +455,11 @@ with.
 - On `PUT /metacatalog/v1/entity/{id}`, validation uses the schema of the snapshot the
   entity is pinned to, **not** the live type's schema. Updating an entity never re-pins
   it to a newer version.
-- Mapped entities (created automatically by `MappingService` from a mapping rule) are
-  pinned to the target type's current version at creation time, just like user-created
-  entities. When a mapped entity is regenerated on source update, the new values are
-  validated against the mapped entity's pinned snapshot.
+- Mapped entities (created automatically from a mapping rule) are pinned to the version the
+  **mapping** was stamped with (`targetEntityTypeVersion`), not to whatever is live at the moment
+  they are derived — so versioning the target type does not move them until the mapping itself is
+  replaced (see [Mappings and type versions](#mappings-and-type-versions)). When a mapped entity
+  is regenerated on source update, the new values are validated against that pinned snapshot.
 - `GET /metacatalog/v1/entity/{id}` returns the pinned version id as `entityTypeVersionId`
   on the `Entity` DTO. The field is `required` **and** `readOnly` in the OpenAPI contract:
   always present on read, and never sent by clients on create (the generator emits
@@ -578,6 +581,30 @@ The `mappingValues` and `entityPathReferences` fields are sent as JSON strings (
 parsed server-side); see the `Mapping` schema in the OpenAPI spec. The UI's "New Mapping"
 form provides a structured editor for both fields.
 
+`POST /mapping` is **create-or-replace**: re-posting a mapping for a pair that already has one
+updates the existing relationship in place (same id, values re-validated, type versions
+re-stamped) instead of adding a second. Mapped entities therefore stay attached to their mapping
+and the engine never derives a duplicate instance of the target type. The UI's mapping form
+pre-fills from the existing mapping, so submitting it replaces what is there.
+
+### Mappings and type versions
+
+Each mapping records the source and target type versions it was defined against
+(`sourceEntityTypeVersion` / `targetEntityTypeVersion`, frozen at creation and exposed read-only
+on the `Mapping` DTO; the UI shows them next to the type names). Two consequences:
+
+- **Versioning a mapped target type is guarded.** `POST /entity-type/{name}/versions` re-validates
+  every mapping *targeting* the type against the candidate schema and refuses the version with a
+  `400` if a mapping no longer satisfies it — update or delete the mapping first. Without the
+  check the breakage would surface only asynchronously, as `FAILED` lifecycle events. Only the
+  target side can be checked statically: a mapping's SpEL reads source *values*, not the source
+  schema.
+- **Mapped entities follow their mapping, not the live type.** They are derived, so they are
+  validated against and pinned to the snapshot of the version the *mapping* was stamped with. An
+  untouched mapping keeps them on the old version even after the target type is versioned;
+  replacing the mapping (re-stamped against the live version) moves them forward on their next
+  update.
+
 ### Configuration
 
 ```yaml
@@ -661,16 +688,23 @@ docker compose -f docker-compose.lock-test.yml down -v         # cleanup
 
 An **aggregate** is a tree of entities: a root entity composed of parts, each of which may be
 an aggregate itself. Aggregates are created through `POST /metacatalog/v1/aggregate/yaml`
-(a YAML document), read back with `GET /metacatalog/v1/aggregate/{id}`, and provisioned in
-dependency order by the provisioning procedure in `metacatalog-functions`.
+(a YAML document), read back with `GET /metacatalog/v1/aggregate/{id}` (or
+`GET /metacatalog/v1/aggregate/{id}/yaml` for the same tree as a YAML file), deleted as a whole
+with `DELETE /metacatalog/v1/aggregate/{id}` (see [Deleting entities and links](#deleting-entities-and-links)),
+and provisioned in dependency order by the provisioning procedure in `metacatalog-functions`.
+`GET /metacatalog/v1/aggregate/provisionable-type` lists the entity types whose instances can be
+provisioned — the answer depends on type *and* trait inheritance chains, so it is computed
+server-side rather than derived from the `traits` on the `EntityType` DTO (which lists only the
+directly associated ones).
 
 ### Aggregate root types
 
 Composition is **not** declared between entity types directly — it is declared once between
 *traits*, and an entity type takes part in it by mixing those traits in. This is the same rule
 that governs whether two entity instances may be linked at all. For example, the built-in
-`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (migration `V2`), so any type
-carrying `Aggregate` can contain any type carrying `AggregateElement`.
+`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (seeded by the Flyway baseline
+`V1__initial_schema.sql`), so any type carrying `Aggregate` can contain any type carrying
+`AggregateElement`.
 
 An **aggregate root type** is a type that can start an aggregate: it has a `HAS_PART`
 relationship towards at least one other type, but is never itself a part of another type.
@@ -732,8 +766,35 @@ Notes on the generated schema:
 `/ui/aggregates/new` (**+ New Aggregate** on the dashboard) turns that schema into a form: pick
 an aggregate root type, and the page renders the tree — typed inputs for each entity's values,
 plus an *Add part* button per allowed part type. Parts are added on demand, so a self-composing
-type does not expand forever. A **Raw JSON** tab allows editing the document directly, and
-submitting creates the entire aggregate — nesting and dependencies included — in one call.
+type does not expand forever. A **Raw JSON** tab allows editing the document directly, a
+read-only **YAML** tab (rendered server-side) shows the exact document the aggregate endpoint
+would receive, and submitting creates the entire aggregate — nesting and dependencies included —
+in one call.
+
+Existing aggregates are listed at `/ui/aggregates`, with a per-aggregate view page showing the
+whole tree (values as JSON or YAML). Deleting, provisioning and unprovisioning an aggregate are
+actions on the instances list: a row gets *Delete aggregate* when its entity type is one of the
+`GET /aggregate/root-type` types, and *Provision* / *Unprovision* when it is one of the
+`GET /aggregate/provisionable-type` types. Provisioning from the UI is synchronous — the POST
+does not return until the whole aggregate is done, which is a reason to keep the UI action for
+demo-scale aggregates.
+
+## Deleting entities and links
+
+Deletion is deliberately conservative: the catalog refuses any removal that would leave a
+dangling link, a stranded entity, or a mapping that can no longer derive its targets.
+
+| Call | Rule |
+| --- | --- |
+| `DELETE /entity/{id}` | Refuses any entity that still has links. It is never a way to dismantle an aggregate piecemeal. |
+| `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction. Refused when a member is linked to an entity outside the aggregate, or is itself a mapping target. |
+| `DELETE /entity/link/...` | Refused for a `HAS_PART` / `IS_PART_OF` link whose containing side implements the `Aggregate` trait — containment is what makes a part reachable from its root, so detaching one strands it. Also refused when an existing mapping resolves an entity path reference *through* the link. `DEPENDS_ON` links, and containment between entities that are not aggregates, stay removable. |
+| `DELETE /trait/link/...` | Refused when an existing link between entity instances relies on the trait relationship. A link is only admitted because a trait relationship sanctions it, so removing the last one that does would leave the link with nothing justifying it. |
+
+Both link checks are **exact** rather than type-level: each candidate is re-tested (a mapping's
+path is re-resolved; an entity link is re-checked for legitimacy with the removed trait pair
+excluded), so only a link that actually loses its last justification blocks the removal. In each
+case the fix is the same — remove the instance link, or delete/re-create the mapping, first.
 
 ## Configuration
 

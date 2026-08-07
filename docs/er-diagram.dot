@@ -89,6 +89,8 @@ digraph ER {
             <TR><TD></TD><TD ALIGN="LEFT">relation_type</TD><TD ALIGN="LEFT">varchar</TD></TR>
             <TR><TD></TD><TD ALIGN="LEFT">mapping_values</TD><TD ALIGN="LEFT">jsonb</TD></TR>
             <TR><TD></TD><TD ALIGN="LEFT">entity_path_references</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">source_entity_type_version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">target_entity_type_version</TD><TD ALIGN="LEFT">int</TD></TR>
         </TABLE>
     >];
 
