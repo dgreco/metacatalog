@@ -18,6 +18,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved, and deleted as a whole (see [Aggregates](#aggregates))
 - **Provisioning**: Run a registered task for every `ProvisionableResource` of an aggregate in dependency order, and tear it down in reverse (see [Aggregates](#aggregates))
 - **Referential Safety**: Deletions that would strand an entity, dangle a link or break a mapping's path resolution are refused, with an exact per-link check rather than a type-level one (see [Deleting entities and links](#deleting-entities-and-links))
+- **Immutable Model**: Traits, entity types and trait relationships a module depends on can be frozen against deletion and versioning, declared from a Java module applied idempotently at startup (see [Immutable model](#immutable-model))
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
@@ -187,7 +188,8 @@ The application will start on port 8080.
 
 ```
 metacatalog/
-├── metacatalog-core/           # Core domain, repositories, and services
+├── metacatalog-core/           # Core domain, repositories, services, and the startup
+│                               #   extension point for declaring an immutable model
 ├── metacatalog-functions/      # Procedures that run over entities (e.g. provisioning)
 ├── metacatalog-openapi/        # OpenAPI spec and generated controllers / client
 ├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for the whole catalog
@@ -702,9 +704,9 @@ directly associated ones).
 Composition is **not** declared between entity types directly — it is declared once between
 *traits*, and an entity type takes part in it by mixing those traits in. This is the same rule
 that governs whether two entity instances may be linked at all. For example, the built-in
-`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (seeded by the Flyway baseline
-`V1__initial_schema.sql`), so any type carrying `Aggregate` can contain any type carrying
-`AggregateElement`.
+`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (installed at startup by
+`BuiltInModelContributor`, and immutable — see [Immutable model](#immutable-model)), so any type
+carrying `Aggregate` can contain any type carrying `AggregateElement`.
 
 An **aggregate root type** is a type that can start an aggregate: it has a `HAS_PART`
 relationship towards at least one other type, but is never itself a part of another type.
@@ -795,6 +797,70 @@ Both link checks are **exact** rather than type-level: each candidate is re-test
 path is re-resolved; an entity link is re-checked for legitimacy with the removed trait pair
 excluded), so only a link that actually loses its last justification blocks the removal. In each
 case the fix is the same — remove the instance link, or delete/re-create the mapping, first.
+
+## Immutable model
+
+Some of the model is infrastructure: the platform keys off it by name, and deleting or re-shaping
+it would break behaviour with nothing pointing back at the cause. `trait`, `entity_type` and
+`trait_relationship` therefore carry an `immutable` flag. An immutable row can be neither deleted
+nor updated:
+
+| Marked immutable | Refused |
+| --- | --- |
+| Trait | `DELETE /trait/{name}`, `POST /trait/{name}/versions` |
+| Entity type | `DELETE /entity-type/{name}`, `POST /entity-type/{name}/versions` |
+| Trait relationship | `DELETE /trait/link/...`, from either direction of the pair |
+
+Creating a new version is refused because versioning mutates the live row **in place** (snapshotting
+the old state into the history table), which is exactly what the flag forbids.
+
+The flag freezes the row, not the graph around it. A mutable trait may still inherit from an
+immutable one and link to it, and entities of an immutable type are created, updated and deleted as
+usual — none of that writes to the frozen row.
+
+**The flag is not part of the REST API.** No endpoint sets it and no response reports it; clients
+only ever observe the refusal, as a `400` naming the row and saying it is immutable. The admin UI,
+which goes exclusively through the API, surfaces that like any other refusal.
+
+### Declaring an immutable model from a module
+
+The only way to create an immutable row is a startup contributor. Implement
+`ImmutableModelContributor` and publish it as a Spring bean; `ImmutableModelInstaller` applies every
+contributor once at boot.
+
+```java
+@Component
+class GovernanceModel implements ImmutableModelContributor {
+  @Override
+  public void contribute(ImmutableModelRegistry registry) {
+    registry.trait("Owned", """
+        {"type":"object","properties":{"owner":{"type":"string"}}}""");
+    registry.trait("Classified");
+    registry.link("Owned", RelationType.HAS_PART, "Classified");
+    registry.entityType("Dataset", null, List.of("Owned"));
+  }
+}
+```
+
+- **Idempotent by construction.** Each declaration is check-then-create against the live catalog:
+  what exists is left alone, what is missing is created immutable. There is no "already applied"
+  ledger and none is needed, so restarts and re-deploys converge on the same state. Write
+  `contribute` as a list of what must exist, not as a migration.
+- **Declaration order is application order** — declare a father before its children, and both traits
+  before the link between them. Across modules the order is bean order, pinnable with `@Order`.
+- The whole installation runs in **one transaction**, so a contributor that throws leaves nothing
+  behind and aborts startup rather than half-building a model.
+- A PostgreSQL advisory lock serialises instances booting together; an instance that misses it skips
+  rather than waits, since the holder is doing the same work.
+- A declared name already held by a **mutable** row is left as it is, with a warning — installation
+  never converts live catalog data.
+
+The built-in traits are installed this way, by `BuiltInModelContributor` (ordered first, so other
+modules can build on them): `Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`
+and the `Aggregate HAS_PART AggregateElement` composition. They are deliberately **not** seeded by
+the Flyway baseline, which keeps one source of truth expressed against the services rather than the
+tables — derived schemas, version groups and the inverse `IS_PART_OF` row are computed exactly as
+they are for a user-declared trait.
 
 ## Configuration
 
@@ -929,6 +995,10 @@ Notes:
 - Relationship tables (`*_relationship`) carry a `relation_type` column holding a
   value of the `RelationType` vocabulary (`DEPENDS_ON`/`IS_REQUIRED_BY`,
   `HAS_PART`/`IS_PART_OF`, `MAPPED_TO`/`IS_MAPPED_BY`).
+- `trait`, `entity_type` and `trait_relationship` carry an `immutable` flag
+  (default `false`) making the row neither deletable nor updatable — see
+  [Immutable model](#immutable-model). The `*_version` snapshot tables do not
+  carry it: an immutable type can never be versioned, so it never accrues one.
 
 ## Database Migrations
 
@@ -947,7 +1017,7 @@ It runs automatically on application startup and creates everything in one shot:
 | Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
 | Relationships | `trait_relationship`, `entity_relationship`, `mapping_type_relationship`, `mapping_entity_relationship` |
 | Lifecycle | `entity_lifecycle_event` + its sequence |
-| Seed data | The built-in traits (`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`) and the `HAS_PART` composition between the first two |
+| Seed data | **None.** The baseline creates tables only — the built-in traits are installed at startup, not by SQL (see [Immutable model](#immutable-model)) |
 
 **This project does not support migrating an existing database.** The schema is always created from
 scratch, which is why there is one baseline instead of an incremental chain. When the model changes,
