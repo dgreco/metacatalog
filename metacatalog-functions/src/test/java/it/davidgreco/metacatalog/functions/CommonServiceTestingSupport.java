@@ -1,9 +1,12 @@
 package it.davidgreco.metacatalog.functions;
 
+import it.davidgreco.metacatalog.bootstrap.ImmutableModelInstaller;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -34,6 +37,22 @@ public class CommonServiceTestingSupport {
             .load();
     flyway.clean();
     flyway.migrate();
+  }
+
+  /**
+   * Restores what {@link #beforeAll} wiped — the built-in traits the provisioning procedure keys
+   * off, and the caches still holding their pre-wipe ids.
+   *
+   * <p>Mirrors the core module's support class of the same name. With a single test class here the
+   * context is built after the wipe and {@link ImmutableModelInstaller} runs on its own, so this is
+   * currently a no-op; it is present so that adding a second test class does not silently reproduce
+   * the stale-cache failure that the core harness exists to prevent.
+   */
+  @BeforeEach
+  void reinstallBuiltInModel() {
+    var cacheManager = applicationContext.getBean(CacheManager.class);
+    cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
+    applicationContext.getBean(ImmutableModelInstaller.class).run(null);
   }
 
   @DynamicPropertySource

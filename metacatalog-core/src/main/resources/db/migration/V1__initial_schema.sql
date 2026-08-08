@@ -25,6 +25,7 @@ CREATE TABLE entity_type
     father_id        VARCHAR(255),
     version          INT          NOT NULL,
     version_group_id VARCHAR(255) NOT NULL,
+    immutable        BOOLEAN      NOT NULL DEFAULT FALSE,
     CONSTRAINT pk_entity_type PRIMARY KEY (id)
 );
 
@@ -44,6 +45,7 @@ CREATE TABLE trait
     father_id        VARCHAR(255),
     version          INT          NOT NULL,
     version_group_id VARCHAR(255) NOT NULL,
+    immutable        BOOLEAN      NOT NULL DEFAULT FALSE,
     CONSTRAINT pk_trait PRIMARY KEY (id)
 );
 
@@ -159,6 +161,7 @@ CREATE TABLE trait_relationship
     source_id     VARCHAR(255) NOT NULL,
     target_id     VARCHAR(255) NOT NULL,
     relation_type VARCHAR(255) NOT NULL,
+    immutable     BOOLEAN      NOT NULL DEFAULT FALSE,
     CONSTRAINT pk_trait_relationship PRIMARY KEY (id)
 );
 
@@ -264,45 +267,15 @@ CREATE TABLE entity_lifecycle_event
 CREATE INDEX idx_entitylifecycleevent_event_type_event_status ON entity_lifecycle_event (event_type, event_status);
 
 -- ---------------------------------------------------------------------------------------------
--- Built-in traits (see it.davidgreco.metacatalog.entity.BuiltInTraits)
+-- Built-in traits
 --
--- Each seeded trait starts at version 1 and is its own version group; the group id reuses the
--- trait id, which is already unique. No trait_version snapshot is seeded — history starts at the
--- first update made through TraitService.
+-- Deliberately NOT seeded here. Aggregate, AggregateElement, Provisionable and
+-- ProvisionableResource — and the Aggregate HAS_PART AggregateElement relationship between them —
+-- are declared by it.davidgreco.metacatalog.bootstrap.BuiltInModelContributor and installed at
+-- startup, immutably, through the same extension point any other module uses.
 --
--- provisioningStatus / provisioningResult are readOnly: the provisioning procedure sets them, not
--- the user, so the UI renders them disabled and validators treat them as server-managed.
+-- Keeping them out of the migration leaves one source of truth for the built-in model, expressed
+-- against the services rather than against the tables, so derived schemas, version groups and the
+-- inverse IS_PART_OF row are all computed the same way they are for user-declared traits instead of
+-- being hand-written in SQL and drifting from it.
 -- ---------------------------------------------------------------------------------------------
-
-INSERT INTO trait (id, name, base_schema, father_id, version, version_group_id)
-VALUES ('00000000-0000-0000-0000-000000000100', 'Aggregate', '{"type": "object", "properties": {}}', NULL, 1,
-        '00000000-0000-0000-0000-000000000100');
-
-INSERT INTO trait (id, name, base_schema, father_id, version, version_group_id)
-VALUES ('00000000-0000-0000-0000-000000000200', 'AggregateElement', '{"type": "object", "properties": {}}', NULL, 1,
-        '00000000-0000-0000-0000-000000000200');
-
-INSERT INTO trait (id, name, base_schema, father_id, version, version_group_id)
-VALUES ('00000000-0000-0000-0000-000000000300', 'Provisionable', '{"type": "object", "properties": {}}',
-        '00000000-0000-0000-0000-000000000100', 1, '00000000-0000-0000-0000-000000000300');
-
-INSERT INTO trait (id, name, base_schema, father_id, version, version_group_id)
-VALUES ('00000000-0000-0000-0000-000000000400', 'ProvisionableResource', '{
-  "type": "object",
-  "properties": {
-    "provisioningStatus": {
-      "type": "string",
-      "enum": ["PROVISIONED", "UNPROVISIONED", "FAILED"],
-      "readOnly": true
-    },
-    "provisioningResult": {
-      "type": "string",
-      "readOnly": true
-    }
-  }
-}', '00000000-0000-0000-0000-000000000200', 1, '00000000-0000-0000-0000-000000000400');
-
--- Composition between the built-in traits: an Aggregate HAS_PART an AggregateElement.
-INSERT INTO trait_relationship (id, source_id, target_id, relation_type)
-VALUES ('00000000-0000-0000-0000-000000000100', '00000000-0000-0000-0000-000000000100',
-        '00000000-0000-0000-0000-000000000200', 'HAS_PART');

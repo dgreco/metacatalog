@@ -78,6 +78,20 @@ public class EntityType implements Type<EntityType> {
   private String versionGroupId;
 
   /**
+   * Whether this entity type is frozen: an immutable type can be neither deleted nor versioned.
+   *
+   * <p>Set at creation and never cleared afterwards — there is deliberately no API that turns it
+   * off, so "immutable" is a guarantee rather than a lock someone can pick. Correcting a type
+   * marked by mistake means going to the database.
+   *
+   * <p>The flag freezes the type definition, not its instances: entities of an immutable type are
+   * created, updated and deleted as usual, because none of that writes to this row.
+   */
+  @Column(name = "immutable", nullable = false)
+  @ToString.Include
+  private boolean immutable = false;
+
+  /**
    * The traits associated with this entity type. Fetched lazily: previously every entity-type load
    * eagerly pulled the whole trait collection (and, transitively, each trait's father chain). The
    * finders whose callers read the traits outside a transaction ({@code findAll} / {@code

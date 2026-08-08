@@ -115,7 +115,10 @@ public class CoreConfig {
    * @param jsonUtils the JSON helpers
    * @return the trait service
    */
+  // @Primary because immutableTraitWriter below re-exposes this very instance under a second bean
+  // name; without it, resolving TraitService by type would find two candidates.
   @Bean
+  @Primary
   public TraitService traitService(
       TraitRepository traitRepository,
       TraitRelationshipRepository traitRelationshipRepository,
@@ -131,6 +134,37 @@ public class CoreConfig {
   }
 
   /**
+   * Exposes the trait service's immutable-creation side under its own type, for the startup
+   * installer alone.
+   *
+   * <p>The cast is safe and not a trick: {@code TraitServiceImpl} implements both interfaces, and a
+   * Spring AOP proxy implements every interface of its target, so the object handed back here is
+   * the same transactional proxy — just seen through the narrower contract. Declaring it as a bean
+   * in its own right is what lets {@code ImmutableModelInstaller} ask for the capability by type
+   * while everything else keeps injecting {@link TraitService}, which cannot create immutable rows
+   * at all.
+   *
+   * @param traitService the trait service bean
+   * @return the same bean, seen as its immutable-creation contract
+   */
+  @Bean
+  public ImmutableTraitWriter immutableTraitWriter(TraitService traitService) {
+    return (ImmutableTraitWriter) traitService;
+  }
+
+  /**
+   * Exposes the entity-type service's immutable-creation side under its own type. See {@link
+   * #immutableTraitWriter}.
+   *
+   * @param entityTypeService the entity type service bean
+   * @return the same bean, seen as its immutable-creation contract
+   */
+  @Bean
+  public ImmutableEntityTypeWriter immutableEntityTypeWriter(EntityTypeService entityTypeService) {
+    return (ImmutableEntityTypeWriter) entityTypeService;
+  }
+
+  /**
    * Creates the entity type service bean.
    *
    * @param entityTypeRepository the entity type repository
@@ -141,7 +175,9 @@ public class CoreConfig {
    *     refuse a new version that would break a mapping targeting the type
    * @return the entity type service
    */
+  // @Primary for the same reason as traitService: immutableEntityTypeWriter re-exposes it.
   @Bean
+  @Primary
   public EntityTypeService entityTypeService(
       EntityTypeRepository entityTypeRepository,
       TraitRepository traitRepository,
