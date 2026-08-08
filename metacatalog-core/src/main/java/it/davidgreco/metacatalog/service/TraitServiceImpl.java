@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** Default implementation of {@link TraitService}. */
 @Slf4j
 @RequiredArgsConstructor
-public class TraitServiceImpl implements TraitService {
+public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
 
   private static final String TRAIT = "Trait ";
   private static final String NOT_FOUND = " not found";
@@ -58,6 +58,24 @@ public class TraitServiceImpl implements TraitService {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public Trait create(String name, Optional<String> schema, Optional<String> fatherName) {
+    return doCreate(name, schema, fatherName, false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Trait createImmutable(String name, Optional<String> schema, Optional<String> fatherName) {
+    return doCreate(name, schema, fatherName, true);
+  }
+
+  /**
+   * The shared body. A private helper rather than one public method delegating to another: a
+   * self-invocation would bypass Spring's proxy, so the annotation on the inner method would be
+   * ignored — harmless here only because both entry points above are themselves transactional, and
+   * clearer when the shared code cannot be mistaken for an entry point at all.
+   */
+  private Trait doCreate(
+      String name, Optional<String> schema, Optional<String> fatherName, boolean immutable) {
     log.info("Creating Trait: {}", name);
     try {
       var baseSchemaNode = parseSchema(schema);
@@ -65,6 +83,7 @@ public class TraitServiceImpl implements TraitService {
       trait.setName(name);
       trait.setBaseSchema(baseSchemaNode);
       trait.setVersion(1);
+      trait.setImmutable(immutable);
       trait.setVersionGroupId(UUID.randomUUID().toString());
       if (fatherName.isPresent()) {
         var father =
@@ -93,6 +112,9 @@ public class TraitServiceImpl implements TraitService {
    * <p>The live row is locked with a pessimistic write lock for the duration of the transaction, so
    * concurrent {@code createVersion} calls for the same trait are serialised.
    *
+   * <p>Refused outright for an immutable trait: versioning mutates the live row in place, which is
+   * exactly what the flag forbids.
+   *
    * @param name the name of the Trait to version
    * @param schema the new optional JSON schema for the new version
    * @param fatherName the new optional father name for the new version
@@ -106,6 +128,7 @@ public class TraitServiceImpl implements TraitService {
           traitRepository
               .findByNameForUpdate(name)
               .orElseThrow(() -> new NotFoundException(TRAIT + name + NOT_FOUND));
+      checkIsMutable(live, "versioned");
 
       var snapshot = new TraitVersion();
       snapshot.setVersionGroupId(live.getVersionGroupId());
@@ -312,6 +335,8 @@ public class TraitServiceImpl implements TraitService {
    * Trait is not found, a {@link ServiceError} is thrown. If a data integrity violation occurs
    * during the deletion process, a {@link ServiceError} is also thrown.
    *
+   * <p>An immutable Trait is refused.
+   *
    * @param name the name of the Trait to delete
    */
   @Transactional(propagation = Propagation.REQUIRED)
@@ -322,6 +347,7 @@ public class TraitServiceImpl implements TraitService {
           traitRepository
               .findByName(name)
               .orElseThrow(() -> new NotFoundException(TRAIT + name + NOT_FOUND));
+      checkIsMutable(entityType, "deleted");
       traitVersionRepository.deleteByVersionGroupId(entityType.getVersionGroupId());
       traitRepository.delete(entityType);
       log.info("Deleted Trait: {}", name);
@@ -378,12 +404,28 @@ public class TraitServiceImpl implements TraitService {
    * It also checks for loops before creating the link. A self-referential link (source and target
    * are the same Trait) is permitted and is not treated as a loop.
    *
+   * <p>Linking to an immutable trait is allowed: the flag freezes the trait row, and creating a
+   * relationship does not write to it.
+   *
    * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
    * @param targetTraitName the name of the second Trait
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public void link(String sourceTraitName, RelationType relType, String targetTraitName) {
+    doLink(sourceTraitName, relType, targetTraitName, false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void linkImmutable(String sourceTraitName, RelationType relType, String targetTraitName) {
+    doLink(sourceTraitName, relType, targetTraitName, true);
+  }
+
+  /** The shared body; see {@link #doCreate} on why it is private. */
+  private void doLink(
+      String sourceTraitName, RelationType relType, String targetTraitName, boolean immutable) {
     log.info("Linking Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
     try {
       if (wouldCreateLoop(sourceTraitName, targetTraitName, relType)) {
@@ -401,12 +443,14 @@ public class TraitServiceImpl implements TraitService {
       directRel.setSource(sourceTrait);
       directRel.setTarget(targetTrait);
       directRel.setRelationType(relType);
+      directRel.setImmutable(immutable);
       traitRelationshipRepository.save(directRel);
       if (relType.hasInverse()) {
         var inverseRel = new TraitRelationship();
         inverseRel.setSource(targetTrait);
         inverseRel.setTarget(sourceTrait);
         inverseRel.setRelationType(relType.inverse());
+        inverseRel.setImmutable(immutable);
         traitRelationshipRepository.save(inverseRel);
       }
       log.info("Linked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
@@ -467,10 +511,48 @@ public class TraitServiceImpl implements TraitService {
                               + " with "
                               + sourceTraitName));
     }
+    checkIsMutable(rel, inverseRel);
     checkNoInstanceLinkReliesOn(rel, inverseRel);
     traitRelationshipRepository.delete(rel);
     if (inverseRel != null) traitRelationshipRepository.delete(inverseRel);
     log.info("Unlinked Trait: {} with Trait: {}", sourceTraitName, targetTraitName);
+  }
+
+  /**
+   * Rejects the removal of an immutable trait relationship.
+   *
+   * <p>Both rows of the pair are checked rather than just the direct one. {@link #link} always
+   * marks them alike, so a disagreement can only come from a hand-edited database — and in that
+   * case refusing is the safe reading: deleting the pair would remove a row someone froze.
+   *
+   * @param rel the relationship being removed
+   * @param inverseRel the paired inverse row, or {@code null} when the relation type has no inverse
+   */
+  private void checkIsMutable(TraitRelationship rel, TraitRelationship inverseRel) {
+    TraitRelationship frozen = null;
+    if (rel.isImmutable()) frozen = rel;
+    else if (inverseRel != null && inverseRel.isImmutable()) frozen = inverseRel;
+    if (frozen == null) return;
+    throw new ServiceError(
+        "The "
+            + frozen.getRelationType()
+            + " relationship between trait "
+            + frozen.getSource().getName()
+            + " and trait "
+            + frozen.getTarget().getName()
+            + " is immutable and cannot be removed.");
+  }
+
+  /**
+   * Rejects an operation that would delete or rewrite an immutable trait.
+   *
+   * @param trait the live trait the operation targets
+   * @param operation the past participle naming what was attempted, e.g. {@code "deleted"}
+   */
+  private void checkIsMutable(Trait trait, String operation) {
+    if (!trait.isImmutable()) return;
+    throw new ServiceError(
+        TRAIT + trait.getName() + " is immutable and cannot be " + operation + ".");
   }
 
   /**

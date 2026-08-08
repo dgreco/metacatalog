@@ -1,9 +1,13 @@
 package it.davidgreco.metacatalog.entity;
 
 /**
- * Names of the built-in traits seeded by Flyway migration {@code V2}. Centralised here so the
- * services and procedures that key off them refer to a single source of truth rather than repeating
- * string literals (a typo in which would silently break trait-based behaviour).
+ * Names of the built-in traits installed at startup by {@code
+ * it.davidgreco.metacatalog.bootstrap.BuiltInModelContributor}. Centralised here so the services
+ * and procedures that key off them refer to a single source of truth rather than repeating string
+ * literals (a typo in which would silently break trait-based behaviour).
+ *
+ * <p>Because that wiring is by name, all four traits are installed immutable and cannot be deleted
+ * or re-versioned through the API.
  */
 public final class BuiltInTraits {
 

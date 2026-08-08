@@ -21,7 +21,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 
 | Module | Purpose |
 | --- | --- |
-| `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files. The heart of the system. |
+| `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files, and the `bootstrap` startup extension point for modules declaring an immutable model. The heart of the system. |
 | `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse. Depends on core; assembled into the application. |
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
@@ -52,10 +52,116 @@ Located in `metacatalog-core/.../entity`:
 - **`AdvisoryLockManager`** — PostgreSQL advisory locks used to serialize scheduled work across
   application instances.
 
-### Built-in traits (seeded by the Flyway baseline `V1__initial_schema.sql`)
+### Built-in traits (installed at startup by `BuiltInModelContributor`)
 
 `Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`. These underpin the
-aggregate model (`AggregateService`) and the provisioning procedure.
+aggregate model (`AggregateService`) and the provisioning procedure. All four are installed
+**immutable**, as is the `Aggregate HAS_PART AggregateElement` relationship between them.
+
+They are deliberately **not** seeded by the Flyway baseline. `BuiltInModelContributor` declares them
+through the same [contributor extension point](#declaring-an-immutable-model-from-a-module-bootstrap-package)
+any other module uses, ordered `HIGHEST_PRECEDENCE` so a module can inherit from them or mix them
+in. That keeps one source of truth, expressed against the services rather than the tables: derived
+schemas, version groups and the inverse `IS_PART_OF` row are computed exactly as they are for a
+user-declared trait, instead of being hand-written in SQL that drifts from what the services would
+produce. (The old seed wrote only the `HAS_PART` row and no inverse — precisely that kind of drift.)
+
+One consequence for tests: the built-ins no longer come back at fixed UUIDs after a
+`flyway.clean()`. `CommonServiceTestingSupport` (core, and its twin in functions) therefore clears
+the Caffeine caches and re-runs the installer in `@BeforeEach` — the Spring context is cached across
+test classes, so without that a cache hit would hand a later test a trait whose id was deleted.
+
+### Immutability
+
+`Trait`, `EntityType` and `TraitRelationship` carry an `immutable` boolean column (default
+`false`). It makes the row neither deletable nor updatable:
+
+| Marked immutable | Refused |
+| --- | --- |
+| `Trait` | `TraitServiceImpl.delete`, `TraitServiceImpl.createVersion` |
+| `EntityType` | `EntityTypeServiceImpl.delete`, `EntityTypeServiceImpl.createVersion` |
+| `TraitRelationship` | `TraitServiceImpl.unlink` |
+
+`createVersion` is refused because versioning mutates the live row **in place** (snapshotting the
+old state into the history table), which is exactly what the flag forbids.
+
+Three properties are worth preserving:
+
+- **The flag is never exposed over REST.** No endpoint sets it and no DTO reports it — `DtoMapper`
+  deliberately does not map it. Callers only ever observe the refusal, as a 400 naming the row and
+  saying it is immutable. The admin UI therefore cannot render a badge or hide the delete control
+  either; it surfaces the error as a flash message like any other refusal. Do not add it to
+  `interface-specification.yaml` to make the UI prettier — that is the whole point of the decision.
+- **A startup contributor is the only way to create one.** `TraitService` and `EntityTypeService`
+  expose no method that can produce an immutable row, so nothing holding them — the REST delegate,
+  the bulk loader, the UI's path through the API — can make one. The capability lives on two
+  separate interfaces, `ImmutableTraitWriter` and `ImmutableEntityTypeWriter`, implemented by the
+  same service impls and injected only into `ImmutableModelInstaller` (see below).
+- **It is one-way.** Set at creation and never cleared. Correcting a row marked by mistake means
+  going to the database.
+- **It freezes the row, not the graph around it.** A mutable trait may inherit from an immutable
+  one, a relationship may be linked to it, and entities of an immutable type are created, updated
+  and deleted as usual — none of that writes to the frozen row.
+
+Two wiring details are load-bearing and easy to undo by accident:
+
+- **The writer interfaces exist because the services are JDK proxies.** `CoreConfig` declares the
+  service `@Bean`s with the *interface* as return type and the app proxies with
+  `proxyTargetClass=false`, so the bean in the container is a proxy implementing `TraitService` — it
+  is not a `TraitServiceImpl`. Putting `createImmutable` on the impl class alone would make it
+  unreachable (injecting the class fails outright). A proxy does implement every interface of its
+  target, which is why a second interface works where a class-only method does not.
+- **`traitService` / `entityTypeService` are `@Primary`.** `immutableTraitWriter` and
+  `immutableEntityTypeWriter` re-expose the *same instance* under a second bean name, so resolving
+  `TraitService` by type would otherwise find two candidates and fail.
+
+The shared bodies behind `create` / `createImmutable` are **private** helpers, not one public method
+delegating to another: a self-invocation bypasses Spring's proxy, so the annotation on the inner
+method would be silently ignored. (Both entry points are themselves `@Transactional`, so the
+transaction is already open — but the same mistake in the form of a `default` method on the
+interface is what once left creation running with no session at all, failing the lazy father/trait
+walk in `computeDerivedSchema` with `LazyInitializationException`.)
+
+#### Declaring an immutable model from a module (`bootstrap` package)
+
+A Java module that owns part of the model — and needs it present and frozen before anything else
+runs — implements `ImmutableModelContributor` and publishes it as a bean. `ImmutableModelInstaller`
+(an `ApplicationRunner`) applies every contributor once at startup:
+
+```java
+@Component
+class GovernanceModel implements ImmutableModelContributor {
+  @Override
+  public void contribute(ImmutableModelRegistry registry) {
+    registry.trait("Owned", """
+        {"type":"object","properties":{"owner":{"type":"string"}}}""");
+    registry.trait("Classified");
+    registry.link("Owned", RelationType.HAS_PART, "Classified");
+    registry.entityType("Dataset", null, List.of("Owned"));
+  }
+}
+```
+
+- **This is the only way to create an immutable row.** The installer is the sole holder of
+  `ImmutableTraitWriter` / `ImmutableEntityTypeWriter`; ordinary creation through
+  `TraitService` / `EntityTypeService` always produces mutable rows.
+- **Idempotent by construction.** Each declaration is check-then-create against the live catalog:
+  what exists is left alone, what is missing is created immutable. There is no "already applied"
+  ledger and none is needed — restarts and re-deploys converge on the same state. Write
+  `contribute` as a list of what must exist, not as a migration.
+- **Declaration order is application order**, and nothing is sorted for you: declare a father
+  before its children, and both traits before the link between them. Across modules the order is
+  bean order, pinnable with `@Order`.
+- The whole installation is one transaction, so a contributor that throws leaves nothing behind and
+  aborts startup rather than half-building a model later declarations would extend.
+- A PostgreSQL advisory lock (id `2`; `MappingUpdaterService` uses `1`) serialises instances booting
+  together. An instance that misses the lock **skips** rather than waits — the holder is doing the
+  same work, and blocking every replica behind one transaction would turn a rolling restart into a
+  queue.
+- A declared name already held by a **mutable** row is left as it is, with a warning. Installation
+  never converts live catalog data, because the flag is only ever set at creation.
+- `contributors` is injected as an `ObjectProvider`, not a `List`: injecting a list when no
+  contributor bean exists fails outright, and none is the default.
 
 ## Services (core)
 
@@ -203,6 +309,10 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   by mixing traits in, several trait relationships can sanction the same link, and each candidate
   link is re-tested for legitimacy with the removed pair excluded — only a link losing its *last*
   justification blocks the removal. Remove the instance link first.
+- Immutability: the delete and version endpoints for traits and entity types, and `DELETE
+  /trait/link/...`, also refuse anything marked immutable (see [Immutability](#immutability)). The
+  flag itself is deliberately **not** part of the contract — it is neither settable nor reported by
+  any endpoint; clients only ever see the refusal.
 
 When running:
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -416,7 +526,8 @@ separately and not shaded. No Ontop CLI install is needed to build or run the ap
 - **Don't hand-edit generated OpenAPI code** — change the YAML spec and regenerate.
 - **DB schema** is owned by a single Flyway baseline,
   `metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql`, which creates every
-  table and seeds the built-in traits. The project does not support migrating an existing database:
+  table. It seeds **no data** — the built-in traits are installed at startup by
+  `BuiltInModelContributor`, not by SQL. The project does not support migrating an existing database:
   edit the baseline in place and recreate the DB rather than adding `V2`, `V3`, … files. Editing it
   changes its checksum, so any database that ran the previous version must be dropped. After
   editing, run `mvn clean` before testing — a stale copy of a deleted migration left in

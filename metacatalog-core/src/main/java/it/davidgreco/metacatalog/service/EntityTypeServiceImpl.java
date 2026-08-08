@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 /** Default implementation of {@link EntityTypeService}. */
 @Slf4j
 @RequiredArgsConstructor
-public class EntityTypeServiceImpl implements EntityTypeService {
+public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntityTypeWriter {
 
   private static final String ENTITYTYPE = "EntityType ";
 
@@ -64,6 +64,29 @@ public class EntityTypeServiceImpl implements EntityTypeService {
   @Transactional(propagation = Propagation.REQUIRED)
   public EntityType create(
       String name, List<String> traits, Optional<String> fatherName, String schema) {
+    return doCreate(name, traits, fatherName, schema, false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public EntityType createImmutable(
+      String name, List<String> traits, Optional<String> fatherName, String schema) {
+    return doCreate(name, traits, fatherName, schema, true);
+  }
+
+  /**
+   * The shared body. A private helper rather than one public method delegating to another: a
+   * self-invocation would bypass Spring's proxy, so the annotation on the inner method would be
+   * ignored — harmless here only because both entry points above are themselves transactional, and
+   * clearer when the shared code cannot be mistaken for an entry point at all.
+   */
+  private EntityType doCreate(
+      String name,
+      List<String> traits,
+      Optional<String> fatherName,
+      String schema,
+      boolean immutable) {
     log.info("Creating EntityType: {}", name);
     try {
       List<Trait> traitsList = resolveTraits(traits);
@@ -73,6 +96,7 @@ public class EntityTypeServiceImpl implements EntityTypeService {
       entityType.setName(name);
       entityType.setBaseSchema(baseSchemaNode);
       entityType.setVersion(1);
+      entityType.setImmutable(immutable);
       entityType.setVersionGroupId(UUID.randomUUID().toString());
       if (fatherName.isPresent()) {
         var father =
@@ -128,6 +152,7 @@ public class EntityTypeServiceImpl implements EntityTypeService {
           entityTypeRepository
               .findByNameForUpdate(name)
               .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
+      checkIsMutable(live, "versioned");
 
       var existingCurrentSnapshot =
           entityTypeVersionRepository.findByVersionGroupIdAndVersion(
@@ -449,6 +474,7 @@ public class EntityTypeServiceImpl implements EntityTypeService {
           entityTypeRepository
               .findByName(name)
               .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
+      checkIsMutable(entityType, "deleted");
       var snapshots =
           entityTypeVersionRepository
               .findByVersionGroupIdOrderByVersionAsc(entityType.getVersionGroupId())
@@ -488,6 +514,22 @@ public class EntityTypeServiceImpl implements EntityTypeService {
    * @param name the name of the entity type to check
    * @return true if an entity type with the given name exists, false otherwise
    */
+  /**
+   * Rejects an operation that would delete or rewrite an immutable entity type.
+   *
+   * <p>Only the type definition is frozen. Entities of an immutable type are still created, updated
+   * and deleted normally, and a mutable type may still inherit from an immutable one — neither
+   * writes to this row.
+   *
+   * @param entityType the live type the operation targets
+   * @param operation the past participle naming what was attempted, e.g. {@code "deleted"}
+   */
+  private void checkIsMutable(EntityType entityType, String operation) {
+    if (!entityType.isImmutable()) return;
+    throw new ServiceError(
+        ENTITYTYPE + entityType.getName() + " is immutable and cannot be " + operation + ".");
+  }
+
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String name) {
     log.info("Checking if EntityType exists: {}", name);

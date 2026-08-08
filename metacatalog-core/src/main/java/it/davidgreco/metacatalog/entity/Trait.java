@@ -75,6 +75,21 @@ public class Trait implements Type<Trait> {
   @Column(name = "version_group_id", nullable = false)
   private String versionGroupId;
 
+  /**
+   * Whether this trait is frozen: an immutable trait can be neither deleted nor versioned.
+   *
+   * <p>Set at creation and never cleared afterwards — there is deliberately no API that turns it
+   * off, so "immutable" is a guarantee rather than a lock someone can pick. Correcting a trait
+   * marked by mistake means going to the database.
+   *
+   * <p>The flag freezes the trait itself, not everything touching it: a new relationship may still
+   * be linked to an immutable trait, and a mutable trait may still inherit from one, because
+   * neither writes to this row.
+   */
+  @Column(name = "immutable", nullable = false)
+  @ToString.Include
+  private boolean immutable = false;
+
   /** The entity types that have this trait. */
   @ManyToMany(mappedBy = "traits", fetch = FetchType.LAZY)
   private List<EntityType> types = new ArrayList<>();
