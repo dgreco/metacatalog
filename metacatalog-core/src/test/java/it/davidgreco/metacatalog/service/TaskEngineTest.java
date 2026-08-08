@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.mockito.Mockito;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
@@ -29,8 +30,18 @@ class TaskEngineTest {
         false, Duration.ofSeconds(1), 3, 100, Duration.ofHours(1), Duration.ofHours(1));
   }
 
+  /**
+   * These tests never register a factory — they exercise scheduling only — so a stub is enough to
+   * satisfy the dependency {@code registerTaskFactory} uses to reject unknown entity types. This is
+   * a plain unit test with no Spring context or database behind it.
+   */
+  private static EntityTypeService stubEntityTypeService() {
+    return Mockito.mock(EntityTypeService.class);
+  }
+
   private final TaskManager taskManager =
-      new TaskManager(new SimpleAsyncTaskExecutor(), testConfigProperties());
+      new TaskManager(
+          new SimpleAsyncTaskExecutor(), testConfigProperties(), stubEntityTypeService());
 
   /** A transient entity of a synthetic type, enough for the engine to identify a task. */
   private static Entity testEntity(String id) {
@@ -115,7 +126,8 @@ class TaskEngineTest {
     pool.setQueueCapacity(4);
     pool.initialize();
     try {
-      var boundedTaskManager = new TaskManager(pool, testConfigProperties());
+      var boundedTaskManager =
+          new TaskManager(pool, testConfigProperties(), stubEntityTypeService());
       var order = new ConcurrentLinkedQueue<Integer>();
       var schedule = boundedTaskManager.createSchedule();
       SimpleTask previous = null;
@@ -177,7 +189,8 @@ class TaskEngineTest {
     pool.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
     pool.initialize();
     try {
-      var boundedTaskManager = new TaskManager(pool, testConfigProperties());
+      var boundedTaskManager =
+          new TaskManager(pool, testConfigProperties(), stubEntityTypeService());
       var schedule = boundedTaskManager.createSchedule();
       // Fill the pool (1 running) + queue (1 queued) = 2 tasks. The third must be rejected.
       var latch = new java.util.concurrent.CountDownLatch(1);

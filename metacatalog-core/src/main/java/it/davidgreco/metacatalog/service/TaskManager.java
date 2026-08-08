@@ -24,16 +24,20 @@ public class TaskManager {
 
   private final TaskFactoryRegistry taskFactoryRegistry;
   private final AsyncTaskExecutor asyncTaskExecutor;
+  private final EntityTypeService entityTypeService;
 
   /**
    * Creates a task manager with a fresh, empty {@link TaskFactoryRegistry}.
    *
    * @param asyncTaskExecutor the executor tasks are submitted to
    * @param coreConfigProperties the core configuration properties
+   * @param entityTypeService used to verify that a factory is registered against a type that exists
    */
   public TaskManager(
-      AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
-    this(new TaskFactoryRegistry(), asyncTaskExecutor, coreConfigProperties);
+      AsyncTaskExecutor asyncTaskExecutor,
+      CoreConfigProperties coreConfigProperties,
+      EntityTypeService entityTypeService) {
+    this(new TaskFactoryRegistry(), asyncTaskExecutor, coreConfigProperties, entityTypeService);
   }
 
   /**
@@ -43,13 +47,16 @@ public class TaskManager {
    * @param taskFactoryRegistry the registry used to look up task factories
    * @param asyncTaskExecutor the executor tasks are submitted to
    * @param coreConfigProperties the core configuration properties
+   * @param entityTypeService used to verify that a factory is registered against a type that exists
    */
   public TaskManager(
       TaskFactoryRegistry taskFactoryRegistry,
       AsyncTaskExecutor asyncTaskExecutor,
-      CoreConfigProperties coreConfigProperties) {
+      CoreConfigProperties coreConfigProperties,
+      EntityTypeService entityTypeService) {
     this.taskFactoryRegistry = taskFactoryRegistry;
     this.asyncTaskExecutor = asyncTaskExecutor;
+    this.entityTypeService = entityTypeService;
   }
 
   /**
@@ -57,11 +64,39 @@ public class TaskManager {
    * factory registered against the entity's type name, so registering under any other name makes
    * the factory unreachable.
    *
+   * <p>The name must be one an entity type actually has. Registering under a name nothing matches
+   * is always a mistake — a typo, or a type that was renamed — and one that used to surface only
+   * much later, as {@code No factory for name: ...} at the point a run tried to provision the
+   * resource, with nothing tying it back to the registration. Worse, the reverse case was silent: a
+   * factory registered under a misspelled name simply never fired.
+   *
+   * <p>The check means a registrar working from configuration cannot register before the type
+   * exists. That is what {@link it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar}
+   * is for: entity types are catalog data created at runtime, so such a registrar re-attempts
+   * registration before each procedure run rather than once at startup.
+   *
    * @param entityTypeName the name of the entity type the factory handles
    * @param factory the task factory implementation
+   * @throws NotFoundException if no entity type has that name
    */
   public void registerTaskFactory(String entityTypeName, TaskFactory factory) {
+    if (!entityTypeService.exists(entityTypeName)) {
+      throw new NotFoundException(
+          "Cannot register a task factory for EntityType "
+              + entityTypeName
+              + ": no entity type with that name exists");
+    }
     taskFactoryRegistry.registerTaskFactory(entityTypeName, factory);
+  }
+
+  /**
+   * Reports whether a factory is already registered for the given entity type name.
+   *
+   * @param entityTypeName the name of the entity type to check
+   * @return true if a factory is registered under that name
+   */
+  public boolean isRegistered(String entityTypeName) {
+    return taskFactoryRegistry.isRegistered(entityTypeName);
   }
 
   /**

@@ -429,7 +429,9 @@ public class CoreConfig {
 
   @Bean
   public TaskManager taskManager(
-      AsyncTaskExecutor asyncTaskExecutor, CoreConfigProperties coreConfigProperties) {
-    return new TaskManager(asyncTaskExecutor, coreConfigProperties);
+      AsyncTaskExecutor asyncTaskExecutor,
+      CoreConfigProperties coreConfigProperties,
+      EntityTypeService entityTypeService) {
+    return new TaskManager(asyncTaskExecutor, coreConfigProperties, entityTypeService);
   }
 }

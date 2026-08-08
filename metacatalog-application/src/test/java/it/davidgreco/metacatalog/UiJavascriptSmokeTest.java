@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
+import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.RemoteWebDriver;
@@ -88,8 +89,22 @@ class UiJavascriptSmokeTest {
     postgres.stop();
   }
 
+  /**
+   * A wait that also tolerates a stale element reference.
+   *
+   * <p>{@link WebDriverWait} ignores {@code NotFoundException} out of the box but not {@code
+   * StaleElementReferenceException}, and several conditions here look an element up and then read
+   * it — {@code findElements(...)} followed by {@code getText()}. The pages under test reload on
+   * submit, so the element can be replaced between those two calls and the whole wait fails on what
+   * is really a "try again" signal. Ignoring it lets the next poll re-find the element, which is
+   * exactly what the condition already does.
+   */
   private static WebDriverWait await() {
-    return new WebDriverWait(driver, Duration.ofSeconds(20));
+    var wait = new WebDriverWait(driver, Duration.ofSeconds(20));
+    // Called as a statement, not chained: ignoring() mutates the wait but is declared to return
+    // FluentWait, which would widen the helper's return type for every caller.
+    wait.ignoring(StaleElementReferenceException.class);
+    return wait;
   }
 
   /**

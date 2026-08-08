@@ -248,6 +248,21 @@ taskManager.registerTaskFactory("S3FolderType",
     entity -> new StdoutProvisioningTask(entity, entityService));
 ```
 
+**The name must be one an entity type actually has** — `registerTaskFactory` throws
+`NotFoundException` otherwise. Registering under a name nothing matches is always a mistake, and it
+used to surface only much later, as `No factory for name: <type>` when a run reached the resource,
+with nothing tying it back to the registration; the reverse case was worse, since a factory
+registered under a misspelled name simply never fired.
+
+The consequence is that **a registrar working from configuration cannot register at startup**, because
+entity types are catalog data created at runtime. That is what
+`it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar` is for: `ProcedureExecutor` calls
+`ensureRegistered()` on every such bean before each procedure run, inside the plan-building
+transaction, when the types involved certainly exist. Implementations must be idempotent and cheap
+(skip what `TaskManager.isRegistered` already reports), and must **not** throw for a type that still
+does not exist — this runs before *every* execution, so one stale name would fail the provisioning of
+unrelated aggregates. A resource whose type genuinely has no factory still fails its own run.
+
 `ProvisioningTask` requires both `provision()` and `unprovision()`, so a type cannot end up with a
 way to create a resource and no way to remove it. Which one runs is set by the procedure through
 `setOperation`, and the base class records the outcome on the entity — `PROVISIONED`,
@@ -260,6 +275,16 @@ provisioned by nothing.
 `[provisioning]` / `[unprovisioning]`) instead of creating anything. It writes to standard output
 rather than the log on purpose: the application ships with `logging.level.root: ERROR`. The list is
 empty by default, so adding the module changes nothing until types are named.
+
+It is a `DeferredTaskFactoryRegistrar` rather than a `@PostConstruct` registrar, for exactly the
+reason above: the Docker Compose demo names `S3FolderType` / `AthenaTableType` in
+`application-docker.yaml`, but `docker/bulk/` only creates them once the app reports healthy, so
+registering at startup would fail on a fresh volume. It does **not** re-check
+`EntityTypeService.exists` itself — that rule belongs to `registerTaskFactory` and duplicating it
+would let the two drift — it attempts the registration and catches the `NotFoundException`, logging
+a warning so a stale entry in the list never turns into an exception.
+`StdoutProvisioningRegistrationTests` pins this — it is the guard against a change that would break
+`docker compose up` rather than CI.
 
 Both operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
 `.../unprovision`. They are **synchronous** — `ProcedureExecutor.executeProcedure` returns only

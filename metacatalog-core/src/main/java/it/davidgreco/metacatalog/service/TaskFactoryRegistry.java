@@ -38,6 +38,17 @@ public class TaskFactoryRegistry {
   }
 
   /**
+   * Reports whether a factory is already registered for the given entity type name. Lets a
+   * registrar that runs repeatedly re-attempt only what it has not managed to register yet.
+   *
+   * @param entityTypeName the name of the entity type to check
+   * @return true if a factory is registered under that name
+   */
+  public boolean isRegistered(String entityTypeName) {
+    return taskFactories.containsKey(entityTypeName);
+  }
+
+  /**
    * Creates a new task for the given entity, using the factory registered under the entity's type
    * name.
    *
