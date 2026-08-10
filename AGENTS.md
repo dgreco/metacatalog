@@ -270,7 +270,7 @@ way to create a resource and no way to remove it. Which one runs is set by the p
 registered factory fails the run (`No factory for name: <type>`) rather than being reported as
 provisioned by nothing.
 
-`StdoutProvisioningFunctions` registers `StdoutProvisioningTask` for each entity type listed under
+`StdoutProvisioningTasks` registers `StdoutProvisioningTask` for each entity type listed under
 `application.config.provisioning.entity-types`, printing what it would do (lines prefixed
 `[provisioning]` / `[unprovisioning]`) instead of creating anything. It writes to standard output
 rather than the log on purpose: the application ships with `logging.level.root: ERROR`. The list is

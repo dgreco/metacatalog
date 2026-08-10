@@ -10,7 +10,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
 /**
- * Covers the case that made {@link StdoutProvisioningFunctions} a {@link
+ * Covers the case that made {@link StdoutProvisioningTasks} a {@link
  * it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar}: entity type names come from
  * configuration, but the types themselves are catalog data loaded later.
  *
