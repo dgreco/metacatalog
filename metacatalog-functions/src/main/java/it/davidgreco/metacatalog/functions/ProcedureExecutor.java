@@ -11,7 +11,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -54,16 +53,6 @@ public class ProcedureExecutor {
 
   private final PlatformTransactionManager transactionManager;
 
-  private final TaskManager taskManager;
-
-  /**
-   * Registrars whose task factories key off entity types created at runtime, so they cannot
-   * register at startup. An {@link org.springframework.beans.factory.ObjectProvider} rather than a
-   * {@code List}: injecting a list when no such bean exists fails outright, and none is the
-   * default.
-   */
-  private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
-
   private TransactionTemplate transactionTemplate;
 
   /**
@@ -72,22 +61,16 @@ public class ProcedureExecutor {
    * @param procedures every procedure bean, injected by Spring
    * @param entityService entity service for reading entities by ID
    * @param transactionManager the transaction manager used to scope plan-building
-   * @param taskManager the task manager used to join schedules produced by procedures
-   * @param deferredRegistrars registrars given a chance to register before each run
    */
   public ProcedureExecutor(
       List<EntityProcedure> procedures,
       EntityService entityService,
-      PlatformTransactionManager transactionManager,
-      TaskManager taskManager,
-      ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
+      PlatformTransactionManager transactionManager) {
     this.procedureRegistry =
         procedures.stream()
             .collect(Collectors.toUnmodifiableMap(EntityProcedure::name, Function.identity()));
     this.entityService = entityService;
     this.transactionManager = transactionManager;
-    this.taskManager = taskManager;
-    this.deferredRegistrars = deferredRegistrars;
   }
 
   @PostConstruct
@@ -116,11 +99,6 @@ public class ProcedureExecutor {
       String entityId, EntityProcedure procedure) {
     return transactionTemplate.execute(
         status -> {
-          // Inside the transaction, before the plan is built: entity types created since startup
-          // exist by now, so a registrar that could not register at boot gets its chance here.
-          deferredRegistrars
-              .orderedStream()
-              .forEach(DeferredTaskFactoryRegistrar::ensureRegistered);
           var entity = entityService.read(entityId);
           return procedure.accept(entity);
         });

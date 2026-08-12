@@ -71,9 +71,10 @@ public class TaskManager {
    * factory registered under a misspelled name simply never fired.
    *
    * <p>The check means a registrar working from configuration cannot register before the type
-   * exists. That is what {@link it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar}
-   * is for: entity types are catalog data created at runtime, so such a registrar re-attempts
-   * registration before each procedure run rather than once at startup.
+   * exists. That is what {@link
+   * it.davidgreco.metacatalog.functions.provisioning.DeferredTaskFactoryRegistrar} is for: entity
+   * types are catalog data created at runtime, so such a registrar re-attempts registration before
+   * each provisioning run rather than once at startup.
    *
    * @param entityTypeName the name of the entity type the factory handles
    * @param factory the task factory implementation

@@ -57,11 +57,20 @@ application:
     # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
     cacheExpireAfterWrite: 1h                 # Spring cache (Traits, EntityTypes) TTL
     provisioning:
-      # Entity types whose provisioning is handled by the stdout task, which prints what it would
-      # provision and unprovision instead of creating or destroying anything. A ProvisionableResource
-      # type not listed here has no registered task, and provisioning it fails with
-      # "No factory for name: <type>" rather than being reported as provisioned by nothing.
-      entity-types: []
+      # Associates each provisioning task with the entity types it handles. A ProvisionableResource
+      # type listed under no task has no registered factory, and provisioning it fails with
+      # "No factory for name: <type>" rather than being reported as provisioned by nothing; a type
+      # listed under two tasks is refused at startup. Available tasks:
+      #   stdout — prints what it would provision/unprovision instead of doing anything
+      #   script — pipes the entity's JSON values to `bash <path> <provision|unprovision>`
+      # No tasks are associated by default. (Do not write `tasks: {}` — YAML renders an empty
+      # inline map as an empty string, which fails to bind to the map.)
+      # tasks:
+      #   stdout:
+      #     entity-types: [S3FolderType]
+      #   script:
+      #     entity-types: [AthenaTableType]
+      #     path: /opt/scripts/provision.sh
     security:
       # Authentication mechanism: none | basic | oauth2 | ldap
       # - none   : security disabled (default for local dev)

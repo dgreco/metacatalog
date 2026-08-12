@@ -11,53 +11,36 @@
     </parent>
 
     <groupId>it.davidgreco.metacatalog</groupId>
-    <artifactId>metacatalog-ui</artifactId>
+    <artifactId>metacatalog-functions-provisioning-tasks</artifactId>
     <version>${project.version}</version>
-    <name>Meta Catalog UI</name>
+    <name>Meta Catalog Functions Provisioning Tasks</name>
 
     <dependencies>
-        <!--
-          OpenAPI module: the UI calls the REST API exclusively, through MetacatalogApiDelegate.
-          metacatalog-core and metacatalog-functions are deliberately kept off this module's
-          compile classpath: the UI must not reach past the API into the service or procedure
-          layer. Declaring no direct dependency is not enough, because both arrive transitively
-          through metacatalog-openapi — hence the explicit exclusions below, which turn a stray
-          `import ...metacatalog.service.*` or `...metacatalog.functions.*` into a compile error
-          instead of leaving the rule to convention.
-
-          The exclusion is compile-scope only. At runtime metacatalog-application assembles both
-          modules, so the delegate implementation still finds its services; the UI simply cannot
-          reference them itself. Anything a page needs must be exposed as an endpoint first.
-        -->
+        <!-- provided is not transitive, so core must be declared even though functions uses it -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
-            <artifactId>metacatalog-openapi</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>it.davidgreco.metacatalog</groupId>
-                    <artifactId>metacatalog-core</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>it.davidgreco.metacatalog</groupId>
-                    <artifactId>metacatalog-functions</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- Spring MVC controllers + server-side rendering with Thymeleaf -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>metacatalog-core</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-functions</artifactId>
+            <scope>provided</scope>
         </dependency>
-
-        <!-- Testing -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Testing & Checking-->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

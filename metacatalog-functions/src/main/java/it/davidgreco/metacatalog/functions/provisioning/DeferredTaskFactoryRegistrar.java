@@ -1,4 +1,4 @@
-package it.davidgreco.metacatalog.functions;
+package it.davidgreco.metacatalog.functions.provisioning;
 
 /**
  * A registrar that cannot register its task factories at startup, because the entity types it works
@@ -7,8 +7,9 @@ package it.davidgreco.metacatalog.functions;
  * <p>{@code TaskManager.registerTaskFactory} refuses a name no entity type has, which is what
  * catches typos — but it also means a registrar driven by configuration has nothing to register
  * against when the application boots. Such a registrar implements this interface instead and is
- * asked again by {@link ProcedureExecutor} before every procedure run, which is a moment when the
- * types involved certainly exist and a transaction is open.
+ * asked again by the provisioning procedures ({@link ProvisioningProcedure}, {@link
+ * UnprovisioningProcedure}) at the start of every run — a moment when the types involved certainly
+ * exist and the plan-building transaction is open.
  *
  * <p>Implementations must be <strong>idempotent and cheap</strong>: this runs on every procedure
  * execution, so skip what is already registered rather than re-registering it, and do not throw for
@@ -20,8 +21,8 @@ package it.davidgreco.metacatalog.functions;
 public interface DeferredTaskFactoryRegistrar {
 
   /**
-   * Registers whatever can now be registered. Called before each procedure execution, inside the
-   * plan-building transaction.
+   * Registers whatever can now be registered. Called by the provisioning procedures before each
+   * run, inside the plan-building transaction.
    */
   void ensureRegistered();
 }

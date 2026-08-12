@@ -14,10 +14,13 @@ application:
   config:
     updateMappedEntitiesSchedulingInterval: 1s
     provisioning:
-      # The ProvisionableResource types of the demo model in docker/bulk/bulk-model.yaml. Listing
-      # them here rather than in application.yaml keeps the demo's types out of the shipped
-      # defaults: an installation with a different model names its own.
-      entity-types: [S3FolderType, AthenaTableType]
+      # The ProvisionableResource types of the demo model in docker/bulk/bulk-model.yaml, all
+      # handled by the stdout task. Listing them here rather than in application.yaml keeps the
+      # demo's types out of the shipped defaults: an installation with a different model names its
+      # own.
+      tasks:
+        stdout:
+          entity-types: [S3FolderType, AthenaTableType]
     security:
       auth-mode: basic
       basic:

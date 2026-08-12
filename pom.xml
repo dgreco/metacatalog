@@ -93,6 +93,11 @@
             </dependency>
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-functions-provisioning-tasks</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-openapi</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -625,6 +630,7 @@
     <modules>
         <module>metacatalog-core</module>
         <module>metacatalog-functions</module>
+        <module>metacatalog-functions-provisioning-tasks</module>
         <module>metacatalog-openapi</module>
         <module>metacatalog-ui</module>
         <module>metacatalog-security</module>

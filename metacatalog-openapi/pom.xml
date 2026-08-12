@@ -21,6 +21,11 @@
             <groupId>it.davidgreco.metacatalog</groupId>
             <artifactId>metacatalog-core</artifactId>
         </dependency>
+        <!-- Functions module: ProcedureExecutor, used by the provision/unprovision endpoints -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-functions</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

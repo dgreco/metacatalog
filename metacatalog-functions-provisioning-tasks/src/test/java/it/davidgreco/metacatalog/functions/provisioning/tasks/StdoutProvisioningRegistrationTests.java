@@ -1,6 +1,5 @@
-package it.davidgreco.metacatalog.functions.provisioning;
+package it.davidgreco.metacatalog.functions.provisioning.tasks;
 
-import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.TaskManager;
@@ -11,8 +10,8 @@ import org.springframework.context.ApplicationContext;
 
 /**
  * Covers the case that made {@link StdoutProvisioningTasks} a {@link
- * it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar}: entity type names come from
- * configuration, but the types themselves are catalog data loaded later.
+ * it.davidgreco.metacatalog.functions.provisioning.DeferredTaskFactoryRegistrar}: entity type names
+ * come from configuration, but the types themselves are catalog data loaded later.
  *
  * <p>The properties here mirror the shipped Docker Compose demo, where {@code
  * application-docker.yaml} names these two types and {@code docker/bulk/} creates them only after
@@ -21,7 +20,8 @@ import org.springframework.context.ApplicationContext;
  * a regression that would break {@code docker compose up} on a fresh volume rather than in CI.
  */
 @SpringBootTest(
-    properties = "application.config.provisioning.entity-types=S3FolderType,AthenaTableType")
+    properties =
+        "application.config.provisioning.tasks.stdout.entity-types=S3FolderType,AthenaTableType")
 class StdoutProvisioningRegistrationTests extends CommonServiceTestingSupport {
 
   public StdoutProvisioningRegistrationTests(ApplicationContext applicationContext) {

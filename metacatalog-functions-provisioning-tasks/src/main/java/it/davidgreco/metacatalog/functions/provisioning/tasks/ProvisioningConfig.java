@@ -1,4 +1,4 @@
-package it.davidgreco.metacatalog.functions.provisioning;
+package it.davidgreco.metacatalog.functions.provisioning.tasks;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;

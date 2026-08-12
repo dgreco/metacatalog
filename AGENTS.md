@@ -22,8 +22,9 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | Module | Purpose |
 | --- | --- |
 | `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files, and the `bootstrap` startup extension point for modules declaring an immutable model. The heart of the system. |
-| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse. Depends on core; assembled into the application. |
-| `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services). |
+| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse. Also holds the procedure abstraction (`EntityProcedure`, `AbstractEntityProcedure`, `ProcedureExecutor`, `DeferredTaskFactoryRegistrar`) and the reusable task/registrar base classes (`ProvisioningTask`, `ProvisioningTasks`) that task modules extend. Depends on core; assembled into the application. |
+| `metacatalog-functions-provisioning-tasks` | The concrete provisioning **tasks** and their registrars — `StdoutProvisioningTask`(`s`) and `ScriptProvisioningTask`(`s`) plus `ProvisioningConfigProperties`, whose `tasks` map associates each task with the entity types it handles. The template for plugging in real task modules: depend on `metacatalog-functions`, subclass `ProvisioningTask`, register through a `ProvisioningTasks` registrar. Assembled into the application. |
+| `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services and, for the provision/unprovision endpoints, to `ProcedureExecutor` in `metacatalog-functions`). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
 | `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
 | `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Drives the REST API through `MetacatalogApiDelegate`; does not depend on `metacatalog-core`. See [UI](#ui-metacatalog-ui). |
@@ -227,8 +228,13 @@ Mapping-target types are excluded: the mapping engine derives their instances an
 
 ### Procedures (functions module)
 
-`AbstractEntityProcedure` / `EntityProcedure` / `ProcedureExecutor` (in core) define the procedure
-abstraction. `metacatalog-functions` provides the concrete ones: `ProvisioningProcedure` and
+`AbstractEntityProcedure` / `EntityProcedure` / `ProcedureExecutor` (in this module, package
+`it.davidgreco.metacatalog.functions`) and `DeferredTaskFactoryRegistrar` (in the `provisioning`
+subpackage, next to the registrar base class that implements it) define the procedure
+abstraction — it lives here rather
+than in core because it is strictly tied to the provisioning features; `metacatalog-openapi`
+depends on this module for `ProcedureExecutor`, which backs the provision/unprovision endpoints.
+`metacatalog-functions` also provides the concrete procedures: `ProvisioningProcedure` and
 `UnprovisioningProcedure`, which read an aggregate, build a dependency graph of
 `ProvisionableResource` entities from mapping relationships (`ResourceGraphBuilder`, shared by both
 so they cannot disagree), detect cycles, and schedule the work.
@@ -256,9 +262,11 @@ registered under a misspelled name simply never fired.
 
 The consequence is that **a registrar working from configuration cannot register at startup**, because
 entity types are catalog data created at runtime. That is what
-`it.davidgreco.metacatalog.functions.DeferredTaskFactoryRegistrar` is for: `ProcedureExecutor` calls
-`ensureRegistered()` on every such bean before each procedure run, inside the plan-building
-transaction, when the types involved certainly exist. Implementations must be idempotent and cheap
+`it.davidgreco.metacatalog.functions.provisioning.DeferredTaskFactoryRegistrar` is for: the two
+provisioning procedures call `ensureRegistered()` on every such bean at the start of each run,
+inside the plan-building transaction, when the types involved certainly exist. (`ProcedureExecutor`
+knows nothing about registrars — deferred registration is a provisioning concern, invoked by the
+procedures that need the factories.) Implementations must be idempotent and cheap
 (skip what `TaskManager.isRegistered` already reports), and must **not** throw for a type that still
 does not exist — this runs before *every* execution, so one stale name would fail the provisioning of
 unrelated aggregates. A resource whose type genuinely has no factory still fails its own run.
@@ -270,21 +278,56 @@ way to create a resource and no way to remove it. Which one runs is set by the p
 registered factory fails the run (`No factory for name: <type>`) rather than being reported as
 provisioned by nothing.
 
-`StdoutProvisioningTasks` registers `StdoutProvisioningTask` for each entity type listed under
-`application.config.provisioning.entity-types`, printing what it would do (lines prefixed
-`[provisioning]` / `[unprovisioning]`) instead of creating anything. It writes to standard output
-rather than the log on purpose: the application ships with `logging.level.root: ERROR`. The list is
-empty by default, so adding the module changes nothing until types are named.
+The concrete tasks live in their own module, `metacatalog-functions-provisioning-tasks`, so task
+registration is pluggable: a module contributes tasks by depending on `metacatalog-functions`,
+subclassing `ProvisioningTask`, and registering through a `ProvisioningTasks` registrar (or any
+other `DeferredTaskFactoryRegistrar`) — the procedures in `metacatalog-functions` never reference a
+concrete task class. Which task handles which entity type is configuration: the
+`application.config.provisioning.tasks` map associates each task (by its registrar's task name)
+with the entity types it handles, and task-specific settings live in the same entry —
 
-It is a `DeferredTaskFactoryRegistrar` rather than a `@PostConstruct` registrar, for exactly the
+```yaml
+application:
+  config:
+    provisioning:
+      tasks:
+        stdout:
+          entity-types: [S3FolderType]
+        script:
+          entity-types: [AthenaTableType]
+          path: /opt/scripts/provision.sh
+```
+
+The map is keyed by task name, not entity type name, deliberately: Spring's relaxed binding
+mangles map keys that are not lowercase alpha-numerics, so a `S3FolderType` key would silently
+bind as `s3foldertype` unless bracket-quoted. A type listed under two tasks is refused at startup
+(`ProvisioningConfigProperties` validates in its constructor); the map is empty by default, so
+adding the module changes nothing until types are named.
+
+Two tasks ship in the module:
+
+- **`stdout`** — `StdoutProvisioningTasks` registers `StdoutProvisioningTask`, printing what it
+  would do (lines prefixed `[provisioning]` / `[unprovisioning]`) instead of creating anything. It
+  writes to standard output rather than the log on purpose: the application ships with
+  `logging.level.root: ERROR`.
+- **`script`** — `ScriptProvisioningTasks` registers `ScriptProvisioningTask`, which runs `bash
+  <path> <provision|unprovision>` with the entity's JSON values on standard input, relays the
+  script's output to standard output and records it in `provisioningResult`. A non-zero exit or a
+  5-minute timeout fails the task (and the run — provisioning is synchronous). The `path` is pure
+  configuration with nothing runtime about it, so a `script` entry naming entity types but no path
+  is refused at startup rather than surfacing on the first run.
+
+Both registrars are `DeferredTaskFactoryRegistrar`s rather than `@PostConstruct` registrars, for exactly the
 reason above: the Docker Compose demo names `S3FolderType` / `AthenaTableType` in
 `application-docker.yaml`, but `docker/bulk/` only creates them once the app reports healthy, so
-registering at startup would fail on a fresh volume. It does **not** re-check
-`EntityTypeService.exists` itself — that rule belongs to `registerTaskFactory` and duplicating it
-would let the two drift — it attempts the registration and catches the `NotFoundException`, logging
-a warning so a stale entry in the list never turns into an exception.
-`StdoutProvisioningRegistrationTests` pins this — it is the guard against a change that would break
-`docker compose up` rather than CI.
+registering at startup would fail on a fresh volume. The shared registrar base
+(`ProvisioningTasks`, functions module) does **not** re-check `EntityTypeService.exists` itself —
+that rule belongs to `registerTaskFactory` and duplicating it would let the two drift — it attempts
+the registration and catches the `NotFoundException`, logging a warning so a stale entry in the
+list never turns into an exception. `StdoutProvisioningRegistrationTests` pins this — it is the
+guard against a change that would break `docker compose up` rather than CI — and
+`ScriptProvisioningRegistrationTests` pins the per-type association, provisioning one aggregate
+whose two resource types are handled by different tasks.
 
 Both operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
 `.../unprovision`. They are **synchronous** — `ProcedureExecutor.executeProcedure` returns only
@@ -455,9 +498,10 @@ Custom properties bind under the `application.config` prefix into
 - `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — `TaskManager` schedule-result cache TTL
 
 Provisioning properties bind under `application.config.provisioning` into
-`ProvisioningConfigProperties` (functions module): `entityTypes` (List&lt;String&gt;, default empty) —
-the entity types handled by the stdout provisioning task (see
-[Procedures](#procedures-functions-module)).
+`ProvisioningConfigProperties` (`metacatalog-functions-provisioning-tasks` module): `tasks`
+(Map&lt;String, TaskConfig&gt;, default empty) — the entity types each provisioning task handles,
+keyed by task name (`stdout`, `script`), with task-specific settings (the `script` task's `path`)
+in the same entry (see [Procedures](#procedures-functions-module)).
 
 Security properties bind under `application.config.security` into `SecurityConfigProperties`
 (see the [Security](#security-metacatalog-security) section). Defaults live in `application.yaml`;

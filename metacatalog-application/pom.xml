@@ -28,6 +28,12 @@
             <artifactId>metacatalog-functions</artifactId>
         </dependency>
 
+        <!-- Provisioning tasks module: the concrete provisioning tasks and their registrar -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-functions-provisioning-tasks</artifactId>
+        </dependency>
+
         <!-- SpringBoot & Openapi -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
@@ -323,7 +329,7 @@
                         </goals>
                         <configuration>
                             <sourcepath>
-                                ${project.basedir}/../metacatalog-core/src/main/java:${project.basedir}/../metacatalog-functions/src/main/java:${project.basedir}/../metacatalog-openapi/target/generated-sources/openapi/src/main/java:${project.basedir}/src/main/java
+                                ${project.basedir}/../metacatalog-core/src/main/java:${project.basedir}/../metacatalog-functions/src/main/java:${project.basedir}/../metacatalog-functions-provisioning-tasks/src/main/java:${project.basedir}/../metacatalog-openapi/target/generated-sources/openapi/src/main/java:${project.basedir}/src/main/java
                             </sourcepath>
                             <additionalJOption>-Xdoclint:none</additionalJOption>
                             <outputDirectory>${project.build.directory}/classes/static/javadoc</outputDirectory>

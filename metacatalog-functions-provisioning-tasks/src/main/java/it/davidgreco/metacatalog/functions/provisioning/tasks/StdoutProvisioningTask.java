@@ -1,6 +1,7 @@
-package it.davidgreco.metacatalog.functions.provisioning;
+package it.davidgreco.metacatalog.functions.provisioning.tasks;
 
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.functions.provisioning.ProvisioningTask;
 import it.davidgreco.metacatalog.service.EntityService;
 
 /**

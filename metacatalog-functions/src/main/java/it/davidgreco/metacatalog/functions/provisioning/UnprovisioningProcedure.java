@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jgrapht.Graph;
 import org.jgrapht.graph.DefaultEdge;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -39,8 +40,18 @@ public class UnprovisioningProcedure extends AbstractEntityProcedure {
   private final ResourceGraphBuilder resourceGraphBuilder;
   private final TaskManager taskManager;
 
+  /**
+   * Registrars whose task factories key off entity types created at runtime, so they cannot
+   * register at startup. An {@link ObjectProvider} rather than a {@code List}: injecting a list
+   * when no such bean exists fails outright, and none is the default.
+   */
+  private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
+
   @Override
   protected Optional<TaskManager.ScheduleHandle> execute(Entity entity) {
+    // Inside the plan-building transaction, before any task is created: entity types created since
+    // startup exist by now, so a registrar that could not register at boot gets its chance here.
+    deferredRegistrars.orderedStream().forEach(DeferredTaskFactoryRegistrar::ensureRegistered);
     var aggregate = aggregateService.read(entity.getId(), true);
     var resourceGraph = resourceGraphBuilder.buildResourceGraph(aggregate);
     var tasks = createTasksForVertices(resourceGraph);
