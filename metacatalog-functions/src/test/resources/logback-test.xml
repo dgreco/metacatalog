@@ -20,6 +20,10 @@
         <appender-ref ref="CONSOLE"/>
     </appender>
 
+    <!-- The stress test reports its progress (aggregates created / mapped / provisioned);
+         without this override the root ERROR level would swallow it. -->
+    <logger name="it.davidgreco.metacatalog.functions.provisioning.DataProductStressTest" level="INFO"/>
+
     <root level="ERROR">
         <appender-ref ref="ASYNC"/>
     </root>

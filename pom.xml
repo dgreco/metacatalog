@@ -69,6 +69,12 @@
         <testcontainers.version>1.21.4</testcontainers.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
 
+        <!-- JUnit tag filtering: tests tagged "stress" are excluded from normal builds
+             and run on demand via the stress-tests profile. Kept as properties (rather
+             than literal surefire configuration) so the profile can flip them. -->
+        <test.groups></test.groups>
+        <test.excluded.groups>stress</test.excluded.groups>
+
         <!-- Docker Image Properties (can be overridden via -D flags) -->
         <docker.image.name>metacatalog</docker.image.name>
         <docker.image.tag>${project.version}</docker.image.tag>
@@ -602,6 +608,10 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.6</version>
+                    <configuration>
+                        <groups>${test.groups}</groups>
+                        <excludedGroups>${test.excluded.groups}</excludedGroups>
+                    </configuration>
                 </plugin>
 
                 <!-- Maven Javadoc Plugin -->
@@ -637,5 +647,17 @@
         <module>metacatalog-sparql</module>
         <module>metacatalog-application</module>
     </modules>
+
+    <profiles>
+        <!-- Runs ONLY the tests tagged "stress" (excluded from normal builds), e.g.:
+             mvn test -Pstress-tests -pl metacatalog-functions -->
+        <profile>
+            <id>stress-tests</id>
+            <properties>
+                <test.groups>stress</test.groups>
+                <test.excluded.groups></test.excluded.groups>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

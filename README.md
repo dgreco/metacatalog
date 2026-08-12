@@ -233,6 +233,35 @@ mvn test
 mvn verify
 ```
 
+### Stress Test (on demand)
+
+`DataProductStressTest` (in `metacatalog-functions`) pushes the automatic mapping engine and
+the provisioning procedure hard: it creates hundreds of data-product aggregates — each with a
+file-based output port and a table-based output port depending on it — while the mapping
+scheduler is draining lifecycle events, then verifies that
+
+- every output port was mapped to exactly one resource (`S3FolderType` / `AthenaTableType`),
+  with no `SOURCE_CREATED` event left `PENDING` or marked `FAILED`;
+- the mapped values are correct for every aggregate, including the cross-entity path
+  references (the Athena table's `dataPath` is its sibling S3 folder's `path`);
+- provisioning every aggregate invokes each resource's task exactly once, always the S3
+  folder before the Athena table that reads it, and records `PROVISIONED` and the task's
+  result on every resource entity.
+
+It is tagged `stress` and excluded from `mvn test` / `mvn verify` / CI; it only runs through
+the `stress-tests` profile (which runs *only* stress-tagged tests). Like the integration
+tests it needs a running Docker daemon (Testcontainers):
+
+```bash
+# 300 aggregates (default)
+mvn test -Pstress-tests -pl metacatalog-functions
+
+# heavier run
+mvn test -Pstress-tests -pl metacatalog-functions -Dstress.aggregates=1000
+```
+
+The test logs its progress (aggregates created / mapped / provisioned) every 50 aggregates.
+
 ### Dependency Management
 
 Check for dependency updates:
