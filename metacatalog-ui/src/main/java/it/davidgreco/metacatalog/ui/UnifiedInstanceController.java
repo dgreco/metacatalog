@@ -183,7 +183,8 @@ class UnifiedInstanceController {
    */
   @PostMapping("/{id}/provision")
   public String provision(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    launchProcedure(redirectAttributes, "Provisioning", () -> api.provisionAggregate(id, ASYNC));
+    launchProcedure(
+        redirectAttributes, "Provisioning", id, () -> api.provisionAggregate(id, ASYNC));
     return "redirect:/ui/instances";
   }
 
@@ -191,7 +192,7 @@ class UnifiedInstanceController {
   @PostMapping("/{id}/unprovision")
   public String unprovision(@PathVariable String id, RedirectAttributes redirectAttributes) {
     launchProcedure(
-        redirectAttributes, "Unprovisioning", () -> api.unprovisionAggregate(id, ASYNC));
+        redirectAttributes, "Unprovisioning", id, () -> api.unprovisionAggregate(id, ASYNC));
     return "redirect:/ui/instances";
   }
 
@@ -200,6 +201,7 @@ class UnifiedInstanceController {
   private void launchProcedure(
       RedirectAttributes redirectAttributes,
       String label,
+      String entityId,
       java.util.function.Supplier<
               org.springframework.http.ResponseEntity<
                   it.davidgreco.metacatalog.openapi.model.ProcedureStatus>>
@@ -209,12 +211,24 @@ class UnifiedInstanceController {
       if (status != null && status.getScheduleId() != null) {
         redirectAttributes.addFlashAttribute("procedureScheduleId", status.getScheduleId());
         redirectAttributes.addFlashAttribute("procedureLabel", label);
+        redirectAttributes.addFlashAttribute("procedureEntityId", entityId);
+        redirectAttributes.addFlashAttribute("procedureEntityType", entityTypeOf(entityId));
       } else {
         // No schedule id to poll (should not happen): fall back to a plain confirmation.
         redirectAttributes.addFlashAttribute("message", label + " started.");
       }
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+  }
+
+  /** The aggregate's entity type name, for the progress popup; best-effort, empty if unknown. */
+  private String entityTypeOf(String entityId) {
+    try {
+      var entity = (Entity) api.getEntity(entityId).getBody();
+      return entity != null && entity.getEntityType() != null ? entity.getEntityType() : "";
+    } catch (RuntimeException e) {
+      return "";
     }
   }
 

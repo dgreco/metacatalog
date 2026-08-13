@@ -23,6 +23,7 @@
   var OUTCOME_KEY = "metacatalog.procedureOutcome";
   var OUTCOME_TTL_MS = 15000;
   var SUCCESS_DISMISS_MS = 6000;
+  var FAILURE_DISMISS_MS = 15000;
 
   var popup = null;
   var activeScheduleId = null;
@@ -33,9 +34,16 @@
     if (banner) {
       var scheduleId = banner.getAttribute("data-schedule-id");
       var label = banner.getAttribute("data-label") || "Procedure";
+      var entityId = banner.getAttribute("data-entity-id") || "";
+      var entityType = banner.getAttribute("data-entity-type") || "";
       banner.parentNode.removeChild(banner);
       if (scheduleId) {
-        write(RUN_KEY, { scheduleId: scheduleId, label: label });
+        write(RUN_KEY, {
+          scheduleId: scheduleId,
+          label: label,
+          entityId: entityId,
+          entityType: entityType
+        });
       }
     }
 
@@ -63,8 +71,20 @@
 
   function track(run) {
     activeScheduleId = run.scheduleId;
-    showRunning(run.label);
+    showRunning(run);
     poll(run);
+  }
+
+  /** "Provisioning DataProductType 0849185c-…" — what the run acts on, for every popup state. */
+  function describe(run) {
+    var parts = [run.label || "Procedure"];
+    if (run.entityType) {
+      parts.push(run.entityType);
+    }
+    if (run.entityId) {
+      parts.push(run.entityId);
+    }
+    return parts.join(" ");
   }
 
   function poll(run) {
@@ -73,7 +93,7 @@
     xhr.setRequestHeader("Accept", "application/json");
     xhr.onload = function () {
       if (xhr.status === 404) {
-        finish(run, false, run.label + " status is unknown or expired.");
+        finish(run, false, describe(run) + ": status is unknown or expired.");
         return;
       }
       if (xhr.status !== 200) {
@@ -86,7 +106,7 @@
       try {
         body = JSON.parse(xhr.responseText);
       } catch (e) {
-        finish(run, false, run.label + " status could not be read.");
+        finish(run, false, describe(run) + ": status could not be read.");
         return;
       }
       if (body.status === "RUNNING") {
@@ -94,9 +114,9 @@
           poll(run);
         }, POLL_MS);
       } else if (body.status === "SUCCEEDED") {
-        finish(run, true, run.label + " completed.");
+        finish(run, true, describe(run) + " completed.");
       } else {
-        finish(run, false, run.label + " failed: " + (body.error || "unknown error"));
+        finish(run, false, describe(run) + " failed: " + (body.error || "unknown error"));
       }
     };
     // Transient network errors: keep polling, the run is still going server-side.
@@ -123,14 +143,14 @@
     showOutcome({ ok: ok, text: text });
   }
 
-  function showRunning(label) {
+  function showRunning(run) {
     var el = ensurePopup();
     el.className = "procedure-popup running";
     el.innerHTML = "";
     var spinner = document.createElement("span");
     spinner.className = "procedure-spinner";
     el.appendChild(spinner);
-    el.appendChild(document.createTextNode((label || "Procedure") + " in progress…"));
+    el.appendChild(document.createTextNode(describe(run) + " in progress…"));
   }
 
   function showOutcome(outcome) {
@@ -145,13 +165,15 @@
     close.textContent = "×";
     close.addEventListener("click", dismiss);
     el.appendChild(close);
-    if (outcome.ok) {
-      window.setTimeout(function () {
-        if (popup === el && el.className.indexOf("ok") >= 0) {
-          dismiss();
-        }
-      }, SUCCESS_DISMISS_MS);
-    }
+    // Completed runs dismiss themselves; failures linger a little longer so the error
+    // is readable, but the outcome also stays available in provisioningResult.
+    window.setTimeout(
+        function () {
+          if (popup === el) {
+            dismiss();
+          }
+        },
+        outcome.ok ? SUCCESS_DISMISS_MS : FAILURE_DISMISS_MS);
   }
 
   function dismiss() {

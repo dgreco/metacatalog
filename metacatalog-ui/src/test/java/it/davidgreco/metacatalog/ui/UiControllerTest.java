@@ -674,13 +674,21 @@ class UiControllerTest {
   void provisionAggregateLaunchesAsyncAndFlashesTheScheduleId() throws Exception {
     org.mockito.Mockito.when(api.provisionAggregate("agg-1", ASYNC))
         .thenReturn(accepted("sched-1"));
+    var aggregate = new Entity();
+    aggregate.setId(java.util.Optional.of("agg-1"));
+    aggregate.setEntityType("DataProductType");
+    org.mockito.Mockito.doReturn(org.springframework.http.ResponseEntity.ok(aggregate))
+        .when(api)
+        .getEntity("agg-1");
 
     mockMvc
         .perform(post("/ui/instances/agg-1/provision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-1"))
-        .andExpect(flash().attribute("procedureLabel", "Provisioning"));
+        .andExpect(flash().attribute("procedureLabel", "Provisioning"))
+        .andExpect(flash().attribute("procedureEntityId", "agg-1"))
+        .andExpect(flash().attribute("procedureEntityType", "DataProductType"));
 
     verify(api).provisionAggregate("agg-1", ASYNC);
   }
@@ -695,7 +703,10 @@ class UiControllerTest {
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-2"))
-        .andExpect(flash().attribute("procedureLabel", "Unprovisioning"));
+        .andExpect(flash().attribute("procedureLabel", "Unprovisioning"))
+        // The type lookup is best-effort: unstubbed here, so it degrades to empty.
+        .andExpect(flash().attribute("procedureEntityId", "agg-1"))
+        .andExpect(flash().attribute("procedureEntityType", ""));
 
     verify(api).unprovisionAggregate("agg-1", ASYNC);
   }

@@ -27,7 +27,7 @@
          as a plain banner when JavaScript is unavailable. -->
     <div class="procedure-banner" id="procedure-banner"
          th:if="${procedureScheduleId}"
-         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel}"
+         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel},data-entity-id=${procedureEntityId},data-entity-type=${procedureEntityType}"
          th:text="${procedureLabel} + ' in progress…'"></div>
 
     <!-- Search -->

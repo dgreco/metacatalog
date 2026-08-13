@@ -437,8 +437,9 @@ so checking them here would miss an inherited `Provisionable`.
 Provisioning from the UI is asynchronous: the controller calls the API with `async=true`, flashes
 the returned schedule id, and the instances page renders a `#procedure-banner` seed that
 `procedure-poller.js` — included on **every** template — immediately consumes into
-`localStorage` and replaces with a fixed-position popup (spinner while `RUNNING`, color-coded
-success/failure with a dismiss button). Because the active run lives in `localStorage` and the
+`localStorage` and replaces with a fixed-position popup naming the run and its target — label, entity type, aggregate id —
+(spinner while `RUNNING`, color-coded success/failure that dismisses itself after a few
+seconds, failures lingering longer). Because the active run lives in `localStorage` and the
 script is site-wide, the popup survives navigating to any other UI page and shows up in every
 open tab (a `storage` listener picks up runs launched elsewhere); each page polls
 `GET /metacatalog/v1/procedure/{scheduleId}` every second — a same-origin XHR, authenticated by
