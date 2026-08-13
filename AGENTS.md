@@ -564,7 +564,9 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   network namespace forwards its `localhost:8081` to Keycloak. `docker-compose.iceberg.yml` is
   another overlay (`make run-iceberg` / `up-iceberg-d`): it adds a MinIO warehouse (bucket
   `iceberg-warehouse`, created by a one-shot `minio-init`) and the Iceberg REST catalog app on
-  `:8181`, sharing the base stack's postgres.
+  `:8181`, sharing the base stack's postgres. The bulk-loader is disabled there (profile trick,
+  like the Keycloak overlay) — the Iceberg stack needs no demo model; run the base file once
+  first to seed it.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).

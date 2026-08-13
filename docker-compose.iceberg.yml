@@ -69,5 +69,12 @@ services:
       retries: 10
       start_period: 30s
 
+  bulk-loader:
+    # The Iceberg stack has no use for the demo model — the catalog declares its own
+    # immutable model at startup — so keep the loader out, same trick as the Keycloak
+    # overlay: assign it to a profile nothing activates. To seed the demo data anyway,
+    # run the base compose file once first; the postgres volume is shared.
+    profiles: ["demo-data-only"]
+
 volumes:
   minio-data:
