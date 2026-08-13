@@ -372,7 +372,11 @@ public class EntityServiceImpl implements EntityService {
   @Transactional(propagation = Propagation.REQUIRED)
   public void link(String sourceId, RelationType relType, String targetId) {
     log.info("Linking entity with id {} with entity with id {}", sourceId, targetId);
-    // Check loops
+    // Check loops. The reachability walk below starts from the target's neighbours, so the
+    // degenerate self-link would slip through it — and a self HAS_PART would make the aggregate
+    // read recursion non-terminating. A trait may compose itself (type-level recursion is how a
+    // folder contains folders); an entity must not.
+    if (sourceId.equals(targetId)) throw new ServiceError("Loops are not allowed");
     if (ServiceUtils.checkLoops(
         entityRepository,
         entityRelationshipRepository,

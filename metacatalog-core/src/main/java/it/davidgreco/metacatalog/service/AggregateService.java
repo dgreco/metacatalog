@@ -179,11 +179,7 @@ public class AggregateService {
     }
 
     var aggregateEntity = entityService.read(aggregateId);
-    if (!entityRelationshipRepository
-        .findByTargetAndRelationType(aggregateEntity, HAS_PART)
-        .isEmpty()) {
-      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
-    }
+    checkIsAggregateRoot(aggregateEntity, aggregateId);
 
     var result =
         Optional.ofNullable(
@@ -232,11 +228,7 @@ public class AggregateService {
    */
   private Map<String, Entity> collectMembers(String aggregateId) {
     var rootEntity = entityService.read(aggregateId);
-    if (!implementsTrait(rootEntity.getEntityType(), BuiltInTraits.AGGREGATE)
-        || !entityRelationshipRepository
-            .findByTargetAndRelationType(rootEntity, HAS_PART)
-            .isEmpty())
-      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
+    checkIsAggregateRoot(rootEntity, aggregateId);
 
     var members = new LinkedHashMap<String, Entity>();
     members.put(rootEntity.getId(), rootEntity);
@@ -250,6 +242,19 @@ public class AggregateService {
       }
     }
     return members;
+  }
+
+  /**
+   * Rejects anything but an aggregate <em>root</em>, classified by the built-in traits its type
+   * carries: a root carries {@code Aggregate} but not {@code AggregateElement} — an intermediate
+   * node carries both, a leaf only {@code AggregateElement}. Whether the entity is itself contained
+   * by another one is deliberately not part of the test: a root may hang off an entity outside the
+   * aggregate model (one carrying neither trait) without ceasing to be a root.
+   */
+  private static void checkIsAggregateRoot(Entity rootEntity, String aggregateId) {
+    if (!implementsTrait(rootEntity.getEntityType(), BuiltInTraits.AGGREGATE)
+        || implementsTrait(rootEntity.getEntityType(), BuiltInTraits.AGGREGATE_ELEMENT))
+      throw new ServiceError("Entity with id: " + aggregateId + " is not an aggregate");
   }
 
   /** Rejects the delete unless the aggregate can be removed without leaving anything dangling. */

@@ -32,9 +32,10 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
       """;
 
   /**
-   * Builds a three-level model: {@code Product} has parts {@code Component}, and {@code Component}
-   * has parts {@code Resource}. Only {@code Product} should be a root, and its schema should cover
-   * all three types.
+   * Builds a three-level model classified by the built-in traits: {@code ProductType} is a root
+   * (carries {@code Aggregate} only), {@code ComponentType} an intermediate (carries both), {@code
+   * ResourceType} a leaf (carries {@code AggregateElement} only). Only {@code Product} should be
+   * reported as a root, and its schema should cover all three types.
    */
   @Test
   void rootDiscoveryAndCombinedSchema() {
@@ -43,17 +44,23 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     var schemaService = getApplicationContext().getBean(AggregateSchemaService.class);
 
     traitService.create("Named", Optional.of(NAMED_SCHEMA), Optional.empty());
-    traitService.create("ProductTrait", Optional.of(EMPTY_SCHEMA), Optional.empty());
-    traitService.create("ComponentTrait", Optional.of(EMPTY_SCHEMA), Optional.empty());
-    traitService.create("ResourceTrait", Optional.of(EMPTY_SCHEMA), Optional.empty());
+    traitService.create("ProductTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.create(
+        "ComponentTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
+    traitService.create(
+        "ResourceTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
 
     traitService.link("ProductTrait", HAS_PART, "ComponentTrait");
     traitService.link("ComponentTrait", HAS_PART, "ResourceTrait");
 
     entityTypeService.create(
         "ProductType", List.of("ProductTrait", "Named"), Optional.empty(), EMPTY_SCHEMA);
+    // The intermediate mixes Aggregate in as well: it both contains parts and is one.
     entityTypeService.create(
-        "ComponentType", List.of("ComponentTrait", "Named"), Optional.empty(), EMPTY_SCHEMA);
+        "ComponentType",
+        List.of("ComponentTrait", "Aggregate", "Named"),
+        Optional.empty(),
+        EMPTY_SCHEMA);
     entityTypeService.create(
         "ResourceType",
         List.of("ResourceTrait"),
@@ -67,8 +74,12 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
         }
         """);
 
+    // The root carries Aggregate only; the intermediate (both traits) and the leaf (element
+    // only) must not be roots. Other classes' root types may coexist in the shared database.
     var roots = schemaService.aggregateRootTypes().stream().map(EntityType::getName).toList();
-    Assertions.assertEquals(List.of("ProductType"), roots);
+    Assertions.assertTrue(roots.contains("ProductType"), roots.toString());
+    Assertions.assertFalse(roots.contains("ComponentType"), roots.toString());
+    Assertions.assertFalse(roots.contains("ResourceType"), roots.toString());
 
     var schema = schemaService.aggregateSchema("ProductType");
 
@@ -79,13 +90,18 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     Assertions.assertTrue(defs.has("ComponentType"));
     Assertions.assertTrue(defs.has("ResourceType"));
 
-    // The root composes ComponentType, which in turn composes ResourceType.
-    Assertions.assertEquals(
-        "#/$defs/ComponentType",
-        schema.get("properties").get("parts").get("items").get("$ref").asText());
-    Assertions.assertEquals(
-        "#/$defs/ResourceType",
-        defs.get("ComponentType").get("properties").get("parts").get("items").get("$ref").asText());
+    // Carrying Aggregate, the root may contain any AggregateElement carrier (the built-in
+    // Aggregate HAS_PART AggregateElement sanction), so both other types are offered as parts.
+    var rootPartRefs = schema.get("properties").get("parts").get("items").get("anyOf");
+    Assertions.assertEquals(2, rootPartRefs.size());
+    Assertions.assertEquals("#/$defs/ComponentType", rootPartRefs.get(0).get("$ref").asText());
+    Assertions.assertEquals("#/$defs/ResourceType", rootPartRefs.get(1).get("$ref").asText());
+    // The intermediate also carries Aggregate, so it composes the same part set.
+    var componentPartRefs =
+        defs.get("ComponentType").get("properties").get("parts").get("items").get("anyOf");
+    Assertions.assertEquals(2, componentPartRefs.size());
+    Assertions.assertEquals("#/$defs/ComponentType", componentPartRefs.get(0).get("$ref").asText());
+    Assertions.assertEquals("#/$defs/ResourceType", componentPartRefs.get(1).get("$ref").asText());
 
     // A leaf type composes nothing, so it carries no 'parts'.
     Assertions.assertFalse(defs.get("ResourceType").get("properties").has("parts"));
@@ -105,7 +121,8 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
 
   /**
    * A self-referential composition ({@code Folder} has parts {@code Folder}) must still yield a
-   * finite schema, and the type must still be reported as a root because nothing else contains it.
+   * finite schema, and the type must still be reported as a root: it carries {@code Aggregate} and
+   * not {@code AggregateElement}, and nesting instances of its own kind does not change that.
    */
   @Test
   void selfReferentialCompositionStaysFiniteAndRoots() {
@@ -113,7 +130,7 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var schemaService = getApplicationContext().getBean(AggregateSchemaService.class);
 
-    traitService.create("FolderTrait", Optional.of(EMPTY_SCHEMA), Optional.empty());
+    traitService.create("FolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
     traitService.link("FolderTrait", HAS_PART, "FolderTrait");
     entityTypeService.create("FolderType", List.of("FolderTrait"), Optional.empty(), EMPTY_SCHEMA);
 
@@ -123,10 +140,22 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
             .anyMatch("FolderType"::equals));
 
     var schema = schemaService.aggregateSchema("FolderType");
-    Assertions.assertEquals(
-        "#/$defs/FolderType",
-        schema.get("properties").get("parts").get("items").get("$ref").asText());
+    // The database is shared across the class's tests, so other AggregateElement-carrying types
+    // may be offered as parts too (the built-in Aggregate HAS_PART AggregateElement sanction);
+    // what matters here is that the self-reference is expressed as a $ref and stays finite.
+    Assertions.assertTrue(partRefs(schema).contains("#/$defs/FolderType"));
     Assertions.assertTrue(schema.get("$defs").has("FolderType"));
+  }
+
+  /** The {@code $ref}s a node's {@code parts} may contain, whether one or an {@code anyOf}. */
+  private static List<String> partRefs(com.fasterxml.jackson.databind.JsonNode nodeSchema) {
+    var items = nodeSchema.get("properties").get("parts").get("items");
+    if (items.has("$ref")) {
+      return List.of(items.get("$ref").asText());
+    }
+    var refs = new java.util.ArrayList<String>();
+    items.get("anyOf").forEach(ref -> refs.add(ref.get("$ref").asText()));
+    return refs;
   }
 
   /** A type that composes nothing cannot root an aggregate. */

@@ -46,6 +46,15 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
                 """),
         Optional.empty());
 
+    // The three classes of the aggregate model: a root type carries only Aggregate, an
+    // intermediate type both traits, a leaf type only AggregateElement.
+    var aggregateRootType =
+        entityTypeService.create(
+            "AggregateRootType",
+            List.of("Aggregate", "NamedTrait"),
+            Optional.empty(),
+            EMPTY_SCHEMA);
+
     var aggregateType =
         entityTypeService.create(
             "AggregateType",
@@ -64,7 +73,7 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
 
     var root =
         new Entity(
-            aggregateType,
+            aggregateRootType,
             jsonMapper.readTree(
                 """
                         {"name": "root"}"""));
@@ -132,5 +141,45 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
 
     Assertions.assertThrows(
         ServiceError.class, () -> aggregateService.read(retrievedSubRoot.getId(), false));
+  }
+
+  /**
+   * The trait model may declare a self-referential composition (a folder contains folders), but at
+   * the instance level containment must stay acyclic: {@code AggregateService.read} recurses along
+   * {@code HAS_PART} with no visited set, so a loop — including the degenerate self-link — would
+   * never terminate. Link creation is where that is refused.
+   */
+  @Test
+  void testContainmentCannotFormALoop() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+
+    traitService.create("LoopFolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.link("LoopFolderTrait", RelationType.HAS_PART, "LoopFolderTrait");
+    entityTypeService.create(
+        "LoopFolderType", List.of("LoopFolderTrait"), Optional.empty(), EMPTY_SCHEMA);
+
+    var a = entityService.create("LoopFolderType", "{}");
+    var b = entityService.create("LoopFolderType", "{}");
+    var c = entityService.create("LoopFolderType", "{}");
+    entityService.link(a.getId(), RelationType.HAS_PART, b.getId());
+    entityService.link(b.getId(), RelationType.HAS_PART, c.getId());
+
+    // Closing the cycle is refused at any length, self-link included.
+    for (var attempt :
+        List.of(
+            (org.junit.jupiter.api.function.Executable)
+                () -> entityService.link(c.getId(), RelationType.HAS_PART, a.getId()),
+            () -> entityService.link(b.getId(), RelationType.HAS_PART, a.getId()),
+            () -> entityService.link(a.getId(), RelationType.HAS_PART, a.getId()))) {
+      var error = Assertions.assertThrows(ServiceError.class, attempt);
+      Assertions.assertTrue(error.getMessage().contains("Loops"), error.getMessage());
+    }
+
+    // The chain stays readable as an aggregate: a contains b contains c, and the walk ends.
+    var read = aggregateService.read(a.getId(), false);
+    Assertions.assertEquals(a.getId(), read.entity().getId());
   }
 }

@@ -38,9 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>Two operations are exposed:
  *
  * <ul>
- *   <li>{@link #aggregateRootTypes()} — the types that can start an aggregate: a type with at least
- *       one outgoing {@code HAS_PART} edge and no incoming one, i.e. it can contain parts but is
- *       never itself a part.
+ *   <li>{@link #aggregateRootTypes()} — the types that can start an aggregate, classified by the
+ *       built-in traits they carry: a root carries {@code Aggregate} but not {@code
+ *       AggregateElement} (an intermediate node carries both, a leaf only {@code
+ *       AggregateElement}).
  *   <li>{@link #aggregateSchema(String)} — one self-contained JSON Schema for the entire tree
  *       reachable from a root type.
  * </ul>
@@ -87,10 +88,17 @@ public class AggregateSchemaService {
   /**
    * Returns the entity types that are aggregate roots, ordered by name.
    *
-   * <p>A root can contain parts ({@code HAS_PART} towards at least one type) but is never a part
-   * itself (no type declares {@code HAS_PART} towards it). A type whose only incoming edge comes
-   * from itself is still a root: it may nest instances of its own kind without being contained by
-   * anything else.
+   * <p>The classification is by the built-in traits a type carries (directly or through the type
+   * and trait inheritance chains): a <em>root</em> carries {@code Aggregate} but not {@code
+   * AggregateElement}, an <em>intermediate</em> node carries both, and a <em>leaf</em> only {@code
+   * AggregateElement}. Whether some other type declares {@code HAS_PART} towards a root is
+   * irrelevant — a root may well be contained by a type outside the aggregate model (one carrying
+   * neither trait) without ceasing to be a root.
+   *
+   * <p>A root additionally needs at least one outgoing {@code HAS_PART} edge in the projected
+   * type-level graph, or {@link #aggregateSchema(String)} could not derive a schema for it — with
+   * the built-in {@code Aggregate HAS_PART AggregateElement} relationship this only excludes a root
+   * in a catalog holding no part type at all.
    *
    * @return the aggregate root entity types, ordered by name
    */
@@ -101,8 +109,9 @@ public class AggregateSchemaService {
     var graph = hasPartGraph(types);
     var roots =
         types.stream()
+            .filter(type -> ServiceUtils.implementsTrait(type, BuiltInTraits.AGGREGATE))
+            .filter(type -> !ServiceUtils.implementsTrait(type, BuiltInTraits.AGGREGATE_ELEMENT))
             .filter(type -> !graph.getOrDefault(type.getName(), List.of()).isEmpty())
-            .filter(type -> !isContainedByAnotherType(type, graph, types))
             .sorted(Comparator.comparing(EntityType::getName))
             .toList();
     log.info("Computed {} aggregate root type(s)", roots.size());
@@ -388,16 +397,5 @@ public class AggregateSchemaService {
         .map(EntityType::getName)
         .sorted()
         .toList();
-  }
-
-  /** True when some type other than {@code type} itself declares {@code HAS_PART} towards it. */
-  private static boolean isContainedByAnotherType(
-      EntityType type, Map<String, List<EntityType>> graph, List<EntityType> types) {
-    return types.stream()
-        .filter(source -> !source.getName().equals(type.getName()))
-        .anyMatch(
-            source ->
-                graph.getOrDefault(source.getName(), List.of()).stream()
-                    .anyMatch(part -> part.getName().equals(type.getName())));
   }
 }

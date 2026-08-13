@@ -206,11 +206,18 @@ Located in `metacatalog-core/.../service`:
 
 `AggregateSchemaService` answers two questions the UI needs in order to author an aggregate:
 
-- **Which types can start one?** An *aggregate root type* has a `HAS_PART` relationship towards at
-  least one other type but is never itself a part. Note that `HAS_PART` is **not** stored between
-  entity types: composition is declared between *traits*, and a type participates by mixing them in
-  (the same rule `ServiceUtils.checkRelIsLegit` enforces when linking two instances). The service
-  projects those trait relationships onto the types carrying them to obtain the type-level graph.
+- **Which types can start one?** Classification is by the built-in traits a type carries (directly
+  or through the type and trait inheritance chains): an *aggregate root type* carries `Aggregate`
+  but **not** `AggregateElement`; an intermediate node carries both; a leaf only `AggregateElement`.
+  Whether some other type declares `HAS_PART` towards a root is irrelevant — a root may be
+  contained by a type outside the aggregate model (one carrying neither trait, like an Iceberg
+  namespace containing tables) without ceasing to be a root. `AggregateService.read`/`delete` apply
+  the same trait test to the root entity. For the schema derivation, `HAS_PART` is **not** stored
+  between entity types: composition is declared between *traits*, and a type participates by mixing
+  them in (the same rule `ServiceUtils.checkRelIsLegit` enforces when linking two instances). The
+  service projects those trait relationships onto the types carrying them to obtain the type-level
+  graph — and since every `Aggregate` carrier declares `HAS_PART` towards `AggregateElement`, any
+  element-carrying type is offered as a part of any aggregate type.
 - **What does the whole tree look like?** `aggregateSchema(rootTypeName)` returns one self-contained
   schema for everything reachable from the root, shaped like the aggregate YAML `BulkLoaderService`
   already accepts (`entityType`, `values`, `ref`, `dependsOn`, `parts`).
@@ -424,9 +431,11 @@ aggregate authoring (`/ui/aggregates/new`).
 
 The instances list is also where an aggregate is deleted, provisioned and unprovisioned. A row gets
 a *Delete aggregate* action when its entity type is one of the `GET /aggregate/root-type` types —
-that test is enough to identify a root, since an aggregate root type is by definition never
-contained in another, so no instance of one can be a part of a larger aggregate. It gets *Provision*
-and *Unprovision* when its type is one of the `GET /aggregate/provisionable-type` types.
+roots are classified by the built-in traits (`Aggregate` without `AggregateElement`), so a root
+instance may still hang off an entity outside the aggregate model (an Iceberg table off its
+namespace); deleting such an aggregate is then refused with the outside-link error until that link
+is removed. It gets *Provision* and *Unprovision* when its type is one of the
+`GET /aggregate/provisionable-type` types.
 
 Both lists are asked of the API rather than worked out in the UI. Whether a type is provisionable
 depends on the type **and** trait inheritance chains, both lazily fetched, so the walk only works
@@ -609,9 +618,13 @@ the main application.
 
 **Registry model.** Declared immutable at startup by `IcebergModelContributor`: traits
 `IcebergNamespaceTrait` / `IcebergTableTrait`, the `IcebergNamespaceTrait HAS_PART
-IcebergTableTrait` link, and entity types `IcebergNamespace` / `IcebergTable`. The traits
-deliberately do **not** inherit `Aggregate`/`AggregateElement` — `unlink` refuses to detach a part
-from an `Aggregate` container, which would make dropping a table impossible. A namespace entity
+IcebergTableTrait` link, and entity types `IcebergNamespace` / `IcebergTable`. A table is a real
+aggregate of its schema entities — `IcebergTableTrait` inherits `Aggregate`,
+`IcebergTableSchemaTrait` inherits `AggregateElement` — so a schema can never be unlinked from its
+table (`unlink` refuses aggregate containment) and dropping goes through `AggregateService.delete`.
+The **namespace** trait deliberately stays outside the aggregate model: were it an `Aggregate` too,
+the namespace→table link could never be unlinked and neither dropping a table nor renaming one
+across namespaces would be possible. A namespace entity
 stores `key` (levels joined with `\u001F`, the one character illegal inside an Iceberg namespace
 level — a level may contain dots, so a dotted join would collide), `name` (dotted, display only),
 `levels`, `properties`. A table entity stores `name`, `namespaceKey`, `metadataLocation`,
@@ -628,8 +641,8 @@ struct/list/map — `required`, optional `doc`; plus optional `identifierFieldId
 schema document, and deliberately no table or namespace name, so renames never leave stale
 copies (the owning table is one `IS_PART_OF` hop away). Iceberg schemas are immutable per id,
 so the sync is append-only and idempotent;
-`dropTable` unlinks and deletes them before the table entity (whose delete would otherwise be
-refused for having relationships).
+`dropTable` detaches the table from its namespace (legal — the namespace is not an aggregate) and
+then deletes the table as an aggregate, taking the schema entities with it in one transaction.
 
 **Storage split.** Standard Iceberg: the server writes table-metadata JSON files to the warehouse
 via a `FileIO` (`application.config.iceberg.{warehouse,io-impl,io-properties}`); the entity holds
@@ -667,6 +680,9 @@ request builders probe `containsKey(null)`, so never hand the client a `Map.of(.
 (real parquet appends via the S3 warehouse, scans, schema evolution, rename, drop): `make
 run-iceberg`, then `cd metacatalog-iceberg-catalog/pyiceberg-test && uv run pytest`. It is not
 part of the Maven build — it exists to test the catalog exactly the way a Python client does.
+The same project carries `create_tables.py` (`uv run python create_tables.py`), an idempotent
+seeder that creates a few demo tables with sample parquet data in a `demo` namespace, for
+browsing the catalog from the UI/SPARQL or another Iceberg client (`--drop` recreates them).
 
 ## Ontop (embedded SPARQL endpoint)
 

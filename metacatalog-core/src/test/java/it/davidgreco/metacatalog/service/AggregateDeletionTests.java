@@ -25,6 +25,8 @@ import org.springframework.context.ApplicationContext;
 @SpringBootTest
 class AggregateDeletionTests extends CommonServiceTestingSupport {
 
+  private EntityType aggregateRootType;
+
   private EntityType aggregateType;
 
   private EntityType aggregateElementType;
@@ -39,6 +41,7 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
 
     if (traitService.exists("NamedTrait")) {
+      aggregateRootType = entityTypeService.read("AggregateRootType");
       aggregateType = entityTypeService.read("AggregateType");
       aggregateElementType = entityTypeService.read("AggregateElementType");
       return;
@@ -58,6 +61,14 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
             }
             """),
         Optional.empty());
+
+    // Root carries only Aggregate, intermediate both traits, leaf only AggregateElement.
+    aggregateRootType =
+        entityTypeService.create(
+            "AggregateRootType",
+            List.of("Aggregate", "NamedTrait"),
+            Optional.empty(),
+            EMPTY_SCHEMA);
 
     aggregateType =
         entityTypeService.create(
@@ -81,7 +92,7 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     var entityService = getApplicationContext().getBean(EntityService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
-    var root = entity(aggregateType, "root");
+    var root = entity(aggregateRootType, "root");
     var leaf1 = entity(aggregateElementType, "leaf1");
     var leaf2 = entity(aggregateElementType, "leaf2");
     var subRoot = entity(aggregateType, "subRoot");
@@ -115,7 +126,7 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     var entityService = getApplicationContext().getBean(EntityService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
-    var root = entity(aggregateType, "outsideRoot");
+    var root = entity(aggregateRootType, "outsideRoot");
     var leaf = entity(aggregateElementType, "outsideLeaf");
 
     var created =
@@ -147,7 +158,7 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     var entityService = getApplicationContext().getBean(EntityService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
-    var root = entity(aggregateType, "nestedRoot");
+    var root = entity(aggregateRootType, "nestedRoot");
     var subRoot = entity(aggregateType, "nestedSubRoot");
     var leaf = entity(aggregateElementType, "nestedLeaf");
 
@@ -179,7 +190,7 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     var entityService = getApplicationContext().getBean(EntityService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
-    var root = entity(aggregateType, "structuralRoot");
+    var root = entity(aggregateRootType, "structuralRoot");
     var kept = entity(aggregateElementType, "structuralKept");
     var part = entity(aggregateElementType, "structuralPart");
 
