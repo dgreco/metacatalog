@@ -201,6 +201,12 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
     assertEquals(2, parts.size());
     assertTrue(parts.stream().allMatch(e -> e.getValues().get("schema").isObject()));
 
+    // The cached metadata copy does not duplicate the schema list — the linked entities are
+    // the one representation of the schemas in the catalog.
+    var cachedMetadata = tableEntity.getValues().get("metadata");
+    assertFalse(cachedMetadata.has("schemas"));
+    assertTrue(cachedMetadata.has("format-version"));
+
     // Dropping the table cleans the schema entities up with it.
     registry.dropTable(identifier);
     assertTrue(entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").isEmpty());

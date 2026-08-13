@@ -355,7 +355,14 @@ public class IcebergRegistryService {
     if (previousMetadataLocation != null) {
       values.put("previousMetadataLocation", previousMetadataLocation);
     }
-    values.set("metadata", metadata.deepCopy());
+    // The schema list is not duplicated into the cached copy: schemas are materialized as
+    // linked IcebergTableSchema entities by syncSchemaEntities. current-schema-id stays, so
+    // the current schema entity is still identifiable. The server never reads this cache back
+    // (refresh loads the metadata file), so stripping is safe.
+    var cachedMetadata = (ObjectNode) metadata.deepCopy();
+    cachedMetadata.remove("schemas");
+    cachedMetadata.remove("schema"); // legacy v1 single-schema field
+    values.set("metadata", cachedMetadata);
     return values.toString();
   }
 

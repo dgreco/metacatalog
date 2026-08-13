@@ -592,8 +592,9 @@ stores `key` (levels joined with `\u001F`, the one character illegal inside an I
 level — a level may contain dots, so a dotted join would collide), `name` (dotted, display only),
 `levels`, `properties`. A table entity stores `name`, `namespaceKey`, `metadataLocation`,
 `previousMetadataLocation` and `metadata` (a cached copy of the current table metadata, browsable
-in the UI/SPARQL). Containment is a real `HAS_PART` entity link, so tables hang off their
-namespace in the catalog graph. Table schemas are additionally materialized as first-class
+in the UI/SPARQL — with the schema list stripped out, since schemas live as linked entities; the
+server never reads this cache back, refresh loads the metadata file). Containment is a real
+`HAS_PART` entity link, so tables hang off their namespace in the catalog graph. Table schemas are additionally materialized as first-class
 entities: on every commit the registry appends one `IcebergTableSchema` entity per new schema-id
 in the metadata (`table HAS_PART schema`, sanctioned by `IcebergTableTrait HAS_PART
 IcebergTableSchemaTrait`), so schema evolution history is linkable and queryable in the graph.
