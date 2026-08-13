@@ -20,8 +20,10 @@ import org.springframework.context.ApplicationContext;
  * a regression that would break {@code docker compose up} on a fresh volume rather than in CI.
  */
 @SpringBootTest(
-    properties =
-        "application.config.provisioning.tasks.stdout.entity-types=S3FolderType,AthenaTableType")
+    properties = {
+      "application.config.provisioning.tasks.stdout.entity-types=S3FolderType,AthenaTableType",
+      "application.config.provisioning.tasks.stdout.delay=1ms"
+    })
 class StdoutProvisioningRegistrationTests extends CommonServiceTestingSupport {
 
   public StdoutProvisioningRegistrationTests(ApplicationContext applicationContext) {

@@ -21,6 +21,10 @@ application:
       tasks:
         stdout:
           entity-types: [S3FolderType, AthenaTableType]
+          # Pause per resource, so an asynchronous run's progress is observable: the UI's
+          # provisioning banner polls for ~10s (2 resources x 5s) instead of finishing
+          # before the first poll.
+          delay: 5s
     security:
       auth-mode: basic
       basic:

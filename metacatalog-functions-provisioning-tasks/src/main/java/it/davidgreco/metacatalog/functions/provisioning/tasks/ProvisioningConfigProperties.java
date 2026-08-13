@@ -72,8 +72,12 @@ public record ProvisioningConfigProperties(Map<String, TaskConfig> tasks) {
    * @param entityTypes the entity types the task handles
    * @param path task-specific: the filesystem path of the bash script run by the {@code script}
    *     task; unused by {@code stdout}
+   * @param delay task-specific: how long the {@code stdout} task pauses per resource between its
+   *     start and done lines, simulating a slow real-world provisioning function — useful for
+   *     watching an asynchronous run progress (the UI banner, the status endpoint). {@code null} or
+   *     zero means no pause; unused by {@code script}
    */
-  public record TaskConfig(List<String> entityTypes, String path) {
+  public record TaskConfig(List<String> entityTypes, String path, java.time.Duration delay) {
 
     public TaskConfig {
       entityTypes = entityTypes == null ? List.of() : List.copyOf(entityTypes);

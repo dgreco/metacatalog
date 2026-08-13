@@ -26,12 +26,28 @@ public class StdoutProvisioningTask extends ProvisioningTask {
   /** Prefix used when tearing a resource down. */
   static final String UNPROVISION_PREFIX = "[unprovisioning]";
 
+  /** Pause between the start and done lines, simulating a slow provisioning function. */
+  private final java.time.Duration delay;
+
   /**
    * @param entity the resource this task acts on
    * @param entityService used to record the outcome on the entity
    */
   public StdoutProvisioningTask(Entity entity, EntityService entityService) {
+    this(entity, entityService, null);
+  }
+
+  /**
+   * @param entity the resource this task acts on
+   * @param entityService used to record the outcome on the entity
+   * @param delay how long to pause per resource between the start and done lines ({@code
+   *     application.config.provisioning.tasks.stdout.delay}), making an asynchronous run's progress
+   *     observable; {@code null} or zero means no pause
+   */
+  public StdoutProvisioningTask(
+      Entity entity, EntityService entityService, java.time.Duration delay) {
     super(entity, entityService);
+    this.delay = delay;
   }
 
   @Override
@@ -50,7 +66,19 @@ public class StdoutProvisioningTask extends ProvisioningTask {
     // The values are printed because they are what a real task would act on — the bucket and path
     // of an S3FolderType, the database and table of an AthenaTableType.
     System.out.println(prefix + " start " + resource + " " + entity.getValues());
+    pause();
     System.out.println(prefix + " done  " + resource);
     return outcome + " " + resource + " (stdout task)";
+  }
+
+  private void pause() {
+    if (delay == null || delay.isZero() || delay.isNegative()) {
+      return;
+    }
+    try {
+      Thread.sleep(delay.toMillis());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 }

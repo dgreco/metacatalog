@@ -310,7 +310,10 @@ Two tasks ship in the module:
 - **`stdout`** — `StdoutProvisioningTasks` registers `StdoutProvisioningTask`, printing what it
   would do (lines prefixed `[provisioning]` / `[unprovisioning]`) instead of creating anything. It
   writes to standard output rather than the log on purpose: the application ships with
-  `logging.level.root: ERROR`.
+  `logging.level.root: ERROR`. An optional `delay` in its config entry pauses each resource
+  between its start and done lines, simulating a slow real provisioning function — the docker
+  profile sets `5s` so an asynchronous run's progress (the UI banner, the status endpoint) is
+  actually observable instead of finishing before the first poll.
 - **`script`** — `ScriptProvisioningTasks` registers `ScriptProvisioningTask`, which runs `bash
   <path> <provision|unprovision>` with the entity's JSON values on standard input, relays the
   script's output to standard output and records it in `provisioningResult`. A non-zero exit or a

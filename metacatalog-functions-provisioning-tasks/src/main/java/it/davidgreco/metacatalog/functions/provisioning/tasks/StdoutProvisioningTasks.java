@@ -42,6 +42,8 @@ public class StdoutProvisioningTasks extends ProvisioningTasks<StdoutProvisionin
 
   @Override
   protected StdoutProvisioningTask createTask(Entity entity) {
-    return new StdoutProvisioningTask(entity, entityService);
+    var taskConfig = provisioningConfigProperties.taskConfig(TASK_NAME);
+    return new StdoutProvisioningTask(
+        entity, entityService, taskConfig == null ? null : taskConfig.delay());
   }
 }
