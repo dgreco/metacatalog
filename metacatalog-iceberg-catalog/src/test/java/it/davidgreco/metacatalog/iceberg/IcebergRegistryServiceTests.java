@@ -10,6 +10,7 @@ import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.iceberg.registry.IcebergRegistryService;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.EntityTypeService;
+import it.davidgreco.metacatalog.service.ServiceError;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -225,6 +226,41 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
 
     // Dropping the table cleans the schema entities up with it.
     registry.dropTable(identifier);
+    assertTrue(entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").isEmpty());
+    assertTrue(registry.dropNamespace(namespace));
+  }
+
+  @Test
+  void tableIsAnAggregateOfItsSchemas() {
+    var namespace = Namespace.of("db5");
+    var identifier = TableIdentifier.of(namespace, "frozen");
+    registry.createNamespace(namespace, Map.of());
+    registry.casCommit(
+        identifier,
+        null,
+        "loc-1",
+        """
+        {"format-version": 2, "schemas": [{"type": "struct", "schema-id": 0, "fields": []}]}""");
+
+    var tableEntity =
+        entityService.list(IcebergModel.TABLE_TYPE, "$ ? (@.name == \"frozen\")").getFirst();
+    var schemaEntity =
+        entityService.linked(tableEntity.getId(), RelationType.HAS_PART).stream()
+            .filter(e -> IcebergModel.TABLE_SCHEMA_TYPE.equals(e.getEntityType().getName()))
+            .findFirst()
+            .orElseThrow();
+
+    // A schema is a part of its table aggregate: detaching it one by one is refused.
+    assertThrows(
+        ServiceError.class,
+        () ->
+            entityService.unlink(tableEntity.getId(), RelationType.HAS_PART, schemaEntity.getId()));
+
+    // The namespace→table containment is NOT aggregate containment (the namespace trait stays
+    // outside the aggregate model), which is what keeps dropTable possible: it detaches the
+    // table from its namespace and deletes it as an aggregate, schemas included.
+    assertEquals("loc-1", registry.dropTable(identifier));
+    assertFalse(registry.tableExists(identifier));
     assertTrue(entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").isEmpty());
     assertTrue(registry.dropNamespace(namespace));
   }

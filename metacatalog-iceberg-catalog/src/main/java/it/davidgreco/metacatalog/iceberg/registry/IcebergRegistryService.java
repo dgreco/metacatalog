@@ -9,6 +9,7 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.iceberg.IcebergCatalogProperties;
 import it.davidgreco.metacatalog.iceberg.IcebergModel;
+import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import java.util.LinkedHashMap;
@@ -50,6 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class IcebergRegistryService {
 
   private final EntityService entityService;
+  private final AggregateService aggregateService;
   private final AdvisoryLockManager advisoryLockManager;
   private final JsonUtils jsonUtils;
   private final IcebergCatalogProperties properties;
@@ -246,7 +248,13 @@ public class IcebergRegistryService {
   }
 
   /**
-   * Drops the table: removes the containment link, then the entity.
+   * Drops the table: detaches it from its namespace, then deletes it as an aggregate.
+   *
+   * <p>The table is an aggregate of its schema entities, so a schema cannot be unlinked one by one
+   * — {@code EntityService.unlink} refuses aggregate containment. {@code AggregateService.delete}
+   * removes the table and everything reachable from it through {@code HAS_PART} in one go, but
+   * requires the root to have no incoming containment, which is why the namespace link goes first
+   * (the namespace is not an aggregate, so that unlink stays legal).
    *
    * @return the last metadata location, or {@code null} when the table did not exist
    */
@@ -260,20 +268,12 @@ public class IcebergRegistryService {
     }
     var entity = maybeEntity.get();
     var lastMetadataLocation = entity.getValues().get("metadataLocation").asText();
-    // Schema entities are parts of the table: unlink and delete them first, or the table
-    // delete would be refused for still having relationships.
-    for (Entity child : entityService.linked(entity.getId(), RelationType.HAS_PART)) {
-      if (IcebergModel.TABLE_SCHEMA_TYPE.equals(child.getEntityType().getName())) {
-        entityService.unlink(entity.getId(), RelationType.HAS_PART, child.getId());
-        entityService.delete(child.getId());
-      }
-    }
     findNamespaceEntity(key(identifier.namespace()))
         .ifPresent(
             namespaceEntity ->
                 entityService.unlink(
                     namespaceEntity.getId(), RelationType.HAS_PART, entity.getId()));
-    entityService.delete(entity.getId());
+    aggregateService.delete(entity.getId());
     return lastMetadataLocation;
   }
 
