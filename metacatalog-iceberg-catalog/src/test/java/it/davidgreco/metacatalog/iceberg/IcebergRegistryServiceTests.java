@@ -165,6 +165,49 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
   }
 
   @Test
+  void schemaEntitiesFollowTheMetadata() {
+    var namespace = Namespace.of("db4");
+    var identifier = TableIdentifier.of(namespace, "evolving");
+    registry.createNamespace(namespace, Map.of());
+
+    var oneSchema =
+        """
+        {"format-version": 2, "schemas": [
+          {"type": "struct", "schema-id": 0, "fields": []}
+        ]}""";
+    var twoSchemas =
+        """
+        {"format-version": 2, "schemas": [
+          {"type": "struct", "schema-id": 0, "fields": []},
+          {"type": "struct", "schema-id": 1, "fields": []}
+        ]}""";
+
+    registry.casCommit(identifier, null, "loc-1", oneSchema);
+    assertEquals(1, entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").size());
+
+    // Evolution appends schema-id 1; re-committing the same list stays idempotent.
+    registry.casCommit(identifier, "loc-1", "loc-2", twoSchemas);
+    registry.casCommit(identifier, "loc-2", "loc-3", twoSchemas);
+    var schemaEntities = entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "");
+    assertEquals(2, schemaEntities.size());
+
+    // Linked table HAS_PART schema, and the schema entity carries the schema document.
+    var tableEntity =
+        entityService.list(IcebergModel.TABLE_TYPE, "$ ? (@.name == \"evolving\")").getFirst();
+    var parts =
+        entityService.linked(tableEntity.getId(), RelationType.HAS_PART).stream()
+            .filter(e -> IcebergModel.TABLE_SCHEMA_TYPE.equals(e.getEntityType().getName()))
+            .toList();
+    assertEquals(2, parts.size());
+    assertTrue(parts.stream().allMatch(e -> e.getValues().get("schema").isObject()));
+
+    // Dropping the table cleans the schema entities up with it.
+    registry.dropTable(identifier);
+    assertTrue(entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").isEmpty());
+    assertTrue(registry.dropNamespace(namespace));
+  }
+
+  @Test
   void concurrentCommitsOnlyOneWins() throws InterruptedException {
     var namespace = Namespace.of("db3");
     var identifier = TableIdentifier.of(namespace, "contended");

@@ -23,7 +23,9 @@ public class IcebergModelContributor implements ImmutableModelContributor {
   public void contribute(ImmutableModelRegistry registry) {
     registry.trait(IcebergModel.NAMESPACE_TRAIT, IcebergModel.NAMESPACE_SCHEMA);
     registry.trait(IcebergModel.TABLE_TRAIT, IcebergModel.TABLE_SCHEMA);
+    registry.trait(IcebergModel.TABLE_SCHEMA_TRAIT, IcebergModel.TABLE_SCHEMA_SCHEMA);
     registry.link(IcebergModel.NAMESPACE_TRAIT, RelationType.HAS_PART, IcebergModel.TABLE_TRAIT);
+    registry.link(IcebergModel.TABLE_TRAIT, RelationType.HAS_PART, IcebergModel.TABLE_SCHEMA_TRAIT);
     registry.entityType(
         IcebergModel.NAMESPACE_TYPE,
         ImmutableModelRegistry.EMPTY_SCHEMA,
@@ -32,5 +34,9 @@ public class IcebergModelContributor implements ImmutableModelContributor {
         IcebergModel.TABLE_TYPE,
         ImmutableModelRegistry.EMPTY_SCHEMA,
         List.of(IcebergModel.TABLE_TRAIT));
+    registry.entityType(
+        IcebergModel.TABLE_SCHEMA_TYPE,
+        ImmutableModelRegistry.EMPTY_SCHEMA,
+        List.of(IcebergModel.TABLE_SCHEMA_TRAIT));
   }
 }

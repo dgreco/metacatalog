@@ -210,6 +210,7 @@ public class IcebergRegistryService {
     if (!acquireLockWithRetry(lockId("table:" + tableKey))) {
       throw new CommitFailedException("Concurrent commit in progress for table %s", identifier);
     }
+    var metadata = parseMetadata(metadataJson);
     var maybeEntity = findTableEntity(identifier);
     if (expectedMetadataLocation == null) {
       if (maybeEntity.isPresent()) {
@@ -224,8 +225,9 @@ public class IcebergRegistryService {
       var entity =
           entityService.create(
               IcebergModel.TABLE_TYPE,
-              tableValues(identifier, newMetadataLocation, null, metadataJson));
+              tableValues(identifier, newMetadataLocation, null, metadata));
       entityService.link(namespaceEntity.getId(), RelationType.HAS_PART, entity.getId());
+      syncSchemaEntities(entity.getId(), metadata);
     } else {
       var entity =
           maybeEntity.orElseThrow(
@@ -238,7 +240,8 @@ public class IcebergRegistryService {
       }
       entityService.updateValues(
           entity.getId(),
-          tableValues(identifier, newMetadataLocation, expectedMetadataLocation, metadataJson));
+          tableValues(identifier, newMetadataLocation, expectedMetadataLocation, metadata));
+      syncSchemaEntities(entity.getId(), metadata);
     }
   }
 
@@ -257,6 +260,14 @@ public class IcebergRegistryService {
     }
     var entity = maybeEntity.get();
     var lastMetadataLocation = entity.getValues().get("metadataLocation").asText();
+    // Schema entities are parts of the table: unlink and delete them first, or the table
+    // delete would be refused for still having relationships.
+    for (Entity child : entityService.linked(entity.getId(), RelationType.HAS_PART)) {
+      if (IcebergModel.TABLE_SCHEMA_TYPE.equals(child.getEntityType().getName())) {
+        entityService.unlink(entity.getId(), RelationType.HAS_PART, child.getId());
+        entityService.delete(child.getId());
+      }
+    }
     findNamespaceEntity(key(identifier.namespace()))
         .ifPresent(
             namespaceEntity ->
@@ -336,7 +347,7 @@ public class IcebergRegistryService {
       TableIdentifier identifier,
       String metadataLocation,
       String previousMetadataLocation,
-      String metadataJson) {
+      JsonNode metadata) {
     var values = jsonUtils.jsonMapper().createObjectNode();
     values.put("name", identifier.name());
     values.put("namespaceKey", key(identifier.namespace()));
@@ -344,12 +355,44 @@ public class IcebergRegistryService {
     if (previousMetadataLocation != null) {
       values.put("previousMetadataLocation", previousMetadataLocation);
     }
+    values.set("metadata", metadata.deepCopy());
+    return values.toString();
+  }
+
+  private JsonNode parseMetadata(String metadataJson) {
     try {
-      values.set("metadata", jsonUtils.jsonMapper().readTree(metadataJson));
+      return jsonUtils.jsonMapper().readTree(metadataJson);
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new ServiceError("Invalid table metadata JSON", e);
     }
-    return values.toString();
+  }
+
+  /**
+   * Materializes the metadata's schema list as entities: one {@code IcebergTableSchema} per
+   * schema-id, linked {@code table HAS_PART schema}. Iceberg schemas are immutable per id and
+   * evolution only appends, so this is append-only and idempotent — existing ids are left alone.
+   */
+  private void syncSchemaEntities(String tableEntityId, JsonNode metadata) {
+    var schemasNode = metadata.get("schemas");
+    if (schemasNode == null || !schemasNode.isArray()) {
+      return;
+    }
+    var existingIds =
+        entityService.linked(tableEntityId, RelationType.HAS_PART).stream()
+            .filter(child -> IcebergModel.TABLE_SCHEMA_TYPE.equals(child.getEntityType().getName()))
+            .map(child -> child.getValues().get("schemaId").asInt())
+            .collect(java.util.stream.Collectors.toSet());
+    for (JsonNode schemaNode : schemasNode) {
+      int schemaId = schemaNode.path("schema-id").asInt(0);
+      if (existingIds.contains(schemaId)) {
+        continue;
+      }
+      var values = jsonUtils.jsonMapper().createObjectNode();
+      values.put("schemaId", schemaId);
+      values.set("schema", schemaNode.deepCopy());
+      var schemaEntity = entityService.create(IcebergModel.TABLE_SCHEMA_TYPE, values.toString());
+      entityService.link(tableEntityId, RelationType.HAS_PART, schemaEntity.getId());
+    }
   }
 
   private static Map<String, String> propertiesOf(JsonNode values) {

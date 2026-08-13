@@ -151,6 +151,10 @@ class IcebergRestCatalogEndToEndTest {
     var values = tableEntities.getFirst().getValues();
     assertTrue(values.get("metadataLocation").asText().endsWith(".metadata.json"));
     assertEquals("e2e", values.get("metadata").get("properties").get("purpose").asText());
+
+    // The schema evolution produced a second IcebergTableSchema entity linked to the table.
+    var schemaEntities = entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "");
+    assertEquals(2, schemaEntities.size());
   }
 
   @Test
@@ -168,6 +172,10 @@ class IcebergRestCatalogEndToEndTest {
     assertTrue(catalog.dropTable(renamed, false));
     assertFalse(catalog.tableExists(renamed));
     assertFalse(catalog.dropTable(renamed, false));
+
+    // Dropping the table also removed its schema entities.
+    var entityService = context.getBean(EntityService.class);
+    assertTrue(entityService.list(IcebergModel.TABLE_SCHEMA_TYPE, "").isEmpty());
 
     assertTrue(catalog.dropNamespace(Namespace.of("db", "nested")));
     assertTrue(catalog.dropNamespace(Namespace.of("db")));

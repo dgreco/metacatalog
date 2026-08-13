@@ -593,7 +593,15 @@ level — a level may contain dots, so a dotted join would collide), `name` (dot
 `levels`, `properties`. A table entity stores `name`, `namespaceKey`, `metadataLocation`,
 `previousMetadataLocation` and `metadata` (a cached copy of the current table metadata, browsable
 in the UI/SPARQL). Containment is a real `HAS_PART` entity link, so tables hang off their
-namespace in the catalog graph.
+namespace in the catalog graph. Table schemas are additionally materialized as first-class
+entities: on every commit the registry appends one `IcebergTableSchema` entity per new schema-id
+in the metadata (`table HAS_PART schema`, sanctioned by `IcebergTableTrait HAS_PART
+IcebergTableSchemaTrait`), so schema evolution history is linkable and queryable in the graph.
+The schema entity holds only `schemaId` + the schema document — deliberately no table or
+namespace name, so renames never leave stale copies (the owning table is one `IS_PART_OF` hop
+away). Iceberg schemas are immutable per id, so the sync is append-only and idempotent;
+`dropTable` unlinks and deletes them before the table entity (whose delete would otherwise be
+refused for having relationships).
 
 **Storage split.** Standard Iceberg: the server writes table-metadata JSON files to the warehouse
 via a `FileIO` (`application.config.iceberg.{warehouse,io-impl,io-properties}`); the entity holds

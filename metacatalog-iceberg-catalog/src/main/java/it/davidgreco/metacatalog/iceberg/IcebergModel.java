@@ -13,8 +13,10 @@ public final class IcebergModel {
 
   public static final String NAMESPACE_TRAIT = "IcebergNamespaceTrait";
   public static final String TABLE_TRAIT = "IcebergTableTrait";
+  public static final String TABLE_SCHEMA_TRAIT = "IcebergTableSchemaTrait";
   public static final String NAMESPACE_TYPE = "IcebergNamespace";
   public static final String TABLE_TYPE = "IcebergTable";
+  public static final String TABLE_SCHEMA_TYPE = "IcebergTableSchema";
 
   /** Joins namespace levels into the canonical lookup key. */
   public static final String KEY_SEPARATOR = "\u001F";
@@ -45,6 +47,24 @@ public final class IcebergModel {
           "metadata": {"type": "object"}
         },
         "required": ["name", "namespaceKey", "metadataLocation"]
+      }
+      """;
+
+  /**
+   * One entity per Iceberg schema version, linked {@code table HAS_PART schema}. Deliberately
+   * normalized — no table or namespace name inside — so renames never leave stale copies; the
+   * owning table is reachable through the inverse {@code IS_PART_OF} link. Iceberg schemas are
+   * immutable per id (evolution appends a new id), so these entities are append-only.
+   */
+  public static final String TABLE_SCHEMA_SCHEMA =
+      """
+      {
+        "type": "object",
+        "properties": {
+          "schemaId": {"type": "integer"},
+          "schema": {"type": "object"}
+        },
+        "required": ["schemaId", "schema"]
       }
       """;
 
