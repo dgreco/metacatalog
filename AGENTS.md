@@ -29,6 +29,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | `metacatalog-security` | Pluggable authentication for the REST API. Selectable via `application.config.security.auth-mode`: `none` (default, no auth), `basic` (HTTP Basic with users from config), `oauth2` (JWT resource server, e.g. Keycloak) or `ldap` (LDAP bind). Depends on Spring Security 7.x. |
 | `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Drives the REST API through `MetacatalogApiDelegate`; does not depend on `metacatalog-core`. See [UI](#ui-metacatalog-ui). |
 | `metacatalog-sparql` | Embedded Ontop SPARQL endpoint over the metacatalog DB. See [Ontop](#ontop-embedded-sparql-endpoint). |
+| `metacatalog-iceberg-catalog` | An **independent Spring Boot application** (port 8181, own image) implementing the standard Apache Iceberg REST catalog API over the core service layer, against the same database as the main app. See [Iceberg REST catalog](#iceberg-rest-catalog-metacatalog-iceberg-catalog). |
 
 Package root everywhere: `it.davidgreco.metacatalog`.
 
@@ -560,10 +561,88 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   there because it only speaks HTTP Basic. `docker-compose.keycloak-sso.yml` stacks on top of
   that to enable browser SSO for the UI: issuer `http://localhost:8081` works from both sides
   because the browser hits Keycloak's published port while a socat sidecar in the app container's
-  network namespace forwards its `localhost:8081` to Keycloak.
+  network namespace forwards its `localhost:8081` to Keycloak. `docker-compose.iceberg.yml` is
+  another overlay (`make run-iceberg` / `up-iceberg-d`): it adds a RustFS S3 warehouse
+  (S3 API on `:9000`, console on `:9001`, credentials `rustfsadmin`/`rustfsadmin`, bucket
+  `iceberg-warehouse` created by a one-shot `rustfs-init` via the aws CLI) and the Iceberg REST
+  catalog app on `:8181`, sharing the base stack's postgres. The bulk-loader is disabled there (profile trick,
+  like the Keycloak overlay) — the Iceberg stack needs no demo model; run the base file once
+  first to seed it.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).
+
+## Iceberg REST catalog (metacatalog-iceberg-catalog)
+
+A second deployable application: `IcebergCatalogApplication` (package root `it.davidgreco.metacatalog`,
+like every app class) serves the standard **Apache Iceberg REST catalog API** on port 8181 so
+Spark / Trino / PyIceberg can use the metacatalog as their table catalog. It shares the main
+app's database (identical Flyway baseline from the core jar — this module **never** adds
+migrations) and depends on **`metacatalog-core` only** among the internal modules: every module
+shares the `it.davidgreco.metacatalog` package root, so any other internal jar on the classpath
+would be component-scanned wholesale. No `@EnableScheduling` — the mapping updater stays owned by
+the main application.
+
+**Registry model.** Declared immutable at startup by `IcebergModelContributor`: traits
+`IcebergNamespaceTrait` / `IcebergTableTrait`, the `IcebergNamespaceTrait HAS_PART
+IcebergTableTrait` link, and entity types `IcebergNamespace` / `IcebergTable`. The traits
+deliberately do **not** inherit `Aggregate`/`AggregateElement` — `unlink` refuses to detach a part
+from an `Aggregate` container, which would make dropping a table impossible. A namespace entity
+stores `key` (levels joined with `\u001F`, the one character illegal inside an Iceberg namespace
+level — a level may contain dots, so a dotted join would collide), `name` (dotted, display only),
+`levels`, `properties`. A table entity stores `name`, `namespaceKey`, `metadataLocation`,
+`previousMetadataLocation` and `metadata` (a cached copy of the current table metadata, browsable
+in the UI/SPARQL — with the schema list stripped out, since schemas live as linked entities; the
+server never reads this cache back, refresh loads the metadata file). Containment is a real
+`HAS_PART` entity link, so tables hang off their namespace in the catalog graph. Table schemas are additionally materialized as first-class
+entities: on every commit the registry appends one `IcebergTableSchema` entity per new schema-id
+in the metadata (`table HAS_PART schema`, sanctioned by `IcebergTableTrait HAS_PART
+IcebergTableSchemaTrait`), so schema evolution history is linkable and queryable in the graph.
+The schema entity holds `schemaId` + an explicitly enumerated `columns` array (each entry
+mirrors an Iceberg field: `id`, `name`, `type` — string for primitives, object for
+struct/list/map — `required`, optional `doc`; plus optional `identifierFieldIds`) — no opaque
+schema document, and deliberately no table or namespace name, so renames never leave stale
+copies (the owning table is one `IS_PART_OF` hop away). Iceberg schemas are immutable per id,
+so the sync is append-only and idempotent;
+`dropTable` unlinks and deletes them before the table entity (whose delete would otherwise be
+refused for having relationships).
+
+**Storage split.** Standard Iceberg: the server writes table-metadata JSON files to the warehouse
+via a `FileIO` (`application.config.iceberg.{warehouse,io-impl,io-properties}`); the entity holds
+the metadata-location pointer. The built-in `LocalFileIO` (nio-based) handles `file://` without
+Hadoop — iceberg-core's only local option is HadoopFileIO plus ~50 MB of hadoop-common — and
+`S3FileIO` (iceberg-aws) serves any S3-compatible store; the `docker` profile targets the
+RustFS added by the `docker-compose.iceberg.yml` overlay (`make run-iceberg`).
+
+**Concurrency.** Entities have no name column and no uniqueness on jsonb values, so
+`IcebergRegistryService` (the only class touching core services) enforces both itself, inside one
+transaction per operation holding a `pg_try_advisory_xact_lock` derived from the name (ids 1 and 2
+are reserved by core; the lock is retried per `commit-lock-*` config). The commit path is a CAS:
+re-read under the lock, compare the stored `metadataLocation` with the commit's base, swap or
+throw `CommitFailedException` — the CAS, not the lock, is the correctness guard. An unknown
+failure after the metadata file is written surfaces as `CommitStateUnknownException` (500) so
+clients do not delete a possibly-live metadata file.
+
+**REST layer.** Hand-written controllers (no OpenAPI codegen — the contract is Apache's):
+`IcebergRestController` parses bodies with `IcebergJson` (a Jackson-2 mapper configured like
+iceberg-core's `RESTObjectMapper`; controllers exchange `String` so Spring's Jackson-3 converters
+never touch iceberg types) and dispatches to iceberg-core's `CatalogHandlers`, which owns the
+protocol semantics including `UpdateRequirement` validation and the server-side commit retry.
+`GET /v1/config` advertises the prefix and an **explicit endpoint list** — omitting it makes
+clients assume the default set (multi-table transactions, views) and fail with 404s. Errors map to
+the spec's `ErrorResponse` in `IcebergExceptionHandler` (404 no-such, 409
+already-exists/commit-failed/not-empty, 500 commit-state-unknown).
+
+**Tests.** `IcebergRegistryServiceTests` pins the jsonpath `\u001F` escaping (a dotted level vs.
+two levels must not collide), the CAS success/stale paths and a concurrent-commit race (exactly
+one winner). `IcebergRestCatalogEndToEndTest` boots the real app against Testcontainers PostgreSQL
+and drives it with **Iceberg's own `RESTCatalog` client** over a temp `file://` warehouse —
+namespaces, table create, property/schema commits, rename, drop. One client quirk worth keeping:
+request builders probe `containsKey(null)`, so never hand the client a `Map.of(...)`.
+`pyiceberg-test/` is a uv-managed Python smoke project driving a **running** stack with PyIceberg
+(real parquet appends via the S3 warehouse, scans, schema evolution, rename, drop): `make
+run-iceberg`, then `cd metacatalog-iceberg-catalog/pyiceberg-test && uv run pytest`. It is not
+part of the Maven build — it exists to test the catalog exactly the way a Python client does.
 
 ## Ontop (embedded SPARQL endpoint)
 

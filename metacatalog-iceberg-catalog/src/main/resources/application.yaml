@@ -1,0 +1,73 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/metacatalog
+    username: metacatalog
+    password: metacatalog
+    driverClassName: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+
+server:
+  port: 8181
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
+application:
+  config:
+    # The mapping updater is owned by the main application; this app never runs it.
+    automaticEntitiesMapping: false
+    updateMappedEntitiesSchedulingInterval: 1s
+    entityPathResolutionMaxAttempts: 3
+    cacheExpireAfterWrite: 1h
+    iceberg:
+      warehouse: file:///tmp/metacatalog-iceberg-warehouse
+      # FileIO implementation: the built-in LocalFileIO handles file:// warehouses without
+      # Hadoop; use org.apache.iceberg.aws.s3.S3FileIO (iceberg-aws on the classpath) for
+      # S3/MinIO warehouses.
+      io-impl: it.davidgreco.metacatalog.iceberg.LocalFileIO
+      prefix: metacatalog
+      catalog-name: metacatalog
+      commit-lock-retries: 5
+      commit-lock-backoff: 100ms
+      # Extra properties passed through to the FileIO (e.g. s3.endpoint, s3.access-key-id).
+      io-properties: {}
+
+logging:
+  level:
+    root: ERROR
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/metacatalog
+
+application:
+  config:
+    iceberg:
+      warehouse: s3://iceberg-warehouse
+      io-impl: org.apache.iceberg.aws.s3.S3FileIO
+      io-properties:
+        s3.endpoint: http://rustfs:9000
+        s3.path-style-access: "true"
+        s3.access-key-id: rustfsadmin
+        s3.secret-access-key: rustfsadmin
+        client.region: us-east-1

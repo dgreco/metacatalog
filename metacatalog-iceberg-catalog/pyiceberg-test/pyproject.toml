@@ -1,0 +1,17 @@
+[project]
+name = "metacatalog-iceberg-test"
+version = "0.1.0"
+description = "PyIceberg smoke tests for the metacatalog Iceberg REST catalog"
+requires-python = ">=3.10"
+dependencies = [
+    "pyiceberg[pyarrow]>=0.11",
+    "s3fs>=2024.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

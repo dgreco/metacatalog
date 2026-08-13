@@ -1,0 +1,88 @@
+# Overlay adding the Iceberg REST catalog to the base stack (same pattern as the
+# Keycloak overlays — stack it with -f):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.iceberg.yml up --build
+#   (or: make run-iceberg / make up-iceberg-d)
+#
+# Adds a RustFS S3 warehouse (S3 API on :9000, console on :9001, credentials
+# rustfsadmin/rustfsadmin), a one-shot bucket initializer, and the
+# metacatalog-iceberg-catalog application on :8181, sharing the base stack's
+# postgres. Point Spark / Trino / PyIceberg at http://localhost:8181; data and
+# metadata files land in s3://iceberg-warehouse.
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: metacatalog-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # One-shot: create the Iceberg warehouse bucket (idempotent across restarts).
+  rustfs-init:
+    image: amazon/aws-cli:latest
+    container_name: metacatalog-rustfs-init
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+    # The marker object keeps the bucket non-empty forever: RustFS drops a bucket whose
+    # last object is deleted, which a table purge would otherwise trigger.
+    entrypoint: >
+      /bin/sh -c "
+      aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket iceberg-warehouse 2>/dev/null ||
+      aws --endpoint-url http://rustfs:9000 s3 mb s3://iceberg-warehouse;
+      echo keep | aws --endpoint-url http://rustfs:9000 s3 cp - s3://iceberg-warehouse/.metacatalog-keep
+      "
+    restart: "no"
+
+  iceberg-catalog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: metacatalog-iceberg-catalog
+    image: metacatalog-iceberg-catalog:0.0.1-SNAPSHOT
+    container_name: metacatalog-iceberg-catalog
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  bulk-loader:
+    # The Iceberg stack has no use for the demo model — the catalog declares its own
+    # immutable model at startup — so keep the loader out, same trick as the Keycloak
+    # overlay: assign it to a profile nothing activates. To seed the demo data anyway,
+    # run the base compose file once first; the postgres volume is shared.
+    profiles: ["demo-data-only"]
+
+volumes:
+  rustfs-data:

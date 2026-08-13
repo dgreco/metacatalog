@@ -1,0 +1,26 @@
+spring:
+  config:
+    activate:
+      on-profile: "default"
+  datasource:
+    driverClassName: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  lifecycle:
+    timeout-per-shutdown-phase: 5s
+server:
+  port: 0
+application:
+  config:
+    automaticEntitiesMapping: false
+    updateMappedEntitiesSchedulingInterval: 1s
+    entityPathResolutionMaxAttempts: 3
+    iceberg:
+      warehouse: file:///tmp/metacatalog-iceberg-test-warehouse
+      prefix: metacatalog
+      catalog-name: metacatalog

@@ -22,6 +22,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
+- **Iceberg REST Catalog**: an independent application implementing the standard Apache Iceberg REST catalog API over the metacatalog — Spark / Trino / PyIceberg can use it as their table catalog, and every namespace, table and schema version becomes a first-class, linkable catalog entity (see [Iceberg REST Catalog](#iceberg-rest-catalog))
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
 - **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, and instance search by type and JSONPath
 
@@ -191,11 +192,15 @@ metacatalog/
 ├── metacatalog-core/           # Core domain, repositories, services, and the startup
 │                               #   extension point for declaring an immutable model
 ├── metacatalog-functions/      # Procedures that run over entities (e.g. provisioning)
+├── metacatalog-functions-provisioning-tasks/  # Concrete provisioning tasks + registrars
 ├── metacatalog-openapi/        # OpenAPI spec and generated controllers / client
 ├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for the whole catalog
 ├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
 ├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
-└── metacatalog-application/    # Spring Boot application (aggregates all modules)
+├── metacatalog-application/    # Spring Boot application (aggregates all modules)
+└── metacatalog-iceberg-catalog/  # Independent app: Apache Iceberg REST catalog over the
+                                #   metacatalog (own port/image; + pyiceberg-test, a
+                                #   uv-managed Python smoke-test project)
 ```
 
 The UI module is a library that is served by `metacatalog-application` on the same
@@ -337,6 +342,87 @@ Ontop's transitive graph is shaded into the `metacatalog-sparql` jar with
 `jsqlparser` 4.x / `jgrapht` 0.9.x from clashing with the versions Spring
 Data JPA / metacatalog-core use at runtime. RDF4J is managed separately at
 5.3.0 and is **not** shaded.
+
+## Iceberg REST Catalog
+
+`metacatalog-iceberg-catalog` is a **second, independent application** (own port, own
+Docker image) that implements the standard [Apache Iceberg REST catalog
+API](https://iceberg.apache.org/rest-catalog-spec/), so Spark, Trino, PyIceberg or any
+other Iceberg client can use the metacatalog as its table catalog. It shares the main
+application's database and goes through the same core service layer — every Iceberg
+namespace, table and schema version is stored as a regular catalog entity, visible in
+the Web UI, the graph and SPARQL.
+
+### Running it
+
+```bash
+make run-iceberg        # base stack + RustFS S3 warehouse + the catalog on :8181
+```
+
+This starts, on top of the base stack: a [RustFS](https://rustfs.com) S3-compatible
+warehouse (S3 API on `:9000`, console on `:9001`, credentials
+`rustfsadmin`/`rustfsadmin`) and the catalog on `http://localhost:8181`. Stop with
+`make down-iceberg` (add `ARGS=-v` to also drop the database and warehouse volumes).
+
+Point a client at it, e.g. PyIceberg:
+
+```python
+from pyiceberg.catalog import load_catalog
+
+catalog = load_catalog("metacatalog", **{
+    "type": "rest", "uri": "http://localhost:8181",
+    "s3.endpoint": "http://localhost:9000",
+    "s3.access-key-id": "rustfsadmin", "s3.secret-access-key": "rustfsadmin",
+    "s3.region": "us-east-1",
+})
+catalog.create_namespace("demo")
+```
+
+Tables created through the protocol appear as entities at
+http://localhost:8080/ui/instances, and the graph shows the
+`namespace → table → schema` containment chain.
+
+### How it stores things
+
+- **Registry = metacatalog entities.** Immutable traits (`IcebergNamespaceTrait`,
+  `IcebergTableTrait`, `IcebergTableSchemaTrait`) and entity types (`IcebergNamespace`,
+  `IcebergTable`, `IcebergTableSchema`) are declared at startup through the
+  [immutable model](#immutable-model) extension point. Namespace → table and
+  table → schema containment are real `HAS_PART` links.
+- **Standard Iceberg metadata storage.** On every commit the server writes the
+  table-metadata JSON file to the warehouse via an Iceberg `FileIO` (the built-in
+  Hadoop-free `LocalFileIO` for `file://`, `S3FileIO` for S3/MinIO/RustFS) and the
+  table entity keeps the metadata-location pointer plus a cached copy of the current
+  metadata (schema list stripped — schemas live as linked entities).
+- **Schemas are first-class.** Each schema version becomes an `IcebergTableSchema`
+  entity with its columns explicitly enumerated (`id`, `name`, `type`, `required`,
+  optional `doc`), so schema history is linkable and queryable like any other entity.
+- **Commit safety without table locks.** Commits are a compare-and-swap on the
+  metadata-location pointer inside one transaction under a per-table advisory lock;
+  concurrent commits from the same base produce exactly one winner, losers get the
+  protocol's `409` and retry.
+
+### Endpoints
+
+`GET /v1/config` plus the namespace and table groups (list/create/load/update/drop,
+HEAD exists, rename, register, metrics no-op). Views and multi-table transactions are
+not implemented and are excluded from the advertised endpoint list, so well-behaved
+clients never call them. The REST layer reuses iceberg-core's `CatalogHandlers`, which
+owns the protocol semantics (update-requirement validation, server-side commit retry).
+
+### Testing
+
+The Java build covers the protocol end-to-end (`IcebergRestCatalogEndToEndTest` boots
+the app against Testcontainers PostgreSQL and drives it with Iceberg's own
+`RESTCatalog` client). For hands-on testing the way a Python user would,
+`metacatalog-iceberg-catalog/pyiceberg-test` is a [uv](https://docs.astral.sh/uv/)-managed
+project:
+
+```bash
+make run-iceberg                                  # if the stack is not already up
+cd metacatalog-iceberg-catalog/pyiceberg-test
+uv run pytest
+```
 
 ## API Documentation
 
