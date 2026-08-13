@@ -6,6 +6,7 @@
     <title th:text="${readOnly != null and readOnly} ? 'View Instance — Meta Catalog' : (${instanceId != null} ? 'Edit Instance — Meta Catalog' : 'New Instance — Meta Catalog')">Instance Form</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
 <header class="topbar">

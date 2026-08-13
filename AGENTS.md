@@ -435,15 +435,18 @@ hands the UI the answer. The `traits` on the `EntityType` DTO are only the direc
 so checking them here would miss an inherited `Provisionable`.
 
 Provisioning from the UI is asynchronous: the controller calls the API with `async=true`, flashes
-the returned schedule id, and the instances page renders a `#procedure-banner` that
-`procedure-poller.js` drives — polling `GET /metacatalog/v1/procedure/{scheduleId}` every second
-(a same-origin XHR, authenticated by the existing UI session in `basic`/`ldap` mode like every
-other API call the pages make) and reloading on completion so the rows show the finished
-`provisioningStatus` values. The outcome survives the reload through `sessionStorage` and is
-re-injected as a normal flash/error banner. The banner deliberately does not use the `.flash`
-class: `flash.js` auto-dismisses those, and this one must stay until the poll completes.
-Plan-building failures (missing aggregate, root not `Provisionable`) still surface immediately as
-a flash error — the API validates the plan synchronously before returning the schedule id.
+the returned schedule id, and the instances page renders a `#procedure-banner` seed that
+`procedure-poller.js` — included on **every** template — immediately consumes into
+`localStorage` and replaces with a fixed-position popup (spinner while `RUNNING`, color-coded
+success/failure with a dismiss button). Because the active run lives in `localStorage` and the
+script is site-wide, the popup survives navigating to any other UI page and shows up in every
+open tab (a `storage` listener picks up runs launched elsewhere); each page polls
+`GET /metacatalog/v1/procedure/{scheduleId}` every second — a same-origin XHR, authenticated by
+the existing UI session in `basic`/`ldap` mode like every other API call the pages make. On the
+instances page, completion also reloads so the rows show the finished `provisioningStatus`
+values, the outcome popup surviving the reload through `localStorage`. Plan-building failures
+(missing aggregate, root not `Provisionable`) still surface immediately as a flash error — the
+API validates the plan synchronously before returning the schedule id.
 
 The link forms distinguish two things that `CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES` does
 not: which relation types may be *authored* versus which direction of a bidirectional pair is

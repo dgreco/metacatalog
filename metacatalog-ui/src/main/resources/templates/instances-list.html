@@ -6,6 +6,7 @@
     <title>Instances — Meta Catalog</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
     <script th:src="@{/ui/js/flash.js}" defer></script>
 </head>
 <body>
@@ -20,8 +21,10 @@
 <main>
     <div class="flash" th:if="${message}" th:text="${message}"></div>
     <div class="error" th:if="${error}" th:text="${error}"></div>
-    <!-- Live banner for an asynchronously launched provisioning/unprovisioning run:
-         procedure-poller.js polls the REST status endpoint and reloads on completion. -->
+    <!-- Seed for an asynchronously launched provisioning/unprovisioning run:
+         procedure-poller.js consumes it into localStorage and shows the floating popup
+         that keeps polling the REST status endpoint across pages and tabs. Visible only
+         as a plain banner when JavaScript is unavailable. -->
     <div class="procedure-banner" id="procedure-banner"
          th:if="${procedureScheduleId}"
          th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel}"
@@ -129,7 +132,6 @@
     window.__TYPE_SCHEMAS__ = /*[[${typeSchemas}]]*/ {};
 </script>
 <script th:src="@{/ui/js/query-path-builder.js}"></script>
-<script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 <script>
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {
         form.addEventListener('submit', function (e) {
