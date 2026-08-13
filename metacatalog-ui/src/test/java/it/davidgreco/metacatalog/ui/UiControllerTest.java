@@ -657,33 +657,54 @@ class UiControllerTest {
     org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).aggregateRoot());
   }
 
+  private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
+
+  private static org.springframework.http.ResponseEntity<
+          it.davidgreco.metacatalog.openapi.model.ProcedureStatus>
+      accepted(String scheduleId) {
+    return org.springframework.http.ResponseEntity.status(202)
+        .body(
+            new it.davidgreco.metacatalog.openapi.model.ProcedureStatus()
+                .scheduleId(scheduleId)
+                .status(
+                    it.davidgreco.metacatalog.openapi.model.ProcedureStatus.StatusEnum.RUNNING));
+  }
+
   @Test
-  void provisionAggregateSubmitsAndRedirects() throws Exception {
+  void provisionAggregateLaunchesAsyncAndFlashesTheScheduleId() throws Exception {
+    org.mockito.Mockito.when(api.provisionAggregate("agg-1", ASYNC))
+        .thenReturn(accepted("sched-1"));
+
     mockMvc
         .perform(post("/ui/instances/agg-1/provision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
-        .andExpect(flash().attribute("message", "Aggregate provisioned."));
+        .andExpect(flash().attribute("procedureScheduleId", "sched-1"))
+        .andExpect(flash().attribute("procedureLabel", "Provisioning"));
 
-    verify(api).provisionAggregate("agg-1", java.util.Optional.empty());
+    verify(api).provisionAggregate("agg-1", ASYNC);
   }
 
   @Test
-  void unprovisionAggregateSubmitsAndRedirects() throws Exception {
+  void unprovisionAggregateLaunchesAsyncAndFlashesTheScheduleId() throws Exception {
+    org.mockito.Mockito.when(api.unprovisionAggregate("agg-1", ASYNC))
+        .thenReturn(accepted("sched-2"));
+
     mockMvc
         .perform(post("/ui/instances/agg-1/unprovision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
-        .andExpect(flash().attribute("message", "Aggregate unprovisioned."));
+        .andExpect(flash().attribute("procedureScheduleId", "sched-2"))
+        .andExpect(flash().attribute("procedureLabel", "Unprovisioning"));
 
-    verify(api).unprovisionAggregate("agg-1", java.util.Optional.empty());
+    verify(api).unprovisionAggregate("agg-1", ASYNC);
   }
 
   @Test
   void provisionAggregateSurfacesTheApiError() throws Exception {
     doThrow(apiError("No factory for name: S3FolderType"))
         .when(api)
-        .provisionAggregate("agg-1", java.util.Optional.empty());
+        .provisionAggregate("agg-1", ASYNC);
 
     mockMvc
         .perform(post("/ui/instances/agg-1/provision"))

@@ -176,33 +176,46 @@ class UnifiedInstanceController {
   }
 
   /**
-   * Provisions the aggregate rooted at this entity.
-   *
-   * <p>Synchronous, like the API call behind it: the request does not come back until every
-   * resource in the aggregate has been provisioned, so the page reloads showing the finished state
-   * rather than work in progress.
+   * Provisions the aggregate rooted at this entity, asynchronously: the API returns a schedule id
+   * right after plan-building (so a missing aggregate or an illegitimate root still surfaces here
+   * as a flash error), and the instances page polls {@code GET /metacatalog/v1/procedure/{id}}
+   * until the run completes, then reloads showing the finished statuses.
    */
   @PostMapping("/{id}/provision")
   public String provision(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    try {
-      api.provisionAggregate(id, java.util.Optional.empty());
-      redirectAttributes.addFlashAttribute("message", "Aggregate provisioned.");
-    } catch (RuntimeException e) {
-      redirectAttributes.addFlashAttribute("error", e.getMessage());
-    }
+    launchProcedure(redirectAttributes, "Provisioning", () -> api.provisionAggregate(id, ASYNC));
     return "redirect:/ui/instances";
   }
 
-  /** Tears the aggregate rooted at this entity back down. Synchronous, like {@link #provision}. */
+  /** Tears the aggregate rooted at this entity back down. Asynchronous, like {@link #provision}. */
   @PostMapping("/{id}/unprovision")
   public String unprovision(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    launchProcedure(
+        redirectAttributes, "Unprovisioning", () -> api.unprovisionAggregate(id, ASYNC));
+    return "redirect:/ui/instances";
+  }
+
+  private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
+
+  private void launchProcedure(
+      RedirectAttributes redirectAttributes,
+      String label,
+      java.util.function.Supplier<
+              org.springframework.http.ResponseEntity<
+                  it.davidgreco.metacatalog.openapi.model.ProcedureStatus>>
+          call) {
     try {
-      api.unprovisionAggregate(id, java.util.Optional.empty());
-      redirectAttributes.addFlashAttribute("message", "Aggregate unprovisioned.");
+      var status = call.get().getBody();
+      if (status != null && status.getScheduleId() != null) {
+        redirectAttributes.addFlashAttribute("procedureScheduleId", status.getScheduleId());
+        redirectAttributes.addFlashAttribute("procedureLabel", label);
+      } else {
+        // No schedule id to poll (should not happen): fall back to a plain confirmation.
+        redirectAttributes.addFlashAttribute("message", label + " started.");
+      }
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
-    return "redirect:/ui/instances";
   }
 
   @GetMapping("/{id}")

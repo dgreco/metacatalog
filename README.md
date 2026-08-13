@@ -895,9 +895,9 @@ Existing aggregates are listed at `/ui/aggregates`, with a per-aggregate view pa
 whole tree (values as JSON or YAML). Deleting, provisioning and unprovisioning an aggregate are
 actions on the instances list: a row gets *Delete aggregate* when its entity type is one of the
 `GET /aggregate/root-type` types, and *Provision* / *Unprovision* when it is one of the
-`GET /aggregate/provisionable-type` types. Provisioning from the UI is synchronous — the POST
-does not return until the whole aggregate is done, which is a reason to keep the UI action for
-demo-scale aggregates.
+`GET /aggregate/provisionable-type` types. Provisioning from the UI is asynchronous: the action
+returns immediately with a progress banner, the page polls the run's status and reloads when it
+completes — so even a slow provisioning task never holds an HTTP request open.
 
 ## Deleting entities and links
 

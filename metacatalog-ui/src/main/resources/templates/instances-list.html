@@ -20,6 +20,12 @@
 <main>
     <div class="flash" th:if="${message}" th:text="${message}"></div>
     <div class="error" th:if="${error}" th:text="${error}"></div>
+    <!-- Live banner for an asynchronously launched provisioning/unprovisioning run:
+         procedure-poller.js polls the REST status endpoint and reloads on completion. -->
+    <div class="procedure-banner" id="procedure-banner"
+         th:if="${procedureScheduleId}"
+         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel}"
+         th:text="${procedureLabel} + ' in progress…'"></div>
 
     <!-- Search -->
     <div class="filter-bar">
@@ -123,6 +129,7 @@
     window.__TYPE_SCHEMAS__ = /*[[${typeSchemas}]]*/ {};
 </script>
 <script th:src="@{/ui/js/query-path-builder.js}"></script>
+<script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 <script>
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {
         form.addEventListener('submit', function (e) {

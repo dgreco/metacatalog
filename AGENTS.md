@@ -340,8 +340,8 @@ immediately, on the caller's thread), and the run is polled via `GET
 `ProcedureExecutor.executeProcedureAsync` records the outcome in a bounded, time-limited Caffeine
 registry (`taskScheduleCacheMaxSize` / `taskScheduleCacheExpireAfterWrite`), so an expired entry
 polls as 404 rather than leaking; the status registry is per-instance, so behind a load balancer
-polls must be pinned to the instance that accepted the run. The UI keeps using the synchronous
-mode. Nothing provisions on its own; it happens when asked.
+polls must be pinned to the instance that accepted the run. The UI uses the async mode (see the
+[UI](#ui-metacatalog-ui) section). Nothing provisions on its own; it happens when asked.
 
 ## REST API
 
@@ -431,9 +431,16 @@ inside a transaction — `AggregateSchemaService.provisionableTypes()` does it t
 hands the UI the answer. The `traits` on the `EntityType` DTO are only the directly associated ones,
 so checking them here would miss an inherited `Provisionable`.
 
-Provisioning from the UI is synchronous: the POST does not return until the whole aggregate is
-done, so the page reloads showing the finished state. A slow real-world provisioning function would
-make that request hang, which is a reason to keep the UI action for demo-scale aggregates.
+Provisioning from the UI is asynchronous: the controller calls the API with `async=true`, flashes
+the returned schedule id, and the instances page renders a `#procedure-banner` that
+`procedure-poller.js` drives — polling `GET /metacatalog/v1/procedure/{scheduleId}` every second
+(a same-origin XHR, authenticated by the existing UI session in `basic`/`ldap` mode like every
+other API call the pages make) and reloading on completion so the rows show the finished
+`provisioningStatus` values. The outcome survives the reload through `sessionStorage` and is
+re-injected as a normal flash/error banner. The banner deliberately does not use the `.flash`
+class: `flash.js` auto-dismisses those, and this one must stay until the poll completes.
+Plan-building failures (missing aggregate, root not `Provisionable`) still surface immediately as
+a flash error — the API validates the plan synchronously before returning the schedule id.
 
 The link forms distinguish two things that `CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES` does
 not: which relation types may be *authored* versus which direction of a bidirectional pair is

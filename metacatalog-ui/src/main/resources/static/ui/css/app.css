@@ -474,6 +474,17 @@ select[multiple].traits-select {
 .flash-dismissed {
     opacity: 0;
 }
+/* Live banner for an in-flight provisioning/unprovisioning run (procedure-poller.js).
+   Deliberately NOT .flash: flash.js auto-dismisses those, and this one must stay
+   until the poll completes and the page reloads. */
+.procedure-banner {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.65rem 0.9rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
 .error {
     background: var(--error-bg);
     color: var(--error-text);
