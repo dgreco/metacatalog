@@ -1759,9 +1759,11 @@ paths:
         Provisions every ProvisionableResource in the aggregate, running the task registered for
         each resource's entity type in dependency order — a resource is provisioned only once
         everything it is derived from exists. The aggregate root must carry the Provisionable
-        trait. Synchronous: the call returns once the whole aggregate is done, and fails if any
-        resource did. Each resource is left PROVISIONED, or FAILED with the error in
-        provisioningResult.
+        trait. Synchronous by default: the call returns once the whole aggregate is done, and
+        fails if any resource did. With async=true the plan is still built and validated
+        synchronously (a missing aggregate or an illegitimate root fails immediately), but the
+        call returns 202 with a schedule id to poll via GET /procedure/{scheduleId}. Each
+        resource is left PROVISIONED, or FAILED with the error in provisioningResult.
       operationId: provisionAggregate
       parameters:
         - in: path
@@ -1770,9 +1772,23 @@ paths:
           description: Aggregate Id
           schema:
             type: string
+        - in: query
+          name: async
+          required: false
+          description: >-
+            When true, return immediately after plan-building with a schedule id to poll instead
+            of waiting for the run to complete. Absent or false means synchronous.
+          schema:
+            type: boolean
       responses:
         204:
-          description: Aggregate provisioned
+          description: Aggregate provisioned (synchronous mode)
+        202:
+          description: Provisioning started (async mode); poll GET /procedure/{scheduleId}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStatus'
         400:
           description: >-
             Invalid input, the root is not Provisionable, a resource type has no registered task,
@@ -1801,8 +1817,9 @@ paths:
       description: >-
         The inverse of provisioning: tears down every ProvisionableResource in the aggregate, in
         the reverse of the order they were provisioned, so nothing is removed while another
-        resource still depends on it. Synchronous, like provisioning. Each resource is left
-        UNPROVISIONED, or FAILED with the error in provisioningResult.
+        resource still depends on it. Synchronous by default, like provisioning; async=true
+        behaves exactly as it does there. Each resource is left UNPROVISIONED, or FAILED with the
+        error in provisioningResult.
       operationId: unprovisionAggregate
       parameters:
         - in: path
@@ -1811,9 +1828,23 @@ paths:
           description: Aggregate Id
           schema:
             type: string
+        - in: query
+          name: async
+          required: false
+          description: >-
+            When true, return immediately after plan-building with a schedule id to poll instead
+            of waiting for the run to complete. Absent or false means synchronous.
+          schema:
+            type: boolean
       responses:
         204:
-          description: Aggregate unprovisioned
+          description: Aggregate unprovisioned (synchronous mode)
+        202:
+          description: Unprovisioning started (async mode); poll GET /procedure/{scheduleId}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStatus'
         400:
           description: >-
             Invalid input, the root is not Provisionable, a resource type has no registered task,
@@ -1824,6 +1855,43 @@ paths:
                 $ref: '#/components/schemas/ValidationError'
         404:
           description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/procedure/{scheduleId}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get the status of an asynchronously launched procedure run
+      description: >-
+        Polls a run started with async=true on the provision or unprovision endpoint. Entries are
+        kept in a bounded, time-limited registry (application.config.taskScheduleCacheMaxSize /
+        taskScheduleCacheExpireAfterWrite), so a very old run's status eventually expires and
+        reads as not found.
+      operationId: getProcedureStatus
+      parameters:
+        - in: path
+          name: scheduleId
+          required: true
+          description: The schedule id returned by the async provision/unprovision call
+          schema:
+            type: string
+      responses:
+        200:
+          description: The run's current status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStatus'
+        404:
+          description: Unknown schedule id (never existed, or its entry expired)
           content:
             application/json:
               schema:
@@ -2062,6 +2130,23 @@ components:
         entityPathReferences:
           type: string
           description: The mapping rule's entity path references, as a JSON string. Null when the rule is no longer available.
+    ProcedureStatus:
+      type: object
+      description: A point-in-time view of an asynchronously launched procedure run.
+      required:
+        - scheduleId
+        - status
+      properties:
+        scheduleId:
+          type: string
+          description: The schedule id identifying the run.
+        status:
+          type: string
+          enum: [RUNNING, SUCCEEDED, FAILED]
+          description: The run's current state.
+        error:
+          type: string
+          description: The failure message; present only when status is FAILED.
     ValidationError:
       type: object
       description: Error response for client-side errors (4xx), listing all validation errors.

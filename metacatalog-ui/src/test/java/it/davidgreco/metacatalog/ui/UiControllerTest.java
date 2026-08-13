@@ -665,7 +665,7 @@ class UiControllerTest {
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("message", "Aggregate provisioned."));
 
-    verify(api).provisionAggregate("agg-1");
+    verify(api).provisionAggregate("agg-1", java.util.Optional.empty());
   }
 
   @Test
@@ -676,12 +676,14 @@ class UiControllerTest {
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("message", "Aggregate unprovisioned."));
 
-    verify(api).unprovisionAggregate("agg-1");
+    verify(api).unprovisionAggregate("agg-1", java.util.Optional.empty());
   }
 
   @Test
   void provisionAggregateSurfacesTheApiError() throws Exception {
-    doThrow(apiError("No factory for name: S3FolderType")).when(api).provisionAggregate("agg-1");
+    doThrow(apiError("No factory for name: S3FolderType"))
+        .when(api)
+        .provisionAggregate("agg-1", java.util.Optional.empty());
 
     mockMvc
         .perform(post("/ui/instances/agg-1/provision"))

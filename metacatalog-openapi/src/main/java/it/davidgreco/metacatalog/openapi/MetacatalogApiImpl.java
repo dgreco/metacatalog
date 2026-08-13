@@ -265,15 +265,53 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
-  public ResponseEntity provisionAggregate(String aggregateId) {
-    procedureExecutor.executeProcedure("ProvisioningProcedure", aggregateId);
-    return status(204).build();
+  public ResponseEntity<ProcedureStatus> provisionAggregate(
+      String aggregateId, Optional<Boolean> async) {
+    return runProcedure("ProvisioningProcedure", aggregateId, async);
   }
 
   @Override
-  public ResponseEntity unprovisionAggregate(String aggregateId) {
-    procedureExecutor.executeProcedure("UnprovisioningProcedure", aggregateId);
+  public ResponseEntity<ProcedureStatus> unprovisionAggregate(
+      String aggregateId, Optional<Boolean> async) {
+    return runProcedure("UnprovisioningProcedure", aggregateId, async);
+  }
+
+  @Override
+  public ResponseEntity<ProcedureStatus> getProcedureStatus(String scheduleId) {
+    var procedureStatus =
+        procedureExecutor
+            .procedureStatus(scheduleId)
+            .orElseThrow(
+                () -> new NotFoundException("No procedure run with schedule id " + scheduleId));
+    return status(200).body(toDto(procedureStatus));
+  }
+
+  /**
+   * Sync mode blocks until the whole run is done (204); async mode returns right after the
+   * plan-building transaction with a schedule id to poll (202). Plan-building failures — missing
+   * aggregate, illegitimate root — fail on this thread in both modes.
+   */
+  private ResponseEntity<ProcedureStatus> runProcedure(
+      String procedureName, String aggregateId, Optional<Boolean> async) {
+    if (async.orElse(Boolean.FALSE)) {
+      var scheduleId = procedureExecutor.executeProcedureAsync(procedureName, aggregateId);
+      var procedureStatus =
+          procedureExecutor
+              .procedureStatus(scheduleId)
+              .orElse(
+                  new ProcedureExecutor.ProcedureStatus(
+                      scheduleId, ProcedureExecutor.ProcedureState.RUNNING, null));
+      return status(202).body(toDto(procedureStatus));
+    }
+    procedureExecutor.executeProcedure(procedureName, aggregateId);
     return status(204).build();
+  }
+
+  private static ProcedureStatus toDto(ProcedureExecutor.ProcedureStatus procedureStatus) {
+    return new ProcedureStatus()
+        .scheduleId(procedureStatus.scheduleId())
+        .status(ProcedureStatus.StatusEnum.valueOf(procedureStatus.state().name()))
+        .error(procedureStatus.error());
   }
 
   @Override

@@ -185,7 +185,7 @@ class UnifiedInstanceController {
   @PostMapping("/{id}/provision")
   public String provision(@PathVariable String id, RedirectAttributes redirectAttributes) {
     try {
-      api.provisionAggregate(id);
+      api.provisionAggregate(id, java.util.Optional.empty());
       redirectAttributes.addFlashAttribute("message", "Aggregate provisioned.");
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
@@ -197,7 +197,7 @@ class UnifiedInstanceController {
   @PostMapping("/{id}/unprovision")
   public String unprovision(@PathVariable String id, RedirectAttributes redirectAttributes) {
     try {
-      api.unprovisionAggregate(id);
+      api.unprovisionAggregate(id, java.util.Optional.empty());
       redirectAttributes.addFlashAttribute("message", "Aggregate unprovisioned.");
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());

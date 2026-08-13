@@ -93,8 +93,11 @@ Provisioning a freshly seeded aggregate needs its resources to exist first — t
 asynchronously by the mapping updater a second or so after the instances load. Provisioning before
 then does not fail, it just finds nothing to do.
 
-Both calls are synchronous: a 204 means every resource in the aggregate is done. Each one ends up
-`PROVISIONED` or `UNPROVISIONED`, or `FAILED` with the error in `provisioningResult`.
+Both calls are synchronous by default: a 204 means every resource in the aggregate is done. Each
+one ends up `PROVISIONED` or `UNPROVISIONED`, or `FAILED` with the error in `provisioningResult`.
+Add `?async=true` to get a 202 with a schedule id instead, and poll
+`GET /metacatalog/v1/procedure/{scheduleId}` for `RUNNING` / `SUCCEEDED` / `FAILED` — useful when
+a provisioning task is slow enough that holding the HTTP request open is not an option.
 
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui

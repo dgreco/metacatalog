@@ -331,9 +331,17 @@ guard against a change that would break `docker compose up` rather than CI — a
 whose two resource types are handled by different tasks.
 
 Both operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
-`.../unprovision`. They are **synchronous** — `ProcedureExecutor.executeProcedure` returns only
-once the schedule completes and throws if any task failed — so a 204 means the whole aggregate is
-done. Nothing provisions on its own; it happens when asked.
+`.../unprovision`. They are **synchronous by default** — `ProcedureExecutor.executeProcedure`
+returns only once the schedule completes and throws if any task failed — so a 204 means the whole
+aggregate is done. With `?async=true` the call instead returns **202 with a schedule id** right
+after the plan-building transaction (a missing aggregate or an illegitimate root still fails
+immediately, on the caller's thread), and the run is polled via `GET
+/metacatalog/v1/procedure/{scheduleId}` → `RUNNING` / `SUCCEEDED` / `FAILED` + error.
+`ProcedureExecutor.executeProcedureAsync` records the outcome in a bounded, time-limited Caffeine
+registry (`taskScheduleCacheMaxSize` / `taskScheduleCacheExpireAfterWrite`), so an expired entry
+polls as 404 rather than leaking; the status registry is per-instance, so behind a load balancer
+polls must be pinned to the instance that accepted the run. The UI keeps using the synchronous
+mode. Nothing provisions on its own; it happens when asked.
 
 ## REST API
 
@@ -495,8 +503,10 @@ Custom properties bind under the `application.config` prefix into
 - `automaticEntitiesMapping` (boolean) — enable the scheduled mapping updater
 - `updateMappedEntitiesSchedulingInterval` (Duration)
 - `entityPathResolutionMaxAttempts` (int)
-- `taskScheduleCacheMaxSize` (int, default 100) — `TaskManager` schedule-result cache capacity
-- `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — `TaskManager` schedule-result cache TTL
+- `taskScheduleCacheMaxSize` (int, default 100) — capacity of `ProcedureExecutor`'s async-run
+  status registry
+- `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — TTL of the async-run status
+  registry (an expired entry polls as 404)
 
 Provisioning properties bind under `application.config.provisioning` into
 `ProvisioningConfigProperties` (`metacatalog-functions-provisioning-tasks` module): `tasks`
