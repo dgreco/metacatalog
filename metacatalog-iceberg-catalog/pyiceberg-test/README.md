@@ -27,6 +27,22 @@ uv run pytest
 `uv run` creates the virtual environment and installs the dependencies on first
 use; nothing else to set up.
 
+## Demo tables
+
+`create_tables.py` seeds the running catalog with a small set of demo tables
+(`demo.trips`, `demo.vendors`, `demo.daily_revenue`), each with a few sample
+rows written as real parquet to the S3 warehouse — handy for browsing the
+catalog from the metacatalog UI, SPARQL, or another Iceberg client:
+
+```bash
+uv run python create_tables.py                 # create what is missing
+uv run python create_tables.py --drop          # recreate from scratch
+uv run python create_tables.py --namespace ns  # target another namespace
+```
+
+It is idempotent: existing tables are skipped and rows are only appended when a
+table is created by that run, so re-running never duplicates data.
+
 ## Configuration
 
 The defaults match the compose stack; override via environment variables when
