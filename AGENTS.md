@@ -639,6 +639,10 @@ one winner). `IcebergRestCatalogEndToEndTest` boots the real app against Testcon
 and drives it with **Iceberg's own `RESTCatalog` client** over a temp `file://` warehouse —
 namespaces, table create, property/schema commits, rename, drop. One client quirk worth keeping:
 request builders probe `containsKey(null)`, so never hand the client a `Map.of(...)`.
+`pyiceberg-test/` is a uv-managed Python smoke project driving a **running** stack with PyIceberg
+(real parquet appends via the S3 warehouse, scans, schema evolution, rename, drop): `make
+run-iceberg`, then `cd metacatalog-iceberg-catalog/pyiceberg-test && uv run pytest`. It is not
+part of the Maven build — it exists to test the catalog exactly the way a Python client does.
 
 ## Ontop (embedded SPARQL endpoint)
 
