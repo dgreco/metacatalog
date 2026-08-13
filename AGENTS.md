@@ -598,9 +598,12 @@ server never reads this cache back, refresh loads the metadata file). Containmen
 entities: on every commit the registry appends one `IcebergTableSchema` entity per new schema-id
 in the metadata (`table HAS_PART schema`, sanctioned by `IcebergTableTrait HAS_PART
 IcebergTableSchemaTrait`), so schema evolution history is linkable and queryable in the graph.
-The schema entity holds only `schemaId` + the schema document — deliberately no table or
-namespace name, so renames never leave stale copies (the owning table is one `IS_PART_OF` hop
-away). Iceberg schemas are immutable per id, so the sync is append-only and idempotent;
+The schema entity holds `schemaId` + an explicitly enumerated `columns` array (each entry
+mirrors an Iceberg field: `id`, `name`, `type` — string for primitives, object for
+struct/list/map — `required`, optional `doc`; plus optional `identifierFieldIds`) — no opaque
+schema document, and deliberately no table or namespace name, so renames never leave stale
+copies (the owning table is one `IS_PART_OF` hop away). Iceberg schemas are immutable per id,
+so the sync is append-only and idempotent;
 `dropTable` unlinks and deletes them before the table entity (whose delete would otherwise be
 refused for having relationships).
 

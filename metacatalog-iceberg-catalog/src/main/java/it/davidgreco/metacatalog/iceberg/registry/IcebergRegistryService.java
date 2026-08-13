@@ -396,11 +396,18 @@ public class IcebergRegistryService {
       }
       var values = jsonUtils.jsonMapper().createObjectNode();
       values.put("schemaId", schemaId);
-      // The id lives once, in the typed top-level field: strip the copy embedded in the
-      // schema document (the verbatim original is always in the metadata file anyway).
-      var schemaDocument = (ObjectNode) schemaNode.deepCopy();
-      schemaDocument.remove("schema-id");
-      values.set("schema", schemaDocument);
+      // The columns are the schema's field list, enumerated explicitly — no opaque schema
+      // document, no repeated schema-id (the verbatim original stays in the metadata file).
+      var fieldsNode = schemaNode.get("fields");
+      values.set(
+          "columns",
+          fieldsNode != null && fieldsNode.isArray()
+              ? fieldsNode.deepCopy()
+              : jsonUtils.jsonMapper().createArrayNode());
+      var identifierFieldIds = schemaNode.get("identifier-field-ids");
+      if (identifierFieldIds != null && identifierFieldIds.isArray()) {
+        values.set("identifierFieldIds", identifierFieldIds.deepCopy());
+      }
       var schemaEntity = entityService.create(IcebergModel.TABLE_SCHEMA_TYPE, values.toString());
       entityService.link(tableEntityId, RelationType.HAS_PART, schemaEntity.getId());
     }

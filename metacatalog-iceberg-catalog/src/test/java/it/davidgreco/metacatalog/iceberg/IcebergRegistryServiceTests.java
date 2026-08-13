@@ -179,7 +179,10 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
         """
         {"format-version": 2, "schemas": [
           {"type": "struct", "schema-id": 0, "fields": []},
-          {"type": "struct", "schema-id": 1, "fields": []}
+          {"type": "struct", "schema-id": 1, "fields": [
+            {"id": 1, "name": "id", "type": "long", "required": true},
+            {"id": 2, "name": "vendor", "type": "string", "required": false}
+          ]}
         ]}""";
 
     registry.casCommit(identifier, null, "loc-1", oneSchema);
@@ -199,9 +202,20 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
             .filter(e -> IcebergModel.TABLE_SCHEMA_TYPE.equals(e.getEntityType().getName()))
             .toList();
     assertEquals(2, parts.size());
-    assertTrue(parts.stream().allMatch(e -> e.getValues().get("schema").isObject()));
-    // The id lives once, in the top-level schemaId — not repeated inside the document.
-    assertTrue(parts.stream().noneMatch(e -> e.getValues().get("schema").has("schema-id")));
+    // Columns are enumerated explicitly — no opaque schema document, no repeated schema-id.
+    assertTrue(parts.stream().allMatch(e -> e.getValues().get("columns").isArray()));
+    assertTrue(parts.stream().noneMatch(e -> e.getValues().has("schema")));
+    var evolved =
+        parts.stream()
+            .filter(e -> e.getValues().get("schemaId").asInt() == 1)
+            .findFirst()
+            .orElseThrow();
+    var columns = evolved.getValues().get("columns");
+    assertEquals(2, columns.size());
+    assertEquals("id", columns.get(0).get("name").asText());
+    assertEquals("long", columns.get(0).get("type").asText());
+    assertTrue(columns.get(0).get("required").asBoolean());
+    assertEquals("vendor", columns.get(1).get("name").asText());
 
     // The cached metadata copy does not duplicate the schema list — the linked entities are
     // the one representation of the schemas in the catalog.

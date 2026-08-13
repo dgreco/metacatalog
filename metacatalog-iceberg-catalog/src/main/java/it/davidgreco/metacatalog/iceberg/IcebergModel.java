@@ -55,6 +55,11 @@ public final class IcebergModel {
    * normalized — no table or namespace name inside — so renames never leave stale copies; the
    * owning table is reachable through the inverse {@code IS_PART_OF} link. Iceberg schemas are
    * immutable per id (evolution appends a new id), so these entities are append-only.
+   *
+   * <p>The columns are enumerated explicitly rather than hidden in an opaque schema document: each
+   * entry mirrors an Iceberg schema field ({@code id}, {@code name}, {@code type} — a string for
+   * primitives, an object for struct/list/map — {@code required}, optional {@code doc}). The
+   * verbatim Iceberg schema JSON always remains available in the table's metadata file.
    */
   public static final String TABLE_SCHEMA_SCHEMA =
       """
@@ -62,9 +67,23 @@ public final class IcebergModel {
         "type": "object",
         "properties": {
           "schemaId": {"type": "integer"},
-          "schema": {"type": "object"}
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {"type": "integer"},
+                "name": {"type": "string"},
+                "type": {"type": ["string", "object"]},
+                "required": {"type": "boolean"},
+                "doc": {"type": "string"}
+              },
+              "required": ["id", "name", "type", "required"]
+            }
+          },
+          "identifierFieldIds": {"type": "array", "items": {"type": "integer"}}
         },
-        "required": ["schemaId", "schema"]
+        "required": ["schemaId", "columns"]
       }
       """;
 
