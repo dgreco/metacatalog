@@ -43,6 +43,65 @@ services:
       retries: 10
       start_period: 30s
 
+  minio:
+    image: minio/minio:latest
+    container_name: metacatalog-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: create the Iceberg warehouse bucket (idempotent across restarts).
+  minio-init:
+    image: minio/mc:latest
+    container_name: metacatalog-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/iceberg-warehouse
+      "
+    restart: "no"
+
+  iceberg-catalog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: metacatalog-iceberg-catalog
+    image: metacatalog-iceberg-catalog:0.0.1-SNAPSHOT
+    container_name: metacatalog-iceberg-catalog
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+    ports:
+      - "8181:8181"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   bulk-loader:
     image: curlimages/curl:8.10.1
     container_name: metacatalog-bulk-loader
@@ -60,3 +119,4 @@ services:
 
 volumes:
   postgres-data:
+  minio-data:

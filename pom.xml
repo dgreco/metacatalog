@@ -52,6 +52,9 @@
         <!-- JGraphT -->
         <jgrapht.version>1.5.3</jgrapht.version>
 
+        <!--   Apache Iceberg (metacatalog-iceberg-catalog) -->
+        <iceberg.version>1.11.0</iceberg.version>
+
         <!--   Postgresql -->
         <postgresql.version>42.7.13</postgresql.version>
 
@@ -120,6 +123,11 @@
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-sparql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-iceberg-catalog</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -264,6 +272,23 @@
                 <groupId>org.jgrapht</groupId>
                 <artifactId>jgrapht-core</artifactId>
                 <version>${jgrapht.version}</version>
+            </dependency>
+
+            <!-- Apache Iceberg (metacatalog-iceberg-catalog) -->
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-core</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-aws</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-aws-bundle</artifactId>
+                <version>${iceberg.version}</version>
             </dependency>
 
             <!-- Postgresql -->
@@ -646,6 +671,7 @@
         <module>metacatalog-security</module>
         <module>metacatalog-sparql</module>
         <module>metacatalog-application</module>
+        <module>metacatalog-iceberg-catalog</module>
     </modules>
 
     <profiles>
