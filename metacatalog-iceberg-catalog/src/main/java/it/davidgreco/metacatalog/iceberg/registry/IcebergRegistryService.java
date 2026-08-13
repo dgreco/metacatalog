@@ -396,7 +396,11 @@ public class IcebergRegistryService {
       }
       var values = jsonUtils.jsonMapper().createObjectNode();
       values.put("schemaId", schemaId);
-      values.set("schema", schemaNode.deepCopy());
+      // The id lives once, in the typed top-level field: strip the copy embedded in the
+      // schema document (the verbatim original is always in the metadata file anyway).
+      var schemaDocument = (ObjectNode) schemaNode.deepCopy();
+      schemaDocument.remove("schema-id");
+      values.set("schema", schemaDocument);
       var schemaEntity = entityService.create(IcebergModel.TABLE_SCHEMA_TYPE, values.toString());
       entityService.link(tableEntityId, RelationType.HAS_PART, schemaEntity.getId());
     }

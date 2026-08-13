@@ -200,6 +200,8 @@ class IcebergRegistryServiceTests extends CommonServiceTestingSupport {
             .toList();
     assertEquals(2, parts.size());
     assertTrue(parts.stream().allMatch(e -> e.getValues().get("schema").isObject()));
+    // The id lives once, in the top-level schemaId — not repeated inside the document.
+    assertTrue(parts.stream().noneMatch(e -> e.getValues().get("schema").has("schema-id")));
 
     // The cached metadata copy does not duplicate the schema list — the linked entities are
     // the one representation of the schemas in the catalog.
