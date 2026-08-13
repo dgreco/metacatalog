@@ -4,44 +4,46 @@
 #   docker compose -f docker-compose.yml -f docker-compose.iceberg.yml up --build
 #   (or: make run-iceberg / make up-iceberg-d)
 #
-# Adds a SeaweedFS S3 warehouse (S3 API on :8333, credentials
-# seaweedadmin/seaweedadmin from docker/seaweedfs/s3.json), a one-shot bucket
-# initializer, and the metacatalog-iceberg-catalog application on :8181, sharing
-# the base stack's postgres. Point Spark / Trino / PyIceberg at
-# http://localhost:8181; data and metadata files land in s3://iceberg-warehouse.
+# Adds a RustFS S3 warehouse (S3 API on :9000, console on :9001, credentials
+# rustfsadmin/rustfsadmin), a one-shot bucket initializer, and the
+# metacatalog-iceberg-catalog application on :8181, sharing the base stack's
+# postgres. Point Spark / Trino / PyIceberg at http://localhost:8181; data and
+# metadata files land in s3://iceberg-warehouse.
 
 services:
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    container_name: metacatalog-seaweedfs
-    # One process for the whole stack (master + volume + filer + S3 gateway) —
-    # plenty for a single-node warehouse.
-    command: server -dir=/data -master.volumeSizeLimitMB=1024 -filer -s3 -s3.config=/etc/seaweedfs/s3.json
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: metacatalog-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
     ports:
-      - "8333:8333"
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - seaweedfs-data:/data
-      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      - rustfs-data:/data
     healthcheck:
-      # The filer answers once master + volume + filer are all up; the S3 gateway
-      # sits directly on the filer, so this is the readiness signal that matters.
-      # SeaweedFS binds to the container IP, not localhost — probe via hostname -i.
-      test: ["CMD-SHELL", "wget -qO- http://$(hostname -i):8888/ >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health >/dev/null || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 10s
 
   # One-shot: create the Iceberg warehouse bucket (idempotent across restarts).
-  seaweedfs-init:
-    image: chrislusf/seaweedfs:latest
-    container_name: metacatalog-seaweedfs-init
+  rustfs-init:
+    image: amazon/aws-cli:latest
+    container_name: metacatalog-rustfs-init
     depends_on:
-      seaweedfs:
+      rustfs:
         condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
     entrypoint: >
       /bin/sh -c "
-      echo 's3.bucket.create -name iceberg-warehouse' | weed shell -master=seaweedfs:9333 || true
+      aws --endpoint-url http://rustfs:9000 s3api head-bucket --bucket iceberg-warehouse 2>/dev/null ||
+      aws --endpoint-url http://rustfs:9000 s3 mb s3://iceberg-warehouse
       "
     restart: "no"
 
@@ -56,7 +58,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      seaweedfs:
+      rustfs:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -80,4 +82,4 @@ services:
     profiles: ["demo-data-only"]
 
 volumes:
-  seaweedfs-data:
+  rustfs-data:
