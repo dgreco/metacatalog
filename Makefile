@@ -10,8 +10,8 @@ COMPOSE ?= docker compose
 # `make up-d` once first to seed the demo data (the postgres volume is shared).
 COMPOSE_KEYCLOAK = $(COMPOSE) -f docker-compose.yml -f docker-compose.keycloak.yml -f docker-compose.keycloak-sso.yml
 
-# The Iceberg overlay adds a MinIO warehouse and the Iceberg REST catalog app on
-# http://localhost:8181 (see docker-compose.iceberg.yml).
+# The Iceberg overlay adds a SeaweedFS S3 warehouse and the Iceberg REST catalog
+# app on http://localhost:8181 (see docker-compose.iceberg.yml).
 COMPOSE_ICEBERG = $(COMPOSE) -f docker-compose.yml -f docker-compose.iceberg.yml
 
 .PHONY: run up up-d rebuild down logs ps info run-keycloak up-keycloak-d down-keycloak run-iceberg up-iceberg-d down-iceberg
@@ -32,7 +32,7 @@ run-keycloak:
 up-keycloak-d:
 	$(COMPOSE_KEYCLOAK) up --build -d
 
-## run-iceberg: the stack plus MinIO and the Iceberg REST catalog on :8181 (foreground)
+## run-iceberg: the stack plus SeaweedFS and the Iceberg REST catalog on :8181 (foreground)
 run-iceberg:
 	$(COMPOSE_ICEBERG) up --build
 

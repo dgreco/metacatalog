@@ -562,8 +562,9 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   that to enable browser SSO for the UI: issuer `http://localhost:8081` works from both sides
   because the browser hits Keycloak's published port while a socat sidecar in the app container's
   network namespace forwards its `localhost:8081` to Keycloak. `docker-compose.iceberg.yml` is
-  another overlay (`make run-iceberg` / `up-iceberg-d`): it adds a MinIO warehouse (bucket
-  `iceberg-warehouse`, created by a one-shot `minio-init`) and the Iceberg REST catalog app on
+  another overlay (`make run-iceberg` / `up-iceberg-d`): it adds a SeaweedFS S3 warehouse
+  (S3 API on `:8333`, identities in `docker/seaweedfs/s3.json`, bucket `iceberg-warehouse`
+  created by a one-shot `seaweedfs-init` via `weed shell`) and the Iceberg REST catalog app on
   `:8181`, sharing the base stack's postgres. The bulk-loader is disabled there (profile trick,
   like the Keycloak overlay) — the Iceberg stack needs no demo model; run the base file once
   first to seed it.
@@ -598,8 +599,8 @@ namespace in the catalog graph.
 via a `FileIO` (`application.config.iceberg.{warehouse,io-impl,io-properties}`); the entity holds
 the metadata-location pointer. The built-in `LocalFileIO` (nio-based) handles `file://` without
 Hadoop — iceberg-core's only local option is HadoopFileIO plus ~50 MB of hadoop-common — and
-`S3FileIO` (iceberg-aws) serves S3/MinIO; the `docker` profile targets the MinIO added by the
-`docker-compose.iceberg.yml` overlay (`make run-iceberg`).
+`S3FileIO` (iceberg-aws) serves any S3-compatible store; the `docker` profile targets the
+SeaweedFS added by the `docker-compose.iceberg.yml` overlay (`make run-iceberg`).
 
 **Concurrency.** Entities have no name column and no uniqueness on jsonb values, so
 `IcebergRegistryService` (the only class touching core services) enforces both itself, inside one

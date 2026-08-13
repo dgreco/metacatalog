@@ -66,8 +66,8 @@ application:
       warehouse: s3://iceberg-warehouse
       io-impl: org.apache.iceberg.aws.s3.S3FileIO
       io-properties:
-        s3.endpoint: http://minio:9000
+        s3.endpoint: http://seaweedfs:8333
         s3.path-style-access: "true"
-        s3.access-key-id: minioadmin
-        s3.secret-access-key: minioadmin
+        s3.access-key-id: seaweedadmin
+        s3.secret-access-key: seaweedadmin
         client.region: us-east-1

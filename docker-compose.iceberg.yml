@@ -4,41 +4,44 @@
 #   docker compose -f docker-compose.yml -f docker-compose.iceberg.yml up --build
 #   (or: make run-iceberg / make up-iceberg-d)
 #
-# Adds a MinIO warehouse (console on :9001, credentials minioadmin/minioadmin), a
-# one-shot bucket initializer, and the metacatalog-iceberg-catalog application on
-# :8181, sharing the base stack's postgres. Point Spark / Trino / PyIceberg at
+# Adds a SeaweedFS S3 warehouse (S3 API on :8333, credentials
+# seaweedadmin/seaweedadmin from docker/seaweedfs/s3.json), a one-shot bucket
+# initializer, and the metacatalog-iceberg-catalog application on :8181, sharing
+# the base stack's postgres. Point Spark / Trino / PyIceberg at
 # http://localhost:8181; data and metadata files land in s3://iceberg-warehouse.
 
 services:
-  minio:
-    image: minio/minio:latest
-    container_name: metacatalog-minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: metacatalog-seaweedfs
+    # One process for the whole stack (master + volume + filer + S3 gateway) —
+    # plenty for a single-node warehouse.
+    command: server -dir=/data -master.volumeSizeLimitMB=1024 -filer -s3 -s3.config=/etc/seaweedfs/s3.json
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "8333:8333"
     volumes:
-      - minio-data:/data
+      - seaweedfs-data:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # The filer answers once master + volume + filer are all up; the S3 gateway
+      # sits directly on the filer, so this is the readiness signal that matters.
+      # SeaweedFS binds to the container IP, not localhost — probe via hostname -i.
+      test: ["CMD-SHELL", "wget -qO- http://$(hostname -i):8888/ >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 10s
 
   # One-shot: create the Iceberg warehouse bucket (idempotent across restarts).
-  minio-init:
-    image: minio/mc:latest
-    container_name: metacatalog-minio-init
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
+    container_name: metacatalog-seaweedfs-init
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin &&
-      mc mb --ignore-existing local/iceberg-warehouse
+      echo 's3.bucket.create -name iceberg-warehouse' | weed shell -master=seaweedfs:9333 || true
       "
     restart: "no"
 
@@ -53,7 +56,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      seaweedfs:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -77,4 +80,4 @@ services:
     profiles: ["demo-data-only"]
 
 volumes:
-  minio-data:
+  seaweedfs-data:
