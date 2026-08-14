@@ -67,13 +67,22 @@ public class OntopRepositoryConfig {
               "${application.sparql.ontology:classpath:ontop/ontology.owl}")
           String ontologyFile) {
 
+    // Register the metacatalog SPARQL extension functions (mtfn:jsonPathExists) by substituting
+    // the FunctionSymbolFactory binding. Ontop resolves implementation classes from settings keyed
+    // by the fully-qualified interface name, and a user-supplied entry wins over the defaults.
+    var ontopProperties = new java.util.Properties();
+    ontopProperties.setProperty(
+        it.unibz.inf.ontop.model.term.functionsymbol.FunctionSymbolFactory.class.getCanonicalName(),
+        it.davidgreco.metacatalog.sparql.ontop.MetacatalogFunctionSymbolFactory.class.getName());
+
     OntopSQLOWLAPIConfiguration.Builder<?> builder =
         OntopSQLOWLAPIConfiguration.defaultBuilder()
             .nativeOntopMappingFile(resolveClasspath(mappingFile))
             .ontologyFile(resolveClasspath(ontologyFile))
             .jdbcUrl(dataSourceProperties.getUrl())
             .jdbcUser(dataSourceProperties.getUsername())
-            .jdbcPassword(dataSourceProperties.getPassword());
+            .jdbcPassword(dataSourceProperties.getPassword())
+            .properties(ontopProperties);
 
     OntopSQLOWLAPIConfiguration config = builder.build();
 

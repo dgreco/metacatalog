@@ -323,6 +323,39 @@ Two endpoints are mounted on the app port:
   JSON / XML / CSV / TSV for SELECT and ASK; Turtle / RDF-XML / N-Triples for
   CONSTRUCT and DESCRIBE.
 
+### SPARQL extension function: `mtfn:jsonPathExists`
+
+Entity `values` are exposed to SPARQL as JSON text (`mt:values`), which standard SPARQL can only
+regex over. The endpoint therefore registers a metacatalog extension function that pushes a
+**SQL/JSON path expression written in the query** down to PostgreSQL:
+
+```sparql
+PREFIX mt:   <http://metacatalog/>
+PREFIX mtfn: <http://metacatalog/fn#>
+
+SELECT ?table WHERE {
+  ?table mt:hasEntityType/mt:name "IcebergTable" ;
+         mt:hasPart ?schema .
+  ?schema mt:hasEntityType/mt:name "IcebergTableSchema" ;
+          mt:values ?v .
+  FILTER(mtfn:jsonPathExists(?v, '$.columns[*] ? (@.name == "vendor")'))
+}
+```
+
+`mtfn:jsonPathExists(jsonText, pathText)` unfolds in the generated SQL to
+`jsonb_path_exists(CAST(x AS jsonb), CAST(p AS jsonpath))` — the path is evaluated entirely by
+PostgreSQL (any jsonpath works: comparisons, `like_regex`, nested paths), never post-processed
+in memory. It is the SPARQL twin of the REST filter `GET /metacatalog/v1/entity?queryPath=...`,
+which feeds the same `jsonb_path_exists`.
+
+The registration substitutes Ontop's `FunctionSymbolFactory` binding
+(`MetacatalogFunctionSymbolFactory` in `metacatalog-sparql`, wired by `OntopRepositoryConfig`).
+That factory SPI is an Ontop-internal extension point — it is how Ontop ships its own `ofn:` and
+GeoSPARQL families — so it is the one place in the codebase coupled to Ontop internals; an Ontop
+upgrade should re-check it (`SparqlJsonPathFunctionIntegrationTest` asserts both the results and
+the literal `jsonb_path_exists` pushdown in the reformulated SQL, so a silent regression fails
+the build).
+
 ### Configuration
 
 The embedded endpoint is gated on `application.sparql.enabled` (default `true`)
