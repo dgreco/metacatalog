@@ -3,11 +3,14 @@ package it.davidgreco.metacatalog.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.Type;
 import it.davidgreco.metacatalog.entity.TypeLinearization;
+import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
@@ -19,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,6 +45,8 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
   private final EntityRepository entityRepository;
 
   private final MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository;
+
+  private final EntityRelationshipRepository entityRelationshipRepository;
 
   private final JsonUtils jsonUtils;
 
@@ -154,6 +160,9 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               .orElseThrow(() -> new NotFoundException(ENTITYTYPE + name + " not found"));
       checkIsMutable(live, "versioned");
 
+      var carriedAggregate = ServiceUtils.implementsTrait(live, BuiltInTraits.AGGREGATE);
+      var carriedElement = ServiceUtils.implementsTrait(live, BuiltInTraits.AGGREGATE_ELEMENT);
+
       var existingCurrentSnapshot =
           entityTypeVersionRepository.findByVersionGroupIdAndVersion(
               live.getVersionGroupId(), live.getVersion());
@@ -181,6 +190,11 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
       }
       live.setDerivedSchema(computeDerivedSchema(live));
       checkTargetMappingsAgainstNewSchema(live);
+      if (carriedAggregate != ServiceUtils.implementsTrait(live, BuiltInTraits.AGGREGATE)
+          || carriedElement
+              != ServiceUtils.implementsTrait(live, BuiltInTraits.AGGREGATE_ELEMENT)) {
+        checkAggregateContainmentsStillHold(live);
+      }
       live.setVersion(live.getVersion() + 1);
       var saved = entityTypeRepository.save(live);
       var latestSnapshot =
@@ -191,6 +205,48 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
       return saved;
     } catch (DataIntegrityViolationException e) {
       throw ServiceError.forDataIntegrity(e);
+    }
+  }
+
+  /**
+   * Refuses a version whose trait-set or father change alters the type's built-in carriage in a way
+   * that leaves an existing {@code HAS_PART} entity link violating the aggregate-model rules — the
+   * same principle as {@link #checkTargetMappingsAgainstNewSchema}: turn a silent, deferred
+   * breakage into an immediate refusal while the link can still be removed first.
+   *
+   * <p>Carriage flows down the type inheritance chain, so the links re-checked are those touching
+   * an entity of this type or of a descendant. A pre-existing violation elsewhere never blocks an
+   * unrelated version.
+   *
+   * @param live the live entity type, already mutated to the candidate new version's state
+   * @throws ServiceError if an existing link would violate the rules under the new carriage
+   */
+  private void checkAggregateContainmentsStillHold(EntityType live) {
+    var affectedTypeNames =
+        entityTypeRepository.findAll().stream()
+            .filter(
+                type ->
+                    CommonTypeService.loadInheritanceChain(type).stream()
+                        .map(EntityType::getName)
+                        .anyMatch(live.getName()::equals))
+            .map(EntityType::getName)
+            .collect(Collectors.toSet());
+    try {
+      entityRelationshipRepository.findByRelationType(RelationType.HAS_PART).stream()
+          .filter(
+              rel ->
+                  affectedTypeNames.contains(rel.getSource().getEntityType().getName())
+                      || affectedTypeNames.contains(rel.getTarget().getEntityType().getName()))
+          .forEach(
+              rel ->
+                  ServiceUtils.checkAggregateEntityContainment(rel.getSource(), rel.getTarget()));
+    } catch (ServiceError e) {
+      throw new ServiceError(
+          "Versioning EntityType "
+              + live.getName()
+              + " would leave an existing containment violating the aggregate model: "
+              + e.getMessage()
+              + " Remove or update the link first.");
     }
   }
 

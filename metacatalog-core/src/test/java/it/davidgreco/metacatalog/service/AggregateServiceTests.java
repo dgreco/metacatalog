@@ -144,10 +144,11 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
   }
 
   /**
-   * The trait model may declare a self-referential composition (a folder contains folders), but at
-   * the instance level containment must stay acyclic: {@code AggregateService.read} recurses along
-   * {@code HAS_PART} with no visited set, so a loop — including the degenerate self-link — would
-   * never terminate. Link creation is where that is refused.
+   * The type model may declare a self-referential composition (a folder contains folders — the type
+   * carries both built-ins, its container role via one trait and its element role via another), but
+   * at the instance level containment must stay acyclic: {@code AggregateService.read} recurses
+   * along {@code HAS_PART} with no visited set, so a loop — including the degenerate self-link —
+   * would never terminate. Link creation is where that is refused.
    */
   @Test
   void testContainmentCannotFormALoop() {
@@ -156,14 +157,26 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
-    traitService.create("LoopFolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
-    traitService.link("LoopFolderTrait", RelationType.HAS_PART, "LoopFolderTrait");
+    traitService.create(
+        "LoopFolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
+    traitService.create(
+        "LoopFolderContainerTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.link("LoopFolderContainerTrait", RelationType.HAS_PART, "LoopFolderTrait");
+    traitService.create("LoopRootTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.link("LoopRootTrait", RelationType.HAS_PART, "LoopFolderTrait");
     entityTypeService.create(
-        "LoopFolderType", List.of("LoopFolderTrait"), Optional.empty(), EMPTY_SCHEMA);
+        "LoopFolderType",
+        List.of("LoopFolderContainerTrait", "LoopFolderTrait"),
+        Optional.empty(),
+        EMPTY_SCHEMA);
+    entityTypeService.create(
+        "LoopRootType", List.of("LoopRootTrait"), Optional.empty(), EMPTY_SCHEMA);
 
+    var root = entityService.create("LoopRootType", "{}");
     var a = entityService.create("LoopFolderType", "{}");
     var b = entityService.create("LoopFolderType", "{}");
     var c = entityService.create("LoopFolderType", "{}");
+    entityService.link(root.getId(), RelationType.HAS_PART, a.getId());
     entityService.link(a.getId(), RelationType.HAS_PART, b.getId());
     entityService.link(b.getId(), RelationType.HAS_PART, c.getId());
 
@@ -178,8 +191,9 @@ class AggregateServiceTests extends CommonServiceTestingSupport {
       Assertions.assertTrue(error.getMessage().contains("Loops"), error.getMessage());
     }
 
-    // The chain stays readable as an aggregate: a contains b contains c, and the walk ends.
-    var read = aggregateService.read(a.getId(), false);
-    Assertions.assertEquals(a.getId(), read.entity().getId());
+    // The chain stays readable as an aggregate: the root contains a contains b contains c, and
+    // the walk ends.
+    var read = aggregateService.read(root.getId(), false);
+    Assertions.assertEquals(root.getId(), read.entity().getId());
   }
 }

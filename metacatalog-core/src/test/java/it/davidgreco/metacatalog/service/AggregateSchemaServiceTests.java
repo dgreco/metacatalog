@@ -50,8 +50,10 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     traitService.create(
         "ResourceTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
 
+    // Only the Aggregate-carrying side may declare parts; the intermediate composes through the
+    // Aggregate trait its type mixes in below (the built-in Aggregate HAS_PART AggregateElement
+    // sanction), not through its element trait — an element-only trait cannot have parts.
     traitService.link("ProductTrait", HAS_PART, "ComponentTrait");
-    traitService.link("ComponentTrait", HAS_PART, "ResourceTrait");
 
     entityTypeService.create(
         "ProductType", List.of("ProductTrait", "Named"), Optional.empty(), EMPTY_SCHEMA);
@@ -92,16 +94,17 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
 
     // Carrying Aggregate, the root may contain any AggregateElement carrier (the built-in
     // Aggregate HAS_PART AggregateElement sanction), so both other types are offered as parts.
-    var rootPartRefs = schema.get("properties").get("parts").get("items").get("anyOf");
-    Assertions.assertEquals(2, rootPartRefs.size());
-    Assertions.assertEquals("#/$defs/ComponentType", rootPartRefs.get(0).get("$ref").asText());
-    Assertions.assertEquals("#/$defs/ResourceType", rootPartRefs.get(1).get("$ref").asText());
+    // The database is shared across the class's tests, so other element carriers may be offered
+    // too — membership, not the exact set, is what this pins.
+    var rootPartRefs = partRefs(schema);
+    Assertions.assertTrue(rootPartRefs.contains("#/$defs/ComponentType"), rootPartRefs.toString());
+    Assertions.assertTrue(rootPartRefs.contains("#/$defs/ResourceType"), rootPartRefs.toString());
     // The intermediate also carries Aggregate, so it composes the same part set.
-    var componentPartRefs =
-        defs.get("ComponentType").get("properties").get("parts").get("items").get("anyOf");
-    Assertions.assertEquals(2, componentPartRefs.size());
-    Assertions.assertEquals("#/$defs/ComponentType", componentPartRefs.get(0).get("$ref").asText());
-    Assertions.assertEquals("#/$defs/ResourceType", componentPartRefs.get(1).get("$ref").asText());
+    var componentPartRefs = partRefs(defs.get("ComponentType"));
+    Assertions.assertTrue(
+        componentPartRefs.contains("#/$defs/ComponentType"), componentPartRefs.toString());
+    Assertions.assertTrue(
+        componentPartRefs.contains("#/$defs/ResourceType"), componentPartRefs.toString());
 
     // A leaf type composes nothing, so it carries no 'parts'.
     Assertions.assertFalse(defs.get("ResourceType").get("properties").has("parts"));
@@ -121,8 +124,10 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
 
   /**
    * A self-referential composition ({@code Folder} has parts {@code Folder}) must still yield a
-   * finite schema, and the type must still be reported as a root: it carries {@code Aggregate} and
-   * not {@code AggregateElement}, and nesting instances of its own kind does not change that.
+   * finite schema. Under the aggregate-model rules a self-composing type carries both built-ins —
+   * as a part it must carry {@code AggregateElement}, and to have parts it must carry {@code
+   * Aggregate} — so it is an intermediate, not a root, and the aggregate is rooted by a separate
+   * type above it ({@code Drive}).
    */
   @Test
   void selfReferentialCompositionStaysFiniteAndRoots() {
@@ -130,21 +135,34 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var schemaService = getApplicationContext().getBean(AggregateSchemaService.class);
 
-    traitService.create("FolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
-    traitService.link("FolderTrait", HAS_PART, "FolderTrait");
-    entityTypeService.create("FolderType", List.of("FolderTrait"), Optional.empty(), EMPTY_SCHEMA);
+    traitService.create("DriveTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.create("FolderTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
+    // A single trait cannot carry both built-ins (single inheritance), so the container role is a
+    // second trait and the type mixes both in.
+    traitService.create(
+        "FolderContainerTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Aggregate"));
+    traitService.link("DriveTrait", HAS_PART, "FolderTrait");
+    traitService.link("FolderContainerTrait", HAS_PART, "FolderTrait");
+    entityTypeService.create("DriveType", List.of("DriveTrait"), Optional.empty(), EMPTY_SCHEMA);
+    entityTypeService.create(
+        "FolderType",
+        List.of("FolderContainerTrait", "FolderTrait"),
+        Optional.empty(),
+        EMPTY_SCHEMA);
 
-    Assertions.assertTrue(
-        schemaService.aggregateRootTypes().stream()
-            .map(EntityType::getName)
-            .anyMatch("FolderType"::equals));
+    var roots = schemaService.aggregateRootTypes().stream().map(EntityType::getName).toList();
+    Assertions.assertTrue(roots.contains("DriveType"), roots.toString());
+    // Carrying both built-ins, the self-composing type is an intermediate, never a root.
+    Assertions.assertFalse(roots.contains("FolderType"), roots.toString());
 
-    var schema = schemaService.aggregateSchema("FolderType");
+    var schema = schemaService.aggregateSchema("DriveType");
     // The database is shared across the class's tests, so other AggregateElement-carrying types
     // may be offered as parts too (the built-in Aggregate HAS_PART AggregateElement sanction);
     // what matters here is that the self-reference is expressed as a $ref and stays finite.
     Assertions.assertTrue(partRefs(schema).contains("#/$defs/FolderType"));
     Assertions.assertTrue(schema.get("$defs").has("FolderType"));
+    Assertions.assertTrue(
+        partRefs(schema.get("$defs").get("FolderType")).contains("#/$defs/FolderType"));
   }
 
   /** The {@code $ref}s a node's {@code parts} may contain, whether one or an {@code anyOf}. */

@@ -399,6 +399,16 @@ public class EntityServiceImpl implements EntityService {
             .findById(targetId)
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
 
+    // A sanction is existential — a relationship between two neutral traits can sanction a link
+    // whose types carry the built-ins through other mixins — so containment must also satisfy the
+    // aggregate-model rules against the types' actual carriage, in whichever direction it is
+    // expressed.
+    if (relType == RelationType.HAS_PART || relType == RelationType.IS_PART_OF) {
+      var whole = relType == RelationType.HAS_PART ? source : target;
+      var part = relType == RelationType.HAS_PART ? target : source;
+      ServiceUtils.checkAggregateEntityContainment(whole, part);
+    }
+
     checkRelationshipExistenceAndSave(sourceId, relType, targetId, source, target);
     if (relType.hasInverse()) {
       checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);

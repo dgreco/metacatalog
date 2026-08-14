@@ -26,6 +26,14 @@ public interface TraitRelationshipRepository extends JpaRepository<TraitRelation
   List<TraitRelationship> findBySourceAndRelationType(Trait source, RelationType relType);
 
   /**
+   * Finds all relationships with the specified relationship type.
+   *
+   * @param relType the relationship type
+   * @return list of matching relationships
+   */
+  List<TraitRelationship> findByRelationType(RelationType relType);
+
+  /**
    * Finds a specific relationship between two traits with the given type.
    *
    * @param source the source trait

@@ -37,6 +37,83 @@ public final class ServiceUtils {
   }
 
   /**
+   * Checks if a trait carries another trait: the trait itself or any ancestor of its father chain.
+   *
+   * @param trait the trait to check
+   * @param traitName the name of the trait to look for
+   * @return true if the trait is or inherits from the named trait, false otherwise
+   */
+  public static boolean carriesTrait(Trait trait, String traitName) {
+    return loadInheritanceChain(trait).stream().map(Trait::getName).anyMatch(traitName::equals);
+  }
+
+  /**
+   * Enforces the aggregate-model containment rules on a trait-level {@code HAS_PART}: a trait
+   * carrying {@code Aggregate} may only declare parts carrying {@code AggregateElement}, and a
+   * trait carrying only {@code AggregateElement} may not declare parts at all. A trait carrying
+   * neither stays free — containment outside the aggregate model (an Iceberg namespace containing
+   * tables) is not the model's business.
+   *
+   * <p>A single trait can never carry both built-ins (single inheritance, both father-less), so
+   * "carries both" only exists at the type level; the entity-level twin below handles it.
+   *
+   * @param whole the containing side of the relationship
+   * @param part the contained side of the relationship
+   */
+  public static void checkAggregateTraitContainment(Trait whole, Trait part) {
+    if (carriesTrait(whole, BuiltInTraits.AGGREGATE)) {
+      if (!carriesTrait(part, BuiltInTraits.AGGREGATE_ELEMENT))
+        throw new ServiceError(
+            "Trait "
+                + whole.getName()
+                + " carries Aggregate; a HAS_PART part must carry AggregateElement — trait "
+                + part.getName()
+                + " does not.");
+    } else if (carriesTrait(whole, BuiltInTraits.AGGREGATE_ELEMENT)) {
+      throw new ServiceError(
+          "Trait "
+              + whole.getName()
+              + " carries only AggregateElement; an aggregate element cannot have parts.");
+    }
+  }
+
+  /**
+   * The entity-level twin of {@link #checkAggregateTraitContainment}: the same rules, tested
+   * against the carriage of the two entities' <em>types</em>. Necessary even with the trait-level
+   * check in place, because a link's sanction is existential — a relationship between two neutral
+   * traits can sanction a link whose types carry the built-ins through other mixins.
+   *
+   * <p>A type carrying both built-ins is an intermediate node and is handled by the first branch:
+   * its Aggregate role is what grants it parts, and those parts must be elements.
+   *
+   * @param whole the containing entity
+   * @param part the contained entity
+   */
+  public static void checkAggregateEntityContainment(Entity whole, Entity part) {
+    var wholeType = whole.getEntityType();
+    if (implementsTrait(wholeType, BuiltInTraits.AGGREGATE)) {
+      if (!implementsTrait(part.getEntityType(), BuiltInTraits.AGGREGATE_ELEMENT))
+        throw new ServiceError(
+            ENTITY_WITH_ID
+                + whole.getId()
+                + " is an aggregate (type "
+                + wholeType.getName()
+                + " carries Aggregate); a HAS_PART part must carry AggregateElement — type "
+                + part.getEntityType().getName()
+                + " of entity with id "
+                + part.getId()
+                + " does not.");
+    } else if (implementsTrait(wholeType, BuiltInTraits.AGGREGATE_ELEMENT)) {
+      throw new ServiceError(
+          ENTITY_WITH_ID
+              + whole.getId()
+              + " (type "
+              + wholeType.getName()
+              + ") carries only AggregateElement; an aggregate element cannot have parts.");
+    }
+  }
+
+  /**
    * Every trait an entity type carries: the traits associated with each type of its inheritance
    * chain, plus each of those traits' own ancestors.
    *

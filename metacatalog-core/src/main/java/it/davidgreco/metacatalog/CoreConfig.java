@@ -173,6 +173,9 @@ public class CoreConfig {
    * @param entityRepository the entity repository
    * @param mappingEntityTypeRelationshipRepository the mapping relationship repository, used to
    *     refuse a new version that would break a mapping targeting the type
+   * @param entityRelationshipRepository the entity relationship repository, used to refuse a new
+   *     version whose carriage change would leave an existing containment violating the
+   *     aggregate-model rules
    * @return the entity type service
    */
   // @Primary for the same reason as traitService: immutableEntityTypeWriter re-exposes it.
@@ -184,6 +187,7 @@ public class CoreConfig {
       EntityTypeVersionRepository entityTypeVersionRepository,
       EntityRepository entityRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
       JsonUtils jsonUtils) {
     return new EntityTypeServiceImpl(
         entityTypeRepository,
@@ -191,6 +195,7 @@ public class CoreConfig {
         entityTypeVersionRepository,
         entityRepository,
         mappingEntityTypeRelationshipRepository,
+        entityRelationshipRepository,
         jsonUtils);
   }
 

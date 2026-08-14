@@ -4,6 +4,7 @@ import static it.davidgreco.metacatalog.common.JsonUtils.EMPTY_SCHEMA;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
@@ -130,6 +131,9 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
               .orElseThrow(() -> new NotFoundException(TRAIT + name + NOT_FOUND));
       checkIsMutable(live, "versioned");
 
+      var carriedAggregate = ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE);
+      var carriedElement = ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE_ELEMENT);
+
       var snapshot = new TraitVersion();
       snapshot.setVersionGroupId(live.getVersionGroupId());
       snapshot.setVersion(live.getVersion());
@@ -156,12 +160,57 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
         live.setFather(null);
       }
       live.setDerivedSchema(computeDerivedSchema(live));
+      if (carriedAggregate != ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE)
+          || carriedElement != ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE_ELEMENT)) {
+        checkAggregateContainmentsStillHold(live);
+      }
       live.setVersion(live.getVersion() + 1);
       var saved = traitRepository.save(live);
       log.info("Created new version of Trait: {}", name);
       return saved;
     } catch (DataIntegrityViolationException e) {
       throw ServiceError.forDataIntegrity(e);
+    }
+  }
+
+  /**
+   * Refuses a version whose father change alters the trait's built-in carriage in a way that leaves
+   * an existing containment violating the aggregate-model rules — mirroring the mapping
+   * re-validation {@code EntityTypeServiceImpl.createVersion} performs. Without it the violation
+   * would exist silently: un-recreatable through {@code link}, and surfacing only when an aggregate
+   * is next read or provisioned.
+   *
+   * <p>Only relationships and links whose carriage actually flows through this trait are
+   * re-checked, so a pre-existing violation elsewhere never blocks an unrelated version.
+   *
+   * @param live the live trait, already mutated to the candidate new version's state
+   * @throws ServiceError if an existing containment would violate the rules under the new carriage
+   */
+  private void checkAggregateContainmentsStillHold(Trait live) {
+    var name = live.getName();
+    try {
+      traitRelationshipRepository.findByRelationType(RelationType.HAS_PART).stream()
+          .filter(
+              rel ->
+                  ServiceUtils.carriesTrait(rel.getSource(), name)
+                      || ServiceUtils.carriesTrait(rel.getTarget(), name))
+          .forEach(
+              rel -> ServiceUtils.checkAggregateTraitContainment(rel.getSource(), rel.getTarget()));
+      entityRelationshipRepository.findByRelationType(RelationType.HAS_PART).stream()
+          .filter(
+              rel ->
+                  ServiceUtils.implementsTrait(rel.getSource().getEntityType(), name)
+                      || ServiceUtils.implementsTrait(rel.getTarget().getEntityType(), name))
+          .forEach(
+              rel ->
+                  ServiceUtils.checkAggregateEntityContainment(rel.getSource(), rel.getTarget()));
+    } catch (ServiceError e) {
+      throw new ServiceError(
+          "Versioning Trait "
+              + name
+              + " would leave an existing containment violating the aggregate model: "
+              + e.getMessage()
+              + " Remove or update the relationship first.");
     }
   }
 
@@ -407,6 +456,9 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
    * <p>Linking to an immutable trait is allowed: the flag freezes the trait row, and creating a
    * relationship does not write to it.
    *
+   * <p>A {@code HAS_PART} / {@code IS_PART_OF} link is additionally subject to the aggregate-model
+   * containment rules — see {@link ServiceUtils#checkAggregateTraitContainment}.
+   *
    * @param sourceTraitName the name of the first Trait
    * @param relType the relation type to use for the link
    * @param targetTraitName the name of the second Trait
@@ -439,6 +491,15 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
           traitRepository
               .findByName(targetTraitName)
               .orElseThrow(() -> new NotFoundException(TRAIT + targetTraitName + NOT_FOUND));
+      // Containment inside the aggregate model is constrained by the built-in traits: an
+      // Aggregate carrier may only have AggregateElement-carrying parts, and an element-only
+      // carrier may have none. Normalized to (whole, part) so the IS_PART_OF entry point is
+      // subject to the same rule as HAS_PART.
+      if (relType == RelationType.HAS_PART || relType == RelationType.IS_PART_OF) {
+        var whole = relType == RelationType.HAS_PART ? sourceTrait : targetTrait;
+        var part = relType == RelationType.HAS_PART ? targetTrait : sourceTrait;
+        ServiceUtils.checkAggregateTraitContainment(whole, part);
+      }
       var directRel = new TraitRelationship();
       directRel.setSource(sourceTrait);
       directRel.setTarget(targetTrait);

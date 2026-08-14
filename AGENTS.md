@@ -73,6 +73,42 @@ One consequence for tests: the built-ins no longer come back at fixed UUIDs afte
 the Caffeine caches and re-runs the installer in `@BeforeEach` — the Spring context is cached across
 test classes, so without that a cache hit would hand a later test a trait whose id was deleted.
 
+#### Aggregate containment rules
+
+Carrying `Aggregate` or `AggregateElement` (directly or through inheritance) constrains what a
+trait or type may contain, and the constraints are **enforced**, not just documented — a violating
+containment is refused wherever a `HAS_PART` can come into existence or change meaning:
+
+1. A carrier of `Aggregate` may only have `HAS_PART` parts carrying `AggregateElement`.
+2. A carrier of *only* `AggregateElement` may have no parts at all — leaves are leaves. (An
+   intermediate node carries both; its Aggregate role is what grants it parts, so rule 1 applies.)
+3. A carrier of **neither** stays free: containment outside the aggregate model is not the model's
+   business, which is what lets an Iceberg namespace contain an Aggregate-only table type without
+   the table ceasing to be a root.
+
+The corollary of 1+2 is that an Aggregate-only carrier can never be a *part* inside the model. A
+single trait can never carry both built-ins (single inheritance, both father-less), so a
+self-composing type (a folder containing folders) carries its container role and its element role
+through two different traits — making it an intermediate, with a separate root type above it.
+
+Enforcement points (`ServiceUtils.checkAggregateTraitContainment` / `checkAggregateEntityContainment`,
+always normalized to (whole, part) so `IS_PART_OF` is judged identically):
+
+- `TraitServiceImpl.doLink` — every trait-relationship route, including `linkImmutable`: a startup
+  contributor declaring a violating model aborts installation.
+- `EntityServiceImpl.link` — necessary even with the trait-level check, because a link's sanction
+  is existential: a relationship between two *neutral* traits can sanction a link whose types
+  carry the built-ins through other mixins.
+- `TraitServiceImpl.createVersion` / `EntityTypeServiceImpl.createVersion` — the only ways carriage
+  can change after creation (a trait version can swap the father, a type version the trait set).
+  A version whose carriage change would leave an existing containment violating the rules is
+  refused naming it, mirroring the mapping re-validation; only relationships whose carriage flows
+  through the versioned row are re-checked, so pre-existing violations elsewhere never block an
+  unrelated version.
+
+`AggregateModelRuleTests` (core) pins all of this, including the allowances: the neutral-source
+freedom, `DEPENDS_ON` between any carriers, and versions that leave carriage untouched.
+
 ### Immutability
 
 `Trait`, `EntityType` and `TraitRelationship` carry an `immutable` boolean column (default
@@ -388,6 +424,10 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   asynchronously, as FAILED lifecycle events. The check is exact (each candidate mapping's path is
   re-resolved and only a traversal that actually walks the link blocks the removal); delete or
   re-create the mapping first.
+- Containment creation: `POST /trait/link/...` and `POST /entity/link/...` refuse a `HAS_PART` /
+  `IS_PART_OF` that violates the [aggregate containment rules](#aggregate-containment-rules), and
+  the trait / entity-type version endpoints refuse a version whose carriage change would leave an
+  existing containment violating them.
 - Trait links: `DELETE /trait/link/...` refuses to remove a trait relationship that an existing
   entity link relies on. A link between two instances is only admitted because a trait relationship
   sanctions it (`ServiceUtils.checkRelIsLegit`), so removing the last one that does would leave the

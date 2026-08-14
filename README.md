@@ -817,17 +817,100 @@ provisioned — the answer depends on type *and* trait inheritance chains, so it
 server-side rather than derived from the `traits` on the `EntityType` DTO (which lists only the
 directly associated ones).
 
+### How the aggregate mechanism works
+
+The whole mechanism rests on two built-in traits, **`Aggregate`** and **`AggregateElement`**
+(installed immutable at startup by `BuiltInModelContributor` — see
+[Immutable model](#immutable-model)), and on one principle: composition is **not** declared
+between entity types directly — it is declared once between *traits*, and an entity type takes
+part in it by *carrying* those traits (mixing them in directly, or inheriting them through its
+father chain and the traits' own father chains). The built-in `Aggregate HAS_PART
+AggregateElement` relationship is the universal sanction: any type carrying `Aggregate` may
+contain any type carrying `AggregateElement`.
+
+Which of the two traits a type carries determines its **role** in an aggregate tree:
+
+| Carries | Role |
+| --- | --- |
+| `Aggregate` only | **Root** — starts an aggregate, is never a part inside the model |
+| `Aggregate` + `AggregateElement` | **Intermediate** — is a part and has parts of its own |
+| `AggregateElement` only | **Leaf** — is a part, can contain nothing |
+| neither | **Outside the model** — free containment, no aggregate semantics |
+
+Here is the Docker Compose demo model seen through that lens — traits inherit a role from a
+built-in (dashed arrows), entity types carry traits (solid arrows), and the one immutable
+`HAS_PART` between the built-ins sanctions every containment in the tree:
+
+```mermaid
+flowchart BT
+    subgraph builtin["Built-in traits (immutable)"]
+        AGG["Aggregate"]
+        ELEM["AggregateElement"]
+        AGG =="HAS_PART"==> ELEM
+        PROV["Provisionable"] -. inherits .-> AGG
+        RES["ProvisionableResource"] -. inherits .-> ELEM
+    end
+    subgraph types["Entity types and their roles"]
+        DPT["DataProductType — root"] --"carries"--> PROV
+        OPT["OutputPortType — intermediate"] --"carries"--> AGG
+        OPT --"carries"--> ELEM
+        S3T["S3FolderType — leaf"] --"carries"--> RES
+        ATT["AthenaTableType — leaf"] --"carries"--> RES
+    end
+```
+
+At the **instance** level an aggregate is then a tree of real `HAS_PART` links between
+entities, with `DEPENDS_ON` links expressing ordering between parts (the provisioning
+procedure walks them: a resource is created after what it depends on and destroyed before it).
+A type outside the model may still contain a root from the outside — an Iceberg namespace
+containing a table — without the root ceasing to be one:
+
+```mermaid
+flowchart TD
+    NS["namespace : IcebergNamespace<br/>(outside the model)"] --"HAS_PART<br/>(allowed: neutral container)"--> DP
+    DP["dp1 : DataProductType<br/>root"] --"HAS_PART"--> OP1["op1 : OutputPortType<br/>intermediate"]
+    DP --"HAS_PART"--> OP2["op2 : OutputPortType<br/>intermediate"]
+    OP1 --"HAS_PART"--> S3["folder : S3FolderType<br/>leaf"]
+    OP2 --"HAS_PART"--> AT["table : AthenaTableType<br/>leaf"]
+    AT -."DEPENDS_ON".-> S3
+```
+
+The roles are not just descriptive — the **containment rules** they imply are enforced wherever
+a `HAS_PART` (or its inverse `IS_PART_OF`) can come into existence or change meaning:
+
+1. A carrier of `Aggregate` may only have parts carrying `AggregateElement`.
+2. A carrier of *only* `AggregateElement` may have no parts at all — leaves are leaves.
+   (An intermediate carries both; its `Aggregate` role is what grants it parts, so rule 1
+   applies to them.)
+3. A carrier of **neither** trait is outside the model and stays free to contain anything —
+   which is exactly what keeps the namespace → table containment above legal.
+
+| whole \ part | `AggregateElement` carrier | `Aggregate` only | neither |
+| --- | :-: | :-: | :-: |
+| `Aggregate` carrier | ✅ | ❌ | ❌ |
+| `AggregateElement` only | ❌ | ❌ | ❌ |
+| neither | ✅ | ✅ | ✅ |
+
+A violating containment is refused with a `400` at every choke point: creating a trait
+relationship (including immutable ones declared by startup contributors — a violating module
+aborts startup), linking two entities (checked against the types' actual trait carriage, not
+just the sanctioning trait relationship), and versioning a trait or an entity type in a way
+that would change carriage and retroactively break an existing containment. Instance
+containment must also stay **acyclic**: closing a `HAS_PART` cycle — self-links included — is
+refused at link creation, so the tree walk of `GET /aggregate/{id}` always terminates.
+
+One consequence worth knowing when modeling recursion (a folder containing folders): a single
+trait can never carry both built-ins (traits have a single father, and both built-ins are
+father-less), so a self-composing *type* carries its container role and its element role
+through **two different traits** — making it an intermediate, with a separate root type above
+it.
+
 ### Aggregate root types
 
-Composition is **not** declared between entity types directly — it is declared once between
-*traits*, and an entity type takes part in it by mixing those traits in. This is the same rule
-that governs whether two entity instances may be linked at all. For example, the built-in
-`Aggregate` trait declares `HAS_PART` towards `AggregateElement` (installed at startup by
-`BuiltInModelContributor`, and immutable — see [Immutable model](#immutable-model)), so any type
-carrying `Aggregate` can contain any type carrying `AggregateElement`.
-
-An **aggregate root type** is a type that can start an aggregate: it has a `HAS_PART`
-relationship towards at least one other type, but is never itself a part of another type.
+An **aggregate root type** is a type that can start an aggregate: it carries `Aggregate` but
+not `AggregateElement`, and composes at least one part type. Whether some other type declares
+`HAS_PART` towards it is irrelevant — as shown above, a root may be contained from outside the
+model without ceasing to be a root.
 
 ```bash
 # Which types can start an aggregate?
