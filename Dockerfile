@@ -52,12 +52,42 @@ RUN --mount=type=cache,target=/root/.m2 \
     mvn -B -pl ${MODULE} -am -DskipTests -Djacoco.skip=true clean package \
     && cp ${MODULE}/target/*.jar /workspace/app.jar
 
-# --- Runtime stage: slim JRE running the packaged jar as a non-root user ---
+# --- AOT stage: extract the jar and produce an ahead-of-time cache (Project Leyden) ---
+# Must run on the SAME image as the runtime stage and at the SAME path (/app): the AOT
+# cache is only accepted by the exact JVM build and classpath it was trained with.
+# The jar is extracted first (jarmode=tools) because the cache cannot map classes out
+# of the nested-jar fat layout; the runtime stage inherits the extracted layout too.
+FROM eclipse-temurin:26-jre-alpine AS aot
+WORKDIR /app
+COPY --from=build /workspace/app.jar /tmp/app.jar
+RUN java -Djarmode=tools -jar /tmp/app.jar extract --destination /app
+# Training run: boot to context refresh with everything database-touching disabled
+# (Flyway, Ontop, the mapping scheduler, Hibernate's JDBC metadata probe), then exit —
+# spring.context.exit=onRefresh returns before the ApplicationRunners, so the immutable
+# model installer never runs. The JVM writes app.aot on the way out. The properties are
+# training-only overrides; the runtime container starts with its normal configuration,
+# and a cache the JVM deems stale is ignored with a warning, never an error (AOTMode=auto).
+# AOTClassLinking is disabled in the assembly phase: with it on, the production JVM dies at
+# startup ("Unexpected exception when loading aot-linked classes" — an InternalError from
+# AppClassLoader.<clinit>) on both the alpine and glibc Temurin 26 builds. Without it the
+# cache still carries the class metadata (CDS) layer, worth ~30% of startup; re-enable when
+# a JDK update fixes the crash.
+RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
+    java -XX:AOTCacheOutput=app.aot \
+    -Dspring.context.exit=onRefresh \
+    -Dspring.flyway.enabled=false \
+    -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \
+    -Dspring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect \
+    -Dapplication.sparql.enabled=false \
+    -Dapplication.config.automaticEntitiesMapping=false \
+    -jar app.jar
+
+# --- Runtime stage: slim JRE running the extracted jar as a non-root user ---
 FROM eclipse-temurin:26-jre-alpine
 RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app
-COPY --from=build /workspace/app.jar app.jar
+COPY --from=aot /app/ ./
 # 8080 = metacatalog-application, 8181 = metacatalog-iceberg-catalog
 EXPOSE 8080 8181
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]
