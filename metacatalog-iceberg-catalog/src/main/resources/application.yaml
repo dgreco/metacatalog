@@ -44,7 +44,11 @@ application:
       commit-lock-retries: 5
       commit-lock-backoff: 100ms
       # Extra properties passed through to the FileIO (e.g. s3.endpoint, s3.access-key-id).
-      io-properties: {}
+      # Omitted by default: YAML renders an empty inline map ({}) as an empty string, which
+      # fails to bind to the map (same gotcha as provisioning.tasks). The properties record
+      # defaults a missing map to Map.of().
+      # io-properties:
+      #   s3.endpoint: http://localhost:9000
 
 logging:
   level:
