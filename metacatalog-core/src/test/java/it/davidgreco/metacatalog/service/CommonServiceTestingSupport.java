@@ -4,16 +4,14 @@ import it.davidgreco.metacatalog.bootstrap.ImmutableModelInstaller;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-@EnableCaching
 @Getter
 @RequiredArgsConstructor
 class CommonServiceTestingSupport {
@@ -25,17 +23,34 @@ class CommonServiceTestingSupport {
   static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
 
   @BeforeAll
-  static void beforeAll() {
+  static void beforeAll() throws Exception {
     if (!postgres.isRunning()) {
       postgres.start();
     }
     // Reset schema/data before each test class (container stays up; only the DB is cleaned).
+    // The clean takes an ACCESS EXCLUSIVE lock on every table, and a previous class's cached
+    // Spring context is still alive: its scheduled mapping updater holds table locks from an
+    // outer transaction while waiting, in the JVM, on REQUIRES_NEW inner transactions — a wait
+    // PostgreSQL's deadlock detector cannot see, so an unbounded clean can hang behind it until
+    // the connection dies. A lock_timeout on the clean's session breaks the cycle instead:
+    // giving up releases the clean's own exclusive locks, the updater's inner transaction
+    // proceeds, its outer one commits, and the retry finds the tables free.
+    var url = postgres.getJdbcUrl();
+    var lockTimeoutUrl = url + (url.contains("?") ? "&" : "?") + "options=-c%20lock_timeout%3D5000";
     var flyway =
         Flyway.configure()
-            .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+            .dataSource(lockTimeoutUrl, postgres.getUsername(), postgres.getPassword())
             .cleanDisabled(false)
             .load();
-    flyway.clean();
+    for (var attempt = 1; ; attempt++) {
+      try {
+        flyway.clean();
+        break;
+      } catch (FlywayException e) {
+        if (attempt == 5) throw e;
+        Thread.sleep(500);
+      }
+    }
     flyway.migrate();
   }
 
@@ -43,18 +58,9 @@ class CommonServiceTestingSupport {
    * Restores what {@link #beforeAll} wiped, for a Spring context that outlives the wipe.
    *
    * <p>{@code flyway.clean()} empties the database, but the {@link ApplicationContext} is cached
-   * and shared across test classes, so two things survive the wipe and have to be dealt with here:
-   *
-   * <ul>
-   *   <li>The Caffeine caches behind {@code TraitRepository.findByName} and its entity-type
-   *       counterpart still hold rows that no longer exist. Left alone, a cache hit would hand a
-   *       later test a trait whose id has been deleted, and the insert into {@code type_traits}
-   *       would fail on the foreign key. This did not bite while the built-in traits were seeded by
-   *       Flyway at fixed UUIDs — the wipe-and-migrate put the very same ids back — but they are
-   *       created at runtime now, with fresh ids each time.
-   *   <li>The built-in traits themselves are gone, and {@link ImmutableModelInstaller} is an {@code
-   *       ApplicationRunner}: it ran once when the context was built and will not run again.
-   * </ul>
+   * and shared across test classes, so the built-in traits are gone and {@link
+   * ImmutableModelInstaller} is an {@code ApplicationRunner}: it ran once when the context was
+   * built and will not run again on its own.
    *
    * <p>Runs per test method rather than per class because it needs the injected context, which does
    * not exist yet in the static {@code @BeforeAll}. That is cheap: after the first call the
@@ -62,8 +68,6 @@ class CommonServiceTestingSupport {
    */
   @BeforeEach
   void reinstallBuiltInModel() {
-    var cacheManager = applicationContext.getBean(CacheManager.class);
-    cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
     applicationContext.getBean(ImmutableModelInstaller.class).run(null);
   }
 

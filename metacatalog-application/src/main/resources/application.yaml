@@ -32,7 +32,7 @@ management:
       exposure:
         # env, configprops, beans, loggers intentionally excluded: they leak DB passwords, basic-auth
         # hashes and other secrets. Enable them only behind an authenticated management port.
-        include: health, info, flyway, metrics, caches
+        include: health, info, flyway, metrics
   info:
     git:
       enabled: true
@@ -55,7 +55,6 @@ application:
     entityPathResolutionMaxAttempts: 3
     # taskScheduleCacheMaxSize: 100           # TaskManager schedule-result cache capacity
     # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
-    cacheExpireAfterWrite: 1h                 # Spring cache (Traits, EntityTypes) TTL
     provisioning:
       # Associates each provisioning task with the entity types it handles. A ProvisionableResource
       # type listed under no task has no registered factory, and provisioning it fails with

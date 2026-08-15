@@ -125,14 +125,8 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
 
     aggregateService.delete(ids.getFirst());
 
-    // Mimic an app restart followed by a read probe, which is what the compose bulk-loader does:
-    // clear the Spring caches (a restart empties them) and list entities of the root type. The
-    // list caches the EntityType via findByName — an instance detached from the probe's session.
-    // The reload below must still work: its create must not attach that detached instance to the
-    // new entity, or linking the parts walks a dead lazy proxy and dies mid-transaction.
-    var cacheManager =
-        getApplicationContext().getBean(org.springframework.cache.CacheManager.class);
-    cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
+    // Mimic the compose bulk-loader's read probe before reloading: list entities of the root type,
+    // then reload the same aggregate document. The reload must succeed after the delete above.
     entityService.list("DataProductType", "");
 
     try (var instances =

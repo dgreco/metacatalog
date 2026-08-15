@@ -1105,7 +1105,6 @@ Application configuration lives in `metacatalog-application/src/main/resources/a
 | `application.config.automaticEntitiesMapping` | `true` | Enable the scheduled mapping updater (see [Mappings](#mappings)) |
 | `application.config.updateMappedEntitiesSchedulingInterval` | `1s` | How often to drain pending lifecycle events |
 | `application.config.entityPathResolutionMaxAttempts` | `3` | Retries for entity-path resolution |
-| `application.config.cacheExpireAfterWrite` | `1h` | Spring cache (Traits, EntityTypes) TTL |
 | `application.config.taskScheduleCacheMaxSize` | `100` | `TaskManager` schedule-result cache capacity |
 | `application.config.taskScheduleCacheExpireAfterWrite` | `1h` | `TaskManager` schedule-result cache TTL |
 
@@ -1262,12 +1261,11 @@ dropped and recreated.
 
 ## Monitoring & Management
 
-Spring Boot Actuator endpoints are enabled for monitoring (exposed set: `health`, `info`, `flyway`, `metrics`, `caches` — `env`/`configprops`/`beans`/`loggers` are intentionally excluded because they leak DB passwords and auth hashes):
+Spring Boot Actuator endpoints are enabled for monitoring (exposed set: `health`, `info`, `flyway`, `metrics` — `env`/`configprops`/`beans`/`loggers` are intentionally excluded because they leak DB passwords and auth hashes):
 - `/actuator/health` - Health check
 - `/actuator/info` - Application info, including the running build's version, git commit and build time
 - `/actuator/metrics` - Metrics
 - `/actuator/flyway` - Flyway migration history
-- `/actuator/caches` - Cache inspection (backed by the Spring cache abstraction)
 
 ## Contributing
 

@@ -63,19 +63,9 @@ public class EntityServiceImpl implements EntityService {
   public Entity create(String typeName, String values) {
     log.info("Creating entity of type {}", typeName);
     try {
-      var cachedType =
-          entityTypeRepository
-              .findByName(typeName)
-              .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
-      // findByName is @Cacheable, so it can return an instance detached from the session that
-      // first loaded it (e.g. a read request right after a restart warms the cache, and this
-      // write request gets its entity). Re-resolve by id into the current session before
-      // attaching the type to the new entity: bulk creation links entities in the same
-      // transaction, and walking a detached type's lazy trait/father graph there dies with a
-      // LazyInitializationException.
       var entityType =
           entityTypeRepository
-              .findById(cachedType.getId())
+              .findByName(typeName)
               .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
 
       if (ServiceUtils.isMappingTargetEntityType(

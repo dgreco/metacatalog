@@ -3,7 +3,6 @@ package it.davidgreco.metacatalog;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
@@ -14,8 +13,6 @@ import it.davidgreco.metacatalog.service.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -27,7 +24,7 @@ import org.springframework.transaction.PlatformTransactionManager;
  * Spring configuration class for the metacatalog core module.
  *
  * <p>This configuration sets up all core services, repositories, and infrastructure components
- * including caching, task execution, and service beans.
+ * including task execution and service beans.
  *
  * <p>Note: JPA repositories are intentionally NOT injected into this {@code @Configuration} class
  * constructor. Doing so creates an initialization cycle ({@code entityManagerFactoryBuilder} →
@@ -37,37 +34,12 @@ import org.springframework.transaction.PlatformTransactionManager;
  * takes its advisory-lock / lifecycle-event dependencies the same way.
  */
 @Configuration
-@EnableCaching
 @Getter
 @RequiredArgsConstructor
 public class CoreConfig {
 
   /** Application configuration properties. */
   private final CoreConfigProperties applicationConfigurationProperties;
-
-  /**
-   * Creates the Caffeine cache configuration.
-   *
-   * @param properties application configuration properties
-   * @return the Caffeine cache builder
-   */
-  @Bean
-  public Caffeine<Object, Object> caffeineConfig(CoreConfigProperties properties) {
-    return Caffeine.newBuilder().expireAfterWrite(properties.cacheExpireAfterWrite());
-  }
-
-  /**
-   * Creates the cache manager using Caffeine as the cache provider.
-   *
-   * @param caffeine the Caffeine configuration
-   * @return the configured cache manager
-   */
-  @Bean
-  public CaffeineCacheManager cacheManager(Caffeine<Object, Object> caffeine) {
-    CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
-    caffeineCacheManager.setCaffeine(caffeine);
-    return caffeineCacheManager;
-  }
 
   @Bean
   @Primary

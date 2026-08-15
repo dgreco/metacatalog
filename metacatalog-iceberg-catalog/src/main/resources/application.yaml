@@ -33,7 +33,6 @@ application:
     automaticEntitiesMapping: false
     updateMappedEntitiesSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
-    cacheExpireAfterWrite: 1h
     iceberg:
       warehouse: file:///tmp/metacatalog-iceberg-warehouse
       # FileIO implementation: the built-in LocalFileIO handles file:// warehouses without

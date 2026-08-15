@@ -4,7 +4,6 @@ import static org.junit.Assert.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.benmanes.caffeine.cache.Cache;
 import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
@@ -13,7 +12,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.json.JsonAssert;
 
@@ -97,7 +95,6 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   void testInheritance() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
-    var cacheManager = getApplicationContext().getBean(CaffeineCacheManager.class);
     var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
     var inheritedSchema =
@@ -190,17 +187,6 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     var leafType1 =
         entityTypeService.create("LeafType1", List.of(), Optional.of("MiddleType"), leafSchema);
 
-    Cache<String, Object> cache =
-        (Cache<String, Object>) cacheManager.getCache("EntityTypes").getNativeCache();
-
-    Assertions.assertTrue(cache.asMap().keySet().contains(baseType.getName()));
-
-    Assertions.assertTrue(cache.asMap().keySet().contains(middleType.getName()));
-
-    Assertions.assertTrue(cache.asMap().keySet().contains(leafType.getName()));
-
-    Assertions.assertTrue(cache.asMap().keySet().contains(leafType1.getName()));
-
     Assertions.assertEquals(2, entityTypeService.countEntityTypeChildren("MiddleType"));
 
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
@@ -219,14 +205,6 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
     entityTypeService.delete("MiddleType");
 
     entityTypeService.delete("BaseType");
-
-    Assertions.assertFalse(cache.asMap().keySet().contains(baseType.getName()));
-
-    Assertions.assertFalse(cache.asMap().keySet().contains(middleType.getName()));
-
-    Assertions.assertFalse(cache.asMap().keySet().contains(leafType.getName()));
-
-    Assertions.assertFalse(cache.asMap().keySet().contains(leafType1.getName()));
   }
 
   /**

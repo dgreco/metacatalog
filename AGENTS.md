@@ -69,9 +69,9 @@ user-declared trait, instead of being hand-written in SQL that drifts from what 
 produce. (The old seed wrote only the `HAS_PART` row and no inverse — precisely that kind of drift.)
 
 One consequence for tests: the built-ins no longer come back at fixed UUIDs after a
-`flyway.clean()`. `CommonServiceTestingSupport` (core, and its twin in functions) therefore clears
-the Caffeine caches and re-runs the installer in `@BeforeEach` — the Spring context is cached across
-test classes, so without that a cache hit would hand a later test a trait whose id was deleted.
+`flyway.clean()`. `CommonServiceTestingSupport` (core, and its twins in the other modules)
+therefore re-runs the installer in `@BeforeEach` — the Spring context is cached across test
+classes, and the installer is an `ApplicationRunner` that would otherwise not run again.
 
 #### Aggregate containment rules
 

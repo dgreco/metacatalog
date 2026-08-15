@@ -4,16 +4,14 @@ import it.davidgreco.metacatalog.bootstrap.ImmutableModelInstaller;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-@EnableCaching
 @Getter
 @RequiredArgsConstructor
 public class CommonServiceTestingSupport {
@@ -25,29 +23,43 @@ public class CommonServiceTestingSupport {
   static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
 
   @BeforeAll
-  static void beforeAll() {
+  static void beforeAll() throws Exception {
     if (!postgres.isRunning()) {
       postgres.start();
     }
     // Reset schema/data before each test class (container stays up; only the DB is cleaned).
+    // The clean takes an ACCESS EXCLUSIVE lock on every table, and a previous class's cached
+    // Spring context is still alive: its scheduled mapping updater holds table locks from an
+    // outer transaction while waiting, in the JVM, on REQUIRES_NEW inner transactions — a wait
+    // PostgreSQL's deadlock detector cannot see, so an unbounded clean can hang behind it until
+    // the connection dies. A lock_timeout on the clean's session breaks the cycle instead:
+    // giving up releases the clean's own exclusive locks, the updater's inner transaction
+    // proceeds, its outer one commits, and the retry finds the tables free.
+    var url = postgres.getJdbcUrl();
+    var lockTimeoutUrl = url + (url.contains("?") ? "&" : "?") + "options=-c%20lock_timeout%3D5000";
     var flyway =
         Flyway.configure()
-            .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+            .dataSource(lockTimeoutUrl, postgres.getUsername(), postgres.getPassword())
             .cleanDisabled(false)
             .load();
-    flyway.clean();
+    for (var attempt = 1; ; attempt++) {
+      try {
+        flyway.clean();
+        break;
+      } catch (FlywayException e) {
+        if (attempt == 5) throw e;
+        Thread.sleep(500);
+      }
+    }
     flyway.migrate();
   }
 
   /**
-   * Restores what {@link #beforeAll} wiped — the built-in traits plus this module's Iceberg model —
-   * and clears the caches still holding their pre-wipe ids. Mirrors the support class of the same
-   * name in core and the functions modules.
+   * Restores what {@link #beforeAll} wiped — the built-in traits plus this module's Iceberg model.
+   * Mirrors the support class of the same name in core and the functions modules.
    */
   @BeforeEach
   void reinstallBuiltInModel() {
-    var cacheManager = applicationContext.getBean(CacheManager.class);
-    cacheManager.getCacheNames().forEach(name -> cacheManager.getCache(name).clear());
     applicationContext.getBean(ImmutableModelInstaller.class).run(null);
   }
 
