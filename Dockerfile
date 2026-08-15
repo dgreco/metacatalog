@@ -16,7 +16,7 @@
 #   * Requires BuildKit (default on Docker 23.0+ / buildx).
 
 # --- Build stage: compile the reactor and package the application jar ---
-FROM maven:3-eclipse-temurin-25 AS build
+FROM maven:3-eclipse-temurin-26 AS build
 
 # Which deployable module this image runs: metacatalog-application (default) or
 # metacatalog-iceberg-catalog. docker-compose.yml passes it per service.
@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/root/.m2 \
     && cp ${MODULE}/target/*.jar /workspace/app.jar
 
 # --- Runtime stage: slim JRE running the packaged jar as a non-root user ---
-FROM eclipse-temurin:25-jre-alpine
+FROM eclipse-temurin:26-jre-alpine
 RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app

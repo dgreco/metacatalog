@@ -11,7 +11,7 @@ engine, and optional ontology-based data access via Ontop.
 
 - **Group / artifact:** `it.davidgreco:metacatalog` — version `0.0.1-SNAPSHOT`
 - **Packaging:** Maven multi-module (`pom` parent + 7 modules)
-- **Java:** 25 · **Spring Boot:** 4.1.0 · **PostgreSQL** (JDBC 42.7.x) · **Maven:** 3.9.9+ (enforced)
+- **Java:** 26 · **Spring Boot:** 4.1.0 · **PostgreSQL** (JDBC 42.7.x) · **Maven:** 3.9.9+ (enforced)
 - **Persistence:** Spring Data JPA / Hibernate, JSON stored in `jsonb` columns via Hypersistence Utils
 - **Schema migrations:** Flyway (auto-run on startup)
 
@@ -764,6 +764,6 @@ separately and not shaded. No Ontop CLI install is needed to build or run the ap
   `target/classes` makes Flyway fail with "Found more than one migration with version 1".
   The JPA entities are the source of truth for column names, nullability and index names; tests run
   with `ddl-auto: validate`, which catches column drift but **not** index or nullability drift.
-- Java 25 + the JDK-internal compiler `--add-opens` args in the compiler plugin are required for the
+- Java 26 + the JDK-internal compiler `--add-opens` args in the compiler plugin are required for the
   toolchain (Google Java Format / Lombok) — keep them when touching the parent `pom.xml`.
 ```
