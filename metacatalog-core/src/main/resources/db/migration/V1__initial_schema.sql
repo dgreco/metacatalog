@@ -266,6 +266,23 @@ CREATE TABLE entity_lifecycle_event
 
 CREATE INDEX idx_entitylifecycleevent_event_type_event_status ON entity_lifecycle_event (event_type, event_status);
 
+-- Durable status registry for asynchronously launched procedure runs. Shared by every
+-- application instance: any replica can answer a status poll, and a run's outcome survives
+-- restarts. Rows are cleaned up by ProcedureExecutor's scheduled retention job.
+CREATE TABLE procedure_run
+(
+    id             VARCHAR(255)                NOT NULL,
+    state          VARCHAR(32)                 NOT NULL,
+    error          TEXT,
+    procedure_name VARCHAR(255)                NOT NULL,
+    entity_id      VARCHAR(255)                NOT NULL,
+    created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    updated_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT pk_procedure_run PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_procedurerun_updated_at ON procedure_run (updated_at);
+
 -- ---------------------------------------------------------------------------------------------
 -- Built-in traits
 --

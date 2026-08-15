@@ -26,7 +26,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 class TaskEngineTest {
 
   private static CoreConfigProperties testConfigProperties() {
-    return new CoreConfigProperties(false, Duration.ofSeconds(1), 3, 100, Duration.ofHours(1));
+    return new CoreConfigProperties(false, Duration.ofSeconds(1), 3, Duration.ofHours(24));
   }
 
   /**

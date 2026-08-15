@@ -1105,8 +1105,7 @@ Application configuration lives in `metacatalog-application/src/main/resources/a
 | `application.config.automaticEntitiesMapping` | `true` | Enable the scheduled mapping updater (see [Mappings](#mappings)) |
 | `application.config.updateMappedEntitiesSchedulingInterval` | `1s` | How often to drain pending lifecycle events |
 | `application.config.entityPathResolutionMaxAttempts` | `3` | Retries for entity-path resolution |
-| `application.config.taskScheduleCacheMaxSize` | `100` | `TaskManager` schedule-result cache capacity |
-| `application.config.taskScheduleCacheExpireAfterWrite` | `1h` | `TaskManager` schedule-result cache TTL |
+| `application.config.procedureRunRetention` | `24h` | How long an async procedure run's status stays pollable; older orphaned `RUNNING` rows are marked `FAILED` |
 
 Security properties bind under `application.config.security` (see [Security](#security)) and the
 SPARQL endpoint under `application.sparql.*` (see [SPARQL / Ontology Access](#sparql--ontology-access)).

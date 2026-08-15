@@ -53,8 +53,7 @@ application:
     automaticEntitiesMapping: true
     updateMappedEntitiesSchedulingInterval: 1s
     entityPathResolutionMaxAttempts: 3
-    # taskScheduleCacheMaxSize: 100           # TaskManager schedule-result cache capacity
-    # taskScheduleCacheExpireAfterWrite: 1h   # TaskManager schedule-result cache TTL
+    # procedureRunRetention: 24h              # how long an async procedure run's status stays pollable
     provisioning:
       # Associates each provisioning task with the entity types it handles. A ProvisionableResource
       # type listed under no task has no registered factory, and provisioning it fails with

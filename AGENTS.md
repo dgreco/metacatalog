@@ -216,7 +216,7 @@ Located in `metacatalog-core/.../service`:
   of a specific `EntityType`; factories are registered per entity type name and resolved from the
   entity's own type. Builds
   dependency graphs with **JGraphT**, detects cycles (`CycleDetector`), and executes schedules
-  asynchronously (results cached with Caffeine). `AsyncTaskExecutor`-backed.
+  asynchronously. `AsyncTaskExecutor`-backed.
 - **`MappingUpdaterService`** — `@Scheduled` job that reacts to `EntityLifeCycleEvent`s to create /
   update mapped entities. Gated by `application.config.automaticEntitiesMapping` and guarded by an
   advisory lock so only one instance runs at a time.
@@ -383,10 +383,13 @@ aggregate is done. With `?async=true` the call instead returns **202 with a sche
 after the plan-building transaction (a missing aggregate or an illegitimate root still fails
 immediately, on the caller's thread), and the run is polled via `GET
 /metacatalog/v1/procedure/{scheduleId}` → `RUNNING` / `SUCCEEDED` / `FAILED` + error.
-`ProcedureExecutor.executeProcedureAsync` records the outcome in a bounded, time-limited Caffeine
-registry (`taskScheduleCacheMaxSize` / `taskScheduleCacheExpireAfterWrite`), so an expired entry
-polls as 404 rather than leaking; the status registry is per-instance, so behind a load balancer
-polls must be pinned to the instance that accepted the run. The UI uses the async mode (see the
+`ProcedureExecutor.executeProcedureAsync` records the run in the `procedure_run` table — a durable
+registry shared by every instance, so any replica can answer a poll and outcomes survive restarts.
+A scheduled retention job (`cleanupProcedureRuns`, every 10 minutes) deletes terminal rows older
+than `procedureRunRetention` (default 24h) and first marks `RUNNING` rows that old as `FAILED` —
+a run that old has lost the instance executing it, and a visible failure beats an eternal spinner;
+after deletion the id polls as 404. Both retention statements are idempotent, so concurrent
+replicas need no coordination. The UI uses the async mode (see the
 [UI](#ui-metacatalog-ui) section). Nothing provisions on its own; it happens when asked.
 
 ## REST API
@@ -566,10 +569,9 @@ Custom properties bind under the `application.config` prefix into
 - `automaticEntitiesMapping` (boolean) — enable the scheduled mapping updater
 - `updateMappedEntitiesSchedulingInterval` (Duration)
 - `entityPathResolutionMaxAttempts` (int)
-- `taskScheduleCacheMaxSize` (int, default 100) — capacity of `ProcedureExecutor`'s async-run
-  status registry
-- `taskScheduleCacheExpireAfterWrite` (Duration, default 1h) — TTL of the async-run status
-  registry (an expired entry polls as 404)
+- `procedureRunRetention` (Duration, default 24h) — how long an async procedure run's status row
+  in `procedure_run` stays pollable after its last write; also the staleness threshold after which
+  an orphaned `RUNNING` row is marked `FAILED` (a cleaned-up id polls as 404)
 
 Provisioning properties bind under `application.config.provisioning` into
 `ProvisioningConfigProperties` (`metacatalog-functions-provisioning-tasks` module): `tasks`

@@ -121,6 +121,19 @@ digraph ER {
         </TABLE>
     >];
 
+    procedure_run [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#8c564b" COLSPAN="3"><FONT COLOR="white"><B>procedure_run</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">state</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">error</TD><TD ALIGN="LEFT">text</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">procedure_name</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">entity_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">updated_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
+        </TABLE>
+    >];
+
     entity_type_version [label=<
         <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
             <TR><TD BGCOLOR="#17becf" COLSPAN="3"><FONT COLOR="white"><B>entity_type_version</B></FONT></TD></TR>

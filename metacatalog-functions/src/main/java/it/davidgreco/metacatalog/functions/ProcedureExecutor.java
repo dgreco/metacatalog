@@ -1,12 +1,13 @@
 package it.davidgreco.metacatalog.functions;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import it.davidgreco.metacatalog.CoreConfigProperties;
+import it.davidgreco.metacatalog.entity.ProcedureRun;
+import it.davidgreco.metacatalog.repository.ProcedureRunRepository;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TaskManager;
 import jakarta.annotation.PostConstruct;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,8 +16,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -58,12 +61,21 @@ public class ProcedureExecutor {
   private final PlatformTransactionManager transactionManager;
 
   /**
-   * Status of asynchronously launched procedure runs, by schedule ID. Bounded and time-limited
-   * (same knobs as the former TaskManager schedule cache: {@code
-   * application.config.taskScheduleCacheMaxSize} / {@code taskScheduleCacheExpireAfterWrite}), so
-   * an abandoned run's entry eventually expires — a poll after expiry gets 404, not a leak.
+   * Durable status registry of asynchronously launched procedure runs, one {@link ProcedureRun} row
+   * per schedule ID. Shared by every application instance — any replica can answer a status poll,
+   * and a run's outcome survives restarts. Rows are removed (terminal states) or marked FAILED
+   * (orphaned RUNNING rows) by {@link #cleanupProcedureRuns()} after {@code
+   * application.config.procedureRunRetention}, so a poll after cleanup gets 404, not a leak.
    */
-  private final Cache<String, ProcedureStatus> statusCache;
+  private final ProcedureRunRepository procedureRunRepository;
+
+  /** Retention for run rows; also the staleness threshold for orphaned RUNNING rows. */
+  private final CoreConfigProperties coreConfigProperties;
+
+  /** The error recorded on a RUNNING row whose executing instance is gone. */
+  public static final String STALE_RUN_ERROR =
+      "run lost: no outcome was recorded within the retention period"
+          + " (the instance executing it likely terminated)";
 
   private TransactionTemplate transactionTemplate;
 
@@ -73,23 +85,22 @@ public class ProcedureExecutor {
    * @param procedures every procedure bean, injected by Spring
    * @param entityService entity service for reading entities by ID
    * @param transactionManager the transaction manager used to scope plan-building
-   * @param coreConfigProperties bounds and TTL for the async-run status cache
+   * @param procedureRunRepository the durable status registry of async runs
+   * @param coreConfigProperties retention for async-run status rows
    */
   public ProcedureExecutor(
       List<EntityProcedure> procedures,
       EntityService entityService,
       PlatformTransactionManager transactionManager,
+      ProcedureRunRepository procedureRunRepository,
       CoreConfigProperties coreConfigProperties) {
     this.procedureRegistry =
         procedures.stream()
             .collect(Collectors.toUnmodifiableMap(EntityProcedure::name, Function.identity()));
     this.entityService = entityService;
     this.transactionManager = transactionManager;
-    this.statusCache =
-        Caffeine.newBuilder()
-            .maximumSize(coreConfigProperties.taskScheduleCacheMaxSize())
-            .expireAfterWrite(coreConfigProperties.taskScheduleCacheExpireAfterWrite())
-            .build();
+    this.procedureRunRepository = procedureRunRepository;
+    this.coreConfigProperties = coreConfigProperties;
   }
 
   @PostConstruct
@@ -127,44 +138,99 @@ public class ProcedureExecutor {
     if (scheduleHandle.isEmpty()) {
       // Nothing to execute (an empty aggregate): the run is trivially complete.
       var id = UUID.randomUUID().toString();
-      statusCache.put(id, new ProcedureStatus(id, ProcedureState.SUCCEEDED, null));
+      procedureRunRepository.save(
+          new ProcedureRun(id, ProcedureRun.State.SUCCEEDED, null, procedureName, entityId));
       return id;
     }
     var handle = scheduleHandle.get();
-    statusCache.put(handle.id(), new ProcedureStatus(handle.id(), ProcedureState.RUNNING, null));
+    // The RUNNING row is committed before the completion callback is attached, so the terminal
+    // update can never be overwritten by it, and the caller's first poll always finds the row.
+    procedureRunRepository.save(
+        new ProcedureRun(handle.id(), ProcedureRun.State.RUNNING, null, procedureName, entityId));
     handle
         .future()
         .whenComplete(
             (result, throwable) -> {
               if (throwable != null) {
-                statusCache.put(
-                    handle.id(),
-                    new ProcedureStatus(
-                        handle.id(), ProcedureState.FAILED, throwable.getMessage()));
+                recordOutcome(handle.id(), throwable.getMessage(), procedureName, entityId, true);
               } else if (result.isFailure()) {
                 var cause = result.getCause();
-                statusCache.put(
+                recordOutcome(
                     handle.id(),
-                    new ProcedureStatus(
-                        handle.id(),
-                        ProcedureState.FAILED,
-                        cause != null ? cause.getMessage() : "unknown"));
+                    cause != null ? cause.getMessage() : "unknown",
+                    procedureName,
+                    entityId,
+                    true);
               } else {
-                statusCache.put(
-                    handle.id(), new ProcedureStatus(handle.id(), ProcedureState.SUCCEEDED, null));
+                recordOutcome(handle.id(), null, procedureName, entityId, false);
               }
             });
     return handle.id();
   }
 
   /**
+   * Records a run's terminal state, overwriting the RUNNING row in place. Runs on the async
+   * executor thread once the schedule completes. If the retention job already marked the run FAILED
+   * as stale — or even deleted it — the real outcome wins: the row is updated or re-created, never
+   * silently dropped.
+   */
+  private void recordOutcome(
+      String scheduleId, String error, String procedureName, String entityId, boolean failed) {
+    var state = failed ? ProcedureRun.State.FAILED : ProcedureRun.State.SUCCEEDED;
+    var run =
+        procedureRunRepository
+            .findById(scheduleId)
+            .orElseGet(() -> new ProcedureRun(scheduleId, state, error, procedureName, entityId));
+    run.setState(state);
+    run.setError(error);
+    run.setUpdatedAt(Instant.now());
+    procedureRunRepository.save(run);
+  }
+
+  /**
    * Looks up the status of an asynchronously launched run.
    *
    * @param scheduleId the ID returned by {@link #executeProcedureAsync(String, String)}
-   * @return the status, or empty if the ID is unknown or the entry has expired
+   * @return the status, or empty if the ID is unknown or its row was removed by retention
    */
   public Optional<ProcedureStatus> procedureStatus(String scheduleId) {
-    return Optional.ofNullable(statusCache.getIfPresent(scheduleId));
+    return procedureRunRepository
+        .findById(scheduleId)
+        .map(
+            run ->
+                new ProcedureStatus(
+                    run.getId(), ProcedureState.valueOf(run.getState().name()), run.getError()));
+  }
+
+  /**
+   * Retention job for the durable run registry. Marks RUNNING rows older than {@code
+   * procedureRunRetention} as FAILED — a run that old has lost the instance executing it, and a
+   * visible failure beats an eternal spinner — then deletes terminal rows older than the same
+   * cutoff. Freshly marked rows get a new {@code updatedAt}, so they stay pollable for one more
+   * retention period before deletion. Both statements are idempotent, so concurrent replicas need
+   * no coordination; the (negligible, retention-sized) race where the job marks a run stale just as
+   * it genuinely completes is resolved by {@link #recordOutcome} writing last.
+   */
+  @Scheduled(initialDelay = 600_000, fixedDelay = 600_000)
+  @Transactional
+  public void cleanupProcedureRuns() {
+    var cutoff = Instant.now().minus(coreConfigProperties.procedureRunRetention());
+    var failed =
+        procedureRunRepository.failStaleRunningRuns(
+            ProcedureRun.State.RUNNING,
+            ProcedureRun.State.FAILED,
+            cutoff,
+            STALE_RUN_ERROR,
+            Instant.now());
+    var deleted =
+        procedureRunRepository.deleteTerminalRunsOlderThan(ProcedureRun.State.RUNNING, cutoff);
+    if (failed > 0 || deleted > 0) {
+      log.info(
+          "Procedure run retention: {} stale RUNNING row(s) marked FAILED, {} terminal row(s)"
+              + " deleted",
+          failed,
+          deleted);
+    }
   }
 
   private EntityProcedure lookup(String procedureName) {

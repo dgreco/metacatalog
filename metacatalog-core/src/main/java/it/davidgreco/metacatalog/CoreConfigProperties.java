@@ -12,23 +12,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param automaticEntitiesMapping whether automatic entity mapping is enabled
  * @param updateMappedEntitiesSchedulingInterval interval for the mapped entities update scheduler
  * @param entityPathResolutionMaxAttempts maximum retry attempts for entity path resolution
- * @param taskScheduleCacheMaxSize maximum number of schedules kept in the {@link
- *     it.davidgreco.metacatalog.service.TaskManager} result cache before eviction; defaults to
- *     {@code 100} when unset or non-positive
- * @param taskScheduleCacheExpireAfterWrite time-to-live for entries in the {@link
- *     it.davidgreco.metacatalog.service.TaskManager} result cache; defaults to 1 hour when unset
+ * @param procedureRunRetention how long an asynchronously launched procedure run's status row stays
+ *     pollable after its last write; also the staleness threshold after which an orphaned RUNNING
+ *     row (its executing instance is gone) is marked FAILED. Defaults to 24 hours when unset
  */
 @ConfigurationProperties("application.config")
 public record CoreConfigProperties(
     boolean automaticEntitiesMapping,
     Duration updateMappedEntitiesSchedulingInterval,
     int entityPathResolutionMaxAttempts,
-    int taskScheduleCacheMaxSize,
-    Duration taskScheduleCacheExpireAfterWrite) {
+    Duration procedureRunRetention) {
 
   public CoreConfigProperties {
-    if (taskScheduleCacheMaxSize <= 0) taskScheduleCacheMaxSize = 100;
-    if (taskScheduleCacheExpireAfterWrite == null)
-      taskScheduleCacheExpireAfterWrite = Duration.ofHours(1);
+    if (procedureRunRetention == null) procedureRunRetention = Duration.ofHours(24);
   }
 }

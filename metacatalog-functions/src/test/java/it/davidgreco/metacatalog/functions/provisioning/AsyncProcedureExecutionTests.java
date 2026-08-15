@@ -7,13 +7,17 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.entity.ProcedureRun;
 import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
+import it.davidgreco.metacatalog.repository.ProcedureRunRepository;
 import it.davidgreco.metacatalog.service.BulkLoaderService;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.TaskFactory;
 import it.davidgreco.metacatalog.service.TaskManager;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import org.awaitility.Durations;
 import org.junit.jupiter.api.Test;
@@ -116,5 +120,53 @@ class AsyncProcedureExecutionTests extends CommonServiceTestingSupport {
     assertThrows(
         ServiceError.class,
         () -> procedureExecutor.executeProcedureAsync("NoSuchProcedure", aggregateId));
+  }
+
+  /**
+   * The registry is a durable table cleaned by {@link ProcedureExecutor#cleanupProcedureRuns()}:
+   * terminal rows older than the retention are deleted, RUNNING rows that old are marked FAILED
+   * (their executing instance is gone), and everything younger is untouched.
+   */
+  @Test
+  void retentionJobFailsStaleRunsAndDeletesOldTerminalOnes() {
+    var procedureExecutor = getApplicationContext().getBean(ProcedureExecutor.class);
+    var repository = getApplicationContext().getBean(ProcedureRunRepository.class);
+
+    var beyondRetention = Instant.now().minus(Duration.ofDays(2));
+
+    var oldDone =
+        new ProcedureRun(
+            "old-done", ProcedureRun.State.SUCCEEDED, null, "ProvisioningProcedure", "e1");
+    oldDone.setUpdatedAt(beyondRetention);
+    repository.save(oldDone);
+    repository.save(
+        new ProcedureRun(
+            "fresh-done", ProcedureRun.State.SUCCEEDED, null, "ProvisioningProcedure", "e2"));
+    var lostRun =
+        new ProcedureRun(
+            "lost-run", ProcedureRun.State.RUNNING, null, "ProvisioningProcedure", "e3");
+    lostRun.setUpdatedAt(beyondRetention);
+    repository.save(lostRun);
+    repository.save(
+        new ProcedureRun(
+            "live-run", ProcedureRun.State.RUNNING, null, "ProvisioningProcedure", "e4"));
+
+    procedureExecutor.cleanupProcedureRuns();
+
+    assertTrue(
+        procedureExecutor.procedureStatus("old-done").isEmpty(),
+        "a terminal row past retention is deleted and polls as absent");
+    assertEquals(
+        ProcedureExecutor.ProcedureState.SUCCEEDED,
+        procedureExecutor.procedureStatus("fresh-done").orElseThrow().state());
+    var lost = procedureExecutor.procedureStatus("lost-run").orElseThrow();
+    assertEquals(
+        ProcedureExecutor.ProcedureState.FAILED,
+        lost.state(),
+        "a RUNNING row past retention lost its instance and is marked FAILED, not deleted");
+    assertEquals(ProcedureExecutor.STALE_RUN_ERROR, lost.error());
+    assertEquals(
+        ProcedureExecutor.ProcedureState.RUNNING,
+        procedureExecutor.procedureStatus("live-run").orElseThrow().state());
   }
 }

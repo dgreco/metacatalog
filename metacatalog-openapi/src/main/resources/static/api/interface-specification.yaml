@@ -1871,10 +1871,12 @@ paths:
         - Meta Catalog Manager
       summary: Get the status of an asynchronously launched procedure run
       description: >-
-        Polls a run started with async=true on the provision or unprovision endpoint. Entries are
-        kept in a bounded, time-limited registry (application.config.taskScheduleCacheMaxSize /
-        taskScheduleCacheExpireAfterWrite), so a very old run's status eventually expires and
-        reads as not found.
+        Polls a run started with async=true on the provision or unprovision endpoint. Statuses are
+        kept in a durable registry shared by every application instance, so any replica can answer
+        the poll and a run's outcome survives restarts. Rows are cleaned up after
+        application.config.procedureRunRetention (default 24h), after which the id reads as not
+        found; a RUNNING row that old is first marked FAILED, since the instance executing it is
+        gone.
       operationId: getProcedureStatus
       parameters:
         - in: path
@@ -1891,7 +1893,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProcedureStatus'
         404:
-          description: Unknown schedule id (never existed, or its entry expired)
+          description: Unknown schedule id (never existed, or cleaned up by retention)
           content:
             application/json:
               schema:
