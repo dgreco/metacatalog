@@ -84,7 +84,10 @@ RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
 
 # --- Runtime stage: slim JRE running the extracted jar as a non-root user ---
 FROM eclipse-temurin:26-jre-alpine
-RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
+# bash + curl + jq for the `script` provisioning task (ScriptProvisioningTask runs
+# `bash <path>`; the Iceberg demo script drives the REST catalog with curl/jq).
+RUN apk add --no-cache bash curl jq \
+    && addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app
 COPY --from=aot /app/ ./

@@ -1,0 +1,65 @@
+# Model for the Iceberg data-product demo (loaded by the iceberg-demo-loader service
+# in docker-compose.iceberg.yml, self-contained — it does not depend on the base
+# demo model in bulk-model.yaml and coexists with it on a shared postgres volume).
+#
+# A data product is an aggregate root (Provisionable inherits Aggregate) whose parts
+# are Iceberg table output ports (the port trait inherits ProvisionableResource,
+# which inherits AggregateElement) — so the built-in
+# `Aggregate HAS_PART AggregateElement` relationship sanctions the containment and
+# no extra trait relationships are needed.
+#
+# Each port carries everything the provisioning script needs to create the real
+# table in the Iceberg REST catalog: the target namespace, the table name and the
+# column list. Provisioning the aggregate runs the `script` task (see
+# application-docker.yaml) once per port; the script drives the catalog API.
+
+Traits:
+  - name: IcebergTableOutputPort
+    inheritsFrom: ProvisionableResource
+
+---
+EntityTypes:
+
+  - name: IcebergDataProductType
+    schema:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    traits:
+      - Provisionable
+
+  - name: IcebergTableOutputPortType
+    schema:
+      type: object
+      required:
+        - name
+        - namespace
+        - columns
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        columns:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - name
+              - type
+            properties:
+              name:
+                type: string
+              # An Iceberg primitive type: long, int, string, double, timestamp, ...
+              type:
+                type: string
+              required:
+                type: boolean
+    traits:
+      - IcebergTableOutputPort

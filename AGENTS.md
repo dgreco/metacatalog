@@ -640,9 +640,18 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   another overlay (`make run-iceberg` / `up-iceberg-d`): it adds a RustFS S3 warehouse
   (S3 API on `:9000`, console on `:9001`, credentials `rustfsadmin`/`rustfsadmin`, bucket
   `iceberg-warehouse` created by a one-shot `rustfs-init` via the aws CLI) and the Iceberg REST
-  catalog app on `:8181`, sharing the base stack's postgres. The bulk-loader is disabled there (profile trick,
-  like the Keycloak overlay) — the Iceberg stack needs no demo model; run the base file once
-  first to seed it.
+  catalog app on `:8181`, sharing the base stack's postgres. The base bulk-loader is disabled
+  there (profile trick, like the Keycloak overlay; run the base file once first if you also want
+  the S3/Athena demo) — instead an `iceberg-demo-loader` seeds the **Iceberg data-product demo**
+  (`docker/bulk/iceberg-demo-*.yaml`, reusing `load-bulk.sh`): a `IcebergDataProductType`
+  aggregate (`Provisionable`) whose three `IcebergTableOutputPortType` parts (a trait inheriting
+  `ProvisionableResource`) each carry a namespace, table name and column list. Provisioning the
+  aggregate — UI instances page or `POST /aggregate/{id}/provision` — runs the `script` task
+  (wired in `application-docker.yaml`) once per port; the mounted
+  `docker/provisioning/provision-iceberg-table.sh` drives the Iceberg REST catalog with curl/jq
+  (namespace + table create on provision, purge-drop on unprovision, idempotent both ways), so
+  the tables materialize in the catalog and are visible to PyIceberg/Spark/Trino, in the UI graph
+  and over SPARQL. The runtime image ships `bash`/`curl`/`jq` for exactly this.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).

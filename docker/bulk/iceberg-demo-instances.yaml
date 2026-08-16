@@ -1,0 +1,43 @@
+# The demo data product: one aggregate with three Iceberg table output ports.
+# Provisioning it (UI instances page or POST /metacatalog/v1/aggregate/{id}/provision)
+# creates the three tables in the Iceberg REST catalog under the sales_analytics
+# namespace; unprovisioning drops them again.
+entityType: "IcebergDataProductType"
+values:
+  name: "sales_analytics"
+  description: "Sales analytics data product exposing its datasets as Iceberg tables"
+
+parts:
+
+- ref: "customers"
+  entityType: "IcebergTableOutputPortType"
+  values:
+    name: "customers"
+    namespace: "sales_analytics"
+    columns:
+      - { name: "customer_id", type: "long", required: true }
+      - { name: "name", type: "string", required: true }
+      - { name: "email", type: "string" }
+      - { name: "created_at", type: "timestamp" }
+
+- ref: "orders"
+  entityType: "IcebergTableOutputPortType"
+  values:
+    name: "orders"
+    namespace: "sales_analytics"
+    columns:
+      - { name: "order_id", type: "long", required: true }
+      - { name: "customer_id", type: "long", required: true }
+      - { name: "total", type: "double" }
+      - { name: "ordered_at", type: "timestamp" }
+
+- ref: "order_items"
+  entityType: "IcebergTableOutputPortType"
+  values:
+    name: "order_items"
+    namespace: "sales_analytics"
+    columns:
+      - { name: "order_id", type: "long", required: true }
+      - { name: "sku", type: "string", required: true }
+      - { name: "quantity", type: "int" }
+      - { name: "price", type: "double" }

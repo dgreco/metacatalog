@@ -22,7 +22,9 @@ RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
     -jar app.jar
 
 FROM eclipse-temurin:26-jre-alpine
-RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
+# bash + curl + jq for the `script` provisioning task (see the root Dockerfile).
+RUN apk add --no-cache bash curl jq \
+    && addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app
 COPY --from=aot /app/ ./

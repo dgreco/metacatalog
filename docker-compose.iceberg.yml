@@ -11,6 +11,16 @@
 # metadata files land in s3://iceberg-warehouse.
 
 services:
+  # The main app takes part in the Iceberg data-product demo: the demo aggregate's
+  # output ports are provisioned as real tables in the Iceberg REST catalog by the
+  # mounted script (the `script` task in application-docker.yaml names the port
+  # type). The env var tells the script where the catalog lives.
+  app:
+    volumes:
+      - ./docker/provisioning:/opt/metacatalog/provisioning:ro
+    environment:
+      ICEBERG_CATALOG_URL: http://iceberg-catalog:8181
+
   rustfs:
     image: rustfs/rustfs:latest
     container_name: metacatalog-rustfs
@@ -78,11 +88,31 @@ services:
       start_period: 30s
 
   bulk-loader:
-    # The Iceberg stack has no use for the demo model — the catalog declares its own
-    # immutable model at startup — so keep the loader out, same trick as the Keycloak
-    # overlay: assign it to a profile nothing activates. To seed the demo data anyway,
-    # run the base compose file once first; the postgres volume is shared.
+    # The base stack's S3/Athena demo model is not needed here — the Iceberg stack
+    # seeds its own demo below — so keep this loader out, same trick as the Keycloak
+    # overlay: assign it to a profile nothing activates. To seed the base demo data
+    # anyway, run the base compose file once first; the postgres volume is shared.
     profiles: ["demo-data-only"]
+
+  # Seeds the Iceberg data-product demo: a data product aggregate whose three output
+  # ports provision as real Iceberg tables (docker/bulk/iceberg-demo-*.yaml). Reuses
+  # load-bulk.sh — idempotent across restarts, so it only loads what is missing.
+  iceberg-demo-loader:
+    image: curlimages/curl:8.10.1
+    container_name: metacatalog-iceberg-demo-loader
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ./docker/bulk:/bulk:ro
+    environment:
+      APP_URL: http://app:8080
+      METACATALOG_USER: admin
+      METACATALOG_PASSWORD: admin
+      MODEL_FILE: /bulk/iceberg-demo-model.yaml
+      INSTANCES_FILE: /bulk/iceberg-demo-instances.yaml
+    entrypoint: ["/bin/sh", "/bulk/load-bulk.sh"]
+    restart: "no"
 
 volumes:
   rustfs-data:
