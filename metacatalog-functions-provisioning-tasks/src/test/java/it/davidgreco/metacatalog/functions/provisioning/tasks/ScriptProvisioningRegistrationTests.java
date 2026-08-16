@@ -73,11 +73,14 @@ class ScriptProvisioningRegistrationTests extends CommonServiceTestingSupport {
 
     procedureExecutor.executeProcedure("ProvisioningProcedure", ids.getFirst());
 
+    // Three carriers: the Provisionable root records the whole run's outcome, plus the two
+    // ProvisionableResource nodes each task provisioned.
     var provisioned = provisioningResults(aggregateService.read(ids.getFirst(), true));
-    Assertions.assertEquals(2, provisioned.size());
+    Assertions.assertEquals(3, provisioned.size());
     for (var values : provisioned) {
       Assertions.assertEquals("PROVISIONED", values.get("provisioningStatus").asText());
     }
+    resultContaining(provisioned, "Provisioning succeeded: all 2 resource(s) provisioned");
     var stdoutResult = resultContaining(provisioned, "(stdout task)");
     Assertions.assertTrue(stdoutResult.contains("S3FolderType"));
     var scriptResult = resultContaining(provisioned, "(script task)");
@@ -89,10 +92,11 @@ class ScriptProvisioningRegistrationTests extends CommonServiceTestingSupport {
     procedureExecutor.executeProcedure("UnprovisioningProcedure", ids.getFirst());
 
     var unprovisioned = provisioningResults(aggregateService.read(ids.getFirst(), true));
-    Assertions.assertEquals(2, unprovisioned.size());
+    Assertions.assertEquals(3, unprovisioned.size());
     for (var values : unprovisioned) {
       Assertions.assertEquals("UNPROVISIONED", values.get("provisioningStatus").asText());
     }
+    resultContaining(unprovisioned, "Unprovisioning succeeded: all 2 resource(s) unprovisioned");
     Assertions.assertTrue(
         resultContaining(unprovisioned, "(script task)").contains("[script:unprovision]"));
   }
