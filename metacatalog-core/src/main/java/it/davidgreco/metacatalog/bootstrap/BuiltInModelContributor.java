@@ -29,11 +29,14 @@ import org.springframework.stereotype.Component;
 public class BuiltInModelContributor implements ImmutableModelContributor {
 
   /**
-   * The provisioning procedure sets {@code provisioningStatus} and {@code provisioningResult}, not
+   * The provisioning machinery sets {@code provisioningStatus} and {@code provisioningResult}, not
    * the user, so both are {@code readOnly}: the UI renders them disabled and validators treat them
-   * as server-managed.
+   * as server-managed. Both provisioning traits carry the same pair — on a {@code
+   * ProvisionableResource} the task records its own outcome, on a {@code Provisionable} the
+   * procedure records the whole run's outcome ({@code PROVISIONED} only when every contained
+   * resource provisioned successfully).
    */
-  private static final String PROVISIONABLE_RESOURCE_SCHEMA =
+  private static final String PROVISIONING_STATUS_SCHEMA =
       """
       {
         "type": "object",
@@ -56,10 +59,11 @@ public class BuiltInModelContributor implements ImmutableModelContributor {
     // Roots first: Provisionable and ProvisionableResource inherit from them.
     registry.trait(BuiltInTraits.AGGREGATE);
     registry.trait(BuiltInTraits.AGGREGATE_ELEMENT);
-    registry.trait(BuiltInTraits.PROVISIONABLE, null, BuiltInTraits.AGGREGATE);
+    registry.trait(
+        BuiltInTraits.PROVISIONABLE, PROVISIONING_STATUS_SCHEMA, BuiltInTraits.AGGREGATE);
     registry.trait(
         BuiltInTraits.PROVISIONABLE_RESOURCE,
-        PROVISIONABLE_RESOURCE_SCHEMA,
+        PROVISIONING_STATUS_SCHEMA,
         BuiltInTraits.AGGREGATE_ELEMENT);
     // Composition: what makes a type able to contain another, and what AggregateSchemaService
     // projects onto the types carrying these traits to derive the aggregate model.

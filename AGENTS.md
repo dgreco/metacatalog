@@ -322,6 +322,16 @@ way to create a resource and no way to remove it. Which one runs is set by the p
 registered factory fails the run (`No factory for name: <type>`) rather than being reported as
 provisioned by nothing.
 
+The run's **overall** outcome is recorded the same way on the aggregate root — the `Provisionable`
+trait carries the same `provisioningStatus`/`provisioningResult` schema as `ProvisionableResource`,
+and `AggregateProvisioningStatusRecorder` writes `PROVISIONED`/`UNPROVISIONED` on the root only
+when every contained resource succeeded, `FAILED` with the error otherwise. The recorder *composes*
+the schedule future (the procedures return the composed future in their `ScheduleHandle`), so a
+synchronous call returns — and an async run turns terminal — only after the root reflects the
+outcome; and it re-reads the root at completion time, because a root that is also a resource (an
+intermediate node) had its resource-level status written during the run and a stale snapshot would
+erase it. A failed status write never alters the run's result.
+
 The concrete tasks live in their own module, `metacatalog-functions-provisioning-tasks`, so task
 registration is pluggable: a module contributes tasks by depending on `metacatalog-functions`,
 subclassing `ProvisioningTask`, and registering through a `ProvisioningTasks` registrar (or any

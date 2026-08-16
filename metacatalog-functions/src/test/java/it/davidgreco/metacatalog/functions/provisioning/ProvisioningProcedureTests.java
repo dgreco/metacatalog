@@ -72,6 +72,15 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
     procedureExecutor.executeProcedure(functionName, ids.getFirst());
 
+    // The Provisionable root records the whole run's outcome, and the synchronous call returns
+    // only after that write: PROVISIONED because every contained resource provisioned.
+    var rootAfterProvision = entityService.read(ids.getFirst());
+    Assertions.assertEquals(
+        "PROVISIONED", rootAfterProvision.getValues().get("provisioningStatus").asText());
+    Assertions.assertEquals(
+        "Provisioning succeeded: all 2 resource(s) provisioned",
+        rootAfterProvision.getValues().get("provisioningResult").asText());
+
     var aggr = aggregateService.read(ids.getFirst(), true);
 
     await()
@@ -139,6 +148,13 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
     // would depend on which ran first.
     procedureExecutor.executeProcedure("UnprovisioningProcedure", ids.getFirst());
 
+    var rootAfterUnprovision = entityService.read(ids.getFirst());
+    Assertions.assertEquals(
+        "UNPROVISIONED", rootAfterUnprovision.getValues().get("provisioningStatus").asText());
+    Assertions.assertEquals(
+        "Unprovisioning succeeded: all 2 resource(s) unprovisioned",
+        rootAfterUnprovision.getValues().get("provisioningResult").asText());
+
     var unprovisioned = aggregateService.read(ids.getFirst(), true);
     for (var index : List.of(0, 1)) {
       var resource =
@@ -163,5 +179,30 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
             "unprovision:AthenaTableType",
             "unprovision:S3FolderType"),
         List.copyOf(order));
+
+    // A resource failing must leave the root FAILED, not partially PROVISIONED: swap the Athena
+    // factory for a failing one and provision again (in the same test, for the same shared-database
+    // reason as the teardown above).
+    taskManager.unregisterTaskFactory("AthenaTableType");
+    taskManager.registerTaskFactory(
+        "AthenaTableType",
+        (Entity entity) ->
+            new ProvisioningTask(entity, entityService) {
+              @Override
+              public String provision() {
+                throw new ServiceError("Athena is down");
+              }
+
+              @Override
+              public String unprovision() {
+                throw new ServiceError("Athena is down");
+              }
+            });
+    Assertions.assertThrows(
+        ServiceError.class, () -> procedureExecutor.executeProcedure(functionName, ids.getFirst()));
+    var rootAfterFailure = entityService.read(ids.getFirst());
+    Assertions.assertEquals(
+        "FAILED", rootAfterFailure.getValues().get("provisioningStatus").asText());
+    Assertions.assertNotNull(rootAfterFailure.getValues().get("provisioningResult"));
   }
 }

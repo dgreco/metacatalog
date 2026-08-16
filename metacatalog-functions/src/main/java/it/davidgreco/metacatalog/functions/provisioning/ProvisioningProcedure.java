@@ -42,6 +42,7 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
   private final AggregateService aggregateService;
   private final ResourceGraphBuilder resourceGraphBuilder;
   private final TaskManager taskManager;
+  private final AggregateProvisioningStatusRecorder statusRecorder;
 
   /**
    * Registrars whose task factories key off entity types created at runtime, so they cannot
@@ -64,7 +65,17 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
       schedule.addTask(task);
     }
     var handle = taskManager.schedule(schedule);
-    return Optional.of(handle);
+    // The returned future completes only after the run's overall outcome is recorded on the
+    // root entity (PROVISIONED only when every resource succeeded, FAILED with the error
+    // otherwise), so callers and status polls never observe a finished run with a stale root.
+    return Optional.of(
+        new TaskManager.ScheduleHandle(
+            handle.id(),
+            statusRecorder.recording(
+                handle.future(),
+                entity.getId(),
+                ProvisioningTask.Operation.PROVISION,
+                tasks.size())));
   }
 
   private HashMap<String, Task> createTasksForVertices(

@@ -31,9 +31,10 @@ import lombok.extern.slf4j.Slf4j;
 @Getter
 public abstract class ProvisioningTask extends Task {
 
-  private static final String PROVISIONING_STATUS = "provisioningStatus";
-  private static final String PROVISIONING_RESULT = "provisioningResult";
-  private static final String STATUS_FAILED = "FAILED";
+  // Package-visible: AggregateProvisioningStatusRecorder writes the same fields on the root.
+  static final String PROVISIONING_STATUS = "provisioningStatus";
+  static final String PROVISIONING_RESULT = "provisioningResult";
+  static final String STATUS_FAILED = "FAILED";
 
   /** The two directions a provisioning task can run in. */
   public enum Operation {
@@ -48,6 +49,16 @@ public abstract class ProvisioningTask extends Task {
     Operation(String label, String successStatus) {
       this.label = label;
       this.successStatus = successStatus;
+    }
+
+    /** The status a successful run of this operation leaves behind. */
+    String successStatus() {
+      return successStatus;
+    }
+
+    /** The human label used in log lines and result messages. */
+    String label() {
+      return label;
     }
   }
 
