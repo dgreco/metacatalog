@@ -1,7 +1,5 @@
 # Meta Catalog
 
-[![Quality Gate Status](http://192.168.10.182:9000/api/project_badges/measure?project=dgreco_metacatalog_a1aac5ad-232a-476b-a015-53dccc79cc9c&metric=alert_status&token=sqb_c971245e209a2d320ffd919a3c2455b3879e24c2)](http://192.168.10.182:9000/dashboard?id=dgreco_metacatalog_a1aac5ad-232a-476b-a015-53dccc79cc9c)
-
 A comprehensive metadata management system built with Spring Boot for managing entities, entity types, traits, and their relationships with integrated ontology support.
 
 ## Features
