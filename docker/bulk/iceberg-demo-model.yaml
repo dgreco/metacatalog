@@ -12,10 +12,26 @@
 # table in the Iceberg REST catalog: the target namespace, the table name and the
 # column list. Provisioning the aggregate runs the `script` task (see
 # application-docker.yaml) once per port; the script drives the catalog API.
+#
+# The Relationships section sanctions `port DEPENDS_ON IcebergTable`: after the
+# script creates the real table, it links the port to the resulting IcebergTable
+# entity (the catalog app materializes one per table) — the port's contract is
+# fulfilled by the table, so the port depends on it. IcebergTableTrait is
+# declared immutable at startup by the catalog app's IcebergModelContributor;
+# linking to an immutable trait is legal (the sanction row itself stays
+# mutable), but it does mean this model can only load once the iceberg-catalog
+# service is up (see depends_on in docker-compose.iceberg.yml).
 
 Traits:
   - name: IcebergTableOutputPort
     inheritsFrom: ProvisionableResource
+
+---
+Relationships:
+
+  - sourceTrait: IcebergTableOutputPort
+    relationshipType: DEPENDS_ON
+    targetTrait: IcebergTableTrait
 
 ---
 EntityTypes:

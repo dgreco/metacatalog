@@ -661,7 +661,17 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   `docker/provisioning/provision-iceberg-table.sh` drives the Iceberg REST catalog with curl/jq
   (namespace + table create on provision, purge-drop on unprovision, idempotent both ways), so
   the tables materialize in the catalog and are visible to PyIceberg/Spark/Trino, in the UI graph
-  and over SPARQL. The runtime image ships `bash`/`curl`/`jq` for exactly this.
+  and over SPARQL. The script also connects each output port to the table provisioned from it:
+  after creating the table it links the port `DEPENDS_ON` the materialized `IcebergTable`
+  entity (both ends looked up by name/namespace through the metacatalog REST API — the app's
+  own `localhost:8080`, credentials via `METACATALOG_*` env in the overlay), sanctioned by the
+  `IcebergTableOutputPort DEPENDS_ON IcebergTableTrait` trait relationship the demo model
+  declares (which is why the demo loader also waits for the iceberg-catalog to be healthy —
+  that app's startup contributor creates `IcebergTableTrait`). On unprovision the link is
+  removed *first*: dropping a table deletes it as an aggregate, which refuses while an outside
+  link exists — the same check that refuses deleting the data-product aggregate while its
+  tables are provisioned, so unprovision before delete. The runtime image ships
+  `bash`/`curl`/`jq` for exactly this.
 - **Kubernetes:** `k8s/` — app Deployment/Service/Ingress/ConfigMap/ServiceAccount plus a
   CloudNativePG (`cnpg`) Postgres cluster and scheduled backup; `kustomization.yaml` ties it together.
   `*.template` secret files must be filled in (DB credentials, registry pull secret).

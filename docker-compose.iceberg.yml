@@ -14,12 +14,19 @@ services:
   # The main app takes part in the Iceberg data-product demo: the demo aggregate's
   # output ports are provisioned as real tables in the Iceberg REST catalog by the
   # mounted script (the `script` task in application-docker.yaml names the port
-  # type). The env var tells the script where the catalog lives.
+  # type). ICEBERG_CATALOG_URL tells the script where the catalog lives; the
+  # METACATALOG_* vars let it call back into the metacatalog REST API — running
+  # inside the app container, so localhost — to link each materialized
+  # IcebergTable entity to the output port that described it (and unlink it
+  # before dropping the table on unprovision).
   app:
     volumes:
       - ./docker/provisioning:/opt/metacatalog/provisioning:ro
     environment:
       ICEBERG_CATALOG_URL: http://iceberg-catalog:8181
+      METACATALOG_API_URL: http://localhost:8080
+      METACATALOG_USER: admin
+      METACATALOG_PASSWORD: admin
 
   rustfs:
     image: rustfs/rustfs:latest
@@ -97,11 +104,15 @@ services:
   # Seeds the Iceberg data-product demo: a data product aggregate whose three output
   # ports provision as real Iceberg tables (docker/bulk/iceberg-demo-*.yaml). Reuses
   # load-bulk.sh — idempotent across restarts, so it only loads what is missing.
+  # Waits for the iceberg-catalog too: the demo model's Relationships section
+  # references IcebergTableTrait, which that app's startup contributor creates.
   iceberg-demo-loader:
     image: curlimages/curl:8.10.1
     container_name: metacatalog-iceberg-demo-loader
     depends_on:
       app:
+        condition: service_healthy
+      iceberg-catalog:
         condition: service_healthy
     volumes:
       - ./docker/bulk:/bulk:ro
