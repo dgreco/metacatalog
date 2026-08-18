@@ -26,7 +26,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ## Technology Stack
 
-- **Java 25**
+- **Java 26**
 - **Spring Boot 4.1.0**
 - **PostgreSQL** (JDBC driver 42.7.13, server 18+)
 - **Maven 3.9.9+**
@@ -34,7 +34,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ## Prerequisites
 
-- Java 25
+- Java 26
 - Maven 3.9.9 or higher
 - PostgreSQL 18+
 - Docker (for testing with Testcontainers)
@@ -885,25 +885,29 @@ flowchart BT
         DPT["DataProductType — root"] --"carries"--> PROV
         OPT["OutputPortType — intermediate"] --"carries"--> AGG
         OPT --"carries"--> ELEM
+        FBT["FileBasedOutputPortType — intermediate"] -. inherits .-> OPT
+        TBT["TableBasedOutputPortType — intermediate"] -. inherits .-> OPT
         S3T["S3FolderType — leaf"] --"carries"--> RES
         ATT["AthenaTableType — leaf"] --"carries"--> RES
     end
 ```
 
 At the **instance** level an aggregate is then a tree of real `HAS_PART` links between
-entities, with `DEPENDS_ON` links expressing ordering between parts (the provisioning
-procedure walks them: a resource is created after what it depends on and destroyed before it).
-A type outside the model may still contain a root from the outside — an Iceberg namespace
-containing a table — without the root ceasing to be one:
+entities, with `DEPENDS_ON` links expressing ordering between parts. The provisioning
+resources are not parts: the mapping engine derives them, and the procedure works out their
+ordering from the mappings that connect them (a resource is created after what it depends on
+and destroyed before it). A type outside the model may still contain a root from the outside —
+an Iceberg namespace containing a table — without the root ceasing to be one:
 
 ```mermaid
 flowchart TD
     NS["namespace : IcebergNamespace<br/>(outside the model)"] --"HAS_PART<br/>(allowed: neutral container)"--> DP
-    DP["dp1 : DataProductType<br/>root"] --"HAS_PART"--> OP1["op1 : OutputPortType<br/>intermediate"]
-    DP --"HAS_PART"--> OP2["op2 : OutputPortType<br/>intermediate"]
-    OP1 --"HAS_PART"--> S3["folder : S3FolderType<br/>leaf"]
-    OP2 --"HAS_PART"--> AT["table : AthenaTableType<br/>leaf"]
-    AT -."DEPENDS_ON".-> S3
+    DP["dp1 : DataProductType<br/>root"] --"HAS_PART"--> OP1["op1 : FileBasedOutputPortType<br/>intermediate"]
+    DP --"HAS_PART"--> OP2["op2 : TableBasedOutputPortType<br/>intermediate"]
+    OP2 -."DEPENDS_ON".-> OP1
+    OP1 -."MAPPED_TO".-> S3["folder : S3FolderType<br/>derived resource"]
+    OP2 -."MAPPED_TO".-> AT["table : AthenaTableType<br/>derived resource"]
+    AT -."waits for (resource graph)".-> S3
 ```
 
 The roles are not just descriptive — the **containment rules** they imply are enforced wherever
@@ -1201,9 +1205,9 @@ The build will fail if:
 ## Database Schema
 
 The schema is owned by Flyway (see [Database Migrations](#database-migrations)
-below) and consists of 11 tables covering entity types, traits, entities, their
-relationships, the mapping system, the entity lifecycle audit log, and the
-append-only version history for types.
+below) and consists of 12 tables covering entity types, traits, entities, their
+relationships, the mapping system, the entity lifecycle audit log, the async
+procedure-run registry, and the append-only version history for types.
 
 ![E/R diagram of the Meta Catalog database schema](docs/er-diagram.png)
 
@@ -1247,6 +1251,7 @@ It runs automatically on application startup and creates everything in one shot:
 | Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
 | Relationships | `trait_relationship`, `entity_relationship`, `mapping_type_relationship`, `mapping_entity_relationship` |
 | Lifecycle | `entity_lifecycle_event` + its sequence |
+| Procedures | `procedure_run` — the durable registry of async procedure runs (state, error, timestamps), so any replica can answer a poll and outcomes survive restarts |
 | Seed data | **None.** The baseline creates tables only — the built-in traits are installed at startup, not by SQL (see [Immutable model](#immutable-model)) |
 
 **This project does not support migrating an existing database.** The schema is always created from
