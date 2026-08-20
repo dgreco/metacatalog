@@ -206,13 +206,21 @@ class GovernanceModel implements ImmutableModelContributor {
 - The whole installation is one transaction, so a contributor that throws leaves nothing behind and
   aborts startup rather than half-building a model later declarations would extend.
 - A PostgreSQL advisory lock (id `2`; `MappingUpdaterService` uses `1`) serialises instances booting
-  together. An instance that misses the lock does not wait — the holder is doing the same work, and
-  blocking every replica behind one transaction would turn a rolling restart into a queue. It skips
-  only the **creating**: it still applies every declaration and verifies what it finds, because the
-  drift check decides whether that instance may run at all, and a replica exempted from it would
-  boot happily against the very database the lock holder is refusing. Declarations whose rows do not
-  exist yet are left to the holder, links included — a source trait the holder has not committed yet
-  is not the mis-ordered declaration that the lock holder's own run reports.
+  together. An instance that misses it still applies every declaration — the drift check decides
+  whether that instance may run at all, and a replica exempted from it would boot happily against
+  the very database the lock holder is refusing. What it skips is the **creating**.
+- **Whether it then waits depends on what that pass found**, and the distinction is load-bearing.
+  Nothing missing means the holder is a replica of the same application installing the same model,
+  so there is nothing to wait for: this is the rolling-restart case, where queueing every replica
+  behind one transaction would be pure delay. Something missing means the holder declares a
+  *different* model against the same database and will never create it — **the lock id is shared by
+  every application built on core**, and `metacatalog-iceberg-catalog` boots against the same tables
+  with its own contributors, so a lost race must not cost it `IcebergNamespace` / `IcebergTable`.
+  It then waits for the lock (60s, bounded by `lock_timeout` so a stalled holder aborts startup with
+  a message instead of hanging it) and re-applies. The second pass re-runs every declaration from
+  scratch: at READ COMMITTED each statement takes a fresh snapshot, so it sees what the holder
+  committed and creates only the remainder. Links are deferred like anything else — a source trait
+  the holder has not committed yet is not the mis-ordered declaration `linked()` throws on.
 - A declared name already held by a **mutable** row is left as it is, with a warning. Installation
   never converts live catalog data, because the flag is only ever set at creation.
 - `contributors` is injected as an `ObjectProvider`, not a `List`: injecting a list when no

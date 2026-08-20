@@ -13,6 +13,9 @@ import it.davidgreco.metacatalog.entity.Trait;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Assertions;
@@ -268,15 +271,30 @@ class ImmutableModelInstallerTests extends CommonServiceTestingSupport {
   }
 
   /**
-   * What such an instance must <em>not</em> do is create anything, or complain about a declaration
-   * whose row the holder has not committed yet — including a link, whose source trait it cannot
-   * see.
+   * An instance whose declarations are all present has nothing to wait for: the holder is a replica
+   * of the same application installing the same model. This is the rolling-restart case the lock's
+   * no-waiting rule exists for, and it must stay free of any wait.
    */
   @Test
-  void testWithoutTheLockMissingDeclarationsAreLeftToTheHolder() {
-    var traitService = getApplicationContext().getBean(TraitService.class);
+  void testWithoutTheLockAnAlreadySatisfiedDeclarationDoesNotWait() {
+    withInstallationLockHeldElsewhere(() -> install(new ContributorConfig().testContributor()));
 
-    withInstallationLockHeldElsewhere(
+    Assertions.assertTrue(
+        getApplicationContext().getBean(TraitService.class).read("InstallerBeta").isImmutable());
+  }
+
+  /**
+   * An instance with something still missing is in the opposite situation: the holder declares a
+   * different model against the same database — the Iceberg REST catalog and the main application
+   * share this lock id — and is never going to create it. Skipping would cost this instance its own
+   * model with nothing reporting why, so it waits for the lock and creates it.
+   */
+  @Test
+  void testWithoutTheLockAMissingDeclarationIsStillInstalled() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+
+    withInstallationLockReleasedShortly(
         () ->
             install(
                 registry -> {
@@ -286,10 +304,16 @@ class ImmutableModelInstallerTests extends CommonServiceTestingSupport {
                   registry.entityType("NotYetInstalledType", null, List.of("NotYetInstalledAlpha"));
                 }));
 
-    Assertions.assertFalse(traitService.exists("NotYetInstalledAlpha"));
-    Assertions.assertFalse(traitService.exists("NotYetInstalledBeta"));
-    Assertions.assertFalse(
-        getApplicationContext().getBean(EntityTypeService.class).exists("NotYetInstalledType"));
+    Assertions.assertTrue(traitService.read("NotYetInstalledAlpha").isImmutable());
+    Assertions.assertTrue(traitService.read("NotYetInstalledBeta").isImmutable());
+    Assertions.assertTrue(entityTypeService.read("NotYetInstalledType").isImmutable());
+    // The link was declared against a trait that did not exist on the first, verify-only pass. It
+    // must not have been mistaken for a mis-ordered declaration there, and must exist now.
+    Assertions.assertEquals(
+        List.of("NotYetInstalledBeta"),
+        traitService.linked("NotYetInstalledAlpha", HAS_PART).stream()
+            .map(Trait::getName)
+            .toList());
   }
 
   /**
@@ -311,6 +335,47 @@ class ImmutableModelInstallerTests extends CommonServiceTestingSupport {
     } catch (SQLException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  /**
+   * The same, but the holder lets go shortly after the body starts — for the case where the
+   * installer is expected to wait and then proceed. Holding for the whole body would deadlock
+   * against exactly the behaviour under test; the other helper's grip is what makes the tests that
+   * must <em>not</em> wait meaningful, since a wrongly-waiting installer hits its timeout there
+   * rather than passing.
+   */
+  private void withInstallationLockReleasedShortly(Runnable body) {
+    var dataSource = getApplicationContext().getBean(DataSource.class);
+    var acquired = new CountDownLatch(1);
+    var failure = new AtomicReference<Exception>();
+    var holder =
+        new Thread(
+            () -> {
+              try (var connection = dataSource.getConnection();
+                  var statement = connection.createStatement()) {
+                statement.execute("SELECT pg_advisory_lock(2)");
+                acquired.countDown();
+                // Long enough that the installer's own try-lock certainly lands inside the hold. A
+                // shorter grip could be released first, letting the installer win the lock outright
+                // and quietly stop exercising the waiting path this test exists for.
+                Thread.sleep(1500);
+                statement.execute("SELECT pg_advisory_unlock(2)");
+              } catch (Exception e) {
+                failure.set(e);
+              } finally {
+                acquired.countDown();
+              }
+            });
+    holder.start();
+    try {
+      Assertions.assertTrue(acquired.await(30, TimeUnit.SECONDS), "holder never took the lock");
+      body.run();
+      holder.join(TimeUnit.SECONDS.toMillis(30));
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException(e);
+    }
+    if (failure.get() != null) throw new IllegalStateException(failure.get());
   }
 
   /**

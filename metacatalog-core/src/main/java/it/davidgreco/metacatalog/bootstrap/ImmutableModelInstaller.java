@@ -9,6 +9,7 @@ import it.davidgreco.metacatalog.service.EntityTypeService;
 import it.davidgreco.metacatalog.service.ImmutableEntityTypeWriter;
 import it.davidgreco.metacatalog.service.ImmutableTraitWriter;
 import it.davidgreco.metacatalog.service.TraitService;
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -44,13 +45,20 @@ import org.springframework.transaction.annotation.Transactional;
  * schema after its first release, and on every database created before it the aggregate-root status
  * write failed schema validation on a feature that had nothing to do with startup.
  *
- * <p>A PostgreSQL advisory lock serialises instances booting together. An instance that does not
- * get the lock does not wait: the instance holding it is doing the same work, and blocking every
- * replica behind one transaction would turn a rolling restart into a queue. It skips only the
- * <em>creating</em> — it still applies every declaration and verifies what it finds, because the
- * check above is what decides whether this instance may run at all, and a replica that skipped it
- * would boot happily against the very database the lock holder is refusing. Declarations whose rows
- * do not exist yet are left to the holder, which is creating them.
+ * <p>A PostgreSQL advisory lock serialises instances booting together, and an instance that does
+ * not get it still applies every declaration: the check above is what decides whether this instance
+ * may run at all, and a replica exempted from it would boot happily against the very database the
+ * lock holder is refusing. What it skips is the <em>creating</em>.
+ *
+ * <p>Whether it then waits depends on what that pass found. Nothing missing means the holder is a
+ * replica of the same application installing the identical model, so there is nothing to wait for —
+ * the rolling-restart case, where queueing every replica behind one transaction would be pure
+ * delay. Something missing means the opposite: the holder declares a <em>different</em> model
+ * against the same database and is never going to create these. The lock id is shared by every
+ * application built on this module — the Iceberg REST catalog boots against the same tables as the
+ * main application, each with its own contributors — so losing the race must not cost an instance
+ * its own model. It waits, then re-applies. Waiting only when there is something to wait for is
+ * what keeps both properties.
  */
 @Slf4j
 @Component
@@ -59,6 +67,14 @@ public class ImmutableModelInstaller implements ApplicationRunner {
 
   /** Distinct from {@code MappingUpdaterService}'s lock id, which is 1. */
   private static final int INSTALL_IMMUTABLE_MODEL_LOCK_ID = 2;
+
+  /**
+   * How long an instance with declarations still to create waits for the holder. Generous, because
+   * the holder is running one short transaction and the alternative is booting with a model this
+   * instance's code requires; bounded, because a holder that has stopped making progress should
+   * abort startup with a message rather than hang it for good.
+   */
+  private static final Duration INSTALL_LOCK_WAIT = Duration.ofSeconds(60);
 
   /**
    * An {@link ObjectProvider} rather than a {@code List}: injecting a list when no contributor bean
@@ -106,15 +122,20 @@ public class ImmutableModelInstaller implements ApplicationRunner {
       return;
     }
     var holdsLock = advisoryLockManager.acquireLock(INSTALL_IMMUTABLE_MODEL_LOCK_ID);
-    if (!holdsLock) {
+    var registry = applyAll(ordered, holdsLock);
+    if (!holdsLock && registry.deferred > 0) {
+      // The holder is not going to create these: it is a different application, declaring a
+      // different model against the same database. Now — and only now — waiting is worth it.
       log.info(
-          "Another instance holds the installation lock and is creating the same contributions;"
-              + " verifying what is already there and leaving the rest to it");
-    }
-    var registry = new Registry(holdsLock);
-    for (var contributor : ordered) {
-      log.debug("Applying immutable model contributor {}", contributor.getClass().getName());
-      contributor.contribute(registry);
+          "Another instance holds the installation lock and {} declaration(s) are still missing;"
+              + " waiting up to {} for it to finish",
+          registry.deferred,
+          INSTALL_LOCK_WAIT);
+      advisoryLockManager.acquireLockWaiting(INSTALL_IMMUTABLE_MODEL_LOCK_ID, INSTALL_LOCK_WAIT);
+      // Re-applied from scratch rather than resumed: the holder has committed by now, and at READ
+      // COMMITTED each statement takes a fresh snapshot, so this pass sees what it created and
+      // creates only the remainder.
+      registry = applyAll(ordered, true);
     }
     log.info(
         "Immutable model from {} contributor(s): {} created, {} already present, {} left to the"
@@ -123,6 +144,15 @@ public class ImmutableModelInstaller implements ApplicationRunner {
         registry.created,
         registry.skipped,
         registry.deferred);
+  }
+
+  private Registry applyAll(List<ImmutableModelContributor> ordered, boolean creates) {
+    var registry = new Registry(creates);
+    for (var contributor : ordered) {
+      log.debug("Applying immutable model contributor {}", contributor.getClass().getName());
+      contributor.contribute(registry);
+    }
+    return registry;
   }
 
   /**

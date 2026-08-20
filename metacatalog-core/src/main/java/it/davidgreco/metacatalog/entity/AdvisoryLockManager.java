@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.entity;
 
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -38,5 +39,33 @@ public class AdvisoryLockManager {
             .createNativeQuery("SELECT pg_try_advisory_xact_lock(:lockId)")
             .setParameter("lockId", lockIdentifier)
             .getSingleResult();
+  }
+
+  /**
+   * Acquires the same transaction-level lock, but waits for the current holder instead of giving up
+   * — for the caller that has established it genuinely has work the holder is not going to do.
+   *
+   * <p>Exceeding {@code timeout} raises {@code lock_not_available}, which <strong>aborts the
+   * transaction</strong>: PostgreSQL leaves no way to carry on after a failed statement, so there
+   * is no "returned false, continue anyway" path here and none would be wanted. A caller waiting on
+   * this lock cannot do its work without it.
+   *
+   * @param lockIdentifier the lock identifier
+   * @param timeout how long to wait before giving up
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void acquireLockWaiting(int lockIdentifier, Duration timeout) {
+    // SET takes no bind parameters, so the value is interpolated. It is a Duration rendered as a
+    // long, never caller-supplied text.
+    entityManager
+        .createNativeQuery("SET LOCAL lock_timeout = " + timeout.toMillis())
+        .executeUpdate();
+    entityManager
+        .createNativeQuery("SELECT pg_advisory_xact_lock(:lockId)")
+        .setParameter("lockId", lockIdentifier)
+        .getResultList();
+    // Back to the session default now the lock is held: the timeout was for this wait, and leaving
+    // it in force would silently apply to every later statement in the same transaction.
+    entityManager.createNativeQuery("SET LOCAL lock_timeout = DEFAULT").executeUpdate();
   }
 }
