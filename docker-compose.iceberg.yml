@@ -88,7 +88,9 @@ services:
     ports:
       - "8181:8181"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/actuator/health || exit 1"]
+      # readiness, not health: it turns UP only after the ApplicationRunners finish, so a dependent
+      # waiting on service_healthy cannot post a model before IcebergModelContributor has run.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8181/actuator/health/readiness || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

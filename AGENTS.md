@@ -664,7 +664,17 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   profile) + a one-shot `bulk-loader` that seeds the demo model and aggregate from `docker/bulk/`.
   The loader is idempotent across restarts (the postgres volume persists): each step probes the API
   first and only loads what is missing, so deleting the demo aggregate from the UI and restarting
-  re-creates just the aggregate. `docker-compose.keycloak.yml` is an overlay (`-f` both files)
+  re-creates just the aggregate. Both app healthchecks poll **`/actuator/health/readiness`**, not
+  `/actuator/health`: the latter is UP as soon as Tomcat listens, during context refresh, whereas
+  `ImmutableModelInstaller` is an `ApplicationRunner` and runs after it — so a loader gated on
+  `depends_on: service_healthy` could post a model before the traits it builds on existed. Both apps
+  therefore set `management.endpoint.health.probes.enabled`, which exposes that path *and* folds
+  readiness into the aggregate (so the plain endpoint refuses during startup too, which is what makes
+  the k8s `startupProbe` on it correct). Boot enables probes by itself when it detects Kubernetes,
+  so `k8s/app-deployment.yaml`'s probes already worked; this gives Compose the same behaviour.
+  `ReadinessProbeStartupTest` pins all of it by probing the app from inside its own startup — the
+  contract is invisible to the rest of the build, and a mistyped path would leave a container
+  permanently unhealthy rather than merely racing. `docker-compose.keycloak.yml` is an overlay (`-f` both files)
   that adds a Keycloak with a pre-imported realm (`docker/keycloak/`) and switches the app to
   `auth-mode: oauth2` in jwk-set-uri mode (client `metacatalog`/`metacatalog-secret`, user
   `demo`/`demo`, password grant for curl-friendly token fetching); the bulk-loader is disabled

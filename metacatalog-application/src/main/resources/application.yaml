@@ -33,6 +33,17 @@ management:
         # env, configprops, beans, loggers intentionally excluded: they leak DB passwords, basic-auth
         # hashes and other secrets. Enable them only behind an authenticated management port.
         include: health, info, flyway, metrics
+  endpoint:
+    health:
+      # Without this, /actuator/health is UP as soon as Tomcat listens — during context refresh,
+      # before the ApplicationRunners and so before ImmutableModelInstaller has created the built-in
+      # traits. The Compose bulk-loader waits on depends_on: service_healthy and posts a model built
+      # on those traits the moment it passes. Enabling the probes exposes /actuator/health/readiness
+      # (which the healthcheck names) and folds readiness into the aggregate, so both refuse until
+      # startup finishes. Boot turns this on by itself when it detects Kubernetes, which is why
+      # k8s/app-deployment.yaml's probes already work; this gives Compose the same.
+      probes:
+        enabled: true
   info:
     git:
       enabled: true

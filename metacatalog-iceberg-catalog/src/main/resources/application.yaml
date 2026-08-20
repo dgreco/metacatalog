@@ -26,6 +26,18 @@ management:
     web:
       exposure:
         include: health, info, metrics
+  endpoint:
+    health:
+      # Without this, /actuator/health is UP as soon as Tomcat listens — during context refresh,
+      # before the ApplicationRunners and so before ImmutableModelInstaller has created this app's
+      # model. Compose depends_on: service_healthy waits on that, and the demo loader posts a model
+      # referencing IcebergTableTrait the moment it passes. Enabling the probes exposes
+      # /actuator/health/readiness (which the healthcheck names) and folds readiness into the
+      # aggregate, so both refuse until startup finishes. Boot turns this on by itself when it
+      # detects Kubernetes, which is why the k8s probes already work; this gives Compose the same.
+      # ReadinessProbeStartupTest pins all of it.
+      probes:
+        enabled: true
 
 application:
   config:
