@@ -97,8 +97,7 @@ public abstract class Task {
                             .map(CompletableFuture::join)
                             .anyMatch(Try::isFailure);
                     return dependsOnTasksFailed
-                        ? Try.<Void>failure(
-                            new ServiceError("One or more of the depending tasks failed"))
+                        ? Try.<Void>failure(new DependencyFailedError())
                         : Try.of(Task.this::apply);
                   },
                   executor)

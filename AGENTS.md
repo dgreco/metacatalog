@@ -370,6 +370,22 @@ write would be two of them with room for a lost update in between.
 `AggregateProvisioningStatusRecorderTests` stages the inline case deterministically rather than
 racing for it, and fails with the root reverted if the write is put back inline.
 
+**A run that never starts is recorded too.** Building the plan can fail before any future exists to
+attach a completion to — a resource type with no registered factory, a cycle in the graph, a
+throwing `DeferredTaskFactoryRegistrar` — and the root would then keep the `PROVISIONED` of the last
+run that worked, which the UI and SPARQL both read. Both procedures therefore plan *inside*
+`recordingAround`, which records `FAILED` before letting the error propagate. It stays silent when
+the root is itself why planning failed (no such entity, or not a legitimate aggregate): there is
+nothing to mark and the caller already has that error. That single wrapper is also what removed the
+duplicated `ScheduleHandle` block the two procedures used to carry.
+
+**The recorded message names the cause.** A failed task takes its dependents down with it, and each
+of those is failed with a `DependencyFailedError` that says only that something else broke;
+`Schedule` picks those last, since in a three-resource chain two of the three results are that
+restatement and the task list is ordered by a `HashMap`. The message then carries its root cause
+(`Provisioning failed for entity <id>: <why>`), because the task's own wrapper identifies the
+resource but not the reason.
+
 The concrete tasks live in their own module, `metacatalog-functions-provisioning-tasks`, so task
 registration is pluggable: a module contributes tasks by depending on `metacatalog-functions`,
 subclassing `ProvisioningTask`, and registering through a `ProvisioningTasks` registrar (or any

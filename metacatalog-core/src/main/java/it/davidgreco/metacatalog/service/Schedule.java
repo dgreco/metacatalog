@@ -91,13 +91,33 @@ public class Schedule {
     List<CompletableFuture<Try<Void>>> futures =
         tasks.stream().map(task -> task.schedule(executor)).toList();
     return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-        .thenApply(
-            ignored ->
-                tasks.stream()
-                    .map(Task::getResult)
-                    .flatMap(Optional::stream)
-                    .filter(Try::isFailure)
-                    .findFirst()
-                    .orElseGet(() -> Try.success(null)));
+        .thenApply(ignored -> reportedFailure().orElseGet(() -> Try.success(null)));
+  }
+
+  /**
+   * The one failure a schedule reports when several tasks failed.
+   *
+   * <p>A failed task takes its dependents down with it, and each of those is failed with a {@link
+   * DependencyFailedError} that says nothing about what went wrong. Those are picked last: in a
+   * chain of three where the first resource fails, two of the three results are that restatement,
+   * so choosing by position — the task list is built from a {@code HashMap}'s values, in no
+   * meaningful order — reported the symptom rather than the cause most of the time, and varied
+   * between runs of the same failure. This is what the aggregate root records in {@code
+   * provisioningResult}, so it is the text someone reads to find out what broke.
+   *
+   * <p>Which originating failure wins when genuinely several resources failed independently is
+   * still unspecified. They are all real causes, so any of them is a useful answer.
+   */
+  private Optional<Try<Void>> reportedFailure() {
+    var failures =
+        tasks.stream()
+            .map(Task::getResult)
+            .flatMap(Optional::stream)
+            .filter(Try::isFailure)
+            .toList();
+    return failures.stream()
+        .filter(failure -> !(failure.getCause() instanceof DependencyFailedError))
+        .findFirst()
+        .or(() -> failures.stream().findFirst());
   }
 }

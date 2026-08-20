@@ -3,7 +3,11 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.vavr.control.Try;
 import it.davidgreco.metacatalog.service.EntityService;
+import it.davidgreco.metacatalog.service.TaskManager;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -69,6 +73,68 @@ public class AggregateProvisioningStatusRecorder {
   }
 
   /**
+   * A built plan: the schedule that was handed to the executor and how many resources it covers.
+   *
+   * @param handle the scheduled run
+   * @param resourceCount how many resources it covers, for the result message
+   */
+  record Plan(TaskManager.ScheduleHandle handle, int resourceCount) {}
+
+  /**
+   * Runs {@code planner} and returns its schedule wrapped so the root records the run's outcome —
+   * covering the case where there is no run to wait for because planning itself failed.
+   *
+   * <p>That case is not exotic. A resource type with no registered task factory, a cycle in the
+   * dependency graph and a throwing {@link DeferredTaskFactoryRegistrar} all fail here, before any
+   * future exists to attach a completion to. The caller gets the error, but the root is the
+   * durable, queryable reflection of the outcome — the UI and SPARQL read it — and left alone it
+   * keeps the {@code PROVISIONED} of the last run that did succeed, which is worse than no answer.
+   *
+   * @param rootEntityId the aggregate root the procedure was invoked on
+   * @param operation which direction the run goes, deciding the success status
+   * @param planner builds the plan and schedules it
+   * @return the schedule, wrapped so its future completes only after the status is written
+   */
+  Optional<TaskManager.ScheduleHandle> recordingAround(
+      String rootEntityId, ProvisioningTask.Operation operation, Supplier<Plan> planner) {
+    Plan plan;
+    try {
+      plan = planner.get();
+    } catch (RuntimeException planningFailed) {
+      recordPlanFailure(rootEntityId, planningFailed);
+      throw planningFailed;
+    }
+    return Optional.of(
+        new TaskManager.ScheduleHandle(
+            plan.handle().id(),
+            recording(plan.handle().future(), rootEntityId, operation, plan.resourceCount())));
+  }
+
+  /**
+   * Marks the root FAILED for a run that never started.
+   *
+   * <p>The root is read first, in a transaction of its own, to tell the two failures apart. When
+   * the root is itself why planning failed — no such entity, or not a legitimate aggregate — there
+   * is nothing to mark and the caller already has that error, so this stays silent rather than
+   * logging an error for what is really a 404. The read is deliberately not part of the write's
+   * transaction: an exception escaping a participating {@code @Transactional} call marks it
+   * rollback-only, and catching it would then surface as an {@code UnexpectedRollbackException} at
+   * commit, replacing the failure the caller is supposed to see.
+   */
+  private void recordPlanFailure(String rootEntityId, Throwable failure) {
+    try {
+      ownTransaction.execute(transaction -> entityService.read(rootEntityId));
+    } catch (RuntimeException rootNotReadable) {
+      return;
+    }
+    try {
+      writeRootStatus(rootEntityId, ProvisioningTask.STATUS_FAILED, failureMessage(null, failure));
+    } catch (Exception e) {
+      log.error("Failed to record the plan failure on root entity {}", rootEntityId, e);
+    }
+  }
+
+  /**
    * Composes the schedule future with the root-status write.
    *
    * @param future the schedule's result future
@@ -92,7 +158,7 @@ public class AggregateProvisioningStatusRecorder {
                       + " succeeded: all "
                       + resourceCount
                       + " resource(s) "
-                      + operation.successStatus().toLowerCase()
+                      + operation.successStatus().toLowerCase(Locale.ROOT)
                   : failureMessage(result, exception);
           try {
             writeRootStatus(rootEntityId, status, message);
@@ -125,6 +191,30 @@ public class AggregateProvisioningStatusRecorder {
   private static String failureMessage(Try<Void> result, Throwable exception) {
     var cause = exception != null ? exception : result != null ? result.getCause() : null;
     if (cause == null) return "unknown failure";
-    return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+    return describe(cause);
+  }
+
+  /**
+   * The failure's own message, plus its root cause when that says something else.
+   *
+   * <p>The outer message is usually a wrapper: a task reports "Provisioning failed for entity
+   * &lt;id&gt;", which identifies the resource but not what went wrong with it. The reason is one
+   * or more hops down the cause chain, and this field is where someone looks to find out why a run
+   * failed — the resource's own {@code provisioningResult} has the detail, but only if you know
+   * which resource to open.
+   */
+  private static String describe(Throwable cause) {
+    var message =
+        cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+    var root = cause;
+    // Bounded rather than "until null": a cause chain that loops would otherwise hang the callback.
+    for (var hop = 0; hop < 10 && root.getCause() != null && root.getCause() != root; hop++) {
+      root = root.getCause();
+    }
+    var rootMessage = root.getMessage();
+    if (root == cause || rootMessage == null || message.contains(rootMessage)) {
+      return message;
+    }
+    return message + ": " + rootMessage;
   }
 }

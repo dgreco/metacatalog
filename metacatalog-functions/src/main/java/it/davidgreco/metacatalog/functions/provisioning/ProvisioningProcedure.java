@@ -51,31 +51,35 @@ public class ProvisioningProcedure extends AbstractEntityProcedure {
    */
   private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
 
+  /**
+   * Planning runs inside {@code recordingAround} so the root ends up reflecting the outcome whether
+   * the run finishes or never starts: the returned future completes only after the status is
+   * written, and a failure to build the plan at all is recorded before it propagates. Callers and
+   * status polls therefore never see a finished — or abandoned — run behind a stale root.
+   */
   @Override
   protected Optional<TaskManager.ScheduleHandle> execute(Entity entity) {
-    // Inside the plan-building transaction, before any task is created: entity types created since
-    // startup exist by now, so a registrar that could not register at boot gets its chance here.
-    deferredRegistrars.orderedStream().forEach(DeferredTaskFactoryRegistrar::ensureRegistered);
-    var aggregate = aggregateService.read(entity.getId(), true);
-    var provisioningGraph = resourceGraphBuilder.buildResourceGraph(aggregate);
-    var tasks = createTasksForVertices(provisioningGraph);
-    wireDependencies(provisioningGraph, tasks);
-    var schedule = taskManager.createSchedule();
-    for (var task : tasks.values()) {
-      schedule.addTask(task);
-    }
-    var handle = taskManager.schedule(schedule);
-    // The returned future completes only after the run's overall outcome is recorded on the
-    // root entity (PROVISIONED only when every resource succeeded, FAILED with the error
-    // otherwise), so callers and status polls never observe a finished run with a stale root.
-    return Optional.of(
-        new TaskManager.ScheduleHandle(
-            handle.id(),
-            statusRecorder.recording(
-                handle.future(),
-                entity.getId(),
-                ProvisioningTask.Operation.PROVISION,
-                tasks.size())));
+    return statusRecorder.recordingAround(
+        entity.getId(),
+        ProvisioningTask.Operation.PROVISION,
+        () -> {
+          // Inside the plan-building transaction, before any task is created: entity types created
+          // since startup exist by now, so a registrar that could not register at boot gets its
+          // chance here.
+          deferredRegistrars
+              .orderedStream()
+              .forEach(DeferredTaskFactoryRegistrar::ensureRegistered);
+          var aggregate = aggregateService.read(entity.getId(), true);
+          var provisioningGraph = resourceGraphBuilder.buildResourceGraph(aggregate);
+          var tasks = createTasksForVertices(provisioningGraph);
+          wireDependencies(provisioningGraph, tasks);
+          var schedule = taskManager.createSchedule();
+          for (var task : tasks.values()) {
+            schedule.addTask(task);
+          }
+          return new AggregateProvisioningStatusRecorder.Plan(
+              taskManager.schedule(schedule), tasks.size());
+        });
   }
 
   private HashMap<String, Task> createTasksForVertices(
