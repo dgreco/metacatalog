@@ -187,15 +187,32 @@ class GovernanceModel implements ImmutableModelContributor {
   what exists is left alone, what is missing is created immutable. There is no "already applied"
   ledger and none is needed — restarts and re-deploys converge on the same state. Write
   `contribute` as a list of what must exist, not as a migration.
+- **Editing a declaration that is already installed aborts startup.** "Left alone" is only safe
+  while the row still says what the contributor declares, so the installer compares each existing
+  **immutable** row against its declaration — base schema (as parsed nodes, so `jsonb`'s key
+  reordering is irrelevant), father, and for an entity type its trait set (as a set: `type_traits`
+  has no order column) — and throws naming the row and the differing field. An immutable row cannot
+  be migrated, so the only remedy is recreating the database, and the message says so. This is the
+  same posture as the Flyway baseline, which the project also edits in place rather than versioning.
+  A *mutable* row of the same name is deliberately exempt: it is the operator's, was never expected
+  to match, and stays fixable through the API, so it keeps the warning below. The check exists
+  because `Provisionable` gained a schema after its first release; without it, every database
+  created before that kept the empty schema, and the aggregate-root status write failed validation
+  on a feature startup never mentioned. `ImmutableModelInstallerTests` pins both the refusals and
+  the round-trip that must *not* be mistaken for drift.
 - **Declaration order is application order**, and nothing is sorted for you: declare a father
   before its children, and both traits before the link between them. Across modules the order is
   bean order, pinnable with `@Order`.
 - The whole installation is one transaction, so a contributor that throws leaves nothing behind and
   aborts startup rather than half-building a model later declarations would extend.
 - A PostgreSQL advisory lock (id `2`; `MappingUpdaterService` uses `1`) serialises instances booting
-  together. An instance that misses the lock **skips** rather than waits — the holder is doing the
-  same work, and blocking every replica behind one transaction would turn a rolling restart into a
-  queue.
+  together. An instance that misses the lock does not wait — the holder is doing the same work, and
+  blocking every replica behind one transaction would turn a rolling restart into a queue. It skips
+  only the **creating**: it still applies every declaration and verifies what it finds, because the
+  drift check decides whether that instance may run at all, and a replica exempted from it would
+  boot happily against the very database the lock holder is refusing. Declarations whose rows do not
+  exist yet are left to the holder, links included — a source trait the holder has not committed yet
+  is not the mis-ordered declaration that the lock holder's own run reports.
 - A declared name already held by a **mutable** row is left as it is, with a warning. Installation
   never converts live catalog data, because the flag is only ever set at creation.
 - `contributors` is injected as an `ObjectProvider`, not a `List`: injecting a list when no
