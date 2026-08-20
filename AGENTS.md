@@ -357,6 +357,19 @@ outcome; and it re-reads the root at completion time, because a root that is als
 intermediate node) had its resource-level status written during the run and a stale snapshot would
 erase it. A failed status write never alters the run's result.
 
+**The status write takes a transaction of its own (`REQUIRES_NEW`), and re-reading is not enough
+without it.** The completion callback is not guaranteed to run on the async executor: `Schedule`
+composes with `allOf(...).thenApply(...)` and the recorder attaches with `whenComplete`, and both
+run *inline on the calling thread* when the futures they are given have already completed — which
+for an empty or fast schedule is the thread building the plan, still inside `ProcedureExecutor`'s
+transaction. That transaction has already read the root, so the "re-read" is answered from its
+persistence context with the plan-time instance, and writing it back reverts whatever the run
+committed meanwhile. A fresh transaction is what makes the re-read reach the row. It also makes the
+read-modify-write atomic: on the async path the callback has no transaction at all, so read and
+write would be two of them with room for a lost update in between.
+`AggregateProvisioningStatusRecorderTests` stages the inline case deterministically rather than
+racing for it, and fails with the root reverted if the write is put back inline.
+
 The concrete tasks live in their own module, `metacatalog-functions-provisioning-tasks`, so task
 registration is pluggable: a module contributes tasks by depending on `metacatalog-functions`,
 subclassing `ProvisioningTask`, and registering through a `ProvisioningTasks` registrar (or any
