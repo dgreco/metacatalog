@@ -24,7 +24,7 @@ ARG MODULE=metacatalog-application
 WORKDIR /workspace
 
 # Copy every module POM (and the root POM) first so dependency resolution can be
-# cached independently of sources. The reactor has 9 modules — copying all of them
+# cached independently of sources. The reactor has 10 modules — copying all of them
 # (not just the app's upstream) lets `go-offline` resolve the full project graph
 # in the cache layer below.
 COPY pom.xml ./
@@ -37,6 +37,7 @@ COPY metacatalog-security/pom.xml     metacatalog-security/
 COPY metacatalog-sparql/pom.xml        metacatalog-sparql/
 COPY metacatalog-application/pom.xml    metacatalog-application/
 COPY metacatalog-iceberg-catalog/pom.xml metacatalog-iceberg-catalog/
+COPY metacatalog-hive-metastore/pom.xml metacatalog-hive-metastore/
 # Pre-populate the Maven repo for the full reactor. --mount=type=cache keeps the
 # repo across builds (outside any image layer); a fresh build reuses whatever the
 # previous build already downloaded. `dependency:go-offline` can't fully resolve
@@ -91,6 +92,7 @@ RUN apk add --no-cache bash curl jq \
 USER 1000:1000
 WORKDIR /app
 COPY --from=aot /app/ ./
-# 8080 = metacatalog-application, 8181 = metacatalog-iceberg-catalog
-EXPOSE 8080 8181
+# 8080 = metacatalog-application, 8181 = metacatalog-iceberg-catalog,
+# 8282 + 9083 (Thrift) = metacatalog-hive-metastore
+EXPOSE 8080 8181 8282 9083
 ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]

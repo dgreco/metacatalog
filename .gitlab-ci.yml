@@ -72,6 +72,21 @@ build:
           docker tag "${CI_REGISTRY_IMAGE}/iceberg-catalog:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/iceberg-catalog:${VERSION}"
           docker push "${CI_REGISTRY_IMAGE}/iceberg-catalog:${VERSION}"
         fi
+
+        # Build and push the Hive Metastore image (own name suffix, same tags).
+        # Must stay after the VERSION= assignment above, which is only in scope here.
+        mvn package -pl metacatalog-hive-metastore -B -DskipTests
+
+        docker build -t "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" metacatalog-hive-metastore/
+        docker push "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}"
+
+        docker tag "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/hive-metastore:latest"
+        docker push "${CI_REGISTRY_IMAGE}/hive-metastore:latest"
+
+        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
+          docker tag "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/hive-metastore:${VERSION}"
+          docker push "${CI_REGISTRY_IMAGE}/hive-metastore:${VERSION}"
+        fi
       fi
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'

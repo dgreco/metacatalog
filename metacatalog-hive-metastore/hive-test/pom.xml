@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Deliberately NOT a module of the reactor, and deliberately not on the project's JDK.
+
+  It exists to answer the one question the in-build tests cannot: does the metastore satisfy the
+  client real consumers actually use? Spark, Trino, Flink and Hive all talk to a metastore through
+  HiveMetaStoreClient, which calls Subject.getSubject() — removed in JDK 24 and impossible to
+  re-enable on JDK 26, where -Djava.security.manager=allow is rejected at VM startup. The main
+  build runs on 26, so this cannot live there. It runs on 21, in a container, against a running
+  stack, exactly as pyiceberg-test does for the Iceberg catalog.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>it.davidgreco.metacatalog</groupId>
+    <artifactId>hive-metastore-client-test</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>Hive Metastore client smoke test</name>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <hive.version>4.2.0</hive.version>
+        <junit.version>5.11.4</junit.version>
+    </properties>
+
+    <dependencies>
+        <!--
+          The wrapper real consumers use, not Thrift's generated client.
+
+          The exclusions are the same shape as the server module's, for a sharper reason here: the
+          metrics reporter drags in hadoop-common 2.6.0 (2014), which declares a system-scoped
+          dependency on jdk.tools pointing at lib/tools.jar — a file that has not existed since
+          JDK 9, so resolution fails outright on any modern JDK.
+        -->
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-standalone-metastore-client</artifactId>
+            <version>${hive.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>jdk.tools</groupId>
+                    <artifactId>jdk.tools</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
+            <version>${hive.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>jdk.tools</groupId>
+                    <artifactId>jdk.tools</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

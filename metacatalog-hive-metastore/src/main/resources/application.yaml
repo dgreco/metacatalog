@@ -1,0 +1,71 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/metacatalog
+    username: metacatalog
+    password: metacatalog
+    driverClassName: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+
+# HTTP is here for the actuator probes only. The metastore protocol is Thrift, on
+# application.config.hive.thrift-port below.
+server:
+  port: 8282
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+  endpoint:
+    health:
+      # Without this, /actuator/health is UP as soon as Tomcat listens — during context refresh,
+      # before the ApplicationRunners and so before ImmutableModelInstaller has created this app's
+      # model, and before the Thrift server has bound its port. Compose depends_on:
+      # service_healthy waits on that. Enabling the probes exposes /actuator/health/readiness and
+      # folds readiness into the aggregate, so both refuse until startup finishes. Boot turns this
+      # on by itself when it detects Kubernetes, which is why the k8s probes already work; this
+      # gives Compose the same.
+      probes:
+        enabled: true
+
+application:
+  config:
+    # The mapping updater is owned by the main application; this app never runs it.
+    automaticEntitiesMapping: false
+    updateMappedEntitiesSchedulingInterval: 1s
+    entityPathResolutionMaxAttempts: 3
+    hive:
+      # 9083 is the Hive Metastore default; clients assume it unless told otherwise.
+      thrift-port: 9083
+      min-worker-threads: 4
+      max-worker-threads: 64
+      # Contended advisory locks are retried before the operation gives up, the same way the
+      # Iceberg registry does it.
+      commit-lock-retries: 5
+      commit-lock-backoff: 100ms
+
+logging:
+  level:
+    root: ERROR
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/metacatalog
+    username: metacatalog
+    password: metacatalog

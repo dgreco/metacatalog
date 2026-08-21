@@ -14,7 +14,10 @@ COMPOSE_KEYCLOAK = $(COMPOSE) -f docker-compose.yml -f docker-compose.keycloak.y
 # app on http://localhost:8181 (see docker-compose.iceberg.yml).
 COMPOSE_ICEBERG = $(COMPOSE) -f docker-compose.yml -f docker-compose.iceberg.yml
 
-.PHONY: run up up-d rebuild down logs ps info run-keycloak up-keycloak-d down-keycloak run-iceberg up-iceberg-d down-iceberg
+## Base stack plus the Hive Metastore (Thrift on :9083)
+COMPOSE_HIVE = $(COMPOSE) -f docker-compose.yml -f docker-compose.hive.yml
+
+.PHONY: run up up-d rebuild down logs ps info run-keycloak up-keycloak-d down-keycloak run-iceberg up-iceberg-d down-iceberg run-hive up-hive-d down-hive
 
 ## run / up: build from source and start the whole stack (foreground)
 run up:
@@ -52,6 +55,18 @@ down:
 ## down-keycloak: stop the Keycloak stack (add ARGS=-v to also drop the database volume)
 down-keycloak:
 	$(COMPOSE_KEYCLOAK) down $(ARGS)
+
+## run-hive: the stack plus the Hive Metastore on :9083 (foreground)
+run-hive:
+	$(COMPOSE_HIVE) up --build
+
+## up-hive-d: same, detached
+up-hive-d:
+	$(COMPOSE_HIVE) up --build -d
+
+## down-hive: stop the hive stack (ARGS=-v to drop volumes too)
+down-hive:
+	$(COMPOSE_HIVE) down $(ARGS)
 
 ## down-iceberg: stop the Iceberg stack (add ARGS=-v to also drop the database and warehouse volumes)
 down-iceberg:

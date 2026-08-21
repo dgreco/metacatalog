@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>it.davidgreco</groupId>
+        <artifactId>metacatalog</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <groupId>it.davidgreco.metacatalog</groupId>
+    <artifactId>metacatalog-hive-metastore</artifactId>
+    <version>${project.version}</version>
+    <name>Meta Catalog Hive Metastore</name>
+
+    <dependencies>
+        <!-- Core module ONLY among the internal modules: every module shares the
+             it.davidgreco.metacatalog package root, so any other internal jar on the
+             classpath would be component-scanned wholesale (openapi would mount the
+             whole metacatalog REST API, ui the admin UI, sparql Ontop). -->
+        <dependency>
+            <groupId>it.davidgreco.metacatalog</groupId>
+            <artifactId>metacatalog-core</artifactId>
+        </dependency>
+
+        <!-- Web is here for the actuator probes only; the metastore protocol is Thrift on
+             its own socket, not HTTP. Compose gates its dependents on the readiness probe,
+             so the HTTP port has to exist. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
+        <!-- Flyway: this app ships the identical V1 baseline from the core jar; it never
+             adds migrations of its own. Whichever app boots first migrates, the others'
+             runs are checksum-matching no-ops. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!--
+          The Hive Metastore Thrift contract is Apache's, so this takes their generated API
+          types (Database, Table, Partition, ThriftHiveMetastore.Iface/Processor) rather than
+          re-generating stubs, exactly as the Iceberg module takes iceberg-core rather than
+          codegen'ing the REST contract.
+
+          The exclusions matter. Unfiltered this artifact resolves 128 jars / 132 MB: two
+          Hadoop client bundles, a *transitive hadoop-common 2.6.0* from 2014 pulled in by a
+          metrics reporter, an embedded Derby, DataNucleus, ORC and a gRPC stack — none of
+          which a metastore that stores nothing itself has any use for. Excluded, it is 48
+          jars / 41 MB and the Thrift server round-trips unchanged. This is the same call the
+          module next door made when it wrote LocalFileIO rather than take HadoopFileIO.
+        -->
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
+            <version>${hive.version}</version>
+            <exclusions>
+                <!-- drags hadoop-common 2.6.0 behind it -->
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.dropwizard.metrics</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <!-- the metastore's own RDBMS persistence, which this app replaces wholesale -->
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.derby</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.zaxxer</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.jolbox</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <!-- file formats and RPC this server never speaks -->
+                <exclusion>
+                    <groupId>org.apache.orc</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-client-runtime</artifactId>
+                </exclusion>
+                <!-- The pre-Jakarta javax.* annotations, which nothing on a Spring Boot 4 stack
+                     reads. Only present for the @javax.annotation.Generated that Thrift stamps on
+                     its generated classes, a class-retention annotation whose absence is
+                     invisible at runtime. -->
+                <exclusion>
+                    <groupId>javax.annotation</groupId>
+                    <artifactId>javax.annotation-api</artifactId>
+                </exclusion>
+                <!-- antlr-runtime 3.3 publishes a POM with no license element at all, and
+                     licensescan fails the build on a dependency it cannot attribute — which is
+                     the point of running it. Hive wants ANTLR to parse partition filter
+                     expressions, and this metastore refuses get_partitions_by_filter outright,
+                     so nothing here ever reaches it. -->
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr-runtime</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Enforcer Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-maven</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireMavenVersion>
+                                    <version>3.9.9</version>
+                                </requireMavenVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Compiler Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+            <!-- SpringBoot Plugin: this module is a deployable application -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                    <image>
+                        <name>metacatalog-hive-metastore:${docker.image.tag}</name>
+                        <env>
+                            <BP_JVM_VERSION>${java.version}</BP_JVM_VERSION>
+                        </env>
+                        <publish>${docker.publish}</publish>
+                    </image>
+                    <docker>
+                        <publishRegistry>
+                            <url>${docker.registry.url}</url>
+                            <username>${docker.registry.username}</username>
+                            <password>${docker.registry.password}</password>
+                        </publishRegistry>
+                    </docker>
+                </configuration>
+            </plugin>
+
+            <!-- JaCoCo Plugin -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Spotless Plugin for Code Formatting -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- licensescan Maven plugin for License check -->
+            <plugin>
+                <groupId>com.github.carlomorelli</groupId>
+                <artifactId>licensescan-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- maven-surefire-plugin to run unit tests through the command line -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
