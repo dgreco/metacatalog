@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Durations;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +23,20 @@ class ProvisioningProcedureTests extends CommonServiceTestingSupport {
 
   public ProvisioningProcedureTests(ApplicationContext applicationContext) {
     super(applicationContext);
+  }
+
+  /**
+   * The factory registry is a field of the singleton {@link TaskManager} bean, and the Spring
+   * context outlives the per-class database reset — so whatever is left registered here is
+   * inherited by every test class that runs afterwards. This test deliberately finishes with a
+   * permanently-failing {@code AthenaTableType} factory in place, and leaving it would fail an
+   * unrelated test later with "Athena is down" and nothing tying that back to here.
+   */
+  @AfterEach
+  void unregisterTaskFactories() {
+    var taskManager = getApplicationContext().getBean(TaskManager.class);
+    taskManager.unregisterTaskFactory("S3FolderType");
+    taskManager.unregisterTaskFactory("AthenaTableType");
   }
 
   @Test
