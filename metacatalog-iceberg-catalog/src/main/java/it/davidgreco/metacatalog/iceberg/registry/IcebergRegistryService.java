@@ -1,5 +1,8 @@
 package it.davidgreco.metacatalog.iceberg.registry;
 
+import static it.davidgreco.metacatalog.common.RegistrySupport.jsonPathString;
+import static it.davidgreco.metacatalog.common.RegistrySupport.lockId;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -16,7 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.zip.CRC32;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.iceberg.catalog.Namespace;
@@ -439,38 +441,6 @@ public class IcebergRegistryService {
 
   private String tableKey(TableIdentifier identifier) {
     return key(identifier.namespace()) + IcebergModel.KEY_SEPARATOR + identifier.name();
-  }
-
-  /**
-   * Renders a string as a PostgreSQL jsonpath string literal. Control characters (the {@code
-   * \u001F} namespace separator above all) and jsonpath metacharacters are emitted as {@code
-   * \\uXXXX} escapes, which the jsonpath grammar accepts in string literals.
-   */
-  static String jsonPathString(String value) {
-    var sb = new StringBuilder(value.length() + 2).append('"');
-    for (int i = 0; i < value.length(); i++) {
-      char c = value.charAt(i);
-      if (c < 0x20 || c == '"' || c == '\\') {
-        sb.append(String.format("\\u%04x", (int) c));
-      } else {
-        sb.append(c);
-      }
-    }
-    return sb.append('"').toString();
-  }
-
-  /**
-   * Derives a stable advisory-lock id from a registry name, steering clear of the ids reserved by
-   * core (1 = mapping updater, 2 = immutable-model installer).
-   */
-  static int lockId(String name) {
-    var crc = new CRC32();
-    crc.update(name.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    int id = (int) crc.getValue();
-    if (id == 1 || id == 2) {
-      id ^= 0x5f3759df;
-    }
-    return id;
   }
 
   private void acquireLockOrFail(String what, int id) {

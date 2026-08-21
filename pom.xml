@@ -54,6 +54,9 @@
 
         <!--   Apache Iceberg (metacatalog-iceberg-catalog) -->
         <iceberg.version>1.11.0</iceberg.version>
+        <!-- Hive Metastore Thrift API types, used by metacatalog-hive-metastore. Only the
+             generated protocol classes are wanted; see that module's exclusions. -->
+        <hive.version>4.2.0</hive.version>
 
         <!--   Postgresql -->
         <postgresql.version>42.7.13</postgresql.version>
@@ -128,6 +131,11 @@
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-iceberg-catalog</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>it.davidgreco.metacatalog</groupId>
+                <artifactId>metacatalog-hive-metastore</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -667,6 +675,7 @@
         <module>metacatalog-sparql</module>
         <module>metacatalog-application</module>
         <module>metacatalog-iceberg-catalog</module>
+        <module>metacatalog-hive-metastore</module>
     </modules>
 
     <profiles>

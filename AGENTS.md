@@ -30,6 +30,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | `metacatalog-ui` | Server-side rendered admin UI under `/ui/**` (Thymeleaf templates + plain JS, no build step). Drives the REST API through `MetacatalogApiDelegate`; does not depend on `metacatalog-core`. See [UI](#ui-metacatalog-ui). |
 | `metacatalog-sparql` | Embedded Ontop SPARQL endpoint over the metacatalog DB. See [Ontop](#ontop-embedded-sparql-endpoint). |
 | `metacatalog-iceberg-catalog` | An **independent Spring Boot application** (port 8181, own image) implementing the standard Apache Iceberg REST catalog API over the core service layer, against the same database as the main app. See [Iceberg REST catalog](#iceberg-rest-catalog-metacatalog-iceberg-catalog). |
+| `metacatalog-hive-metastore` | Another **independent Spring Boot application** (Thrift on 9083, actuator on 8282, own image) implementing the Apache Hive Metastore protocol over the core service layer, against the same database. A separate implementation with its own model, not a view over the Iceberg registry. See [Hive Metastore](#hive-metastore-metacatalog-hive-metastore). |
 
 Package root everywhere: `it.davidgreco.metacatalog`.
 
@@ -824,6 +825,117 @@ part of the Maven build — it exists to test the catalog exactly the way a Pyth
 The same project carries `create_tables.py` (`uv run python create_tables.py`), an idempotent
 seeder that creates a few demo tables with sample parquet data in a `demo` namespace, for
 browsing the catalog from the UI/SPARQL or another Iceberg client (`--drop` recreates them).
+
+## Hive Metastore (metacatalog-hive-metastore)
+
+A third deployable application: `HiveMetastoreApplication` speaks the **Apache Hive Metastore Thrift
+protocol** on port **9083** (the Hive default, so clients need no unusual configuration), with HTTP
+on **8282** carrying nothing but the actuator probes. It shares the main app's database, depends on
+**`metacatalog-core` only** among internal modules, and — like the Iceberg app — has no
+`@EnableScheduling`, because the mapping updater belongs to the main application.
+
+It is a **separate implementation, not a view over the Iceberg registry**. It declares its own model
+and owns its own entities; the two catalogs coexist in one database and one graph, and either side's
+objects can be linked to anything else because both are just entities. A Hive database created over
+Thrift is visible immediately through the main app's REST API, in `/ui/graph` and over SPARQL, which
+is the point of storing metastore objects as entities rather than in tables of their own.
+
+**Model.** Declared immutable at startup by `HiveModelContributor`: traits `HiveDatabaseTrait`,
+`HiveTableTrait` (inherits `Aggregate`) and `HivePartitionTrait` (inherits `AggregateElement`), the
+two `HAS_PART` links between them, and entity types `HiveDatabase` / `HiveTable` / `HivePartition`.
+Two boundaries carry the weight:
+
+- **A table is a real aggregate of its partitions.** `EntityService.unlink` refuses to detach a
+  partition — it would strand it — and dropping a table goes through `AggregateService.delete`,
+  which removes the table and its partitions in one transaction. A stock metastore has to remember
+  to cascade; here the model will not let you forget.
+- **The database trait deliberately carries neither built-in trait.** Were it an `Aggregate`, the
+  database→table link could never be unlinked, so neither dropping a table nor renaming one into
+  another database would be possible. This is the same conclusion the Iceberg module reached about
+  namespaces, for the same reason.
+
+Entity values are JSON-Schema validated on every write — storage descriptors, serde info, partition
+keys and all. The schemas are **inlined rather than factored into `$defs`/`$ref`**, and that is
+load-bearing: `JsonUtils.mergeSchemas` emits a fresh node carrying only `type`, `properties`,
+`required` and `additionalProperties`, so `$defs` does not survive into the derived schema and every
+reference would dangle. They are composed from Java constants instead, so there is still one source
+of truth, and `HiveModelTests` covers a fully populated table specifically so that factoring them
+back out fails loudly.
+
+**Registry.** `HiveRegistryService` is the only class touching core services, one transaction per
+operation. Entities have no name column and no uniqueness constraint on their jsonb values, so name
+uniqueness is enforced with a transaction-scoped advisory lock keyed on the name (via core's
+`RegistrySupport.lockId`, which avoids the ids core reserves) plus a re-check under it; reads push a
+jsonpath predicate into PostgreSQL via `RegistrySupport.jsonPathString`. A rename takes both table
+locks in ascending id order so two concurrent renames cannot deadlock. It throws the **unchecked**
+types in `HiveErrors`, not Thrift's own: Thrift's are checked, and Spring rolls back on unchecked
+exceptions only, so throwing one partway through would commit the half-written state the transaction
+exists to prevent.
+
+Dropping a *single* partition deliberately goes around `EntityService.unlink`, removing the
+relationship row and the entity directly — exactly what `AggregateService.delete` does internally.
+The public API still cannot strand a partition; this is the component that owns these entities
+tearing one down on purpose.
+
+**Protocol layer.** `ThriftHiveMetastore.Iface` has several hundred methods and extends fb303's
+service interface, so implementing it literally would mean a stub file larger than the rest of the
+module. `HmsIfaceProxy` satisfies it with a dynamic proxy dispatching **by name** to
+`MetacatalogHmsHandler`, which declares only the supported operations; anything else is refused
+naming the method. That trades a compile error for a runtime failure when Hive renames something, so
+`HmsIfaceProxyTests` resolves every name *and signature* the handler claims against the live
+interface. It is not optional — it immediately caught that Hive 4 replaced `get_table(db, name)` and
+`get_table_objects_by_name` with `get_table_req(GetTableRequest)` and
+`get_table_objects_by_name_req(GetTablesRequest)`.
+
+Databases, tables and partitions are supported read-write. **Deliberately refused**, each naming its
+limitation: `get_partitions_by_filter` / `get_partitions_by_expr` (a Hive filter-expression parser is
+its own project), transactions and locks, statistics, materialized views and the notification log. A
+plausible-looking wrong answer — empty statistics, an empty partition list — would have clients
+making decisions on it.
+
+`HiveMetastoreThriftServer` is a `SmartLifecycle`, not a `@PostConstruct` bean, for two reasons: it
+starts after context refresh so a client cannot reach a half-built application, and it never runs
+during the image build, where the AOT training run boots with `spring.context.exit=onRefresh` and a
+server bound in a constructor would try to take 9083 inside the builder. Its phase puts it after the
+web server, so readiness only flips once the Thrift socket is accepting — which is what the Compose
+healthcheck gates on.
+
+**Two client conventions the flat protocol hides**, both found by driving the server with the real
+client and invisible to Thrift's generated one:
+
+- **Hive 4 moved most operations to request objects.** `HiveMetaStoreClient` calls
+  `create_database_req`, `get_database_req`, `create_table_req`, `alter_table_req`,
+  `drop_table_req`, `add_partitions_req`, `fetch_partition_names_req` and friends — not the flat
+  forms. Both are implemented; the flat ones are still on the interface and older clients use them.
+- **A catalog-qualified database is encoded into the name string** as `@hive#sales`, and "every
+  database" as `@hive#` (`MetaStoreUtils.prependCatalogToDbName`). A server that treats the whole
+  string as a name returns an empty catalog *with no error*, which is exactly what a real client
+  saw here. `HiveCatalogNames` strips the prefix; this metastore has one catalog and does not model
+  the concept.
+
+**Tests.** `HiveModelTests` pins the model and its schemas; `HiveRegistryServiceTests` the registry,
+including a four-thread race where exactly one caller creates the table; `HmsIfaceProxyTests` the
+dispatch guard; `HiveMetastoreEndToEndTest` boots the real app and drives it over a real Thrift
+socket. That last one uses Thrift's **generated client**, not `HiveMetaStoreClient`, and not by
+choice: `HiveMetaStoreClient` calls `Subject.getSubject()`, which throws on JDK 24+, and
+`-Djava.security.manager=allow` is *rejected at VM startup* on JDK 26. It cannot run in this build.
+Real consumers run their own JVMs and are unaffected — which is what
+`metacatalog-hive-metastore/hive-test/` is for: a Maven project outside the reactor that drives a
+*running* stack with the real `HiveMetaStoreClient` on JDK 21, in a container, exactly as
+`pyiceberg-test/` does for the Iceberg catalog. `make up-hive-d`, then `./hive-test/run.sh`. It is
+not optional decoration: it is what found both client conventions above, and each of them made the
+metastore silently useless to a real consumer while every in-build test stayed green.
+
+The module's own `@SpringBootTest`s bind the Thrift server to a free port rather than 9083, because
+the lifecycle bean starts with the context and would otherwise fight a stack the developer has
+running. Note `HiveMetastoreProperties` reads a non-positive port as "unset" and substitutes 9083,
+so 0 does not mean "ephemeral" there.
+
+**Dependencies.** `hive-standalone-metastore-common` unfiltered resolves 128 jars / 132 MB: two
+Hadoop client bundles, a transitive `hadoop-common` **2.6.0** behind a metrics reporter, an embedded
+Derby, DataNucleus, ORC and a gRPC stack. The module excludes all of it — a metastore that stores
+nothing itself needs none of it — leaving the whole classpath at 127 MB, less than the Iceberg
+module's 162 MB, with guava back at the parent-managed version. Keep the exclusions.
 
 ## Ontop (embedded SPARQL endpoint)
 

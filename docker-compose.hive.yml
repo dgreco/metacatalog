@@ -1,0 +1,40 @@
+# Overlay adding the Hive Metastore application to the base stack:
+#   docker compose -f docker-compose.yml -f docker-compose.hive.yml up --build
+# or `make run-hive` / `make up-hive-d`.
+#
+# It shares the base stack's postgres, so a Hive database created over Thrift on
+# :9083 is visible immediately through the main app's REST API on :8080, in the
+# admin UI's catalog graph, and over SPARQL — which is the whole reason the
+# metastore stores its objects as entities rather than in tables of its own.
+
+services:
+  hive-metastore:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODULE: metacatalog-hive-metastore
+    image: metacatalog-hive-metastore:0.0.1-SNAPSHOT
+    container_name: metacatalog-hive-metastore
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/metacatalog
+      SPRING_DATASOURCE_USERNAME: metacatalog
+      SPRING_DATASOURCE_PASSWORD: metacatalog
+    ports:
+      # 9083 is the Hive default, so a client needs no unusual configuration.
+      - "9083:9083"
+      # Actuator only.
+      - "8282:8282"
+    healthcheck:
+      # readiness, not health: it turns UP only after the ApplicationRunners finish
+      # and the Thrift lifecycle bean has bound its port, so a dependent gated on
+      # service_healthy cannot connect before the metastore is actually answering.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8282/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
