@@ -41,3 +41,22 @@ parts:
       - { name: "sku", type: "string", required: true }
       - { name: "quantity", type: "int" }
       - { name: "price", type: "double" }
+
+# The fourth port is not an Iceberg table. It is an ordinary Parquet dataset described in the Hive
+# Metastore, so a consumer that only speaks Hive can read it — the same data product publishing
+# through two catalogs, which is the point of the demo. Provisioning creates it over the metastore's
+# Thrift protocol on :9083; the three ports above are created over the Iceberg REST catalog on
+# :8181. Both end up as entities in the same graph, side by side under this aggregate.
+- ref: "returns"
+  entityType: "HiveTableOutputPortType"
+  values:
+    name: "returns"
+    database: "sales_analytics"
+    location: "s3://iceberg-warehouse/sales_analytics/returns"
+    description: "Returned orders, published as Parquet for Hive-speaking consumers"
+    columns:
+      - { name: "return_id", type: "bigint", comment: "primary key" }
+      - { name: "order_id", type: "bigint" }
+      - { name: "reason", type: "string" }
+      - { name: "refunded", type: "decimal(10,2)" }
+      - { name: "returned_at", type: "timestamp" }

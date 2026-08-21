@@ -17,7 +17,10 @@ COMPOSE_ICEBERG = $(COMPOSE) -f docker-compose.yml -f docker-compose.iceberg.yml
 ## Base stack plus the Hive Metastore (Thrift on :9083)
 COMPOSE_HIVE = $(COMPOSE) -f docker-compose.yml -f docker-compose.hive.yml
 
-.PHONY: run up up-d rebuild down logs ps info run-keycloak up-keycloak-d down-keycloak run-iceberg up-iceberg-d down-iceberg run-hive up-hive-d down-hive
+## The mixed demo: base + Iceberg + Hive, one data product publishing through both catalogs
+COMPOSE_HIVE_DEMO = $(COMPOSE) -f docker-compose.yml -f docker-compose.iceberg.yml -f docker-compose.hive.yml -f docker-compose.hive-demo.yml
+
+.PHONY: run up up-d rebuild down logs ps info run-keycloak up-keycloak-d down-keycloak run-iceberg up-iceberg-d down-iceberg run-hive up-hive-d down-hive hive-cli run-hive-demo up-hive-demo-d down-hive-demo
 
 ## run / up: build from source and start the whole stack (foreground)
 run up:
@@ -67,6 +70,27 @@ up-hive-d:
 ## down-hive: stop the hive stack (ARGS=-v to drop volumes too)
 down-hive:
 	$(COMPOSE_HIVE) down $(ARGS)
+
+## hive-cli: build the Thrift client the Hive provisioning script shells out to.
+## Out of the reactor and mounted rather than shipped: 34 MB of Hive classes only the demo needs.
+## Built in a container so the demo needs no JDK or Maven on the host, like everything else here.
+hive-cli:
+	docker run --rm \
+	  -v "$(PWD)/docker/provisioning/hive-cli":/work \
+	  -v "$(HOME)/.m2":/root/.m2 \
+	  -w /work maven:3-eclipse-temurin-21 mvn -q -B package
+
+## run-hive-demo: the mixed data product demo (foreground)
+run-hive-demo: hive-cli
+	$(COMPOSE_HIVE_DEMO) up --build
+
+## up-hive-demo-d: same, detached
+up-hive-demo-d: hive-cli
+	$(COMPOSE_HIVE_DEMO) up --build -d
+
+## down-hive-demo: stop it (ARGS=-v to drop volumes too)
+down-hive-demo:
+	$(COMPOSE_HIVE_DEMO) down $(ARGS)
 
 ## down-iceberg: stop the Iceberg stack (add ARGS=-v to also drop the database and warehouse volumes)
 down-iceberg:

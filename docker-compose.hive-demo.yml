@@ -1,0 +1,30 @@
+# The mixed data product demo: one aggregate whose output ports are published through *two*
+# catalogs — three as Iceberg tables in the REST catalog on :8181, one as an ordinary Parquet table
+# in the Hive Metastore on :9083. Stacks on top of the base, Iceberg and Hive files:
+#
+#   make run-hive-demo        (builds the Thrift CLI first, then brings the stack up)
+#
+# Provisioning the aggregate from the UI's instances page, or with
+# POST /metacatalog/v1/aggregate/{id}/provision, materialises all four ports. All four end up as
+# entities in one graph, side by side under the same data product, whichever catalog created them.
+
+services:
+  app:
+    environment:
+      # Where provision-hive-table.sh sends its Thrift calls, and where it finds the client.
+      HIVE_METASTORE_URI: thrift://hive-metastore:9083
+      HIVE_CLI_JAR: /opt/metacatalog/provisioning/hive-cli/hive-cli.jar
+    volumes:
+      # Mounted, not baked into the image: the CLI is 34 MB of Hive and Thrift classes that only
+      # the demo needs. `make hive-cli` builds it into the path below.
+      - ./docker/provisioning/hive-cli/target:/opt/metacatalog/provisioning/hive-cli:ro
+    depends_on:
+      hive-metastore:
+        condition: service_healthy
+
+  # The demo loader waits for the metastore too, not just the Iceberg catalog: the model it posts
+  # is the same one, and provisioning it needs both services answering.
+  iceberg-demo-loader:
+    depends_on:
+      hive-metastore:
+        condition: service_healthy

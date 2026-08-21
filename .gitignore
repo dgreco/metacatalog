@@ -59,3 +59,6 @@ k8s/db-secret.yaml
 # Working notes kept alongside the repo rather than in it
 Daily Notes/
 Task Board.md
+
+# Demo-only Thrift CLI build output (built by `make hive-cli`, mounted not shipped)
+docker/provisioning/hive-cli/target/

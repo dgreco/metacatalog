@@ -23,8 +23,12 @@ import org.apache.hadoop.hive.metastore.api.DropTableRequest;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.GetDatabaseRequest;
+import org.apache.hadoop.hive.metastore.api.GetFieldsRequest;
+import org.apache.hadoop.hive.metastore.api.GetFieldsResponse;
 import org.apache.hadoop.hive.metastore.api.GetPartitionRequest;
 import org.apache.hadoop.hive.metastore.api.GetPartitionResponse;
+import org.apache.hadoop.hive.metastore.api.GetSchemaRequest;
+import org.apache.hadoop.hive.metastore.api.GetSchemaResponse;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
 import org.apache.hadoop.hive.metastore.api.GetTableResult;
 import org.apache.hadoop.hive.metastore.api.GetTablesRequest;
@@ -285,13 +289,46 @@ public class MetacatalogHmsHandler {
   }
 
   public List<FieldSchema> get_fields(String databaseName, String name) throws TException {
-    var table = get(() -> registry.getTable(databaseName, name));
+    return fieldsOf(databaseName, name);
+  }
+
+  /** The environment-context and request-object forms, which the real client calls. */
+  public List<FieldSchema> get_fields_with_environment_context(
+      String databaseName, String name, EnvironmentContext context) throws TException {
+    return fieldsOf(databaseName, name);
+  }
+
+  public GetFieldsResponse get_fields_req(GetFieldsRequest request) throws TException {
+    var response = new GetFieldsResponse();
+    response.setFields(fieldsOf(request.getDbName(), request.getTblName()));
+    return response;
+  }
+
+  private List<FieldSchema> fieldsOf(String databaseName, String name) throws TException {
+    var database = HiveCatalogNames.database(databaseName);
+    var table = get(() -> registry.getTable(database, name));
     return table.getSd() == null ? List.of() : table.getSd().getCols();
   }
 
   /** The schema is the columns plus the partition keys, which is how Hive defines it. */
   public List<FieldSchema> get_schema(String databaseName, String name) throws TException {
-    var table = get(() -> registry.getTable(databaseName, name));
+    return schemaOf(databaseName, name);
+  }
+
+  public List<FieldSchema> get_schema_with_environment_context(
+      String databaseName, String name, EnvironmentContext context) throws TException {
+    return schemaOf(databaseName, name);
+  }
+
+  public GetSchemaResponse get_schema_req(GetSchemaRequest request) throws TException {
+    var response = new GetSchemaResponse();
+    response.setFields(schemaOf(request.getDbName(), request.getTblName()));
+    return response;
+  }
+
+  private List<FieldSchema> schemaOf(String databaseName, String name) throws TException {
+    var database = HiveCatalogNames.database(databaseName);
+    var table = get(() -> registry.getTable(database, name));
     var schema = new ArrayList<FieldSchema>();
     if (table.getSd() != null && table.getSd().getCols() != null) {
       schema.addAll(table.getSd().getCols());

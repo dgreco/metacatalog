@@ -826,6 +826,49 @@ The same project carries `create_tables.py` (`uv run python create_tables.py`), 
 seeder that creates a few demo tables with sample parquet data in a `demo` namespace, for
 browsing the catalog from the UI/SPARQL or another Iceberg client (`--drop` recreates them).
 
+## The mixed data-product demo (both catalogs at once)
+
+`make run-hive-demo` (or `up-hive-demo-d`) stacks four compose files — base, Iceberg, Hive and
+`docker-compose.hive-demo.yml` — and seeds **one data product whose output ports are published
+through two different catalogs**: three as Iceberg tables in the REST catalog on `:8181`, and one as
+an ordinary Parquet table in the Hive Metastore on `:9083`. Provisioning the aggregate materialises
+all four; all four are entities under the same root in one graph, whichever catalog created them.
+
+Three things about it are worth knowing before changing it:
+
+- **The metastore speaks Thrift, so the provisioning script cannot be curl.** It shells out to
+  `docker/provisioning/hive-cli/`, a small shaded Thrift client built out of the reactor by `make
+  hive-cli` (in a container — the demo needs no JDK on the host) and **mounted** into the app
+  container rather than baked into the shipped image, since it is 34 MB of Hive classes only the
+  demo wants. It uses Thrift's *generated* client rather than `HiveMetaStoreClient`, which is what
+  lets it run on the image's JDK 26 at all.
+- **One script task, two kinds of port.** `application.config.provisioning.tasks` is keyed by task
+  name, so the `script` task has exactly one `path`. `provision-output-port.sh` is a dispatcher: it
+  reads the port's shape — `namespace` means Iceberg, `database` means Hive — and delegates. Change
+  either schema and that line changes with it.
+- **The Parquet table has no data behind it.** It is an external table describing a location a
+  pipeline fills, which is how Hive external tables are normally used, and it is what makes the port
+  readable by a Hive consumer without the demo needing a Parquet writer. What makes it *Parquet* to
+  a query engine is the input/output format and SerDe, which the CLI sets.
+
+**Every port is linked to the resource it produced**, on both sides: after materialising a table the
+script links `port DEPENDS_ON <table entity>` — `IcebergTable` for the Iceberg ports, `HiveTable`
+for the Hive one — so the graph shows what each port's contract is actually fulfilled by. Each is
+sanctioned by a trait relationship the demo model declares (`IcebergTableOutputPort DEPENDS_ON
+IcebergTableTrait`, `HiveTableOutputPort DEPENDS_ON HiveTableTrait`), and since both target traits
+are declared by the *other* applications' startup contributors, the demo loader waits for both
+services to be healthy before posting the model.
+
+The lookup, link and unlink are shared between the two scripts in `metacatalog-api.sh`. Their
+subtleties — a miss must be empty rather than fatal so unprovision tolerates a catalog that was
+never provisioned, more than one match is fatal rather than a guess, and each invocation needs its
+own response file because an aggregate's resources provision in parallel — were paid for once.
+
+Unprovisioning removes the link **before** dropping, and the order is load-bearing: the drop deletes
+the table as an aggregate, and `AggregateService` refuses that while a member is linked from outside
+it. It then drops the tables from both catalogs and leaves the Hive **database** behind on purpose:
+sibling ports share it, and the metastore refuses to drop a non-empty one.
+
 ## Hive Metastore (metacatalog-hive-metastore)
 
 A third deployable application: `HiveMetastoreApplication` speaks the **Apache Hive Metastore Thrift
@@ -912,6 +955,10 @@ client and invisible to Thrift's generated one:
   string as a name returns an empty catalog *with no error*, which is exactly what a real client
   saw here. `HiveCatalogNames` strips the prefix; this metastore has one catalog and does not model
   the concept.
+- **Several operations have an environment-context variant the client prefers.** `getSchema` and
+  `getFields` call `get_schema_with_environment_context` / `get_fields_with_environment_context`,
+  never the flat forms. Found by the mixed demo, not by any in-build test — the pattern by now is
+  that anything only a real client exercises is only ever found by a real client.
 
 **Tests.** `HiveModelTests` pins the model and its schemas; `HiveRegistryServiceTests` the registry,
 including a four-thread race where exactly one caller creates the table; `HmsIfaceProxyTests` the
