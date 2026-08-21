@@ -55,3 +55,7 @@ k8s/db-secret.yaml
 
 # Claude
 .claude
+
+# Working notes kept alongside the repo rather than in it
+Daily Notes/
+Task Board.md
