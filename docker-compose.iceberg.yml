@@ -25,8 +25,15 @@ services:
     environment:
       ICEBERG_CATALOG_URL: http://iceberg-catalog:8181
       METACATALOG_API_URL: http://localhost:8080
-      METACATALOG_USER: admin
-      METACATALOG_PASSWORD: admin
+      # The credentials the provisioning script authenticates to the app's own API with.
+      # They must match the basic-auth user in application-docker.yaml, whose password is
+      # overridden by BASIC_AUTH_PASSWORD — as a *bcrypt hash*, so it cannot be reused here
+      # and the matching plaintext has to be given alongside it. Hardcoded, an operator who
+      # followed that file's instruction was left authenticating as admin:admin: every
+      # lookup 401s, curl -sf fails, and the task dies with an exit status rather than
+      # anything resembling an auth error.
+      METACATALOG_USER: ${METACATALOG_USER:-admin}
+      METACATALOG_PASSWORD: ${METACATALOG_PASSWORD:-admin}
 
   rustfs:
     image: rustfs/rustfs:latest
@@ -120,8 +127,9 @@ services:
       - ./docker/bulk:/bulk:ro
     environment:
       APP_URL: http://app:8080
-      METACATALOG_USER: admin
-      METACATALOG_PASSWORD: admin
+      # As above: overriding the app's password means setting the plaintext here too.
+      METACATALOG_USER: ${METACATALOG_USER:-admin}
+      METACATALOG_PASSWORD: ${METACATALOG_PASSWORD:-admin}
       MODEL_FILE: /bulk/iceberg-demo-model.yaml
       INSTANCES_FILE: /bulk/iceberg-demo-instances.yaml
     entrypoint: ["/bin/sh", "/bulk/load-bulk.sh"]

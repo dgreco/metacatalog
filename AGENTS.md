@@ -693,7 +693,13 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   profile) + a one-shot `bulk-loader` that seeds the demo model and aggregate from `docker/bulk/`.
   The loader is idempotent across restarts (the postgres volume persists): each step probes the API
   first and only loads what is missing, so deleting the demo aggregate from the UI and restarting
-  re-creates just the aggregate. Both app healthchecks poll **`/actuator/health/readiness`**, not
+  re-creates just the aggregate. The model probe checks **every** trait, entity type and trait
+  relationship the file declares — one sentinel name standing in for the file silently skipped the
+  load whenever the model gained something while keeping its first declaration, which is what left
+  the Iceberg demo's `DEPENDS_ON` uncreated on older volumes. A model that is *partly* present now
+  fails the loader with `docker compose down -v` in the message rather than skipping: the bulk
+  endpoint is all-or-nothing and dies on the first existing name, so a partial change is not
+  something it can apply. (`Mappings` are not probed — there is no read-by-name for one.) Both app healthchecks poll **`/actuator/health/readiness`**, not
   `/actuator/health`: the latter is UP as soon as Tomcat listens, during context refresh, whereas
   `ImmutableModelInstaller` is an `ApplicationRunner` and runs after it — so a loader gated on
   `depends_on: service_healthy` could post a model before the traits it builds on existed. Both apps

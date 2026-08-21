@@ -55,8 +55,11 @@ services:
       - ./docker/bulk:/bulk:ro
     environment:
       APP_URL: http://app:8080
-      METACATALOG_USER: admin
-      METACATALOG_PASSWORD: admin
+      # Must match the basic-auth user in application-docker.yaml. That file's password is
+      # overridden by BASIC_AUTH_PASSWORD as a *bcrypt hash*, which cannot be reused here,
+      # so overriding it means giving the matching plaintext through METACATALOG_PASSWORD.
+      METACATALOG_USER: ${METACATALOG_USER:-admin}
+      METACATALOG_PASSWORD: ${METACATALOG_PASSWORD:-admin}
     entrypoint: ["/bin/sh", "/bulk/load-bulk.sh"]
     restart: "no"
 

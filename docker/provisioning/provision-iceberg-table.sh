@@ -42,21 +42,45 @@ TABLE="$(jq -r '.name' <<<"${VALUES}")"
 
 fail() { echo "$1" >&2; exit 1; }
 
-# request <expected-code-regex> <curl args...> — body lands in /tmp/response.json
+# Per-invocation, because the resources of one aggregate have no dependencies between
+# them and are provisioned in parallel: several copies of this script run at once in
+# the same container, and a shared path would have them overwrite each other's bodies —
+# so a failure could report the response of a different table entirely, and that text is
+# what ends up in provisioningResult.
+RESPONSE_BODY="$(mktemp)"
+trap 'rm -f "${RESPONSE_BODY}"' EXIT
+
+# request <expected-code-regex> <curl args...> — body lands in ${RESPONSE_BODY}
 request() {
   local expected="$1"; shift
   local code
-  code=$(curl -s -o /tmp/response.json -w '%{http_code}' "$@")
-  [[ "${code}" =~ ^(${expected})$ ]] || fail "unexpected HTTP ${code} from ${*: -1}: $(cat /tmp/response.json)"
+  code=$(curl -s -o "${RESPONSE_BODY}" -w '%{http_code}' "$@")
+  [[ "${code}" =~ ^(${expected})$ ]] || fail "unexpected HTTP ${code} from ${*: -1}: $(cat "${RESPONSE_BODY}")"
   echo "${code}"
 }
 
-# entity_id <entityTypeName> <queryPath> — the single matching entity's id, empty if none
+# entity_id <entityTypeName> <queryPath> — the single matching entity's id, empty if none.
+#
+# A lookup that finds nothing is empty and successful, including when the request itself
+# fails because the entity type does not exist: unprovisioning has to tolerate a catalog
+# that was never provisioned, and `set -e` would otherwise abort the script at the
+# assignment — before the caller's `|| return 0` could express that.
+#
+# More than one match is fatal. The caller is about to link or unlink exactly one entity,
+# and nothing stops two data products from exposing a port of the same name in the same
+# namespace; picking arbitrarily would wire the wrong port to the wrong table and report
+# success.
 entity_id() {
-  curl -sf -u "${API_AUTH}" --get \
-    --data-urlencode "entityTypeName=$1" \
-    --data-urlencode "queryPath=$2" \
-    "${API}/entity" | jq -r '.[0].id // empty'
+  local body count
+  if ! body=$(curl -sf -u "${API_AUTH}" --get \
+      --data-urlencode "entityTypeName=$1" \
+      --data-urlencode "queryPath=$2" \
+      "${API}/entity"); then
+    return 0
+  fi
+  count=$(jq 'length' <<<"${body}")
+  ((count <= 1)) || fail "found ${count} $1 entities matching ${NAMESPACE}.${TABLE}; refusing to guess which one this port means"
+  jq -r '.[0].id // empty' <<<"${body}"
 }
 
 table_entity_id() {
