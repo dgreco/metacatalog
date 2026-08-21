@@ -26,12 +26,17 @@ application:
           # before the first poll.
           delay: 5s
         script:
-          # The Iceberg data-product demo (docker-compose.iceberg.yml overlay): each
-          # output port of the demo aggregate is provisioned as a real table in the
-          # Iceberg REST catalog by the script the overlay mounts. In the base stack
-          # the type does not exist and the deferred registrar just logs a warning.
-          entity-types: [IcebergTableOutputPortType]
-          path: /opt/metacatalog/provisioning/provision-iceberg-table.sh
+          # The data-product demo (docker-compose.iceberg.yml, and .hive-demo.yml for the
+          # Hive port): each output port of the demo aggregate is provisioned as a real
+          # table — in the Iceberg REST catalog, or in the Hive Metastore — by the scripts
+          # the overlays mount. In the base stack neither type exists and the deferred
+          # registrar just logs a warning.
+          #
+          # Both types name the same script because this map is keyed by task name, so the
+          # `script` task has exactly one path. provision-output-port.sh is a dispatcher
+          # that reads the port's shape and delegates.
+          entity-types: [IcebergTableOutputPortType, HiveTableOutputPortType]
+          path: /opt/metacatalog/provisioning/provision-output-port.sh
     security:
       auth-mode: basic
       basic:

@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A minimal Hive Metastore Thrift client, packaged as a shaded jar so a provisioning script can
+  drive the metastore the same way provision-iceberg-table.sh drives the Iceberg REST catalog with
+  curl. Thrift is not HTTP, so curl cannot do it and something has to.
+
+  Deliberately outside the reactor and NOT baked into the application image: it exists for the demo
+  only, and the docker-compose overlay mounts it into the app container the same way it mounts the
+  provisioning scripts.
+
+  It uses Thrift's *generated* ThriftHiveMetastore.Client, not HiveMetaStoreClient. That is what
+  makes it runnable at all on the application image's JDK 26: the wrapper calls Subject.getSubject(),
+  removed in JDK 24, and -Djava.security.manager=allow is rejected at VM startup on 26. The
+  generated client has no such dependency.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>it.davidgreco.metacatalog</groupId>
+    <artifactId>hive-cli</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>Hive Metastore provisioning CLI</name>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <hive.version>4.2.0</hive.version>
+        <jackson.version>2.20.0</jackson.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-standalone-metastore-common</artifactId>
+            <version>${hive.version}</version>
+            <exclusions>
+                <!-- The same weight the server module sheds; see its pom. Here it also matters
+                     that hadoop-common 2.6.0 declares a system-scoped jdk.tools pointing at
+                     lib/tools.jar, which has not existed since JDK 9 and fails resolution. -->
+                <exclusion>
+                    <groupId>com.github.joshelser</groupId>
+                    <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.grpc</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.datanucleus</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.derby</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.orc</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.zaxxer</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.curator</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- The port definition arrives as JSON on standard input. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>hive-cli</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>HiveCli</mainClass>
+                                </transformer>
+                            </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

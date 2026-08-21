@@ -134,6 +134,16 @@ class HiveMetaStoreClientSmokeTest {
     var batch = client.getTableObjectsByName("smoke_db", List.of("payments", "missing"));
     assertEquals(1, batch.size(), "the batch read skips what is missing rather than failing");
     assertEquals("payments", batch.getFirst().getTableName());
+
+    // getSchema and getFields route through the environment-context variants, not the flat ones a
+    // hand-written client would call — which is how the demo found them missing. The schema is the
+    // columns plus the partition keys; the fields are the columns alone.
+    assertEquals(
+        List.of("id", "amount", "note", "dt"),
+        client.getSchema("smoke_db", "payments").stream().map(FieldSchema::getName).toList());
+    assertEquals(
+        List.of("id", "amount", "note"),
+        client.getFields("smoke_db", "payments").stream().map(FieldSchema::getName).toList());
   }
 
   @Test
