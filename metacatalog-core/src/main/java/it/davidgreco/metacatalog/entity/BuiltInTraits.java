@@ -6,7 +6,7 @@ package it.davidgreco.metacatalog.entity;
  * and procedures that key off them refer to a single source of truth rather than repeating string
  * literals (a typo in which would silently break trait-based behaviour).
  *
- * <p>Because that wiring is by name, all four traits are installed immutable and cannot be deleted
+ * <p>Because that wiring is by name, all six traits are installed immutable and cannot be deleted
  * or re-versioned through the API.
  */
 public final class BuiltInTraits {
@@ -24,4 +24,10 @@ public final class BuiltInTraits {
 
   /** The provisionable-resource trait (a physical resource within a provisionable aggregate). */
   public static final String PROVISIONABLE_RESOURCE = "ProvisionableResource";
+
+  /** The authorizable trait (an aggregate whose access can be authorized or rejected). */
+  public static final String AUTHORIZABLE = "Authorizable";
+
+  /** The authorizable-resource trait (a resource within an authorizable aggregate). */
+  public static final String AUTHORIZABLE_RESOURCE = "AuthorizableResource";
 }

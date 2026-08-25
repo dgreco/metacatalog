@@ -20,12 +20,19 @@ import org.jgrapht.graph.DefaultEdge;
 import org.springframework.stereotype.Service;
 
 /**
- * Builds the graph of {@code ProvisionableResource} entities in an aggregate, with an edge from
+ * Builds the graph of the resources in an aggregate that carry a given trait, with an edge from
  * each resource to the resources it depends on.
  *
- * <p>Shared by {@link ProvisioningProcedure} and {@link UnprovisioningProcedure} so the two cannot
- * disagree about what an aggregate contains or how its resources relate. They differ only in the
- * direction they then wire the tasks in.
+ * <p>Shared by all four procedures — {@link ProvisioningProcedure} and {@link
+ * UnprovisioningProcedure} over {@code ProvisionableResource}, {@link AuthorizationProcedure} and
+ * {@link RejectionProcedure} over {@code AuthorizableResource} — so no two of them can disagree
+ * about what an aggregate contains or how its resources relate. They differ only in the trait they
+ * select on and the direction they then wire the tasks in.
+ *
+ * <p>The trait is a parameter rather than four copies of this walk because the selection is the
+ * <em>only</em> thing that varies: an aggregate whose members carry both traits produces the same
+ * tree, the same mapping-derived edges and the same cycle check either way, and a resource that is
+ * provisionable but not authorizable simply drops out of the authorization graph.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,9 +51,21 @@ public class ResourceGraphBuilder {
    * @return the resources it contains
    */
   public List<Entity> getProvisionableResourceSequence(AggregateService.AggregatePart aggregate) {
+    return getResourceSequence(aggregate, PROVISIONABLE_RESOURCE);
+  }
+
+  /**
+   * The resources in an aggregate carrying the given trait, in tree order.
+   *
+   * @param aggregate the aggregate, read with its mapped instances
+   * @param resourceTrait the trait a member must carry to be a resource of this run
+   * @return the resources it contains
+   */
+  public List<Entity> getResourceSequence(
+      AggregateService.AggregatePart aggregate, String resourceTrait) {
     switch (aggregate) {
       case AggregateService.AggregateElement(Entity entity, _):
-        if (hasTrait(entity, PROVISIONABLE_RESOURCE)) {
+        if (hasTrait(entity, resourceTrait)) {
           return List.of(entity);
         } else {
           return List.of();
@@ -56,11 +75,11 @@ public class ResourceGraphBuilder {
           _,
           List<AggregateService.AggregatePart> elements):
         var sequence = new ArrayList<Entity>();
-        if (hasTrait(entity, PROVISIONABLE_RESOURCE)) {
+        if (hasTrait(entity, resourceTrait)) {
           sequence.add(entity);
         }
         for (var childElement : elements) {
-          sequence.addAll(getProvisionableResourceSequence(childElement));
+          sequence.addAll(getResourceSequence(childElement, resourceTrait));
         }
         return sequence;
     }
@@ -70,7 +89,7 @@ public class ResourceGraphBuilder {
    * The resources the given resource is derived from, found by following its mapping sources'
    * reference paths.
    */
-  private List<Entity> getMappingDependencies(Entity entity) {
+  private List<Entity> getMappingDependencies(Entity entity, String resourceTrait) {
     return mappingService.findMappingSources(entity).stream()
         .flatMap(
             ms ->
@@ -81,23 +100,37 @@ public class ResourceGraphBuilder {
                                 ms.source().getId(), er.referencePath()))
                     .filter(Optional::isPresent)
                     .map(Optional::get)
-                    .filter(e -> hasTrait(e, PROVISIONABLE_RESOURCE)))
+                    .filter(e -> hasTrait(e, resourceTrait)))
         .toList();
   }
 
   /**
-   * Builds the dependency graph of an aggregate's resources. An edge runs from a resource to each
-   * resource it depends on.
+   * Builds the dependency graph of an aggregate's provisionable resources. An edge runs from a
+   * resource to each resource it depends on.
    *
    * @param aggregate the aggregate, read with its mapped instances
    * @return the graph
    * @throws ServiceError if the dependencies form a cycle
    */
   public Graph<Entity, DefaultEdge> buildResourceGraph(AggregateService.AggregatePart aggregate) {
+    return buildResourceGraph(aggregate, PROVISIONABLE_RESOURCE);
+  }
+
+  /**
+   * Builds the dependency graph of the aggregate's resources carrying the given trait. An edge runs
+   * from a resource to each resource it depends on.
+   *
+   * @param aggregate the aggregate, read with its mapped instances
+   * @param resourceTrait the trait a member must carry to be a resource of this run
+   * @return the graph
+   * @throws ServiceError if the dependencies form a cycle
+   */
+  public Graph<Entity, DefaultEdge> buildResourceGraph(
+      AggregateService.AggregatePart aggregate, String resourceTrait) {
     Graph<Entity, DefaultEdge> resourceGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
-    var provisionableResourceSequence = getProvisionableResourceSequence(aggregate);
-    provisionableResourceSequence.stream()
-        .map(e -> new Tuple2<>(e, getMappingDependencies(e)))
+    var resourceSequence = getResourceSequence(aggregate, resourceTrait);
+    resourceSequence.stream()
+        .map(e -> new Tuple2<>(e, getMappingDependencies(e, resourceTrait)))
         .toList()
         .forEach(
             t -> {
@@ -109,7 +142,7 @@ public class ResourceGraphBuilder {
                   });
             });
     if (new CycleDetector<>(resourceGraph).detectCycles())
-      throw new ServiceError("Cycle detected in provisioning graph");
+      throw new ServiceError("Cycle detected in the " + resourceTrait + " graph");
     return resourceGraph;
   }
 }

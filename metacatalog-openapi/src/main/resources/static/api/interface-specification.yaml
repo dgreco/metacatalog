@@ -1543,6 +1543,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/authorizable-type:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the authorizable entity types
+      description: >
+        Returns the entity types whose instances can be authorized — those carrying the
+        Authorizable trait, directly or through the type and trait inheritance chains. This is
+        the same test the authorization procedure applies to an aggregate root, so a client can
+        tell in advance which entities offer authorization rather than discovering it from a
+        rejected call. Provisioning and authorization are independent capabilities: a type may
+        offer one, both or neither.
+      operationId: listAuthorizableTypes
+      responses:
+        200:
+          description: The authorizable entity types, ordered by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/root-type/{name}/schema:
     get:
       tags:
@@ -1865,13 +1893,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/authorize:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Authorize an aggregate
+      description: >-
+        Authorizes every AuthorizableResource in the aggregate — every leaf and intermediate node
+        carrying the trait — running the task registered for each resource's entity type in
+        dependency order, so a resource is authorized only once everything it is derived from has
+        been. The aggregate root must carry the Authorizable trait; this is a separate capability
+        from provisioning and neither implies the other. Synchronous by default: the call returns
+        once the whole aggregate is done, and fails if any resource did. With async=true the plan
+        is still built and validated synchronously (a missing aggregate or an illegitimate root
+        fails immediately), but the call returns 202 with a schedule id to poll via GET
+        /procedure/{scheduleId}. Each resource is left AUTHORIZED, or FAILED with the error in
+        authorizationResult; the root records the whole run's outcome in the same fields.
+      operationId: authorizeAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+        - in: query
+          name: async
+          required: false
+          description: >-
+            When true, return immediately after plan-building with a schedule id to poll instead
+            of waiting for the run to complete. Absent or false means synchronous.
+          schema:
+            type: boolean
+      responses:
+        204:
+          description: Aggregate authorized (synchronous mode)
+        202:
+          description: Authorization started (async mode); poll GET /procedure/{scheduleId}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStatus'
+        400:
+          description: >-
+            Invalid input, the root is not Authorizable, a resource type has no registered task or
+            a task that implements authorize(), or the authorization failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/reject:
+    post:
+      tags:
+        - Meta Catalog Manager
+      summary: Reject an aggregate
+      description: >-
+        The inverse of authorization: withdraws access from every AuthorizableResource in the
+        aggregate, in the reverse of the order they were authorized, so nothing is left holding a
+        grant on something it can no longer reach. Synchronous by default, like authorization;
+        async=true behaves exactly as it does there. Each resource is left REJECTED, or FAILED
+        with the error in authorizationResult.
+      operationId: rejectAggregate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+        - in: query
+          name: async
+          required: false
+          description: >-
+            When true, return immediately after plan-building with a schedule id to poll instead
+            of waiting for the run to complete. Absent or false means synchronous.
+          schema:
+            type: boolean
+      responses:
+        204:
+          description: Aggregate rejected (synchronous mode)
+        202:
+          description: Rejection started (async mode); poll GET /procedure/{scheduleId}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStatus'
+        400:
+          description: >-
+            Invalid input, the root is not Authorizable, a resource type has no registered task or
+            a task that implements reject(), or the rejection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/procedure/{scheduleId}:
     get:
       tags:
         - Meta Catalog Manager
       summary: Get the status of an asynchronously launched procedure run
       description: >-
-        Polls a run started with async=true on the provision or unprovision endpoint. Statuses are
+        Polls a run started with async=true on the provision, unprovision, authorize or reject
+        endpoint. Statuses are
         kept in a durable registry shared by every application instance, so any replica can answer
         the poll and a run's outcome survives restarts. Rows are cleaned up after
         application.config.procedureRunRetention (default 24h), after which the id reads as not
@@ -1882,7 +2028,7 @@ paths:
         - in: path
           name: scheduleId
           required: true
-          description: The schedule id returned by the async provision/unprovision call
+          description: The schedule id returned by the async provision/unprovision/authorize/reject call
           schema:
             type: string
       responses:

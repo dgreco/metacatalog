@@ -1,17 +1,10 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import static it.davidgreco.metacatalog.service.ServiceUtils.hasTrait;
-
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
-import it.davidgreco.metacatalog.entity.Entity;
-import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
-import it.davidgreco.metacatalog.service.*;
-import java.util.HashMap;
-import java.util.Optional;
-import lombok.RequiredArgsConstructor;
+import it.davidgreco.metacatalog.service.AggregateService;
+import it.davidgreco.metacatalog.service.TaskFactory;
+import it.davidgreco.metacatalog.service.TaskManager;
 import lombok.extern.slf4j.Slf4j;
-import org.jgrapht.Graph;
-import org.jgrapht.graph.DefaultEdge;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -32,85 +25,40 @@ import org.springframework.stereotype.Service;
  *
  * <p>Each task comes from the {@link TaskFactory} registered against the resource's entity type
  * name, so a resource type with no registered factory fails the run rather than being reported as
- * provisioned by nothing. See {@link UnprovisioningProcedure} for the inverse.
+ * provisioned by nothing. See {@link UnprovisioningProcedure} for the inverse, and {@link
+ * AbstractAggregateResourceProcedure} for the machinery all four aggregate procedures share.
  */
 @Slf4j
-@RequiredArgsConstructor
 @Service
-public class ProvisioningProcedure extends AbstractEntityProcedure {
+public class ProvisioningProcedure extends AbstractAggregateResourceProcedure {
 
-  private final AggregateService aggregateService;
-  private final ResourceGraphBuilder resourceGraphBuilder;
-  private final TaskManager taskManager;
-  private final AggregateProvisioningStatusRecorder statusRecorder;
-
-  /**
-   * Registrars whose task factories key off entity types created at runtime, so they cannot
-   * register at startup. An {@link ObjectProvider} rather than a {@code List}: injecting a list
-   * when no such bean exists fails outright, and none is the default.
-   */
-  private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
-
-  /**
-   * Planning runs inside {@code recordingAround} so the root ends up reflecting the outcome whether
-   * the run finishes or never starts: the returned future completes only after the status is
-   * written, and a failure to build the plan at all is recorded before it propagates. Callers and
-   * status polls therefore never see a finished — or abandoned — run behind a stale root.
-   */
-  @Override
-  protected Optional<TaskManager.ScheduleHandle> execute(Entity entity) {
-    return statusRecorder.recordingAround(
-        entity.getId(),
-        ProvisioningTask.Operation.PROVISION,
-        () -> {
-          // Inside the plan-building transaction, before any task is created: entity types created
-          // since startup exist by now, so a registrar that could not register at boot gets its
-          // chance here.
-          deferredRegistrars
-              .orderedStream()
-              .forEach(DeferredTaskFactoryRegistrar::ensureRegistered);
-          var aggregate = aggregateService.read(entity.getId(), true);
-          var provisioningGraph = resourceGraphBuilder.buildResourceGraph(aggregate);
-          var tasks = createTasksForVertices(provisioningGraph);
-          wireDependencies(provisioningGraph, tasks);
-          var schedule = taskManager.createSchedule();
-          for (var task : tasks.values()) {
-            schedule.addTask(task);
-          }
-          return new AggregateProvisioningStatusRecorder.Plan(
-              taskManager.schedule(schedule), tasks.size());
-        });
-  }
-
-  private HashMap<String, Task> createTasksForVertices(
-      Graph<Entity, DefaultEdge> provisioningGraph) {
-    var tasks = new HashMap<String, Task>();
-    provisioningGraph.vertexSet().forEach(e -> tasks.put(e.getId(), taskManager.createTask(e)));
-    return tasks;
-  }
-
-  /**
-   * Makes each task depend on the tasks of the resources it is derived from, so a resource is
-   * provisioned only once everything it is built from exists.
-   */
-  private void wireDependencies(
-      Graph<Entity, DefaultEdge> provisioningGraph, HashMap<String, Task> tasks) {
-    tasks
-        .values()
-        .forEach(
-            task -> {
-              var dependsOnTasks =
-                  provisioningGraph.outgoingEdgesOf(task.getEntity()).stream()
-                      .map(e -> tasks.get(provisioningGraph.getEdgeTarget(e).getId()))
-                      .toList();
-              dependsOnTasks.forEach(task::dependsOn);
-            });
+  public ProvisioningProcedure(
+      AggregateService aggregateService,
+      ResourceGraphBuilder resourceGraphBuilder,
+      TaskManager taskManager,
+      AggregateProvisioningStatusRecorder statusRecorder,
+      ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
+    super(aggregateService, resourceGraphBuilder, taskManager, statusRecorder, deferredRegistrars);
   }
 
   @Override
-  protected void checkInputType(Entity entity) {
-    if (!hasTrait(entity, BuiltInTraits.PROVISIONABLE))
-      throw new ServiceError(
-          "Entity type: " + entity.getEntityType().getName() + " has not a trait Provisionable");
+  protected String rootTrait() {
+    return BuiltInTraits.PROVISIONABLE;
+  }
+
+  @Override
+  protected String resourceTrait() {
+    return BuiltInTraits.PROVISIONABLE_RESOURCE;
+  }
+
+  @Override
+  protected ProvisioningTask.Operation operation() {
+    return ProvisioningTask.Operation.PROVISION;
+  }
+
+  /** A resource is provisioned only once everything it is derived from exists. */
+  @Override
+  protected boolean dependentsFirst() {
+    return false;
   }
 }

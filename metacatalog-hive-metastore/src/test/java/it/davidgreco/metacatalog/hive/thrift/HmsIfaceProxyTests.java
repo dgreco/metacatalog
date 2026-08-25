@@ -77,6 +77,51 @@ class HmsIfaceProxyTests {
             + mismatched);
   }
 
+  /**
+   * The return type matters as much as the parameters, and fails far less visibly. A handler method
+   * returning {@code void} where the protocol operation returns a result struct makes the proxy
+   * hand back {@code null}; Thrift then writes a reply with no success field, and the client sees
+   * {@code TApplicationException: <op> failed: unknown result} — a message that names the operation
+   * but says nothing about why. That is exactly what {@code alter_table_req} did: it is {@code
+   * void} in most of Hive's flat operations but returns {@code AlterTableResponse} in the
+   * request-object form the Hive 4 client actually calls, so every {@code alterTable} through a
+   * real client failed while the parameter check above stayed green.
+   */
+  @Test
+  void testTheReturnTypesStillSatisfyTheInterface() {
+    var supported = HmsIfaceProxy.supportedMethods(new MetacatalogHmsHandler(null));
+    var mismatched = new ArrayList<String>();
+
+    for (var entry : supported.entrySet()) {
+      if ("supportedOperations".equals(entry.getKey())) continue;
+      var handlerMethod = entry.getValue();
+      var counterpart =
+          Arrays.stream(ThriftHiveMetastore.Iface.class.getMethods())
+              .filter(m -> m.getName().equals(entry.getKey()))
+              .filter(m -> Arrays.equals(m.getParameterTypes(), handlerMethod.getParameterTypes()))
+              .findFirst();
+      if (counterpart.isEmpty()) continue; // already reported by the signature test
+      var expected = counterpart.get().getReturnType();
+      // A void operation discards whatever the handler returns, so only a result-carrying one
+      // constrains it.
+      if (expected == void.class) continue;
+      if (!expected.isAssignableFrom(handlerMethod.getReturnType())) {
+        mismatched.add(
+            entry.getKey()
+                + " returns "
+                + handlerMethod.getReturnType().getSimpleName()
+                + " but the interface expects "
+                + expected.getSimpleName());
+      }
+    }
+
+    Assertions.assertTrue(
+        mismatched.isEmpty(),
+        "the handler returns nothing the protocol can put in the reply, so clients would get "
+            + "'unknown result': "
+            + mismatched);
+  }
+
   @Test
   void testASupportedCallReachesTheHandler() throws Exception {
     var handler = new Handler();

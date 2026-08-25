@@ -13,10 +13,15 @@ import java.util.concurrent.TimeUnit;
  * standard input.
  *
  * <p>The script is invoked as {@code bash <path> <operation>} where {@code <operation>} is {@code
- * provision} or {@code unprovision}, so one script serves both directions and can tell them apart.
- * Whatever the script prints is relayed to this process's standard output — like {@link
- * StdoutProvisioningTask}, deliberately not the logger, because the application ships with {@code
- * logging.level.root: ERROR} — and recorded in the entity's {@code provisioningResult}.
+ * provision}, {@code unprovision}, {@code authorize} or {@code reject}, so one script serves every
+ * direction and can tell them apart. Whatever the script prints is relayed to this process's
+ * standard output — like {@link StdoutProvisioningTask}, deliberately not the logger, because the
+ * application ships with {@code logging.level.root: ERROR} — and recorded in the entity's {@code
+ * provisioningResult} or {@code authorizationResult}, whichever the operation writes.
+ *
+ * <p>A script wired to a type that is only provisionable never sees the authorization arguments,
+ * and vice versa: which operations reach it is decided by the traits its entity type carries, not
+ * by the task. One that handles both should branch on the argument rather than assume.
  *
  * <p>A non-zero exit status fails the task (and with it the run), as does a script still running
  * after {@link #TIMEOUT_MINUTES} minutes — provisioning is synchronous, so a hanging script would
@@ -47,6 +52,16 @@ public class ScriptProvisioningTask extends ProvisioningTask {
   @Override
   public String unprovision() {
     return runScript("unprovision", "Unprovisioned");
+  }
+
+  @Override
+  public String authorize() {
+    return runScript("authorize", "Authorized");
+  }
+
+  @Override
+  public String reject() {
+    return runScript("reject", "Rejected");
   }
 
   private String runScript(String operation, String outcome) {

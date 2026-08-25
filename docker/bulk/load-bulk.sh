@@ -15,6 +15,12 @@
 # declaration: that is what left `IcebergTableOutputPort DEPENDS_ON
 # IcebergTableTrait` uncreated on any volume predating it, so provisioning got as
 # far as creating real Iceberg tables and then failed linking the port to them.
+# For the same reason it also checks the *traits each entity type carries*, not
+# just that the type exists: a model change can leave every name exactly as it
+# was and still be a change, which is what adding `Authorizable` /
+# `AuthorizableResource` to the demo did. Without this the loader would report
+# the model as fully present and the authorization demo would quietly not work
+# on any volume created before it.
 # The instance probe still uses the root instance's type and name; override with
 # ROOT_ENTITY_TYPE / ROOT_ENTITY_NAME.
 #
@@ -55,6 +61,19 @@ declared_names() { # <section> <key>
   ' "${MODEL_FILE}"
 }
 
+# The traits one entity type declares, one per line. `traits:` sits four spaces in and its
+# entries six, which is what separates them from the `required:` lists inside a `schema:` block.
+declared_traits() { # <entityTypeName>
+  awk -v want="$1" '
+    /^[A-Za-z][A-Za-z]*:[[:space:]]*$/ { s = $1; sub(/:$/, "", s); section = s; next }
+    section != "EntityTypes" { next }
+    /^  - name:/ { name = $3; gsub(/"/, "", name); in_traits = 0; next }
+    /^    traits:[[:space:]]*$/ { in_traits = 1; next }
+    in_traits && /^      - / { if (name == want) { t = $2; gsub(/"/, "", t); print t }; next }
+    { in_traits = 0 }
+  ' "${MODEL_FILE}"
+}
+
 declared_relationships() { # source/type/target per line
   awk '
     /^[A-Za-z][A-Za-z]*:[[:space:]]*$/ { s = $1; sub(/:$/, "", s); section = s; next }
@@ -71,6 +90,22 @@ trait_exists() {
 
 entity_type_exists() {
   curl -fsS -o /dev/null -u "${AUTH}" "${APP_URL}/metacatalog/v1/entity-type/$1" 2>/dev/null
+}
+
+# The traits the catalog has on an entity type, one per line. The DTO reports only the directly
+# associated ones, which is exactly what the file declares, so the two are comparable as they
+# stand. Parsed with sed because this runs in curlimages/curl, where there is no jq.
+entity_type_traits() {
+  curl -fsS -u "${AUTH}" "${APP_URL}/metacatalog/v1/entity-type/$1" 2>/dev/null \
+    | sed -n 's/.*"traits":\[\([^]]*\)\].*/\1/p' \
+    | tr ',' '\n' \
+    | tr -d '"' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+    | grep -v '^$' || true
+}
+
+has_trait() { # <entityTypeName> <traitName>
+  entity_type_traits "$1" | grep -qx "$2"
 }
 
 relationship_exists() { # <source>/<type>/<target>
@@ -99,6 +134,15 @@ survey_model() {
   for name in $(declared_names EntityTypes name); do
     if entity_type_exists "${name}"; then
       note "entity type ${name}" yes
+      # Only worth asking once the type is there; on a fresh volume the type itself is the
+      # missing thing and listing each of its traits again would just be noise.
+      for trait in $(declared_traits "${name}"); do
+        if has_trait "${name}" "${trait}"; then
+          note "trait ${trait} on entity type ${name}" yes
+        else
+          note "trait ${trait} on entity type ${name}" no
+        fi
+      done
     else
       note "entity type ${name}" no
     fi

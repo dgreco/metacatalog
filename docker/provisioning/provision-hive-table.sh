@@ -6,7 +6,14 @@
 # On provision it creates the database (if missing) and an external Parquet table in the Hive
 # Metastore; on unprovision it drops the table. The database is left behind deliberately — sibling
 # ports of the same data product share it, and the metastore refuses to drop a non-empty one.
-# Both directions are idempotent, because a provisioning procedure may retry and the demo stack
+#
+# `authorize` and `reject` are the second, independent lifecycle: they stamp the access decision
+# into the table's own parameters (`access.status`, `access.granted-to` from the port's `grantee`),
+# the same two names the Iceberg script writes as table properties, so both catalogs answer the
+# question the same way in their own vocabulary. A Hive-speaking consumer reads it off the table it
+# is already looking at.
+#
+# All four directions are idempotent, because a provisioning procedure may retry and the demo stack
 # restarts freely.
 #
 # The metastore speaks Thrift, not HTTP, so this cannot be curl. It shells out to hive-cli.jar,
@@ -20,7 +27,7 @@
 # Hive-speaking consumer without the demo needing a Parquet writer.
 set -euo pipefail
 
-OPERATION="${1:?usage: provision-hive-table.sh <provision|unprovision>}"
+OPERATION="${1:?usage: provision-hive-table.sh <provision|unprovision|authorize|reject>}"
 VALUES="$(cat)"
 
 METASTORE_URI="${HIVE_METASTORE_URI:-thrift://hive-metastore:9083}"
@@ -75,9 +82,9 @@ unlink_port_from_table() {
 }
 
 # The CLI takes the port definition as-is; it reads `database`, `name` -> table, `location`,
-# `columns` and the optional `description`.
+# `columns` and the optional `description` and `grantee`.
 REQUEST="$(jq '{database: .database, table: .name, location: .location,
-                description: .description, columns: .columns}' <<<"${VALUES}")"
+                description: .description, columns: .columns, grantee: .grantee}' <<<"${VALUES}")"
 
 case "${OPERATION}" in
 provision)
@@ -88,6 +95,14 @@ unprovision)
   # The link goes first; see unlink_port_from_table.
   unlink_port_from_table
   java -jar "${CLI}" drop "${METASTORE_URI}" <<<"${REQUEST}"
+  ;;
+authorize)
+  # No link work here: authorization does not create or destroy the table, it only records a
+  # decision about the one provisioning already made.
+  java -jar "${CLI}" authorize "${METASTORE_URI}" <<<"${REQUEST}"
+  ;;
+reject)
+  java -jar "${CLI}" reject "${METASTORE_URI}" <<<"${REQUEST}"
   ;;
 *)
   echo "unknown operation: ${OPERATION}" >&2

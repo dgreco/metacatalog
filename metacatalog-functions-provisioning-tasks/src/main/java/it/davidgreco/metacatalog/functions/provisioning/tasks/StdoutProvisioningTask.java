@@ -15,6 +15,10 @@ import it.davidgreco.metacatalog.service.EntityService;
  * surrounding machinery (dependency graph, status write-back, failure handling) exactly as it is
  * for a task that does real work.
  *
+ * <p>It reports the authorization pair the same way, so a type carrying {@code
+ * AuthorizableResource} is covered by the same registration and an authorization run is just as
+ * observable as a provisioning one.
+ *
  * <p>Standard output rather than the logger, deliberately: the application ships with {@code
  * logging.level.root: ERROR}, so an {@code INFO} line would never be seen.
  */
@@ -25,6 +29,12 @@ public class StdoutProvisioningTask extends ProvisioningTask {
 
   /** Prefix used when tearing a resource down. */
   static final String UNPROVISION_PREFIX = "[unprovisioning]";
+
+  /** Prefix used when granting access to a resource. */
+  static final String AUTHORIZE_PREFIX = "[authorizing]";
+
+  /** Prefix used when withdrawing access to a resource. */
+  static final String REJECT_PREFIX = "[rejecting]";
 
   /** Pause between the start and done lines, simulating a slow provisioning function. */
   private final java.time.Duration delay;
@@ -58,6 +68,16 @@ public class StdoutProvisioningTask extends ProvisioningTask {
   @Override
   public String unprovision() {
     return report(UNPROVISION_PREFIX, "Unprovisioned");
+  }
+
+  @Override
+  public String authorize() {
+    return report(AUTHORIZE_PREFIX, "Authorized");
+  }
+
+  @Override
+  public String reject() {
+    return report(REJECT_PREFIX, "Rejected");
   }
 
   private String report(String prefix, String outcome) {

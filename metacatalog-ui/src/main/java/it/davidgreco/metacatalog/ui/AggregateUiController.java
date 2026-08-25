@@ -57,8 +57,8 @@ public class AggregateUiController {
   /**
    * Lists every aggregate instance — the entities whose type is an aggregate root type — with the
    * type each one actually belongs to. Reuses {@link InstanceRowView} for the human-readable name
-   * derivation; the aggregate/provisionable distinctions are irrelevant here, so empty sets are
-   * passed.
+   * derivation; the aggregate-root, provisionable and authorizable distinctions are all irrelevant
+   * here, so empty sets are passed.
    */
   @GetMapping
   public String list(Model model) {
@@ -66,7 +66,7 @@ public class AggregateUiController {
     for (var rootType :
         api.listAggregateRootTypes().getBody().stream().map(EntityType::getName).toList()) {
       List<Entity> entities = api.getEntities(Optional.of(rootType), Optional.empty()).getBody();
-      rows.addAll(InstanceRowView.listFrom(entities, Set.of(), Set.of()));
+      rows.addAll(InstanceRowView.listFrom(entities, Set.of(), Set.of(), Set.of()));
     }
     model.addAttribute("aggregates", rows);
     return "aggregates-list";
