@@ -1571,6 +1571,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/type-capabilities:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List every type classification in one answer
+      description: >
+        Returns, in one call, the three per-type classifications a client needs in order to decide
+        which actions an instance of that type offers: which types are aggregate roots, which can
+        be provisioned, and which can be authorized. They are the same answers
+        /aggregate/root-type, /aggregate/provisionable-type and /aggregate/authorizable-type give,
+        and they remain three separate answers — the capabilities are declared by independent
+        pairs of traits, so none implies another.
+
+        What this saves is the work, not the distinction. Each of those endpoints walks the whole
+        catalog and every type's and trait's inheritance chain, so a page needing all three paid
+        for that walk three times. Only the names are returned: a caller deciding which buttons a
+        row gets has no use for the schemas the per-capability endpoints carry.
+      operationId: getTypeCapabilities
+      responses:
+        200:
+          description: The three classifications, each ordered by name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeCapabilities'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/root-type/{name}/schema:
     get:
       tags:
@@ -2295,6 +2326,34 @@ components:
         error:
           type: string
           description: The failure message; present only when status is FAILED.
+    TypeCapabilities:
+      type: object
+      description: >
+        The per-type classifications that decide which actions an instance offers. Three separate
+        lists, because the capabilities are declared by independent pairs of traits: a type may be
+        provisionable, authorizable, both or neither, and being an aggregate root implies neither.
+      required:
+        - aggregateRoot
+        - provisionable
+        - authorizable
+      properties:
+        aggregateRoot:
+          type: array
+          items:
+            type: string
+          description: >
+            Names of the entity types that root an aggregate — carrying Aggregate but not
+            AggregateElement, and composing at least one part type. Ordered by name.
+        provisionable:
+          type: array
+          items:
+            type: string
+          description: Names of the entity types carrying Provisionable, ordered by name.
+        authorizable:
+          type: array
+          items:
+            type: string
+          description: Names of the entity types carrying Authorizable, ordered by name.
     ValidationError:
       type: object
       description: Error response for client-side errors (4xx), listing all validation errors.

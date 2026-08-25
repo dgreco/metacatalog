@@ -29,11 +29,33 @@ import org.springframework.context.ApplicationContext;
 @SpringBootTest
 class AuthorizationProcedureTests extends CommonServiceTestingSupport {
 
-  private static final String AUTHORIZE = "AuthorizationProcedure";
-  private static final String REJECT = "RejectionProcedure";
+  private static final String AUTHORIZE = AuthorizationProcedure.class.getSimpleName();
+  private static final String REJECT = RejectionProcedure.class.getSimpleName();
 
   public AuthorizationProcedureTests(ApplicationContext applicationContext) {
     super(applicationContext);
+  }
+
+  /**
+   * A task that implements only the authorization pair. The provisioning pair is abstract — a task
+   * must always have both directions of it — but these tests are about the other capability, so the
+   * two are stubbed once here rather than in every anonymous factory below.
+   */
+  private abstract static class AuthorizationOnlyTask extends ProvisioningTask {
+
+    AuthorizationOnlyTask(Entity entity, EntityService entityService) {
+      super(entity, entityService);
+    }
+
+    @Override
+    public String provision() {
+      return "unused";
+    }
+
+    @Override
+    public String unprovision() {
+      return "unused";
+    }
   }
 
   /**
@@ -45,7 +67,7 @@ class AuthorizationProcedureTests extends CommonServiceTestingSupport {
   @BeforeEach
   void loadModel() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
-    if (entityTypeService.list().stream().noneMatch(t -> "DataProductType".equals(t.getName()))) {
+    if (!entityTypeService.exists("DataProductType")) {
       getApplicationContext()
           .getBean(BulkLoaderService.class)
           .bulkModelCreation(
@@ -91,17 +113,7 @@ class AuthorizationProcedureTests extends CommonServiceTestingSupport {
 
     TaskFactory factory =
         (Entity entity) ->
-            new ProvisioningTask(entity, entityService) {
-              @Override
-              public String provision() {
-                return "unused";
-              }
-
-              @Override
-              public String unprovision() {
-                return "unused";
-              }
-
+            new AuthorizationOnlyTask(entity, entityService) {
               @Override
               public String authorize() {
                 order.add("authorize:" + getEntity().getEntityType().getName());
@@ -175,17 +187,7 @@ class AuthorizationProcedureTests extends CommonServiceTestingSupport {
     taskManager.registerTaskFactory(
         "AthenaTableType",
         (Entity entity) ->
-            new ProvisioningTask(entity, entityService) {
-              @Override
-              public String provision() {
-                return "unused";
-              }
-
-              @Override
-              public String unprovision() {
-                return "unused";
-              }
-
+            new AuthorizationOnlyTask(entity, entityService) {
               @Override
               public String authorize() {
                 throw new ServiceError("The grant service is down");

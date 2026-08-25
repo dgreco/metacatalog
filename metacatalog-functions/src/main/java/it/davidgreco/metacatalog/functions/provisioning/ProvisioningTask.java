@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
@@ -52,34 +53,45 @@ import lombok.extern.slf4j.Slf4j;
 @Getter
 public abstract class ProvisioningTask extends Task {
 
-  // Package-visible: AggregateProvisioningStatusRecorder writes the same fields on the root.
-  static final String PROVISIONING_STATUS = "provisioningStatus";
-  static final String PROVISIONING_RESULT = "provisioningResult";
-  static final String AUTHORIZATION_STATUS = "authorizationStatus";
-  static final String AUTHORIZATION_RESULT = "authorizationResult";
   static final String STATUS_FAILED = "FAILED";
 
-  /** The directions a provisioning task can run in, two per capability. */
+  /**
+   * The directions a provisioning task can run in, two per {@link BuiltInCapability}: one building
+   * up and one tearing down.
+   *
+   * <p>Everything that distinguishes one direction from another is here, and the procedures read it
+   * from here rather than restating it. Which traits a run selects on, which field pair it records
+   * into and which way round it wires its tasks are all decided the moment the constant is named,
+   * so no procedure can pair an operation with the wrong capability's traits — a combination that
+   * used to be expressible and surfaced only at the end of a successful run, as a validation
+   * refusal on the status write.
+   */
   public enum Operation {
     /** Create the resource; leaves it {@code PROVISIONED}. */
-    PROVISION("Provisioning", "PROVISIONED", PROVISIONING_STATUS, PROVISIONING_RESULT),
+    PROVISION(BuiltInCapability.PROVISIONING, "Provisioning", "PROVISIONED", false),
     /** Tear the resource down; leaves it {@code UNPROVISIONED}. */
-    UNPROVISION("Unprovisioning", "UNPROVISIONED", PROVISIONING_STATUS, PROVISIONING_RESULT),
+    UNPROVISION(BuiltInCapability.PROVISIONING, "Unprovisioning", "UNPROVISIONED", true),
     /** Grant access to the resource; leaves it {@code AUTHORIZED}. */
-    AUTHORIZE("Authorizing", "AUTHORIZED", AUTHORIZATION_STATUS, AUTHORIZATION_RESULT),
+    AUTHORIZE(BuiltInCapability.AUTHORIZATION, "Authorizing", "AUTHORIZED", false),
     /** Withdraw access to the resource; leaves it {@code REJECTED}. */
-    REJECT("Rejecting", "REJECTED", AUTHORIZATION_STATUS, AUTHORIZATION_RESULT);
+    REJECT(BuiltInCapability.AUTHORIZATION, "Rejecting", "REJECTED", true);
 
+    private final BuiltInCapability capability;
     private final String label;
     private final String successStatus;
-    private final String statusField;
-    private final String resultField;
+    private final boolean dependentsFirst;
 
-    Operation(String label, String successStatus, String statusField, String resultField) {
+    Operation(
+        BuiltInCapability capability, String label, String successStatus, boolean dependentsFirst) {
+      this.capability = capability;
       this.label = label;
       this.successStatus = successStatus;
-      this.statusField = statusField;
-      this.resultField = resultField;
+      this.dependentsFirst = dependentsFirst;
+    }
+
+    /** The lifecycle this operation is one direction of. */
+    BuiltInCapability capability() {
+      return capability;
     }
 
     /** The status a successful run of this operation leaves behind. */
@@ -88,18 +100,36 @@ public abstract class ProvisioningTask extends Task {
     }
 
     /** The human label used in log lines and result messages. */
-    String label() {
+    public String label() {
       return label;
+    }
+
+    /** The name a script or external tool is handed to select this direction. */
+    public String command() {
+      return name().toLowerCase(Locale.ROOT);
     }
 
     /** The entity value field this operation's status is recorded in. */
     String statusField() {
-      return statusField;
+      return capability.statusField();
     }
 
     /** The entity value field this operation's result message is recorded in. */
     String resultField() {
-      return resultField;
+      return capability.resultField();
+    }
+
+    /**
+     * {@code false} to make each resource wait for what it is derived from (building up), {@code
+     * true} to make what it is derived from wait for the resource (tearing down).
+     *
+     * <p>The reasoning is the same in both capabilities. An Athena table reading an S3 folder is
+     * created after the folder and destroyed before it, and by the same token access to it is
+     * granted after — and withdrawn before — access to the folder it reads, so nothing is ever left
+     * holding a grant on something it can no longer reach.
+     */
+    boolean dependentsFirst() {
+      return dependentsFirst;
     }
   }
 
@@ -234,6 +264,7 @@ public abstract class ProvisioningTask extends Task {
         + method
         + "(), so entity type "
         + getEntity().getEntityType().getName()
-        + " cannot be authorized. Override authorize() and reject() on the task registered for it.";
+        + " cannot take part in an authorization run. Override authorize() and reject() on the"
+        + " task registered for it.";
   }
 }

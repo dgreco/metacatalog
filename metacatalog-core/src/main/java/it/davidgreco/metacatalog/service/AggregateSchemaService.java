@@ -152,6 +152,65 @@ public class AggregateSchemaService {
   }
 
   /**
+   * Every per-type answer a client needs in order to decide which actions a row of that type
+   * offers, worked out in a single pass.
+   *
+   * @param aggregateRoot the names of the aggregate root types
+   * @param provisionable the names of the types that can be provisioned
+   * @param authorizable the names of the types that can be authorized
+   */
+  public record TypeCapabilities(
+      List<String> aggregateRoot, List<String> provisionable, List<String> authorizable) {}
+
+  /**
+   * Answers all three type classifications at once, ordered by name.
+   *
+   * <p>They are the same three questions {@link #aggregateRootTypes()}, {@link
+   * #provisionableTypes()} and {@link #authorizableTypes()} answer, and they stay <em>separate
+   * answers</em> — the capabilities are declared by independent pairs of traits, so none implies
+   * another. What is shared is the work: each of those methods starts from {@link
+   * #authorableTypes()}, which is a {@code findAll} plus a mapping-target query per type, and then
+   * walks every type's and every trait's father chain again. Asking them one at a time made a page
+   * that needs all three pay for that three times over.
+   *
+   * @return the three classifications
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public TypeCapabilities typeCapabilities() {
+    log.info("Computing the type capabilities");
+    var types = authorableTypes();
+    // The projected containment graph is needed only for the root test, but it is derived from the
+    // same type list, so building it here keeps the whole answer to one pass.
+    var graph = hasPartGraph(types);
+    var roots = new ArrayList<String>();
+    var provisionable = new ArrayList<String>();
+    var authorizable = new ArrayList<String>();
+    for (var type : types.stream().sorted(Comparator.comparing(EntityType::getName)).toList()) {
+      // One trait-name set per type, tested four times, rather than four independent walks of the
+      // type's and its traits' father chains.
+      var traits = ServiceUtils.traitNamesOf(type);
+      if (traits.contains(BuiltInTraits.AGGREGATE)
+          && !traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)
+          && !graph.getOrDefault(type.getName(), List.of()).isEmpty()) {
+        roots.add(type.getName());
+      }
+      if (traits.contains(BuiltInTraits.PROVISIONABLE)) {
+        provisionable.add(type.getName());
+      }
+      if (traits.contains(BuiltInTraits.AUTHORIZABLE)) {
+        authorizable.add(type.getName());
+      }
+    }
+    log.info(
+        "Computed {} root, {} provisionable and {} authorizable type(s)",
+        roots.size(),
+        provisionable.size(),
+        authorizable.size());
+    return new TypeCapabilities(
+        List.copyOf(roots), List.copyOf(provisionable), List.copyOf(authorizable));
+  }
+
+  /**
    * The entity types carrying a built-in capability trait, ordered by name.
    *
    * <p>This is computed here rather than derived by callers because answering it needs the full
@@ -159,7 +218,8 @@ public class AggregateSchemaService {
    * fetched: outside a transaction the walk would fail. The {@code traits} on an {@code EntityType}
    * DTO are only the directly associated ones, so a client checking them itself would miss an
    * inherited capability. Clients that need to know which entities offer an operation — the UI,
-   * deciding which rows get the action — read it from here.
+   * deciding which rows get the action — read it from here, or from {@link #typeCapabilities()}
+   * when they need more than one of these answers.
    */
   private List<EntityType> typesCarryingTrait(String traitName) {
     log.info("Computing the types carrying {}", traitName);

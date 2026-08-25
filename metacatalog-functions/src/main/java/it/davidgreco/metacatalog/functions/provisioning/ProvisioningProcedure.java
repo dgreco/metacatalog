@@ -1,10 +1,8 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.TaskFactory;
 import it.davidgreco.metacatalog.service.TaskManager;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +16,8 @@ import org.springframework.stereotype.Service;
  *   <li>Identifying all ProvisionableResource entities in the hierarchy
  *   <li>Building a dependency graph based on mapping relationships
  *   <li>Creating provisioning tasks for each resource
- *   <li>Scheduling and executing tasks in dependency order
+ *   <li>Scheduling and executing tasks in dependency order — a resource is provisioned only once
+ *       everything it is derived from exists
  * </ol>
  *
  * <p>The procedure detects cycles in the provisioning graph and fails early if any are found.
@@ -28,7 +27,6 @@ import org.springframework.stereotype.Service;
  * provisioned by nothing. See {@link UnprovisioningProcedure} for the inverse, and {@link
  * AbstractAggregateResourceProcedure} for the machinery all four aggregate procedures share.
  */
-@Slf4j
 @Service
 public class ProvisioningProcedure extends AbstractAggregateResourceProcedure {
 
@@ -38,27 +36,12 @@ public class ProvisioningProcedure extends AbstractAggregateResourceProcedure {
       TaskManager taskManager,
       AggregateProvisioningStatusRecorder statusRecorder,
       ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
-    super(aggregateService, resourceGraphBuilder, taskManager, statusRecorder, deferredRegistrars);
-  }
-
-  @Override
-  protected String rootTrait() {
-    return BuiltInTraits.PROVISIONABLE;
-  }
-
-  @Override
-  protected String resourceTrait() {
-    return BuiltInTraits.PROVISIONABLE_RESOURCE;
-  }
-
-  @Override
-  protected ProvisioningTask.Operation operation() {
-    return ProvisioningTask.Operation.PROVISION;
-  }
-
-  /** A resource is provisioned only once everything it is derived from exists. */
-  @Override
-  protected boolean dependentsFirst() {
-    return false;
+    super(
+        ProvisioningTask.Operation.PROVISION,
+        aggregateService,
+        resourceGraphBuilder,
+        taskManager,
+        statusRecorder,
+        deferredRegistrars);
   }
 }

@@ -46,30 +46,41 @@ public class ScriptProvisioningTask extends ProvisioningTask {
 
   @Override
   public String provision() {
-    return runScript("provision", "Provisioned");
+    return runScript("Provisioned");
   }
 
   @Override
   public String unprovision() {
-    return runScript("unprovision", "Unprovisioned");
+    return runScript("Unprovisioned");
   }
 
   @Override
   public String authorize() {
-    return runScript("authorize", "Authorized");
+    return runScript("Authorized");
   }
 
   @Override
   public String reject() {
-    return runScript("reject", "Rejected");
+    return runScript("Rejected");
   }
 
-  private String runScript(String operation, String outcome) {
+  /**
+   * Runs the script for the operation the procedure selected.
+   *
+   * <p>The argument handed to the script is {@code getOperation().command()}, not a literal per
+   * method. The procedure has already set the operation by the time this runs, so the two can never
+   * disagree — a mistyped literal here would have run the wrong direction against a real catalog
+   * while still recording the status the enum says, which is the one slip in this class with
+   * consequences outside the process.
+   */
+  private String runScript(String outcome) {
     var entity = getEntity();
     var resource = entity.getEntityType().getName() + " id=" + entity.getId();
     try {
       var process =
-          new ProcessBuilder("bash", scriptPath, operation).redirectErrorStream(true).start();
+          new ProcessBuilder("bash", scriptPath, getOperation().command())
+              .redirectErrorStream(true)
+              .start();
       try (var stdin = process.getOutputStream()) {
         stdin.write(entity.getValues().toString().getBytes(StandardCharsets.UTF_8));
       }

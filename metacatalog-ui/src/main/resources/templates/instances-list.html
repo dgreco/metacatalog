@@ -99,35 +99,18 @@
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
-                <form th:if="${inst.provisionable}" method="post"
-                      th:action="@{/ui/instances/{id}/provision(id=${inst.id})}"
+                <!-- The aggregate actions this row's type qualifies for: label, tooltip, confirm
+                     text and target are all carried by the AggregateAction, so a new capability
+                     adds an enum constant rather than another block here. Procedures post under
+                     /procedure/, the synchronous ones directly. -->
+                <form th:each="action : ${inst.actions}" method="post"
+                      th:action="${action.procedure}
+                                 ? @{/ui/instances/{id}/procedure/{a}(id=${inst.id}, a=${action.path})}
+                                 : @{/ui/instances/{id}/{a}(id=${inst.id}, a=${action.path})}"
                       class="inline-form"
-                      data-confirm="Provision this aggregate? Every resource it contains will be provisioned, in dependency order.">
-                    <button type="submit" class="btn-sm" title="Provision the whole aggregate">Provision</button>
-                </form>
-                <form th:if="${inst.provisionable}" method="post"
-                      th:action="@{/ui/instances/{id}/unprovision(id=${inst.id})}"
-                      class="inline-form"
-                      data-confirm="Unprovision this aggregate? Every resource it contains will be torn down, in the reverse order.">
-                    <button type="submit" class="btn-sm" title="Unprovision the whole aggregate">Unprovision</button>
-                </form>
-                <form th:if="${inst.authorizable}" method="post"
-                      th:action="@{/ui/instances/{id}/authorize(id=${inst.id})}"
-                      class="inline-form"
-                      data-confirm="Authorize this aggregate? Every resource it contains will be granted access, in dependency order.">
-                    <button type="submit" class="btn-sm" title="Authorize the whole aggregate">Authorize</button>
-                </form>
-                <form th:if="${inst.authorizable}" method="post"
-                      th:action="@{/ui/instances/{id}/reject(id=${inst.id})}"
-                      class="inline-form"
-                      data-confirm="Reject this aggregate? Access to every resource it contains will be withdrawn, in the reverse order.">
-                    <button type="submit" class="btn-sm" title="Withdraw access to the whole aggregate">Reject</button>
-                </form>
-                <form th:if="${inst.aggregateRoot}" method="post"
-                      th:action="@{/ui/instances/{id}/delete-aggregate(id=${inst.id})}"
-                      class="inline-form"
-                      data-confirm="Delete this whole aggregate? Every entity it contains, and everything mapped from them, will be removed.">
-                    <button type="submit" class="btn-sm" title="Delete the whole aggregate">Delete aggregate</button>
+                      th:data-confirm="${action.confirm}">
+                    <button type="submit" class="btn-sm"
+                            th:title="${action.title}" th:text="${action.label}">Action</button>
                 </form>
                 <form method="post" th:action="@{/ui/instances/{id}/delete(id=${inst.id})}"
                       class="inline-form" data-confirm="Delete this instance?">

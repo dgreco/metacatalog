@@ -40,8 +40,11 @@ DATABASE="$(jq -r '.database' <<<"${VALUES}")"
 TABLE="$(jq -r '.name' <<<"${VALUES}")"
 RESOURCE_LABEL="${DATABASE}.${TABLE}"
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=metacatalog-api.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/metacatalog-api.sh"
+source "${HERE}/metacatalog-api.sh"
+# shellcheck source=access-decision.sh
+source "${HERE}/access-decision.sh"
 
 table_entity_id() {
   entity_id HiveTable "\$ ? (@.name == \"${TABLE}\" && @.databaseName == \"${DATABASE}\")"
@@ -82,9 +85,18 @@ unlink_port_from_table() {
 }
 
 # The CLI takes the port definition as-is; it reads `database`, `name` -> table, `location`,
-# `columns` and the optional `description` and `grantee`.
-REQUEST="$(jq '{database: .database, table: .name, location: .location,
-                description: .description, columns: .columns, grantee: .grantee}' <<<"${VALUES}")"
+# `columns` and the optional `description`.
+#
+# `grantee` is resolved here rather than in the CLI, and the two access parameter names are handed
+# to it rather than compiled into it: they are shared with the Iceberg script (see
+# access-decision.sh), and a Java constant on this side could drift from the shell one on the other
+# without anything failing — the two catalogs would just quietly stop agreeing.
+REQUEST="$(jq --arg grantee "$(grantee_of "${VALUES}")" \
+              --arg statusKey "${ACCESS_STATUS_KEY}" \
+              --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+           '{database: .database, table: .name, location: .location,
+             description: .description, columns: .columns, grantee: $grantee,
+             accessStatusKey: $statusKey, accessGrantedToKey: $granteeKey}' <<<"${VALUES}")"
 
 case "${OPERATION}" in
 provision)

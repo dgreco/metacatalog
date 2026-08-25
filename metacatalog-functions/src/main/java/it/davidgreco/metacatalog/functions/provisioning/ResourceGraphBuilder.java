@@ -3,7 +3,6 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import static it.davidgreco.metacatalog.service.ServiceUtils.hasTrait;
 
 import io.vavr.Tuple2;
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.EntityPathResolver;
@@ -38,21 +37,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class ResourceGraphBuilder {
 
-  private static final String PROVISIONABLE_RESOURCE = BuiltInTraits.PROVISIONABLE_RESOURCE;
-
   private final MappingService mappingService;
 
   private final EntityPathResolver entityPathResolver;
-
-  /**
-   * The provisionable resources in an aggregate, in tree order.
-   *
-   * @param aggregate the aggregate, read with its mapped instances
-   * @return the resources it contains
-   */
-  public List<Entity> getProvisionableResourceSequence(AggregateService.AggregatePart aggregate) {
-    return getResourceSequence(aggregate, PROVISIONABLE_RESOURCE);
-  }
 
   /**
    * The resources in an aggregate carrying the given trait, in tree order.
@@ -102,18 +89,6 @@ public class ResourceGraphBuilder {
                     .map(Optional::get)
                     .filter(e -> hasTrait(e, resourceTrait)))
         .toList();
-  }
-
-  /**
-   * Builds the dependency graph of an aggregate's provisionable resources. An edge runs from a
-   * resource to each resource it depends on.
-   *
-   * @param aggregate the aggregate, read with its mapped instances
-   * @return the graph
-   * @throws ServiceError if the dependencies form a cycle
-   */
-  public Graph<Entity, DefaultEdge> buildResourceGraph(AggregateService.AggregatePart aggregate) {
-    return buildResourceGraph(aggregate, PROVISIONABLE_RESOURCE);
   }
 
   /**

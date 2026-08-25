@@ -5,6 +5,10 @@ import static org.springframework.http.ResponseEntity.*;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
+import it.davidgreco.metacatalog.functions.provisioning.AuthorizationProcedure;
+import it.davidgreco.metacatalog.functions.provisioning.ProvisioningProcedure;
+import it.davidgreco.metacatalog.functions.provisioning.RejectionProcedure;
+import it.davidgreco.metacatalog.functions.provisioning.UnprovisioningProcedure;
 import it.davidgreco.metacatalog.openapi.common.GlobalExceptionHandler;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
@@ -267,25 +271,25 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   @Override
   public ResponseEntity<ProcedureStatus> provisionAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure("ProvisioningProcedure", aggregateId, async);
+    return runProcedure(ProvisioningProcedure.class.getSimpleName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> unprovisionAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure("UnprovisioningProcedure", aggregateId, async);
+    return runProcedure(UnprovisioningProcedure.class.getSimpleName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> authorizeAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure("AuthorizationProcedure", aggregateId, async);
+    return runProcedure(AuthorizationProcedure.class.getSimpleName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> rejectAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure("RejectionProcedure", aggregateId, async);
+    return runProcedure(RejectionProcedure.class.getSimpleName(), aggregateId, async);
   }
 
   @Override
@@ -424,29 +428,40 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
   @Override
   public ResponseEntity listAggregateRootTypes() {
-    var rootTypes =
-        aggregateSchemaService.aggregateRootTypes().stream()
-            .map(dtoMapper::entityTypeToDto)
-            .toList();
-    return status(200).contentType(MediaType.APPLICATION_JSON).body(rootTypes);
+    return entityTypeList(aggregateSchemaService.aggregateRootTypes());
   }
 
   @Override
   public ResponseEntity listProvisionableTypes() {
-    var provisionableTypes =
-        aggregateSchemaService.provisionableTypes().stream()
-            .map(dtoMapper::entityTypeToDto)
-            .toList();
-    return status(200).contentType(MediaType.APPLICATION_JSON).body(provisionableTypes);
+    return entityTypeList(aggregateSchemaService.provisionableTypes());
   }
 
   @Override
   public ResponseEntity listAuthorizableTypes() {
-    var authorizableTypes =
-        aggregateSchemaService.authorizableTypes().stream()
-            .map(dtoMapper::entityTypeToDto)
-            .toList();
-    return status(200).contentType(MediaType.APPLICATION_JSON).body(authorizableTypes);
+    return entityTypeList(aggregateSchemaService.authorizableTypes());
+  }
+
+  @Override
+  public ResponseEntity<TypeCapabilities> getTypeCapabilities() {
+    var capabilities = aggregateSchemaService.typeCapabilities();
+    return status(200)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            new TypeCapabilities()
+                .aggregateRoot(capabilities.aggregateRoot())
+                .provisionable(capabilities.provisionable())
+                .authorizable(capabilities.authorizable()));
+  }
+
+  /**
+   * The three capability listings differ only in which question they ask the service; the endpoints
+   * stay separate because the answers are, but their bodies need not be.
+   */
+  private ResponseEntity entityTypeList(
+      java.util.List<it.davidgreco.metacatalog.entity.EntityType> types) {
+    return status(200)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(types.stream().map(dtoMapper::entityTypeToDto).toList());
   }
 
   @Override

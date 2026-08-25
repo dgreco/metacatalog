@@ -1,10 +1,8 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.TaskFactory;
 import it.davidgreco.metacatalog.service.TaskManager;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -41,7 +39,6 @@ import org.springframework.stereotype.Service;
  *
  * <p>See {@link RejectionProcedure} for the inverse.
  */
-@Slf4j
 @Service
 public class AuthorizationProcedure extends AbstractAggregateResourceProcedure {
 
@@ -51,27 +48,12 @@ public class AuthorizationProcedure extends AbstractAggregateResourceProcedure {
       TaskManager taskManager,
       AggregateProvisioningStatusRecorder statusRecorder,
       ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
-    super(aggregateService, resourceGraphBuilder, taskManager, statusRecorder, deferredRegistrars);
-  }
-
-  @Override
-  protected String rootTrait() {
-    return BuiltInTraits.AUTHORIZABLE;
-  }
-
-  @Override
-  protected String resourceTrait() {
-    return BuiltInTraits.AUTHORIZABLE_RESOURCE;
-  }
-
-  @Override
-  protected ProvisioningTask.Operation operation() {
-    return ProvisioningTask.Operation.AUTHORIZE;
-  }
-
-  /** A resource is authorized only once everything it is derived from has been. */
-  @Override
-  protected boolean dependentsFirst() {
-    return false;
+    super(
+        ProvisioningTask.Operation.AUTHORIZE,
+        aggregateService,
+        resourceGraphBuilder,
+        taskManager,
+        statusRecorder,
+        deferredRegistrars);
   }
 }

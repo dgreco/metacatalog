@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -14,44 +15,43 @@ import java.util.Set;
  * @param entityType the name of the entity type
  * @param entityTypeVersionId the id of the entity type version the entity is pinned to
  * @param name the entity name extracted from the {@code name} property in values, or the entity id
- * @param aggregateRoot whether the entity is the root of an aggregate, and can therefore be deleted
- *     as a whole
- * @param provisionable whether the entity can be provisioned and unprovisioned
- * @param authorizable whether the entity can be authorized and rejected
+ * @param actions the aggregate actions this row offers, in declaration order
  */
 public record InstanceRowView(
     String id,
     String entityType,
     String entityTypeVersionId,
     String name,
-    boolean aggregateRoot,
-    boolean provisionable,
-    boolean authorizable) {
+    List<AggregateAction> actions) {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   /**
-   * Builds {@link InstanceRowView} rows for the given entities, extracting a human-readable name
-   * from the entity's {@code name} property when present, falling back to the entity id.
-   *
-   * <p>An entity is an aggregate root when its type is one: aggregate root types are precisely the
-   * types that are never contained in another, so no instance of one can be part of a larger
-   * aggregate. It is provisionable when its type carries the {@code Provisionable} trait, and
-   * authorizable when it carries {@code Authorizable} — questions only the API can answer, since
-   * deciding either needs the type and trait inheritance chains. The two are independent: a type
-   * may offer one, both or neither, so they are two separate sets rather than one flag. Pass empty
-   * sets where the distinctions do not matter.
+   * Rows for a page that offers no aggregate actions — the entity-link picker and the aggregate
+   * form, which need the id and the display name and nothing else.
    *
    * @param entities the entities to render
-   * @param aggregateRootTypeNames the names of the aggregate root types
-   * @param provisionableTypeNames the names of the provisionable types
-   * @param authorizableTypeNames the names of the authorizable types
+   */
+  public static List<InstanceRowView> listFrom(List<Entity> entities) {
+    return listFrom(entities, TypeCapabilities.NONE);
+  }
+
+  /**
+   * Builds {@link InstanceRowView} rows for the given entities, extracting a human-readable name
+   * from the entity's {@code name} property when present, falling back to the entity id, and
+   * attaching the {@link AggregateAction}s the entity's type qualifies for.
+   *
+   * <p>Which capabilities a type has is a question only the API can answer, since deciding any of
+   * them needs the type and trait inheritance chains. They are three independent answers — a type
+   * may be provisionable, authorizable, both or neither, and being an aggregate root implies
+   * neither — so the row's actions are the union of what each capability grants, not a single "has
+   * a lifecycle" flag.
+   *
+   * @param entities the entities to render
+   * @param capabilities which type names hold which capabilities
    */
   public static List<InstanceRowView> listFrom(
-      List<Entity> entities,
-      Set<String> aggregateRootTypeNames,
-      Set<String> provisionableTypeNames,
-      Set<String> authorizableTypeNames) {
+      List<Entity> entities, TypeCapabilities capabilities) {
     var views = new ArrayList<InstanceRowView>();
     for (var entity : entities) {
       String id = entity.getId().orElse(null);
@@ -71,10 +71,37 @@ public record InstanceRowView(
               entity.getEntityType(),
               entity.getEntityTypeVersionId(),
               name,
-              aggregateRootTypeNames.contains(entity.getEntityType()),
-              provisionableTypeNames.contains(entity.getEntityType()),
-              authorizableTypeNames.contains(entity.getEntityType())));
+              capabilities.actionsFor(entity.getEntityType())));
     }
     return views;
+  }
+
+  /**
+   * The type names holding each capability, as the API reports them.
+   *
+   * @param aggregateRoot names of the types that root an aggregate
+   * @param provisionable names of the types that can be provisioned
+   * @param authorizable names of the types that can be authorized
+   */
+  public record TypeCapabilities(
+      Set<String> aggregateRoot, Set<String> provisionable, Set<String> authorizable) {
+
+    /** No type has any capability: for pages that offer no aggregate actions at all. */
+    public static final TypeCapabilities NONE = new TypeCapabilities(Set.of(), Set.of(), Set.of());
+
+    /** The actions a row of this type offers, in {@link AggregateAction} declaration order. */
+    List<AggregateAction> actionsFor(String entityTypeName) {
+      return EnumSet.allOf(AggregateAction.class).stream()
+          .filter(action -> holds(action.getCapability()).contains(entityTypeName))
+          .toList();
+    }
+
+    private Set<String> holds(AggregateAction.Capability capability) {
+      return switch (capability) {
+        case AGGREGATE_ROOT -> aggregateRoot;
+        case PROVISIONABLE -> provisionable;
+        case AUTHORIZABLE -> authorizable;
+      };
+    }
   }
 }
