@@ -50,17 +50,22 @@ BASE="${CATALOG_URL}/v1/${PREFIX}"
 API="${METACATALOG_API_URL:-http://localhost:8080}/metacatalog/v1"
 API_AUTH="${METACATALOG_USER:-admin}:${METACATALOG_PASSWORD:-admin}"
 
-NAMESPACE="$(jq -r '.namespace' <<<"${VALUES}")"
-TABLE="$(jq -r '.name' <<<"${VALUES}")"
-# A port with no grantee is granted to everyone: there is no identity provider behind this demo,
-# and inventing a placeholder principal would read as one.
-GRANTEE="$(jq -r '.grantee // "everyone"' <<<"${VALUES}")"
+# One jq pass for all three: the script is exec'd once per output port, and an aggregate's ports
+# provision in parallel.
+IFS=$'\t' read -r NAMESPACE TABLE GRANTEE < <(
+  jq -r '[.namespace, .name, (.grantee // "")] | @tsv' <<<"${VALUES}")
 
 RESOURCE_LABEL="${NAMESPACE}.${TABLE}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The lookup/link/unlink helpers are shared with provision-hive-table.sh; their subtleties are
 # documented there and are the same either side of the two catalogs.
 # shellcheck source=metacatalog-api.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/metacatalog-api.sh"
+source "${HERE}/metacatalog-api.sh"
+# The two names the access decision is recorded under, shared with the Hive side so both catalogs
+# answer the question identically.
+# shellcheck source=access-decision.sh
+source "${HERE}/access-decision.sh"
+GRANTEE="${GRANTEE:-${DEFAULT_GRANTEE}}"
 
 table_entity_id() {
   entity_id IcebergTable "\$ ? (@.name == \"${TABLE}\" && @.namespaceKey == \"${NAMESPACE}\")"
@@ -115,7 +120,7 @@ provision)
 
   # Table: create if missing (an existing one is an idempotent success — but the
   # link is still ensured below, so a retry after a half-done run completes it).
-  if curl -sf -o /dev/null "${BASE}/namespaces/${NAMESPACE}/tables/${TABLE}"; then
+  if table_exists; then
     echo "table ${NAMESPACE}.${TABLE} already exists"
   else
     # Build the CreateTableRequest from the port's column list; the server assigns
@@ -159,7 +164,9 @@ unprovision)
 authorize)
   table_exists || fail "table ${NAMESPACE}.${TABLE} does not exist; provision the data product before authorizing it"
   commit_updates "$(jq -n --arg g "${GRANTEE}" \
-    '[{action: "set-properties", updates: {"access.status": "AUTHORIZED", "access.granted-to": $g}}]')"
+    --arg statusKey "${ACCESS_STATUS_KEY}" --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+    '[{action: "set-properties",
+       updates: {($statusKey): "AUTHORIZED", ($granteeKey): $g}}]')"
   echo "granted ${GRANTEE} access to ${NAMESPACE}.${TABLE}"
   ;;
 
@@ -170,8 +177,10 @@ reject)
     # The status is set rather than removed: REJECTED is an answer, and a table with no access
     # property at all is one nobody has decided about yet. The grantee goes, because it no longer
     # holds.
-    commit_updates '[{"action": "set-properties", "updates": {"access.status": "REJECTED"}},
-                     {"action": "remove-properties", "removals": ["access.granted-to"]}]'
+    commit_updates "$(jq -n \
+      --arg statusKey "${ACCESS_STATUS_KEY}" --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+      '[{action: "set-properties", updates: {($statusKey): "REJECTED"}},
+        {action: "remove-properties", removals: [$granteeKey]}]')"
     echo "withdrew access to ${NAMESPACE}.${TABLE}"
   fi
   ;;

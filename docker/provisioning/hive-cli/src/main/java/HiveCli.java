@@ -58,11 +58,6 @@ public final class HiveCli {
   private static final String PARQUET_SERDE =
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe";
 
-  /** Table parameters carrying the access decision; the Iceberg script uses the same two names. */
-  private static final String ACCESS_STATUS = "access.status";
-
-  private static final String ACCESS_GRANTED_TO = "access.granted-to";
-
   private HiveCli() {}
 
   public static void main(String[] args) throws Exception {
@@ -88,7 +83,7 @@ public final class HiveCli {
         case "create" -> create(client, values, database, table);
         case "drop" -> drop(client, database, table);
         case "authorize" -> authorize(client, values, database, table);
-        case "reject" -> reject(client, database, table);
+        case "reject" -> reject(client, values, database, table);
         default -> fail("unknown operation: " + operation);
       }
     }
@@ -166,42 +161,63 @@ public final class HiveCli {
   private static void authorize(
       ThriftHiveMetastore.Client client, JsonNode values, String database, String table)
       throws Exception {
-    var grantee = text(values, "grantee");
     var existing = loadTable(client, database, table);
     if (existing == null) {
       fail(
-          "table "
-              + database
-              + "."
-              + table
-              + " does not exist; provision the data product before authorizing it");
+          "table %s.%s does not exist; provision the data product before authorizing it"
+              .formatted(database, table));
       return;
     }
-    var parameters = parametersOf(existing);
-    parameters.put(ACCESS_STATUS, "AUTHORIZED");
-    parameters.put(ACCESS_GRANTED_TO, grantee != null ? grantee : "everyone");
-    alter(client, database, table, existing, parameters);
-    System.out.println(
-        "granted " + parameters.get(ACCESS_GRANTED_TO) + " access to " + database + "." + table);
+    var grantee = text(values, "grantee");
+    decide(client, values, database, table, existing, "AUTHORIZED", grantee);
+    System.out.println("granted " + grantee + " access to " + database + "." + table);
   }
 
-  /**
-   * Withdraws access. The status is set rather than removed — REJECTED is an answer, and a table
-   * with no access parameter at all is one nobody has decided about — while the grantee goes,
-   * because it no longer holds.
-   */
-  private static void reject(ThriftHiveMetastore.Client client, String database, String table)
+  /** Withdraws that access. A table that does not exist has nothing to withdraw. */
+  private static void reject(
+      ThriftHiveMetastore.Client client, JsonNode values, String database, String table)
       throws Exception {
     var existing = loadTable(client, database, table);
     if (existing == null) {
       System.out.println("table " + database + "." + table + " does not exist; nothing to withdraw");
       return;
     }
-    var parameters = parametersOf(existing);
-    parameters.put(ACCESS_STATUS, "REJECTED");
-    parameters.remove(ACCESS_GRANTED_TO);
-    alter(client, database, table, existing, parameters);
+    decide(client, values, database, table, existing, "REJECTED", null);
     System.out.println("withdrew access to " + database + "." + table);
+  }
+
+  /**
+   * Records the decision in the table's parameters and writes the table back. A {@code null}
+   * grantee removes the name rather than writing one: on reject it no longer holds. The status is
+   * always set, never removed — REJECTED is an answer, and a table with no access parameter at all
+   * is one nobody has decided about.
+   *
+   * <p>The two parameter names come from the request rather than from constants here. The Iceberg
+   * script writes the same two names as table <em>properties</em>, and the mixed demo only means
+   * anything while both catalogs answer the access question identically — a Java constant on this
+   * side could drift from the shell one on the other with nothing failing, leaving the two
+   * catalogs' consumers quietly disagreeing. They are declared once, in {@code access-decision.sh},
+   * and handed to both sides.
+   */
+  private static void decide(
+      ThriftHiveMetastore.Client client,
+      JsonNode values,
+      String database,
+      String table,
+      Table existing,
+      String status,
+      String grantee)
+      throws Exception {
+    var statusKey = required(values, "accessStatusKey");
+    var granteeKey = required(values, "accessGrantedToKey");
+    var parameters = parametersOf(existing);
+    parameters.put(statusKey, status);
+    if (grantee == null) {
+      parameters.remove(granteeKey);
+    } else {
+      parameters.put(granteeKey, grantee);
+    }
+    alter(client, database, table, existing, parameters);
   }
 
   /**
@@ -261,6 +277,19 @@ public final class HiveCli {
   private static String text(JsonNode node, String field) {
     var value = node.get(field);
     return value == null || value.isNull() ? null : value.asText();
+  }
+
+  /**
+   * A field the caller is contractually required to supply. Only the provisioning scripts invoke
+   * this CLI, and they always send it; a missing one means the script and this jar have gone out of
+   * step, which is worth saying rather than silently writing a parameter named "null".
+   */
+  private static String required(JsonNode node, String field) throws IOException {
+    var value = text(node, field);
+    if (value == null) {
+      fail("the request must carry a '" + field + "'; provision-hive-table.sh supplies it");
+    }
+    return value;
   }
 
   private static void fail(String message) throws IOException {

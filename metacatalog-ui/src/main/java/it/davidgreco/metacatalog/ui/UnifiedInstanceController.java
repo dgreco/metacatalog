@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -64,10 +63,7 @@ class UnifiedInstanceController {
       entities = List.of();
       model.addAttribute("error", e.getMessage());
     }
-    model.addAttribute(
-        "instances",
-        InstanceRowView.listFrom(
-            entities, aggregateRootTypeNames(), provisionableTypeNames(), authorizableTypeNames()));
+    model.addAttribute("instances", InstanceRowView.listFrom(entities, typeCapabilities()));
     model.addAttribute("selectedType", type);
     model.addAttribute("query", query);
     model.addAttribute("entityTypes", types);
@@ -177,59 +173,39 @@ class UnifiedInstanceController {
   }
 
   /**
-   * Provisions the aggregate rooted at this entity, asynchronously: the API returns a schedule id
-   * right after plan-building (so a missing aggregate or an illegitimate root still surfaces here
-   * as a flash error), and the instances page polls {@code GET /metacatalog/v1/procedure/{id}}
-   * until the run completes, then reloads showing the finished statuses.
-   */
-  @PostMapping("/{id}/provision")
-  public String provision(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    launchProcedure(
-        redirectAttributes, "Provisioning", id, () -> api.provisionAggregate(id, ASYNC));
-    return "redirect:/ui/instances";
-  }
-
-  /** Tears the aggregate rooted at this entity back down. Asynchronous, like {@link #provision}. */
-  @PostMapping("/{id}/unprovision")
-  public String unprovision(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    launchProcedure(
-        redirectAttributes, "Unprovisioning", id, () -> api.unprovisionAggregate(id, ASYNC));
-    return "redirect:/ui/instances";
-  }
-
-  /**
-   * Grants access to the aggregate rooted at this entity. Asynchronous, like {@link #provision},
-   * and the same popup reports it — the poller is driven by the label the controller flashes, not
-   * by which procedure ran, so authorization needed nothing of its own there.
+   * Runs one of the four aggregate procedures, asynchronously: the API returns a schedule id right
+   * after plan-building (so a missing aggregate or an illegitimate root still surfaces here as a
+   * flash error), and the instances page polls {@code GET /metacatalog/v1/procedure/{id}} until the
+   * run completes, then reloads showing the finished statuses.
    *
-   * <p>This is a separate action from provisioning rather than a mode of it: the two capabilities
-   * are independent, so a row can offer either, both or neither.
+   * <p>One mapping rather than four, keyed by the {@link AggregateAction} whose {@code path} the
+   * form posted. The four differ only in which delegate call they make and which label they flash,
+   * and both of those are already on the action. An unknown or non-procedure segment is refused
+   * rather than falling through to another handler — the buttons only ever offer the four, but a
+   * hand-crafted POST must not reach past them.
    */
-  @PostMapping("/{id}/authorize")
-  public String authorize(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    launchProcedure(redirectAttributes, "Authorizing", id, () -> api.authorizeAggregate(id, ASYNC));
-    return "redirect:/ui/instances";
-  }
-
-  /** Withdraws that access. Asynchronous, like {@link #authorize}. */
-  @PostMapping("/{id}/reject")
-  public String reject(@PathVariable String id, RedirectAttributes redirectAttributes) {
-    launchProcedure(redirectAttributes, "Rejecting", id, () -> api.rejectAggregate(id, ASYNC));
+  @PostMapping("/{id}/procedure/{action}")
+  public String runProcedure(
+      @PathVariable String id, @PathVariable String action, RedirectAttributes redirectAttributes) {
+    var procedure =
+        java.util.Arrays.stream(AggregateAction.values())
+            .filter(a -> a.isProcedure() && a.getPath().equals(action))
+            .findFirst();
+    if (procedure.isEmpty()) {
+      redirectAttributes.addFlashAttribute("error", "Unknown aggregate procedure: " + action);
+      return "redirect:/ui/instances";
+    }
+    launchProcedure(redirectAttributes, procedure.get(), id);
     return "redirect:/ui/instances";
   }
 
   private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
 
   private void launchProcedure(
-      RedirectAttributes redirectAttributes,
-      String label,
-      String entityId,
-      java.util.function.Supplier<
-              org.springframework.http.ResponseEntity<
-                  it.davidgreco.metacatalog.openapi.model.ProcedureStatus>>
-          call) {
+      RedirectAttributes redirectAttributes, AggregateAction action, String entityId) {
+    var label = action.getProcedureLabel();
     try {
-      var status = call.get().getBody();
+      var status = callProcedure(action, entityId).getBody();
       if (status != null && status.getScheduleId() != null) {
         redirectAttributes.addFlashAttribute("procedureScheduleId", status.getScheduleId());
         redirectAttributes.addFlashAttribute("procedureLabel", label);
@@ -242,6 +218,23 @@ class UnifiedInstanceController {
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
+  }
+
+  /**
+   * The delegate call each procedure action makes. The generated delegate has one typed method per
+   * operation, so this is where the action becomes a call; everything either side of it is shared.
+   */
+  private org.springframework.http.ResponseEntity<
+          it.davidgreco.metacatalog.openapi.model.ProcedureStatus>
+      callProcedure(AggregateAction action, String entityId) {
+    return switch (action) {
+      case PROVISION -> api.provisionAggregate(entityId, ASYNC);
+      case UNPROVISION -> api.unprovisionAggregate(entityId, ASYNC);
+      case AUTHORIZE -> api.authorizeAggregate(entityId, ASYNC);
+      case REJECT -> api.rejectAggregate(entityId, ASYNC);
+      case DELETE ->
+          throw new IllegalArgumentException("DELETE is not a procedure: " + action.getPath());
+    };
   }
 
   /** The aggregate's entity type name, for the progress popup; best-effort, empty if unknown. */
@@ -275,31 +268,21 @@ class UnifiedInstanceController {
     }
   }
 
-  private Set<String> aggregateRootTypeNames() {
-    return api.listAggregateRootTypes().getBody().stream()
-        .map(EntityType::getName)
-        .collect(Collectors.toSet());
-  }
-
   /**
-   * Which types can be provisioned. Asked of the API rather than worked out here: deciding it needs
-   * the type and trait inheritance chains, which this module has no access to by design.
+   * Which types are aggregate roots, which can be provisioned and which can be authorized.
+   *
+   * <p>Asked of the API rather than worked out here: deciding any of them needs the type and trait
+   * inheritance chains, which this module has no access to by design. Asked in <em>one</em> call
+   * because answering any of them means walking the whole catalog and every inheritance chain in
+   * it, and this page needs all three — the three still come back as three separate answers, since
+   * the capabilities are declared by independent pairs of traits and none implies another.
    */
-  private Set<String> provisionableTypeNames() {
-    return api.listProvisionableTypes().getBody().stream()
-        .map(EntityType::getName)
-        .collect(Collectors.toSet());
-  }
-
-  /**
-   * Which types can be authorized. Asked of the API for the same reason as {@link
-   * #provisionableTypeNames()}, and asked <em>separately</em>: the two capabilities are declared by
-   * two independent pairs of traits, so neither list implies the other.
-   */
-  private Set<String> authorizableTypeNames() {
-    return api.listAuthorizableTypes().getBody().stream()
-        .map(EntityType::getName)
-        .collect(Collectors.toSet());
+  private InstanceRowView.TypeCapabilities typeCapabilities() {
+    var capabilities = api.getTypeCapabilities().getBody();
+    return new InstanceRowView.TypeCapabilities(
+        Set.copyOf(capabilities.getAggregateRoot()),
+        Set.copyOf(capabilities.getProvisionable()),
+        Set.copyOf(capabilities.getAuthorizable()));
   }
 
   private Map<String, String> schemaMap(List<EntityType> types) {
@@ -452,10 +435,6 @@ class UnifiedInstanceController {
   }
 
   private List<InstanceRowView> allInstanceRows() {
-    return InstanceRowView.listFrom(
-        api.getEntities(Optional.empty(), Optional.empty()).getBody(),
-        Set.of(),
-        Set.of(),
-        Set.of());
+    return InstanceRowView.listFrom(api.getEntities(Optional.empty(), Optional.empty()).getBody());
   }
 }

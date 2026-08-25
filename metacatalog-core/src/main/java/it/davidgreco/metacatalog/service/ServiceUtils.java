@@ -127,8 +127,17 @@ public final class ServiceUtils {
         .toList();
   }
 
-  /** The names of {@link #allTraitsOf(EntityType)}. */
-  private static Set<String> traitNamesOf(EntityType entityType) {
+  /**
+   * The names of {@link #allTraitsOf(EntityType)}.
+   *
+   * <p>Public because {@link #implementsTrait} rebuilds this set on every call: a caller asking
+   * several trait questions about the same type — which capabilities it offers, whether it is an
+   * aggregate root — should walk the father chains once and test the set it gets back.
+   *
+   * @param entityType the entity type to collect the trait names of
+   * @return every trait name the type carries, directly or through either inheritance chain
+   */
+  public static Set<String> traitNamesOf(EntityType entityType) {
     return allTraitsOf(entityType).stream().map(Trait::getName).collect(Collectors.toSet());
   }
 

@@ -72,6 +72,16 @@ could not hold both answers. Since a derived schema carries `additionalPropertie
 the wrong pair on a type that does not carry the matching trait is refused by validation rather
 than silently accepted.
 
+Each pair is declared once, as a `BuiltInCapability` constant (core, next to `BuiltInTraits`):
+the two trait names, the two field names, the statuses the first may take, and the base schema both
+traits carry — rendered from those same constants, so the schema can only ever admit exactly the
+fields the machinery writes. `BuiltInModelContributor` loops over the enum rather than spelling out
+a block per capability, and `ProvisioningTask.Operation` reads its field pair from the same place.
+Before that the field names lived as literals in a JSON text block in core *and* as constants in
+`metacatalog-functions`, with nothing connecting them — a typo in either half stays invisible until
+the status write at the end of a successful run, and since the traits are immutable the only remedy
+then is recreating the database.
+
 They are deliberately **not** seeded by the Flyway baseline. `BuiltInModelContributor` declares them
 through the same [contributor extension point](#declaring-an-immutable-model-from-a-module-bootstrap-package)
 any other module uses, ordered `HIGHEST_PRECEDENCE` so a module can inherit from them or mix them
@@ -364,6 +374,12 @@ way to create a resource and no way to remove it. Which one runs is set by the p
 registered factory fails the run (`No factory for name: <type>`) rather than being reported as
 provisioned by nothing.
 
+For the same reason, a factory producing a plain `Task` rather than a `ProvisioningTask` fails the
+run too, **in every direction**. Provisioning used to tolerate one — it is the operation a task
+runs by default, so nothing needed selecting — but a plain task records no status, and the run
+would then leave the root `PROVISIONED` for a resource that reported nothing at all. That is the
+same silence the missing-factory check exists to prevent, and it is worth no more here.
+
 The run's **overall** outcome is recorded the same way on the aggregate root — the `Provisionable`
 trait carries the same `provisioningStatus`/`provisioningResult` schema as `ProvisionableResource`,
 and `AggregateProvisioningStatusRecorder` writes `PROVISIONED`/`UNPROVISIONED` on the root only
@@ -466,11 +482,16 @@ one task per resource. The tasks are the same `ProvisioningTask`s, from the same
 registered per entity type name; they run `authorize()` / `reject()` instead of `provision()` /
 `unprovision()` and record into the authorization field pair.
 
-All four procedures are one class, `AbstractAggregateResourceProcedure`, filled in with three
-answers: which traits (root and resource), which `ProvisioningTask.Operation`, and which direction
-to wire the tasks in. `ResourceGraphBuilder` takes the resource trait as a parameter for the same
-reason — the selection is the only thing that varies, so no two procedures can disagree about what
-an aggregate contains. **The direction is the part worth reading twice**, and it is the same
+All four procedures are one class, `AbstractAggregateResourceProcedure`, and each supplies exactly
+one answer: which `ProvisioningTask.Operation` it runs. Everything else follows from it. The
+operation names a `BuiltInCapability` (core, next to `BuiltInTraits`) that owns the trait pair and
+the status/result field pair, and carries the wiring direction itself — so a procedure *cannot*
+pair an operation with the wrong capability's traits. That combination used to be expressible and
+would surface only at the end of an otherwise successful run, as a validation refusal on the status
+write, because a derived schema carries `additionalProperties: false`. `ResourceGraphBuilder` takes
+the resource trait as a parameter for the same reason — the selection is the only thing that varies,
+so no two procedures can disagree about what an aggregate contains. **The direction is the part
+worth reading twice**, and it is the same
 reasoning in both pairs: building up makes a resource wait for what it is derived from, tearing
 down makes what it is derived from wait for *it*. An Athena table reading an S3 folder is created
 after the folder and destroyed before it, and by the same token access to it is granted after — and
@@ -528,6 +549,15 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   out client-side: the walk needs an open transaction, and the `traits` on an `EntityType` DTO are
   only the directly associated ones, so a client checking them itself would miss an inherited
   capability.
+- `GET /aggregate/type-capabilities` answers those two **and** the root-type question in one call,
+  returning just the names (`aggregateRoot` / `provisionable` / `authorizable`). Each of the three
+  individual endpoints costs a `findAll`, a mapping-target query per type and a walk of every
+  type's and trait's father chains, so a client needing all three — the instances page does — paid
+  for that walk three times. `AggregateSchemaService.typeCapabilities()` does it once, testing one
+  trait-name set per type. The answers stay three separate lists: the capabilities are declared by
+  independent pairs of traits, so none implies another, and `AggregateSchemaServiceTests` pins the
+  combined answer against the three individual ones over a model that crosses them over. The three
+  endpoints remain for clients wanting a single capability with the full DTOs.
 - Aggregate authoring: `GET /aggregate/root-type` lists the aggregate root types and
   `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
   [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
@@ -594,24 +624,36 @@ catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/inst
 aggregate authoring (`/ui/aggregates/new`).
 
 The instances list is also where an aggregate is deleted, provisioned, unprovisioned, authorized
-and rejected. A row gets
-a *Delete aggregate* action when its entity type is one of the `GET /aggregate/root-type` types —
-roots are classified by the built-in traits (`Aggregate` without `AggregateElement`), so a root
-instance may still hang off an entity outside the aggregate model (an Iceberg table off its
-namespace); deleting such an aggregate is then refused with the outside-link error until that link
-is removed. It gets *Provision* and *Unprovision* when its type is one of the
-`GET /aggregate/provisionable-type` types, and *Authorize* and *Reject* when it is one of the
-`GET /aggregate/authorizable-type` types.
+and rejected. **A row's actions are data, not markup**: each is an `AggregateAction` constant
+carrying its path, button label, tooltip, confirmation text, the capability a row must have for it
+to be offered, and — for the four procedures — the label flashed for the progress popup. The
+controller attaches the constants that apply, the template renders them with a single `th:each`,
+and the four procedures share one `@PostMapping("/{id}/procedure/{action}")` that looks the action
+up by path (an unknown or non-procedure segment is refused, since the segment is now input rather
+than something the routing table pins down). A third capability therefore adds enum constants and
+nothing else — before this, it meant two more controller methods, two more near-identical `<form>`
+blocks and a wider `InstanceRowView` that two unrelated call sites had to pad with empty sets.
 
-All three lists are asked of the API rather than worked out in the UI. Whether a type is
-provisionable or authorizable depends on the type **and** trait inheritance chains, both lazily
-fetched, so the walk only works inside a transaction —
-`AggregateSchemaService.provisionableTypes()` / `authorizableTypes()` do it there and the endpoints
-hand the UI the answers. The `traits` on the `EntityType` DTO are only the directly associated ones,
-so checking them here would miss an inherited `Provisionable`. **The two capability lists are asked
-separately and neither stands in for the other** — they are declared by independent pairs of traits,
-so a type may offer one, both or neither, and `UiControllerTest` pins the crossed-over case that a
-single "has a lifecycle" flag would get wrong in both rows.
+`AggregateAction` deliberately does **not** reuse `ProvisioningTask.Operation`, whose four
+constants it mirrors: that lives in `metacatalog-functions`, which this module's build excludes on
+purpose. The overlap is the REST contract's, not a shortcut around the boundary.
+
+A row gets *Delete aggregate* when its entity type is one of the aggregate root types — roots are
+classified by the built-in traits (`Aggregate` without `AggregateElement`), so a root instance may
+still hang off an entity outside the aggregate model (an Iceberg table off its namespace); deleting
+such an aggregate is then refused with the outside-link error until that link is removed. It gets
+*Provision* and *Unprovision* when its type is provisionable, and *Authorize* and *Reject* when it
+is authorizable.
+
+All three classifications are asked of the API rather than worked out in the UI, in **one** call to
+`GET /aggregate/type-capabilities`. Whether a type is provisionable or authorizable depends on the
+type **and** trait inheritance chains, both lazily fetched, so the walk only works inside a
+transaction — `AggregateSchemaService.typeCapabilities()` does it there, once, and the endpoint
+hands the UI all three answers. The `traits` on the `EntityType` DTO are only the directly
+associated ones, so checking them here would miss an inherited `Provisionable`. **The capability
+lists remain separate answers and neither stands in for the other** — they are declared by
+independent pairs of traits, so a type may offer one, both or neither, and `UiControllerTest` pins
+the crossed-over case that a single "has a lifecycle" flag would get wrong in both rows.
 
 Provisioning and authorization from the UI are asynchronous: the controller calls the API with
 `async=true`, flashes
@@ -912,7 +954,12 @@ The data product is **also `Authorizable`**, and each port carries `Authorizable
 its own port trait, so the same aggregate has a second lifecycle: `POST /aggregate/{id}/authorize`
 stamps each port's `grantee` onto the table it produced — Iceberg table *properties*, Hive table
 *parameters*, the same two names (`access.status`, `access.granted-to`) either side — and
-`.../reject` withdraws it. Because both are ordinary catalog writes, the decision is visible to
+`.../reject` withdraws it. Those two names, and the `everyone` a port with no `grantee` grants to,
+are declared once in `docker/provisioning/access-decision.sh`, sourced by both scripts, and the
+Hive side *passes them into* `hive-cli` rather than the jar holding constants of its own: the whole
+point is that a consumer of either catalog reads the same answer, and a Java constant on one side
+could have drifted from a shell literal on the other with nothing failing — the two catalogs would
+just have quietly stopped agreeing. Because both are ordinary catalog writes, the decision is visible to
 PyIceberg / Spark / Trino and to a Hive client, and (the Iceberg catalog caching each table's
 metadata on its `IcebergTable` entity) in the UI graph and over SPARQL. Authorizing before
 provisioning fails naming the table that does not exist yet; rejecting something never provisioned

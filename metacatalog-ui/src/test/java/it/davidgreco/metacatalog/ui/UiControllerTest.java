@@ -55,6 +55,8 @@ class UiControllerTest {
     given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listAuthorizableTypes()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.getTypeCapabilities())
+        .willReturn(ResponseEntity.ok(capabilities(List.of(), List.of(), List.of())));
     given(api.listEntityTypeVersions(any())).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
@@ -640,22 +642,15 @@ class UiControllerTest {
     part.setEntityType("OutputPortType");
     part.setValues("{\"name\":\"port\"}");
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root, part)));
-    var rootType = new EntityType();
-    rootType.setName("ProductType");
-    given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of(rootType)));
+    given(api.getTypeCapabilities())
+        .willReturn(ResponseEntity.ok(capabilities(List.of("ProductType"), List.of(), List.of())));
 
-    var rows =
-        (List<InstanceRowView>)
-            mockMvc
-                .perform(get("/ui/instances"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getModelAndView()
-                .getModel()
-                .get("instances");
+    var rows = instanceRows();
 
-    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).aggregateRoot());
-    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).aggregateRoot());
+    org.junit.jupiter.api.Assertions.assertTrue(
+        rows.get(0).actions().contains(AggregateAction.DELETE));
+    org.junit.jupiter.api.Assertions.assertFalse(
+        rows.get(1).actions().contains(AggregateAction.DELETE));
   }
 
   private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
@@ -683,7 +678,7 @@ class UiControllerTest {
         .getEntity("agg-1");
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/provision"))
+        .perform(post("/ui/instances/agg-1/procedure/provision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-1"))
@@ -700,7 +695,7 @@ class UiControllerTest {
         .thenReturn(accepted("sched-2"));
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/unprovision"))
+        .perform(post("/ui/instances/agg-1/procedure/unprovision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-2"))
@@ -719,7 +714,7 @@ class UiControllerTest {
         .provisionAggregate("agg-1", ASYNC);
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/provision"))
+        .perform(post("/ui/instances/agg-1/procedure/provision"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(
@@ -739,7 +734,7 @@ class UiControllerTest {
         .getEntity("agg-1");
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/authorize"))
+        .perform(post("/ui/instances/agg-1/procedure/authorize"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-3"))
@@ -757,7 +752,7 @@ class UiControllerTest {
     org.mockito.Mockito.when(api.rejectAggregate("agg-1", ASYNC)).thenReturn(accepted("sched-4"));
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/reject"))
+        .perform(post("/ui/instances/agg-1/procedure/reject"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-4"))
@@ -775,7 +770,7 @@ class UiControllerTest {
         .authorizeAggregate("agg-1", ASYNC);
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/authorize"))
+        .perform(post("/ui/instances/agg-1/procedure/authorize"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(
@@ -785,13 +780,56 @@ class UiControllerTest {
   }
 
   /**
+   * The four procedures now share one mapping keyed by the path segment, so the segment is input
+   * rather than something the routing table pins down. A hand-crafted POST naming something else —
+   * or naming the synchronous {@code delete-aggregate}, which is not a procedure — must be refused
+   * rather than reaching a delegate call.
+   */
+  @Test
+  void unknownAggregateProcedureIsRefused() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/agg-1/procedure/delete-aggregate"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(
+            flash()
+                .attribute(
+                    "error", org.hamcrest.Matchers.containsString("Unknown aggregate procedure")));
+
+    verify(api, org.mockito.Mockito.never()).deleteAggregate(org.mockito.ArgumentMatchers.any());
+  }
+
+  /** A capability answer as the combined endpoint returns it. */
+  private static it.davidgreco.metacatalog.openapi.model.TypeCapabilities capabilities(
+      List<String> aggregateRoot, List<String> provisionable, List<String> authorizable) {
+    return new it.davidgreco.metacatalog.openapi.model.TypeCapabilities()
+        .aggregateRoot(aggregateRoot)
+        .provisionable(provisionable)
+        .authorizable(authorizable);
+  }
+
+  /** The rows the instances page rendered, which is where every per-row action shows up. */
+  @SuppressWarnings("unchecked")
+  private List<InstanceRowView> instanceRows() throws Exception {
+    return (List<InstanceRowView>)
+        mockMvc
+            .perform(get("/ui/instances"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getModelAndView()
+            .getModel()
+            .get("instances");
+  }
+
+  /**
    * The two capabilities are declared by independent pairs of traits, so the row flags come from
    * two separate API answers and one must not stand in for the other. Here the product is
    * provisionable only and the port authorizable only — the crossed-over case that a single "is an
-   * aggregate with a lifecycle" flag would get wrong in both rows.
+   * aggregate with a lifecycle" flag would get wrong in both rows. It also covers the plain
+   * provisionable case: which rows get the buttons comes from the API, not from a guess at the
+   * trait chain here.
    */
   @Test
-  @SuppressWarnings("unchecked")
   void instancesListOffersAuthorizationIndependentlyOfProvisioning() throws Exception {
     var product = new Entity();
     product.setId(java.util.Optional.of("agg-1"));
@@ -802,57 +840,19 @@ class UiControllerTest {
     port.setEntityType("OutputPortType");
     port.setValues("{\"name\":\"port\"}");
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(product, port)));
-    var provisionable = new EntityType();
-    provisionable.setName("ProductType");
-    given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of(provisionable)));
-    var authorizable = new EntityType();
-    authorizable.setName("OutputPortType");
-    given(api.listAuthorizableTypes()).willReturn(ResponseEntity.ok(List.of(authorizable)));
+    given(api.getTypeCapabilities())
+        .willReturn(
+            ResponseEntity.ok(
+                capabilities(List.of(), List.of("ProductType"), List.of("OutputPortType"))));
 
-    var rows =
-        (List<InstanceRowView>)
-            mockMvc
-                .perform(get("/ui/instances"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getModelAndView()
-                .getModel()
-                .get("instances");
+    var rows = instanceRows();
 
-    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).provisionable());
-    org.junit.jupiter.api.Assertions.assertFalse(rows.get(0).authorizable());
-    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).provisionable());
-    org.junit.jupiter.api.Assertions.assertTrue(rows.get(1).authorizable());
-  }
-
-  @Test
-  void instancesListOffersProvisioningOnlyForProvisionableTypes() throws Exception {
-    var product = new Entity();
-    product.setId(java.util.Optional.of("agg-1"));
-    product.setEntityType("ProductType");
-    product.setValues("{\"name\":\"product\"}");
-    var port = new Entity();
-    port.setId(java.util.Optional.of("ent-2"));
-    port.setEntityType("OutputPortType");
-    port.setValues("{\"name\":\"port\"}");
-    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(product, port)));
-    var provisionable = new EntityType();
-    provisionable.setName("ProductType");
-    given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of(provisionable)));
-
-    var rows =
-        (List<InstanceRowView>)
-            mockMvc
-                .perform(get("/ui/instances"))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getModelAndView()
-                .getModel()
-                .get("instances");
-
-    // Which rows get the buttons comes from the API, not from a guess at the trait chain here.
-    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).provisionable());
-    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).provisionable());
+    // The product offers the provisioning pair and neither authorization action; the port the
+    // reverse. A single "has a lifecycle" flag would get both rows wrong.
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(AggregateAction.PROVISION, AggregateAction.UNPROVISION), rows.get(0).actions());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(AggregateAction.AUTHORIZE, AggregateAction.REJECT), rows.get(1).actions());
   }
 
   @Test

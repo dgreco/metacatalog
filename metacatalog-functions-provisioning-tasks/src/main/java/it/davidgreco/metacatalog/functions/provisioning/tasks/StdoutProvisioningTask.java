@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.functions.provisioning.tasks;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.provisioning.ProvisioningTask;
 import it.davidgreco.metacatalog.service.EntityService;
+import java.util.Locale;
 
 /**
  * A provisioning task that reports what it would do on standard output instead of creating or
@@ -23,18 +24,6 @@ import it.davidgreco.metacatalog.service.EntityService;
  * logging.level.root: ERROR}, so an {@code INFO} line would never be seen.
  */
 public class StdoutProvisioningTask extends ProvisioningTask {
-
-  /** Prefix on every line, so a run can be grepped out of the application output. */
-  static final String PROVISION_PREFIX = "[provisioning]";
-
-  /** Prefix used when tearing a resource down. */
-  static final String UNPROVISION_PREFIX = "[unprovisioning]";
-
-  /** Prefix used when granting access to a resource. */
-  static final String AUTHORIZE_PREFIX = "[authorizing]";
-
-  /** Prefix used when withdrawing access to a resource. */
-  static final String REJECT_PREFIX = "[rejecting]";
 
   /** Pause between the start and done lines, simulating a slow provisioning function. */
   private final java.time.Duration delay;
@@ -62,26 +51,35 @@ public class StdoutProvisioningTask extends ProvisioningTask {
 
   @Override
   public String provision() {
-    return report(PROVISION_PREFIX, "Provisioned");
+    return report("Provisioned");
   }
 
   @Override
   public String unprovision() {
-    return report(UNPROVISION_PREFIX, "Unprovisioned");
+    return report("Unprovisioned");
   }
 
   @Override
   public String authorize() {
-    return report(AUTHORIZE_PREFIX, "Authorized");
+    return report("Authorized");
   }
 
   @Override
   public String reject() {
-    return report(REJECT_PREFIX, "Rejected");
+    return report("Rejected");
   }
 
-  private String report(String prefix, String outcome) {
+  /**
+   * Prints the start/done pair and returns the outcome message.
+   *
+   * <p>The line prefix — {@code [provisioning]}, {@code [authorizing]}, … — is the operation's own
+   * label rather than a constant per direction: the procedure has already selected the operation by
+   * the time this runs, so a fifth direction gets its prefix for free and no method can print a
+   * prefix belonging to another one.
+   */
+  private String report(String outcome) {
     var entity = getEntity();
+    var prefix = "[" + getOperation().label().toLowerCase(Locale.ROOT) + "]";
     var resource = entity.getEntityType().getName() + " id=" + entity.getId();
     // The values are printed because they are what a real task would act on — the bucket and path
     // of an S3FolderType, the database and table of an AthenaTableType.

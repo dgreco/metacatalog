@@ -1,10 +1,8 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.TaskFactory;
 import it.davidgreco.metacatalog.service.TaskManager;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -14,17 +12,16 @@ import org.springframework.stereotype.Service;
  *
  * <p>It reads the same aggregate, builds the same graph through {@link ResourceGraphBuilder} and
  * takes its tasks from the same {@link TaskFactory} registered against each resource's entity type
- * name. Two things differ.
+ * name. Two things differ, and both follow from the operation alone.
  *
- * <p>First, the tasks are told to run {@link ProvisioningTask.Operation#UNPROVISION}, so they call
- * {@code unprovision()} and record {@code UNPROVISIONED} rather than {@code PROVISIONED}.
+ * <p>First, the tasks run {@link ProvisioningTask.Operation#UNPROVISION}, so they call {@code
+ * unprovision()} and record {@code UNPROVISIONED} rather than {@code PROVISIONED}.
  *
  * <p>Second — and this is the part worth reading twice — the dependencies are wired the other way
  * round. Provisioning makes a resource wait for what it is built from; unprovisioning makes what it
  * is built from wait for <em>it</em>. An Athena table reading an S3 folder is created after the
  * folder and destroyed before it, so nothing is ever removed while something still depends on it.
  */
-@Slf4j
 @Service
 public class UnprovisioningProcedure extends AbstractAggregateResourceProcedure {
 
@@ -34,27 +31,12 @@ public class UnprovisioningProcedure extends AbstractAggregateResourceProcedure 
       TaskManager taskManager,
       AggregateProvisioningStatusRecorder statusRecorder,
       ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
-    super(aggregateService, resourceGraphBuilder, taskManager, statusRecorder, deferredRegistrars);
-  }
-
-  @Override
-  protected String rootTrait() {
-    return BuiltInTraits.PROVISIONABLE;
-  }
-
-  @Override
-  protected String resourceTrait() {
-    return BuiltInTraits.PROVISIONABLE_RESOURCE;
-  }
-
-  @Override
-  protected ProvisioningTask.Operation operation() {
-    return ProvisioningTask.Operation.UNPROVISION;
-  }
-
-  /** Dependents are torn down first, so nothing is removed while something still depends on it. */
-  @Override
-  protected boolean dependentsFirst() {
-    return true;
+    super(
+        ProvisioningTask.Operation.UNPROVISION,
+        aggregateService,
+        resourceGraphBuilder,
+        taskManager,
+        statusRecorder,
+        deferredRegistrars);
   }
 }

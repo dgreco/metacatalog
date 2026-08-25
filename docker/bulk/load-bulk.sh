@@ -61,15 +61,17 @@ declared_names() { # <section> <key>
   ' "${MODEL_FILE}"
 }
 
-# The traits one entity type declares, one per line. `traits:` sits four spaces in and its
-# entries six, which is what separates them from the `required:` lists inside a `schema:` block.
-declared_traits() { # <entityTypeName>
-  awk -v want="$1" '
+# Every (entity type, trait) pair the file declares, one "<type> <trait>" per line. `traits:` sits
+# four spaces in and its entries six, which is what separates them from the `required:` lists inside
+# a `schema:` block. One pass over the file for all of them, like the other two enumerators — asking
+# per entity type re-scanned the whole file once per type.
+declared_type_traits() {
+  awk '
     /^[A-Za-z][A-Za-z]*:[[:space:]]*$/ { s = $1; sub(/:$/, "", s); section = s; next }
     section != "EntityTypes" { next }
     /^  - name:/ { name = $3; gsub(/"/, "", name); in_traits = 0; next }
     /^    traits:[[:space:]]*$/ { in_traits = 1; next }
-    in_traits && /^      - / { if (name == want) { t = $2; gsub(/"/, "", t); print t }; next }
+    in_traits && /^      - / { t = $2; gsub(/"/, "", t); print name " " t; next }
     { in_traits = 0 }
   ' "${MODEL_FILE}"
 }
@@ -104,10 +106,6 @@ entity_type_traits() {
     | grep -v '^$' || true
 }
 
-has_trait() { # <entityTypeName> <traitName>
-  entity_type_traits "$1" | grep -qx "$2"
-}
-
 relationship_exists() { # <source>/<type>/<target>
   rest="${1#*/}"
   curl -fsS -u "${AUTH}" \
@@ -128,6 +126,7 @@ note() { # <label> <exists?>
 }
 
 survey_model() {
+  declared_traits=$(declared_type_traits)
   for name in $(declared_names Traits name); do
     if trait_exists "${name}"; then note "trait ${name}" yes; else note "trait ${name}" no; fi
   done
@@ -136,8 +135,10 @@ survey_model() {
       note "entity type ${name}" yes
       # Only worth asking once the type is there; on a fresh volume the type itself is the
       # missing thing and listing each of its traits again would just be noise.
-      for trait in $(declared_traits "${name}"); do
-        if has_trait "${name}" "${trait}"; then
+      # One GET per type, not one per declared trait: the DTO already carries the whole list.
+      catalog_traits=$(entity_type_traits "${name}")
+      for trait in $(echo "${declared_traits}" | awk -v want="${name}" '$1 == want { print $2 }'); do
+        if echo "${catalog_traits}" | grep -qx "${trait}"; then
           note "trait ${trait} on entity type ${name}" yes
         else
           note "trait ${trait} on entity type ${name}" no

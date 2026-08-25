@@ -288,4 +288,45 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     Assertions.assertEquals("#/$defs/BookType", anyOf.get(0).get("$ref").asText());
     Assertions.assertEquals("#/$defs/PenType", anyOf.get(1).get("$ref").asText());
   }
+
+  /**
+   * The combined answer must agree with the three it replaces asking for, one at a time — that is
+   * the whole contract of collapsing them into one walk. The model here crosses the capabilities
+   * over: the root is provisionable but not authorizable, the part authorizable but not
+   * provisionable, so an answer that conflated the two would be wrong in both entries.
+   */
+  @Test
+  void typeCapabilitiesAgreeWithTheIndividualListings() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var schemaService = getApplicationContext().getBean(AggregateSchemaService.class);
+
+    traitService.create("PalletTrait", Optional.of(EMPTY_SCHEMA), Optional.of("Provisionable"));
+    traitService.create("ParcelTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
+    traitService.link("PalletTrait", HAS_PART, "ParcelTrait");
+
+    entityTypeService.create("PalletType", List.of("PalletTrait"), Optional.empty(), EMPTY_SCHEMA);
+    // Authorizable inherits Aggregate, so mixing it into the part makes the part authorizable
+    // without making it provisionable — and an intermediate node, which is still not a root.
+    entityTypeService.create(
+        "ParcelType", List.of("ParcelTrait", "Authorizable"), Optional.empty(), EMPTY_SCHEMA);
+
+    var capabilities = schemaService.typeCapabilities();
+
+    Assertions.assertEquals(
+        schemaService.aggregateRootTypes().stream().map(EntityType::getName).toList(),
+        capabilities.aggregateRoot());
+    Assertions.assertEquals(
+        schemaService.provisionableTypes().stream().map(EntityType::getName).toList(),
+        capabilities.provisionable());
+    Assertions.assertEquals(
+        schemaService.authorizableTypes().stream().map(EntityType::getName).toList(),
+        capabilities.authorizable());
+
+    // And the crossed-over case is genuinely crossed over, not two copies of one answer.
+    Assertions.assertTrue(capabilities.provisionable().contains("PalletType"));
+    Assertions.assertFalse(capabilities.authorizable().contains("PalletType"));
+    Assertions.assertTrue(capabilities.authorizable().contains("ParcelType"));
+    Assertions.assertFalse(capabilities.provisionable().contains("ParcelType"));
+  }
 }
