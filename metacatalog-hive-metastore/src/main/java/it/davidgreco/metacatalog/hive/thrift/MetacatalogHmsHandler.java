@@ -1,5 +1,6 @@
 package it.davidgreco.metacatalog.hive.thrift;
 
+import com.facebook.fb303.fb_status;
 import it.davidgreco.metacatalog.hive.registry.HiveErrors;
 import it.davidgreco.metacatalog.hive.registry.HiveRegistryService;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import org.apache.hadoop.hive.metastore.api.AddPartitionsResult;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.AlterDatabaseRequest;
 import org.apache.hadoop.hive.metastore.api.AlterTableRequest;
+import org.apache.hadoop.hive.metastore.api.AlterTableResponse;
 import org.apache.hadoop.hive.metastore.api.CreateDatabaseRequest;
 import org.apache.hadoop.hive.metastore.api.CreateTableRequest;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -81,9 +83,13 @@ public class MetacatalogHmsHandler {
     return "1.0";
   }
 
-  /** fb303 ALIVE. */
-  public int getStatus() {
-    return 2;
+  /**
+   * fb303 liveness. The enum, not its ordinal: dispatch is by name through a dynamic proxy, so the
+   * value this returns is handed to Thrift as-is, and an {@code int} where the interface declares
+   * {@code fb_status} reaches the client as a failure rather than a status.
+   */
+  public fb_status getStatus() {
+    return fb_status.ALIVE;
   }
 
   public String getStatusDetails() {
@@ -180,8 +186,16 @@ public class MetacatalogHmsHandler {
     run(() -> registry.createTable(request.getTable()));
   }
 
-  public void alter_table_req(AlterTableRequest request) throws TException {
+  /**
+   * Note the return: unlike the flat {@code alter_table}, the request-object form Hive 4 clients
+   * actually call carries a result struct. Returning {@code void} here made the proxy hand Thrift a
+   * {@code null} success field, and every client-side {@code alterTable} failed with {@code
+   * TApplicationException: alter_table_req failed: unknown result}. The response itself is empty —
+   * Hive's own metastore returns a bare one too — but the reply has to contain it.
+   */
+  public AlterTableResponse alter_table_req(AlterTableRequest request) throws TException {
     run(() -> registry.alterTable(request.getDbName(), request.getTableName(), request.getTable()));
+    return new AlterTableResponse();
   }
 
   public void drop_table_req(DropTableRequest request) throws TException {

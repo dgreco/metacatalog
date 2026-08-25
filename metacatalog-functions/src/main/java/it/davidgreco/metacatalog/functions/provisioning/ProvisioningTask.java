@@ -5,6 +5,7 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.Task;
+import java.util.Locale;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -17,15 +18,35 @@ import lombok.extern.slf4j.Slf4j;
  * cannot end up with a way to create a resource and no way to remove it. This base class handles
  * the lifecycle around them, including updating the entity's provisioning status and result.
  *
- * <p>Which of the two runs is decided by the procedure that schedules the task, through {@link
+ * <p>The same class also carries the authorization pair, {@link #authorize()} and {@link
+ * #reject()}, driven by {@link AuthorizationProcedure} / {@link RejectionProcedure} over the {@code
+ * AuthorizableResource} entities of an aggregate. Unlike the provisioning pair those two are
+ * <em>not</em> abstract: the two capabilities are declared by two independent pairs of built-in
+ * traits, so a type may well be a {@code ProvisionableResource} and never an {@code
+ * AuthorizableResource}, and forcing every existing task to implement an authorization it does not
+ * have would buy nothing. They default to failing the task, naming the class that did not implement
+ * them — a resource whose type carries {@code AuthorizableResource} but whose task never overrode
+ * them fails its own run loudly, exactly as a resource type with no registered factory does. A task
+ * that <em>does</em> authorize must override both, for the same reason the provisioning pair is
+ * abstract.
+ *
+ * <p>Which of the four runs is decided by the procedure that schedules the task, through {@link
  * #setOperation}; it defaults to {@link Operation#PROVISION}. After execution:
  *
  * <ul>
- *   <li>On success: provisioningStatus is set to "PROVISIONED" or "UNPROVISIONED" depending on the
- *       operation, and provisioningResult contains the result
- *   <li>On failure: provisioningStatus is set to "FAILED" and provisioningResult contains the error
+ *   <li>On success: the operation's status field is set to "PROVISIONED", "UNPROVISIONED",
+ *       "AUTHORIZED" or "REJECTED" depending on the operation, and its result field contains the
+ *       result
+ *   <li>On failure: the status field is set to "FAILED" and the result field contains the error
  *       message
  * </ul>
+ *
+ * <p>Which pair of fields is written is part of the operation, not of this class: provisioning
+ * writes {@code provisioningStatus} / {@code provisioningResult}, authorization writes {@code
+ * authorizationStatus} / {@code authorizationResult}. They are separate because the two answers are
+ * independent — an aggregate can be provisioned and not yet authorized — and because a derived
+ * schema carries {@code additionalProperties: false}, so writing the wrong pair on an entity whose
+ * type does not carry the matching trait is refused by validation.
  */
 @Slf4j
 @Getter
@@ -34,21 +55,31 @@ public abstract class ProvisioningTask extends Task {
   // Package-visible: AggregateProvisioningStatusRecorder writes the same fields on the root.
   static final String PROVISIONING_STATUS = "provisioningStatus";
   static final String PROVISIONING_RESULT = "provisioningResult";
+  static final String AUTHORIZATION_STATUS = "authorizationStatus";
+  static final String AUTHORIZATION_RESULT = "authorizationResult";
   static final String STATUS_FAILED = "FAILED";
 
-  /** The two directions a provisioning task can run in. */
+  /** The directions a provisioning task can run in, two per capability. */
   public enum Operation {
     /** Create the resource; leaves it {@code PROVISIONED}. */
-    PROVISION("Provisioning", "PROVISIONED"),
+    PROVISION("Provisioning", "PROVISIONED", PROVISIONING_STATUS, PROVISIONING_RESULT),
     /** Tear the resource down; leaves it {@code UNPROVISIONED}. */
-    UNPROVISION("Unprovisioning", "UNPROVISIONED");
+    UNPROVISION("Unprovisioning", "UNPROVISIONED", PROVISIONING_STATUS, PROVISIONING_RESULT),
+    /** Grant access to the resource; leaves it {@code AUTHORIZED}. */
+    AUTHORIZE("Authorizing", "AUTHORIZED", AUTHORIZATION_STATUS, AUTHORIZATION_RESULT),
+    /** Withdraw access to the resource; leaves it {@code REJECTED}. */
+    REJECT("Rejecting", "REJECTED", AUTHORIZATION_STATUS, AUTHORIZATION_RESULT);
 
     private final String label;
     private final String successStatus;
+    private final String statusField;
+    private final String resultField;
 
-    Operation(String label, String successStatus) {
+    Operation(String label, String successStatus, String statusField, String resultField) {
       this.label = label;
       this.successStatus = successStatus;
+      this.statusField = statusField;
+      this.resultField = resultField;
     }
 
     /** The status a successful run of this operation leaves behind. */
@@ -59,6 +90,16 @@ public abstract class ProvisioningTask extends Task {
     /** The human label used in log lines and result messages. */
     String label() {
       return label;
+    }
+
+    /** The entity value field this operation's status is recorded in. */
+    String statusField() {
+      return statusField;
+    }
+
+    /** The entity value field this operation's result message is recorded in. */
+    String resultField() {
+      return resultField;
     }
   }
 
@@ -94,16 +135,19 @@ public abstract class ProvisioningTask extends Task {
           switch (operation) {
             case PROVISION -> provision();
             case UNPROVISION -> unprovision();
+            case AUTHORIZE -> authorize();
+            case REJECT -> reject();
           };
-      writeProvisioningStatus(operation.successStatus, result);
+      writeStatus(operation.successStatus, result);
     } catch (Exception e) {
       log.error("{} failed for entity {}", operation.label, getEntity().getId(), e);
       try {
-        writeProvisioningStatus(
+        writeStatus(
             STATUS_FAILED, e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
       } catch (Exception statusUpdateFailure) {
         log.error(
-            "Failed to record FAILED provisioning status for entity {}",
+            "Failed to record FAILED {} status for entity {}",
+            operation.label,
             getEntity().getId(),
             statusUpdateFailure);
       }
@@ -118,15 +162,17 @@ public abstract class ProvisioningTask extends Task {
     return null;
   }
 
-  private void writeProvisioningStatus(String status, String result) {
+  private void writeStatus(String status, String result) {
     if (!(getEntity().getValues() instanceof ObjectNode values)) {
       throw new ServiceError(
           "Entity "
               + getEntity().getId()
-              + " values are not a JSON object; cannot record provisioning status");
+              + " values are not a JSON object; cannot record "
+              + operation.label().toLowerCase(Locale.ROOT)
+              + " status");
     }
-    values.put(PROVISIONING_STATUS, status);
-    values.put(PROVISIONING_RESULT, result);
+    values.put(operation.statusField(), status);
+    values.put(operation.resultField(), result);
     getEntityService().updateValues(getEntity().getId(), values.toPrettyString());
   }
 
@@ -149,4 +195,45 @@ public abstract class ProvisioningTask extends Task {
    * @return a result string describing the unprovisioning outcome
    */
   public abstract String unprovision();
+
+  /**
+   * Grants access to the resource — whatever authorization means for its type: adding a grant to a
+   * warehouse table, attaching a bucket policy, opening a share.
+   *
+   * <p>Runs in dependency order, like {@link #provision()}: a resource is authorized only once
+   * everything it is derived from has been, so a grant is never handed out on something still
+   * unreachable behind a closed door.
+   *
+   * <p>The default fails the task. Override it — together with {@link #reject()} — in any task
+   * registered for a type carrying the {@code AuthorizableResource} trait.
+   *
+   * @return a result string describing the authorization outcome
+   */
+  public String authorize() {
+    throw new ServiceError(unsupported("authorize"));
+  }
+
+  /**
+   * Withdraws access to the resource — the inverse of {@link #authorize()}.
+   *
+   * <p>Runs in the reverse of the order authorization runs in, so access is withdrawn from what is
+   * derived from a resource before it is withdrawn from the resource itself.
+   *
+   * <p>The default fails the task. Override it — together with {@link #authorize()} — in any task
+   * registered for a type carrying the {@code AuthorizableResource} trait.
+   *
+   * @return a result string describing the rejection outcome
+   */
+  public String reject() {
+    throw new ServiceError(unsupported("reject"));
+  }
+
+  private String unsupported(String method) {
+    return getClass().getName()
+        + " does not implement "
+        + method
+        + "(), so entity type "
+        + getEntity().getEntityType().getName()
+        + " cannot be authorized. Override authorize() and reject() on the task registered for it.";
+  }
 }

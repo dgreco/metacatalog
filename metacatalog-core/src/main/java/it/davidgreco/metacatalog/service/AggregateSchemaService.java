@@ -46,6 +46,10 @@ import org.springframework.transaction.annotation.Transactional;
  *       reachable from a root type.
  * </ul>
  *
+ * <p>It also answers which types carry the capability traits — {@link #provisionableTypes()} and
+ * {@link #authorizableTypes()} — for the same reason: the test walks lazily-fetched inheritance
+ * chains and only works inside a transaction.
+ *
  * <p>The generated schema mirrors the aggregate YAML shape {@link
  * BulkLoaderService#bulkAggregateCreation} already accepts ({@code entityType}, {@code values},
  * {@code ref}, {@code dependsOn}, {@code parts}), so a document written against it can be handed
@@ -125,23 +129,47 @@ public class AggregateSchemaService {
    * and trait inheritance chains — the same test the provisioning procedure applies to an aggregate
    * root before it will act on it.
    *
-   * <p>This is computed here rather than derived by callers because answering it needs the full
-   * ancestor walk, and both the type's father chain and its traits' father chains are lazily
-   * fetched: outside a transaction the walk would fail. Clients that need to know which entities
-   * offer provisioning — the UI, deciding which rows get the action — read it from here.
-   *
    * @return the provisionable entity types, ordered by name
    */
   @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
   public List<EntityType> provisionableTypes() {
-    log.info("Computing provisionable types");
-    var provisionable =
+    return typesCarryingTrait(BuiltInTraits.PROVISIONABLE);
+  }
+
+  /**
+   * Returns the entity types whose instances can be authorized, ordered by name.
+   *
+   * <p>Those are the types carrying the {@code Authorizable} trait, directly or through the type
+   * and trait inheritance chains — the same test the authorization procedure applies to an
+   * aggregate root before it will act on it. The two capabilities are independent: a type may offer
+   * provisioning, authorization, both or neither.
+   *
+   * @return the authorizable entity types, ordered by name
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public List<EntityType> authorizableTypes() {
+    return typesCarryingTrait(BuiltInTraits.AUTHORIZABLE);
+  }
+
+  /**
+   * The entity types carrying a built-in capability trait, ordered by name.
+   *
+   * <p>This is computed here rather than derived by callers because answering it needs the full
+   * ancestor walk, and both the type's father chain and its traits' father chains are lazily
+   * fetched: outside a transaction the walk would fail. The {@code traits} on an {@code EntityType}
+   * DTO are only the directly associated ones, so a client checking them itself would miss an
+   * inherited capability. Clients that need to know which entities offer an operation — the UI,
+   * deciding which rows get the action — read it from here.
+   */
+  private List<EntityType> typesCarryingTrait(String traitName) {
+    log.info("Computing the types carrying {}", traitName);
+    var carriers =
         authorableTypes().stream()
-            .filter(type -> ServiceUtils.implementsTrait(type, BuiltInTraits.PROVISIONABLE))
+            .filter(type -> ServiceUtils.implementsTrait(type, traitName))
             .sorted(Comparator.comparing(EntityType::getName))
             .toList();
-    log.info("Computed {} provisionable type(s)", provisionable.size());
-    return provisionable;
+    log.info("Computed {} type(s) carrying {}", carriers.size(), traitName);
+    return carriers;
   }
 
   /**

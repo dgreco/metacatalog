@@ -15,6 +15,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Ontology Integration**: Semantic web support via an embedded Ontop 5.5.0 virtual knowledge graph, exposed as a SPARQL 1.1 Protocol endpoint and a Yasgui query UI
 - **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved, and deleted as a whole (see [Aggregates](#aggregates))
 - **Provisioning**: Run a registered task for every `ProvisionableResource` of an aggregate in dependency order, and tear it down in reverse (see [Aggregates](#aggregates))
+- **Authorization**: The same machinery over a second, independent pair of traits — every `AuthorizableResource` of an `Authorizable` aggregate is granted access in dependency order and has it withdrawn in reverse, recorded separately from provisioning so an aggregate can be provisioned and not yet authorized (see [Aggregates](#aggregates))
 - **Referential Safety**: Deletions that would strand an entity, dangle a link or break a mapping's path resolution are refused, with an exact per-link check rather than a type-level one (see [Deleting entities and links](#deleting-entities-and-links))
 - **Immutable Model**: Traits, entity types and trait relationships a module depends on can be frozen against deletion and versioning, declared from a Java module applied idempotently at startup (see [Immutable model](#immutable-model))
 - **Bulk Operations**: Efficient bulk loading and updates
@@ -22,7 +23,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Iceberg REST Catalog**: an independent application implementing the standard Apache Iceberg REST catalog API over the metacatalog — Spark / Trino / PyIceberg can use it as their table catalog, and every namespace, table and schema version becomes a first-class, linkable catalog entity (see [Iceberg REST Catalog](#iceberg-rest-catalog))
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
-- **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, and instance search by type and JSONPath
+- **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, instance search by type and JSONPath, and provision / unprovision / authorize / reject actions with a site-wide progress popup
 
 ## Technology Stack
 
@@ -96,6 +97,32 @@ one ends up `PROVISIONED` or `UNPROVISIONED`, or `FAILED` with the error in `pro
 Add `?async=true` to get a 202 with a schedule id instead, and poll
 `GET /metacatalog/v1/procedure/{scheduleId}` for `RUNNING` / `SUCCEEDED` / `FAILED` — useful when
 a provisioning task is slow enough that holding the HTTP request open is not an option.
+
+The same aggregate is also `Authorizable`, which is a **second lifecycle, not a second name for
+the first**:
+
+```bash
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/authorize
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/reject
+
+docker logs metacatalog-app | grep -E '\[(authorizing|rejecting)\]'
+# [authorizing] start S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
+# [authorizing] done  S3FolderType id=0849185c…
+# [authorizing] start AthenaTableType id=693457a7…
+# [authorizing] done  AthenaTableType id=693457a7…
+# [rejecting]   start AthenaTableType id=693457a7…         <- reversed, as unprovisioning is
+# [rejecting]   done  AthenaTableType id=693457a7…
+# [rejecting]   start S3FolderType id=0849185c…
+# [rejecting]   done  S3FolderType id=0849185c…
+```
+
+Access is granted after — and withdrawn before — access to whatever a resource is derived from,
+the same asymmetry provisioning has and for the same reason. The outcome lands in
+`authorizationStatus` / `authorizationResult` (`AUTHORIZED` / `REJECTED` / `FAILED`), a different
+pair of fields from the provisioning one: the two questions have different answers and neither
+overwrites the other. `?async=true` and the schedule poll work identically.
+`GET /metacatalog/v1/aggregate/authorizable-type` lists the types that offer it, as
+`.../provisionable-type` does for provisioning.
 
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui
@@ -843,10 +870,12 @@ an aggregate itself. Aggregates are created through `POST /metacatalog/v1/aggreg
 `GET /metacatalog/v1/aggregate/{id}/yaml` for the same tree as a YAML file), deleted as a whole
 with `DELETE /metacatalog/v1/aggregate/{id}` (see [Deleting entities and links](#deleting-entities-and-links)),
 and provisioned in dependency order by the provisioning procedure in `metacatalog-functions`.
-`GET /metacatalog/v1/aggregate/provisionable-type` lists the entity types whose instances can be
-provisioned — the answer depends on type *and* trait inheritance chains, so it is computed
-server-side rather than derived from the `traits` on the `EntityType` DTO (which lists only the
-directly associated ones).
+The same aggregate can also be **authorized** — a second, independent capability with the same
+shape (see [Authorization](#authorization)).
+`GET /metacatalog/v1/aggregate/provisionable-type` and `.../authorizable-type` list the entity
+types whose instances offer each — the answer depends on type *and* trait inheritance chains, so it
+is computed server-side rather than derived from the `traits` on the `EntityType` DTO (which lists
+only the directly associated ones).
 
 ### How the aggregate mechanism works
 
@@ -880,17 +909,26 @@ flowchart BT
         AGG =="HAS_PART"==> ELEM
         PROV["Provisionable"] -. inherits .-> AGG
         RES["ProvisionableResource"] -. inherits .-> ELEM
+        AUTH["Authorizable"] -. inherits .-> AGG
+        AUTHRES["AuthorizableResource"] -. inherits .-> ELEM
     end
     subgraph types["Entity types and their roles"]
         DPT["DataProductType — root"] --"carries"--> PROV
+        DPT --"carries"--> AUTH
         OPT["OutputPortType — intermediate"] --"carries"--> AGG
         OPT --"carries"--> ELEM
         FBT["FileBasedOutputPortType — intermediate"] -. inherits .-> OPT
         TBT["TableBasedOutputPortType — intermediate"] -. inherits .-> OPT
         S3T["S3FolderType — leaf"] --"carries"--> RES
+        S3T --"carries"--> AUTHRES
         ATT["AthenaTableType — leaf"] --"carries"--> RES
+        ATT --"carries"--> AUTHRES
     end
 ```
+
+The demo model carries both capability pairs on the same types, which is the easiest place to see
+that they are independent: the roles come from `Aggregate` / `AggregateElement`, and each pair adds
+one lifecycle on top without knowing about the other.
 
 At the **instance** level an aggregate is then a tree of real `HAS_PART` links between
 entities, with `DEPENDS_ON` links expressing ordering between parts. The provisioning
@@ -1010,12 +1048,91 @@ would receive, and submitting creates the entire aggregate — nesting and depen
 in one call.
 
 Existing aggregates are listed at `/ui/aggregates`, with a per-aggregate view page showing the
-whole tree (values as JSON or YAML). Deleting, provisioning and unprovisioning an aggregate are
-actions on the instances list: a row gets *Delete aggregate* when its entity type is one of the
-`GET /aggregate/root-type` types, and *Provision* / *Unprovision* when it is one of the
-`GET /aggregate/provisionable-type` types. Provisioning from the UI is asynchronous: the action
-returns immediately with a progress banner, the page polls the run's status and reloads when it
-completes — so even a slow provisioning task never holds an HTTP request open.
+whole tree (values as JSON or YAML). Deleting, provisioning, unprovisioning, authorizing and
+rejecting an aggregate are actions on the instances list: a row gets *Delete aggregate* when its
+entity type is one of the `GET /aggregate/root-type` types, *Provision* / *Unprovision* when it is
+one of the `GET /aggregate/provisionable-type` types, and *Authorize* / *Reject* when it is one of
+the `GET /aggregate/authorizable-type` types. The last two lists are asked separately and neither
+implies the other — a type may offer one capability, both or neither. Every one of these runs is
+asynchronous: the action returns immediately with a progress popup, the page polls the run's status
+and reloads when it completes — so even a slow task never holds an HTTP request open.
+
+## Authorization
+
+Authorization is a **second capability with the same shape as provisioning**, over its own pair of
+built-in traits: `Authorizable` (inheriting `Aggregate`) and `AuthorizableResource` (inheriting
+`AggregateElement`), both installed immutable at startup alongside the provisioning pair.
+
+```bash
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/authorize
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/reject
+```
+
+`AuthorizationProcedure` acts **only on the root** of an aggregate, and only when that root carries
+`Authorizable` — a root that is merely `Provisionable` is refused, naming the missing trait. It then
+plans one task for every `AuthorizableResource` in the tree, leaves and intermediate nodes alike,
+and runs them in the order the mappings imply. `RejectionProcedure` is its inverse.
+
+**The direction is the same asymmetry provisioning has, for the same reason.** Access is granted
+after access to whatever a resource is derived from, and withdrawn before it — an Athena table
+reading an S3 folder is granted after the folder and revoked before it, so nothing is ever left
+holding a grant on something it can no longer reach.
+
+The tasks are the same `ProvisioningTask`s, from the same factories registered per entity type
+name, with two more methods:
+
+```java
+public class MyTask extends ProvisioningTask {
+  @Override public String provision()   { /* create the resource   */ }
+  @Override public String unprovision() { /* tear it down          */ }
+  @Override public String authorize()   { /* grant access to it    */ }
+  @Override public String reject()      { /* withdraw that access  */ }
+}
+```
+
+`authorize()` / `reject()` are **not abstract**, unlike the provisioning pair: a type may be a
+`ProvisionableResource` and never an `AuthorizableResource`, so a task that does not authorize has
+nothing to implement. The defaults fail the task naming the class that did not override them — as
+loudly as a resource type with no registered factory fails — so an omission is never mistaken for a
+grant. A task that *does* authorize must override both.
+
+The outcome is recorded in `authorizationStatus` (`AUTHORIZED` / `REJECTED` / `FAILED`) and
+`authorizationResult`, on each resource and — for the whole run — on the root. Those are a
+**different pair of fields from the provisioning ones on purpose**: the two capabilities are
+independent, so an aggregate can be provisioned and not yet authorized, or authorized and then torn
+down, and one field could not hold both answers. Because a derived schema carries
+`additionalProperties: false`, writing the wrong pair on a type that does not carry the matching
+trait is refused by validation rather than silently accepted.
+
+Everything else behaves exactly as provisioning does: `?async=true` returns a 202 with a schedule id
+polled at `GET /metacatalog/v1/procedure/{scheduleId}`, cycles fail the run before any task executes,
+and a run that never starts still leaves the root `FAILED` rather than showing the last successful
+one.
+
+### In the demo
+
+Both Docker Compose demos exercise it:
+
+- The **base stack** (`make up-d`) marks `DataProductType` `Authorizable` and its two resources
+  `AuthorizableResource`; the `stdout` task prints `[authorizing]` / `[rejecting]` lines the same
+  way it prints the provisioning ones.
+- The **data-product demo** (`make run-hive-demo`) goes all the way to the catalogs. Each output
+  port carries a `grantee`, and authorizing stamps the decision onto the real table it produced:
+  Iceberg table **properties** for the three REST-catalog ports, Hive table **parameters** for the
+  Parquet one, using the same two names either side — `access.status` and `access.granted-to`.
+
+```bash
+# after provisioning the data product
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$DP/authorize
+
+# the grant is on the table itself, not in a side channel
+curl -s http://localhost:8181/v1/metacatalog/namespaces/sales_analytics/tables/customers \
+  | jq '.metadata.properties | {"access.status", "access.granted-to"}'
+# { "access.status": "AUTHORIZED", "access.granted-to": "crm-analysts" }
+```
+
+Authorizing a data product that was never provisioned fails naming the table that does not exist —
+a grant on nothing is not a grant. Rejecting one is a no-op, exactly as unprovisioning is.
 
 ## Deleting entities and links
 

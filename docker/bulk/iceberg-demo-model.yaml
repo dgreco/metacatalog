@@ -13,6 +13,22 @@
 # column list. Provisioning the aggregate runs the `script` task (see
 # application-docker.yaml) once per port; the script drives the catalog API.
 #
+# The data product is also Authorizable, and each port carries AuthorizableResource
+# alongside its own port trait, so the same aggregate has a second, independent
+# lifecycle: provisioning creates the tables, authorization grants access to them.
+# The two are independent by design — a table can exist and not yet be granted —
+# and they record into different fields, so neither overwrites the other's answer.
+# Authorizing runs the same `script` task in the `authorize` direction, and the
+# script stamps the access decision onto the *real* table: Iceberg table
+# properties, Hive table parameters. A port's optional `grantee` says who the
+# grant is for.
+#
+# Note the ports mix AuthorizableResource in at the entity-type level rather than
+# through their port trait: a trait has single inheritance, and
+# IcebergTableOutputPort already inherits ProvisionableResource. Carrying two
+# capability traits therefore means carrying two traits, which is exactly what an
+# entity type's trait list is for.
+#
 # The Relationships section sanctions `port DEPENDS_ON IcebergTable`: after the
 # script creates the real table, it links the port to the resulting IcebergTable
 # entity (the catalog app materializes one per table) — the port's contract is
@@ -62,6 +78,7 @@ EntityTypes:
           type: string
     traits:
       - Provisionable
+      - Authorizable
 
   - name: IcebergTableOutputPortType
     schema:
@@ -91,8 +108,16 @@ EntityTypes:
                 type: string
               required:
                 type: boolean
+        # Who the port's data is granted to. Read by the provisioning script when the
+        # authorization procedure runs, and stamped onto the real table as
+        # `access.granted-to`. Optional: a port with no grantee is granted to
+        # `everyone`, which is the honest default for a demo with no identity provider
+        # behind it.
+        grantee:
+          type: string
     traits:
       - IcebergTableOutputPort
+      - AuthorizableResource
 
   # An output port published as a plain Parquet table in the Hive Metastore. The port carries the
   # Hive column types (bigint, string, timestamp) rather than the Iceberg ones (long, string,
@@ -135,5 +160,10 @@ EntityTypes:
                 type: string
               comment:
                 type: string
+        # As on the Iceberg port; stamped onto the Hive table as the `access.granted-to`
+        # table parameter.
+        grantee:
+          type: string
     traits:
       - HiveTableOutputPort
+      - AuthorizableResource

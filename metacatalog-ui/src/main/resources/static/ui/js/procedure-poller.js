@@ -1,7 +1,11 @@
 /*
- * Site-wide popup for asynchronously launched provisioning/unprovisioning runs.
+ * Site-wide popup for asynchronously launched aggregate runs — provisioning and unprovisioning,
+ * authorization and rejection alike.
  *
- * The provision/unprovision actions call the REST API with async=true; the controller
+ * Nothing here knows which of the four ran: the controller flashes a label ("Provisioning",
+ * "Authorizing", …) and this reads it, so a new procedure needs no change on this side.
+ *
+ * The provision/unprovision/authorize/reject actions call the REST API with async=true; the controller
  * flashes the returned schedule id, which the instances page renders as a hidden
  * #procedure-banner seed element. This script (included on every page) moves the run
  * into localStorage and shows a fixed-position popup that keeps polling
@@ -11,7 +15,7 @@
  * The XHR is same-origin: in basic/ldap mode it is authenticated by the existing UI
  * session, like every other API call the pages make. When the run leaves RUNNING, the
  * popup flips to a success/failure state; on the instances page the outcome is stashed
- * in localStorage and the page reloads so the rows show the finished provisioningStatus
+ * in localStorage and the page reloads so the rows show the finished status
  * values, with the outcome popup re-injected after the reload.
  */
 (function () {
@@ -133,7 +137,7 @@
       activeScheduleId = null;
     }
     remove(RUN_KEY);
-    // On the instances page the rows show provisioningStatus values: reload so they are
+    // On the instances page the rows reflect the run's outcome: reload so they are
     // fresh, carrying the outcome popup across the reload.
     if (window.location.pathname.indexOf("/ui/instances") === 0) {
       write(OUTCOME_KEY, { ok: ok, text: text, at: Date.now() });
@@ -166,7 +170,7 @@
     close.addEventListener("click", dismiss);
     el.appendChild(close);
     // Completed runs dismiss themselves; failures linger a little longer so the error
-    // is readable, but the outcome also stays available in provisioningResult.
+    // is readable, but the outcome also stays available in the entity's own result field.
     window.setTimeout(
         function () {
           if (popup === el) {

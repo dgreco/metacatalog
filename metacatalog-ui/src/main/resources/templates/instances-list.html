@@ -21,7 +21,8 @@
 <main>
     <div class="flash" th:if="${message}" th:text="${message}"></div>
     <div class="error" th:if="${error}" th:text="${error}"></div>
-    <!-- Seed for an asynchronously launched provisioning/unprovisioning run:
+    <!-- Seed for an asynchronously launched run — provisioning or authorization, the popup is
+         driven by the flashed label rather than by which procedure ran:
          procedure-poller.js consumes it into localStorage and shows the floating popup
          that keeps polling the REST status endpoint across pages and tabs. Visible only
          as a plain banner when JavaScript is unavailable. -->
@@ -109,6 +110,18 @@
                       class="inline-form"
                       data-confirm="Unprovision this aggregate? Every resource it contains will be torn down, in the reverse order.">
                     <button type="submit" class="btn-sm" title="Unprovision the whole aggregate">Unprovision</button>
+                </form>
+                <form th:if="${inst.authorizable}" method="post"
+                      th:action="@{/ui/instances/{id}/authorize(id=${inst.id})}"
+                      class="inline-form"
+                      data-confirm="Authorize this aggregate? Every resource it contains will be granted access, in dependency order.">
+                    <button type="submit" class="btn-sm" title="Authorize the whole aggregate">Authorize</button>
+                </form>
+                <form th:if="${inst.authorizable}" method="post"
+                      th:action="@{/ui/instances/{id}/reject(id=${inst.id})}"
+                      class="inline-form"
+                      data-confirm="Reject this aggregate? Access to every resource it contains will be withdrawn, in the reverse order.">
+                    <button type="submit" class="btn-sm" title="Withdraw access to the whole aggregate">Reject</button>
                 </form>
                 <form th:if="${inst.aggregateRoot}" method="post"
                       th:action="@{/ui/instances/{id}/delete-aggregate(id=${inst.id})}"

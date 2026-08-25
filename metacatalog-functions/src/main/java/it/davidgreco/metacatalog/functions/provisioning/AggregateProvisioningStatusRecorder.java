@@ -15,27 +15,30 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Records a provisioning run's overall outcome on the aggregate root — the {@code Provisionable}
- * entity the procedure was invoked on — in the same {@code provisioningStatus} /{@code
- * provisioningResult} fields the tasks write on each resource (the {@code Provisionable} trait
- * carries the same schema as {@code ProvisionableResource}).
+ * Records a run's overall outcome on the aggregate root — the entity the procedure was invoked on —
+ * in the same pair of fields the tasks write on each resource. Which pair that is comes from the
+ * {@link ProvisioningTask.Operation}: a provisioning run writes {@code provisioningStatus} /{@code
+ * provisioningResult} on the {@code Provisionable} root, an authorization run writes {@code
+ * authorizationStatus} /{@code authorizationResult} on the {@code Authorizable} one. Either way the
+ * root trait carries the same schema as its resource counterpart, which is what makes the root a
+ * legal place to write the whole run's answer.
  *
- * <p>The root is {@code PROVISIONED} (or {@code UNPROVISIONED}) only when the whole schedule
- * succeeded — i.e. every contained {@code ProvisionableResource} completed successfully — and
- * {@code FAILED} with the error otherwise. The write happens by <em>composing</em> the schedule's
- * future rather than merely observing it: {@link #recording} returns a future that completes only
- * after the root status is written, and the procedures hand that future back in their {@link
- * it.davidgreco.metacatalog.service.TaskManager.ScheduleHandle}. A synchronous call thus returns —
- * and an asynchronous run reports its terminal state — only once the root reflects the outcome,
- * never before.
+ * <p>The root is {@code PROVISIONED} / {@code UNPROVISIONED} / {@code AUTHORIZED} / {@code
+ * REJECTED} only when the whole schedule succeeded — i.e. every contained resource completed
+ * successfully — and {@code FAILED} with the error otherwise. The write happens by
+ * <em>composing</em> the schedule's future rather than merely observing it: {@link #recording}
+ * returns a future that completes only after the root status is written, and the procedures hand
+ * that future back in their {@link it.davidgreco.metacatalog.service.TaskManager.ScheduleHandle}. A
+ * synchronous call thus returns — and an asynchronous run reports its terminal state — only once
+ * the root reflects the outcome, never before.
  *
  * <p>The root's values are re-read at completion time, not carried over from the plan-building
- * transaction: a root that also carries {@code ProvisionableResource} (an intermediate node
- * provisioned as its own task) has its resource-level status written during the run, and a stale
- * snapshot would erase it. Re-reading is necessary but not sufficient on its own — the write takes
- * a transaction of its own so that the re-read cannot be answered from the plan-building
- * transaction's persistence context, which would hand back exactly the snapshot it is trying to
- * avoid. See the field comment on {@code ownTransaction}.
+ * transaction: a root that also carries the resource trait (an intermediate node run as its own
+ * task) has its resource-level status written during the run, and a stale snapshot would erase it.
+ * Re-reading is necessary but not sufficient on its own — the write takes a transaction of its own
+ * so that the re-read cannot be answered from the plan-building transaction's persistence context,
+ * which would hand back exactly the snapshot it is trying to avoid. See the field comment on {@code
+ * ownTransaction}.
  *
  * <p>A failure to record the status never alters the run's result — the returned future preserves
  * the original outcome, and the write error is logged. The run's truth lives in the schedule
@@ -101,7 +104,7 @@ public class AggregateProvisioningStatusRecorder {
     try {
       plan = planner.get();
     } catch (RuntimeException planningFailed) {
-      recordPlanFailure(rootEntityId, planningFailed);
+      recordPlanFailure(rootEntityId, operation, planningFailed);
       throw planningFailed;
     }
     return Optional.of(
@@ -121,14 +124,16 @@ public class AggregateProvisioningStatusRecorder {
    * rollback-only, and catching it would then surface as an {@code UnexpectedRollbackException} at
    * commit, replacing the failure the caller is supposed to see.
    */
-  private void recordPlanFailure(String rootEntityId, Throwable failure) {
+  private void recordPlanFailure(
+      String rootEntityId, ProvisioningTask.Operation operation, Throwable failure) {
     try {
       ownTransaction.execute(transaction -> entityService.read(rootEntityId));
     } catch (RuntimeException rootNotReadable) {
       return;
     }
     try {
-      writeRootStatus(rootEntityId, ProvisioningTask.STATUS_FAILED, failureMessage(null, failure));
+      writeRootStatus(
+          rootEntityId, operation, ProvisioningTask.STATUS_FAILED, failureMessage(null, failure));
     } catch (Exception e) {
       log.error("Failed to record the plan failure on root entity {}", rootEntityId, e);
     }
@@ -161,10 +166,11 @@ public class AggregateProvisioningStatusRecorder {
                       + operation.successStatus().toLowerCase(Locale.ROOT)
                   : failureMessage(result, exception);
           try {
-            writeRootStatus(rootEntityId, status, message);
+            writeRootStatus(rootEntityId, operation, status, message);
           } catch (Exception e) {
             log.error(
-                "Failed to record aggregate provisioning status {} on root entity {}",
+                "Failed to record aggregate {} status {} on root entity {}",
+                operation.label(),
                 status,
                 rootEntityId,
                 e);
@@ -172,18 +178,19 @@ public class AggregateProvisioningStatusRecorder {
         });
   }
 
-  private void writeRootStatus(String rootEntityId, String status, String message) {
+  private void writeRootStatus(
+      String rootEntityId, ProvisioningTask.Operation operation, String status, String message) {
     ownTransaction.executeWithoutResult(
         transaction -> {
           var root = entityService.read(rootEntityId);
           if (!(root.getValues() instanceof ObjectNode values)) {
             log.error(
-                "Root entity {} values are not a JSON object; cannot record provisioning status",
+                "Root entity {} values are not a JSON object; cannot record the run status",
                 rootEntityId);
             return;
           }
-          values.put(ProvisioningTask.PROVISIONING_STATUS, status);
-          values.put(ProvisioningTask.PROVISIONING_RESULT, message);
+          values.put(operation.statusField(), status);
+          values.put(operation.resultField(), message);
           entityService.updateValues(rootEntityId, values.toPrettyString());
         });
   }

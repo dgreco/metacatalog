@@ -1,7 +1,16 @@
-# The demo data product: one aggregate with three Iceberg table output ports.
+# The demo data product: one aggregate with three Iceberg table output ports and one Hive one.
 # Provisioning it (UI instances page or POST /metacatalog/v1/aggregate/{id}/provision)
 # creates the three tables in the Iceberg REST catalog under the sales_analytics
 # namespace; unprovisioning drops them again.
+#
+# The same aggregate is also Authorizable: POST /metacatalog/v1/aggregate/{id}/authorize stamps
+# each port's `grantee` onto the real table it produced — Iceberg table properties, Hive table
+# parameters — and .../reject withdraws it. That is a second lifecycle, not a second name for the
+# first: a port can be provisioned and not granted, and each records its own status. Authorizing
+# before provisioning fails naming the table that does not exist yet, which is the point.
+#
+# The grantees differ per port on purpose: they are what a real data product's access policy looks
+# like, and they make the stamped properties tell you which port you are looking at.
 entityType: "IcebergDataProductType"
 values:
   name: "sales_analytics"
@@ -19,6 +28,7 @@ parts:
       - { name: "name", type: "string", required: true }
       - { name: "email", type: "string" }
       - { name: "created_at", type: "timestamp" }
+    grantee: "crm-analysts"
 
 - ref: "orders"
   entityType: "IcebergTableOutputPortType"
@@ -30,6 +40,7 @@ parts:
       - { name: "customer_id", type: "long", required: true }
       - { name: "total", type: "double" }
       - { name: "ordered_at", type: "timestamp" }
+    grantee: "sales-analysts"
 
 - ref: "order_items"
   entityType: "IcebergTableOutputPortType"
@@ -41,6 +52,7 @@ parts:
       - { name: "sku", type: "string", required: true }
       - { name: "quantity", type: "int" }
       - { name: "price", type: "double" }
+    grantee: "sales-analysts"
 
 # The fourth port is not an Iceberg table. It is an ordinary Parquet dataset described in the Hive
 # Metastore, so a consumer that only speaks Hive can read it — the same data product publishing
@@ -60,3 +72,4 @@ parts:
       - { name: "reason", type: "string" }
       - { name: "refunded", type: "decimal(10,2)" }
       - { name: "returned_at", type: "timestamp" }
+    grantee: "finance-reporting"

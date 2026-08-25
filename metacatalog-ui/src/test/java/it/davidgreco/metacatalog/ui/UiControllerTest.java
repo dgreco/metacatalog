@@ -54,6 +54,7 @@ class UiControllerTest {
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of()));
     given(api.listAggregateRootTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listAuthorizableTypes()).willReturn(ResponseEntity.ok(List.of()));
     given(api.listEntityTypeVersions(any())).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
@@ -724,6 +725,104 @@ class UiControllerTest {
         .andExpect(
             flash()
                 .attribute("error", org.hamcrest.Matchers.containsString("No factory for name")));
+  }
+
+  @Test
+  void authorizeAggregateLaunchesAsyncAndFlashesTheScheduleId() throws Exception {
+    org.mockito.Mockito.when(api.authorizeAggregate("agg-1", ASYNC))
+        .thenReturn(accepted("sched-3"));
+    var aggregate = new Entity();
+    aggregate.setId(java.util.Optional.of("agg-1"));
+    aggregate.setEntityType("DataProductType");
+    org.mockito.Mockito.doReturn(org.springframework.http.ResponseEntity.ok(aggregate))
+        .when(api)
+        .getEntity("agg-1");
+
+    mockMvc
+        .perform(post("/ui/instances/agg-1/authorize"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("procedureScheduleId", "sched-3"))
+        // The popup is driven by this label, which is the only thing that distinguishes an
+        // authorization run from a provisioning one on the browser side.
+        .andExpect(flash().attribute("procedureLabel", "Authorizing"))
+        .andExpect(flash().attribute("procedureEntityId", "agg-1"))
+        .andExpect(flash().attribute("procedureEntityType", "DataProductType"));
+
+    verify(api).authorizeAggregate("agg-1", ASYNC);
+  }
+
+  @Test
+  void rejectAggregateLaunchesAsyncAndFlashesTheScheduleId() throws Exception {
+    org.mockito.Mockito.when(api.rejectAggregate("agg-1", ASYNC)).thenReturn(accepted("sched-4"));
+
+    mockMvc
+        .perform(post("/ui/instances/agg-1/reject"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("procedureScheduleId", "sched-4"))
+        .andExpect(flash().attribute("procedureLabel", "Rejecting"))
+        .andExpect(flash().attribute("procedureEntityId", "agg-1"))
+        .andExpect(flash().attribute("procedureEntityType", ""));
+
+    verify(api).rejectAggregate("agg-1", ASYNC);
+  }
+
+  @Test
+  void authorizeAggregateSurfacesTheApiError() throws Exception {
+    doThrow(apiError("Entity type: DataProductType has not a trait Authorizable"))
+        .when(api)
+        .authorizeAggregate("agg-1", ASYNC);
+
+    mockMvc
+        .perform(post("/ui/instances/agg-1/authorize"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(
+            flash()
+                .attribute(
+                    "error", org.hamcrest.Matchers.containsString("has not a trait Authorizable")));
+  }
+
+  /**
+   * The two capabilities are declared by independent pairs of traits, so the row flags come from
+   * two separate API answers and one must not stand in for the other. Here the product is
+   * provisionable only and the port authorizable only — the crossed-over case that a single "is an
+   * aggregate with a lifecycle" flag would get wrong in both rows.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void instancesListOffersAuthorizationIndependentlyOfProvisioning() throws Exception {
+    var product = new Entity();
+    product.setId(java.util.Optional.of("agg-1"));
+    product.setEntityType("ProductType");
+    product.setValues("{\"name\":\"product\"}");
+    var port = new Entity();
+    port.setId(java.util.Optional.of("ent-2"));
+    port.setEntityType("OutputPortType");
+    port.setValues("{\"name\":\"port\"}");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(product, port)));
+    var provisionable = new EntityType();
+    provisionable.setName("ProductType");
+    given(api.listProvisionableTypes()).willReturn(ResponseEntity.ok(List.of(provisionable)));
+    var authorizable = new EntityType();
+    authorizable.setName("OutputPortType");
+    given(api.listAuthorizableTypes()).willReturn(ResponseEntity.ok(List.of(authorizable)));
+
+    var rows =
+        (List<InstanceRowView>)
+            mockMvc
+                .perform(get("/ui/instances"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getModelAndView()
+                .getModel()
+                .get("instances");
+
+    org.junit.jupiter.api.Assertions.assertTrue(rows.get(0).provisionable());
+    org.junit.jupiter.api.Assertions.assertFalse(rows.get(0).authorizable());
+    org.junit.jupiter.api.Assertions.assertFalse(rows.get(1).provisionable());
+    org.junit.jupiter.api.Assertions.assertTrue(rows.get(1).authorizable());
   }
 
   @Test

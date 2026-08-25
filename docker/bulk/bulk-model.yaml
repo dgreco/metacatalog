@@ -1,3 +1,12 @@
+# The demo model for the base stack (docker-compose.yml, loaded by the bulk-loader service).
+#
+# The data product is both Provisionable and Authorizable, and its two resources carry both
+# resource traits, because the two capabilities are independent and the demo is the easiest place
+# to see that: provisioning creates the S3 folder and the Athena table, authorization grants access
+# to them, and each records into its own pair of status fields on the resource and on the root.
+# Everything here is handled by the `stdout` task (see application-docker.yaml), which prints what
+# it would do for all four operations instead of touching anything real.
+
 Traits:
   - name: WithName
     schema:
@@ -26,6 +35,7 @@ EntityTypes:
       properties: {}
     traits:
       - Provisionable
+      - Authorizable
       - WithName
 
   - name: OutputPortType
@@ -60,6 +70,7 @@ EntityTypes:
           type: string
     traits:
       - ProvisionableResource
+      - AuthorizableResource
 
   - name: AthenaTableType
     schema:
@@ -73,6 +84,7 @@ EntityTypes:
           type: string
     traits:
       - ProvisionableResource
+      - AuthorizableResource
 
 ---
 Mappings:

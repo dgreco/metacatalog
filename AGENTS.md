@@ -22,7 +22,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | Module | Purpose |
 | --- | --- |
 | `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files, and the `bootstrap` startup extension point for modules declaring an immutable model. The heart of the system. |
-| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse. Also holds the procedure abstraction (`EntityProcedure`, `AbstractEntityProcedure`, `ProcedureExecutor`, `DeferredTaskFactoryRegistrar`) and the reusable task/registrar base classes (`ProvisioningTask`, `ProvisioningTasks`) that task modules extend. Depends on core; assembled into the application. |
+| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse, and authorizes / rejects them the same way over the second pair of traits (all four share `AbstractAggregateResourceProcedure`). Also holds the procedure abstraction (`EntityProcedure`, `AbstractEntityProcedure`, `ProcedureExecutor`, `DeferredTaskFactoryRegistrar`) and the reusable task/registrar base classes (`ProvisioningTask`, `ProvisioningTasks`) that task modules extend. Depends on core; assembled into the application. |
 | `metacatalog-functions-provisioning-tasks` | The concrete provisioning **tasks** and their registrars — `StdoutProvisioningTask`(`s`) and `ScriptProvisioningTask`(`s`) plus `ProvisioningConfigProperties`, whose `tasks` map associates each task with the entity types it handles. The template for plugging in real task modules: depend on `metacatalog-functions`, subclass `ProvisioningTask`, register through a `ProvisioningTasks` registrar. Assembled into the application. |
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services and, for the provision/unprovision endpoints, to `ProcedureExecutor` in `metacatalog-functions`). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
@@ -57,9 +57,20 @@ Located in `metacatalog-core/.../entity`:
 
 ### Built-in traits (installed at startup by `BuiltInModelContributor`)
 
-`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`. These underpin the
-aggregate model (`AggregateService`) and the provisioning procedure. All four are installed
-**immutable**, as is the `Aggregate HAS_PART AggregateElement` relationship between them.
+`Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`, `Authorizable`,
+`AuthorizableResource`. These underpin the aggregate model (`AggregateService`) and the
+provisioning and authorization procedures. All six are installed **immutable**, as is the
+`Aggregate HAS_PART AggregateElement` relationship between them.
+
+The last four come in two pairs with the same shape: a root trait inheriting `Aggregate` and a
+resource trait inheriting `AggregateElement`, each carrying a status/result field pair the
+machinery writes (`provisioningStatus` / `provisioningResult`, `authorizationStatus` /
+`authorizationResult`). **The two capabilities are independent** — a type may offer provisioning,
+authorization, both or neither — which is why they are separate fields rather than one: an
+aggregate can be provisioned and not yet authorized, or authorized and torn down, and one field
+could not hold both answers. Since a derived schema carries `additionalProperties: false`, writing
+the wrong pair on a type that does not carry the matching trait is refused by validation rather
+than silently accepted.
 
 They are deliberately **not** seeded by the Flyway baseline. `BuiltInModelContributor` declares them
 through the same [contributor extension point](#declaring-an-immutable-model-from-a-module-bootstrap-package)
@@ -303,11 +314,16 @@ Mapping-target types are excluded: the mapping engine derives their instances an
 subpackage, next to the registrar base class that implements it) define the procedure
 abstraction — it lives here rather
 than in core because it is strictly tied to the provisioning features; `metacatalog-openapi`
-depends on this module for `ProcedureExecutor`, which backs the provision/unprovision endpoints.
+depends on this module for `ProcedureExecutor`, which backs the provision/unprovision and
+authorize/reject endpoints.
 `metacatalog-functions` also provides the concrete procedures: `ProvisioningProcedure` and
 `UnprovisioningProcedure`, which read an aggregate, build a dependency graph of
 `ProvisionableResource` entities from mapping relationships (`ResourceGraphBuilder`, shared by both
-so they cannot disagree), detect cycles, and schedule the work.
+so they cannot disagree), detect cycles, and schedule the work — plus `AuthorizationProcedure` and
+`RejectionProcedure`, the same thing over `AuthorizableResource` (see
+[Authorization](#authorization)). The authorization pair lives in the same `provisioning` package
+rather than one of its own: it shares the task type, the graph builder and the status recorder,
+and moving it out would mean widening all three to `public` for no gain.
 
 **The two differ only in direction.** Provisioning makes a resource wait for what it is derived
 from; unprovisioning makes what it is derived from wait for *it*. An Athena table reading an S3
@@ -441,8 +457,41 @@ guard against a change that would break `docker compose up` rather than CI — a
 `ScriptProvisioningRegistrationTests` pins the per-type association, provisioning one aggregate
 whose two resource types are handled by different tasks.
 
-Both operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
-`.../unprovision`. They are **synchronous by default** — `ProcedureExecutor.executeProcedure`
+#### Authorization
+
+Authorization is the same machinery over the second pair of traits, and the symmetry is deliberate:
+`AuthorizationProcedure` and `RejectionProcedure` act on a root carrying `Authorizable`, plan over
+the aggregate's `AuthorizableResource` members — leaves **and** intermediate nodes — and schedule
+one task per resource. The tasks are the same `ProvisioningTask`s, from the same factories
+registered per entity type name; they run `authorize()` / `reject()` instead of `provision()` /
+`unprovision()` and record into the authorization field pair.
+
+All four procedures are one class, `AbstractAggregateResourceProcedure`, filled in with three
+answers: which traits (root and resource), which `ProvisioningTask.Operation`, and which direction
+to wire the tasks in. `ResourceGraphBuilder` takes the resource trait as a parameter for the same
+reason — the selection is the only thing that varies, so no two procedures can disagree about what
+an aggregate contains. **The direction is the part worth reading twice**, and it is the same
+reasoning in both pairs: building up makes a resource wait for what it is derived from, tearing
+down makes what it is derived from wait for *it*. An Athena table reading an S3 folder is created
+after the folder and destroyed before it, and by the same token access to it is granted after — and
+withdrawn before — access to the folder it reads, so nothing is ever left holding a grant on
+something it can no longer reach. `AuthorizationProcedureTests` asserts both orders.
+
+`authorize()` / `reject()` are **not abstract**, unlike `provision()` / `unprovision()`. A type may
+well be a `ProvisionableResource` and never an `AuthorizableResource`, so forcing every task to
+implement an authorization it does not have would buy nothing; instead the defaults fail the task
+naming the class that did not override them, exactly as loudly as a resource type with no
+registered factory fails. A task that *does* authorize must override both — the pairing argument
+still holds within the pair, just not across the two capabilities. Both shipped tasks implement all
+four: `stdout` prints `[authorizing]` / `[rejecting]` lines, and `script` invokes `bash <path>
+authorize|reject`.
+
+One consequence of the shared `Operation` is that `AggregateProvisioningStatusRecorder` keeps its
+name while recording either kind of run: which field pair it writes on the root comes from the
+operation, not from the class.
+
+Both provisioning operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
+`.../unprovision`, and both authorization ones as `.../authorize` and `.../reject`. They are **synchronous by default** — `ProcedureExecutor.executeProcedure`
 returns only once the schedule completes and throws if any task failed — so a 204 means the whole
 aggregate is done. With `?async=true` the call instead returns **202 with a schedule id** right
 after the plan-building transaction (a missing aggregate or an illegitimate root still fails
@@ -454,8 +503,9 @@ A scheduled retention job (`cleanupProcedureRuns`, every 10 minutes) deletes ter
 than `procedureRunRetention` (default 24h) and first marks `RUNNING` rows that old as `FAILED` —
 a run that old has lost the instance executing it, and a visible failure beats an eternal spinner;
 after deletion the id polls as 404. Both retention statements are idempotent, so concurrent
-replicas need no coordination. The UI uses the async mode (see the
-[UI](#ui-metacatalog-ui) section). Nothing provisions on its own; it happens when asked.
+replicas need no coordination. The UI uses the async mode for provisioning (see the
+[UI](#ui-metacatalog-ui) section); it does not yet surface the authorization pair. Nothing
+provisions or authorizes on its own; it happens when asked.
 
 ## REST API
 
@@ -472,6 +522,12 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   `GET /trait/relationships`, `/entity/relationships`, `/mapping/entity-relationships`,
   `/trait/versions`, `/entity-type/versions`. `GET /entity` lists every entity when
   `entityTypeName` is omitted.
+- Capability listings: `GET /aggregate/provisionable-type` and `GET /aggregate/authorizable-type`
+  return the entity types carrying `Provisionable` / `Authorizable`, directly or through the type
+  and trait inheritance chains. Both are answered by `AggregateSchemaService` rather than worked
+  out client-side: the walk needs an open transaction, and the `traits` on an `EntityType` DTO are
+  only the directly associated ones, so a client checking them itself would miss an inherited
+  capability.
 - Aggregate authoring: `GET /aggregate/root-type` lists the aggregate root types and
   `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
   [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
@@ -537,21 +593,28 @@ Pages: dashboard (`/ui`), trait / entity-type / mapping / trait-link forms, vers
 catalog graph (`/ui/graph`), YAML bulk upload (`/ui/bulk`), instances (`/ui/instances`), and
 aggregate authoring (`/ui/aggregates/new`).
 
-The instances list is also where an aggregate is deleted, provisioned and unprovisioned. A row gets
+The instances list is also where an aggregate is deleted, provisioned, unprovisioned, authorized
+and rejected. A row gets
 a *Delete aggregate* action when its entity type is one of the `GET /aggregate/root-type` types —
 roots are classified by the built-in traits (`Aggregate` without `AggregateElement`), so a root
 instance may still hang off an entity outside the aggregate model (an Iceberg table off its
 namespace); deleting such an aggregate is then refused with the outside-link error until that link
 is removed. It gets *Provision* and *Unprovision* when its type is one of the
-`GET /aggregate/provisionable-type` types.
+`GET /aggregate/provisionable-type` types, and *Authorize* and *Reject* when it is one of the
+`GET /aggregate/authorizable-type` types.
 
-Both lists are asked of the API rather than worked out in the UI. Whether a type is provisionable
-depends on the type **and** trait inheritance chains, both lazily fetched, so the walk only works
-inside a transaction — `AggregateSchemaService.provisionableTypes()` does it there and the endpoint
-hands the UI the answer. The `traits` on the `EntityType` DTO are only the directly associated ones,
-so checking them here would miss an inherited `Provisionable`.
+All three lists are asked of the API rather than worked out in the UI. Whether a type is
+provisionable or authorizable depends on the type **and** trait inheritance chains, both lazily
+fetched, so the walk only works inside a transaction —
+`AggregateSchemaService.provisionableTypes()` / `authorizableTypes()` do it there and the endpoints
+hand the UI the answers. The `traits` on the `EntityType` DTO are only the directly associated ones,
+so checking them here would miss an inherited `Provisionable`. **The two capability lists are asked
+separately and neither stands in for the other** — they are declared by independent pairs of traits,
+so a type may offer one, both or neither, and `UiControllerTest` pins the crossed-over case that a
+single "has a lifecycle" flag would get wrong in both rows.
 
-Provisioning from the UI is asynchronous: the controller calls the API with `async=true`, flashes
+Provisioning and authorization from the UI are asynchronous: the controller calls the API with
+`async=true`, flashes
 the returned schedule id, and the instances page renders a `#procedure-banner` seed that
 `procedure-poller.js` — included on **every** template — immediately consumes into
 `localStorage` and replaces with a fixed-position popup naming the run and its target — label, entity type, aggregate id —
@@ -563,8 +626,13 @@ open tab (a `storage` listener picks up runs launched elsewhere); each page poll
 the existing UI session in `basic`/`ldap` mode like every other API call the pages make. On the
 instances page, completion also reloads so the rows show the finished `provisioningStatus`
 values, the outcome popup surviving the reload through `localStorage`. Plan-building failures
-(missing aggregate, root not `Provisionable`) still surface immediately as a flash error — the
-API validates the plan synchronously before returning the schedule id.
+(missing aggregate, root not `Provisionable` / not `Authorizable`) still surface immediately as a
+flash error — the API validates the plan synchronously before returning the schedule id.
+
+**Nothing in the poller knows which of the four procedures ran.** The controller flashes a label
+(`Provisioning`, `Unprovisioning`, `Authorizing`, `Rejecting`) and the script renders it, which is
+why adding the authorization pair needed no JavaScript change at all — the seed element, the
+polling, the popup states and the cross-tab `storage` listener were already procedure-agnostic.
 
 The link forms distinguish two things that `CatalogGraphService.PRIMARY_RELATION_TYPE_NAMES` does
 not: which relation types may be *authored* versus which direction of a bidirectional pair is
@@ -697,7 +765,13 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   re-creates just the aggregate. The model probe checks **every** trait, entity type and trait
   relationship the file declares — one sentinel name standing in for the file silently skipped the
   load whenever the model gained something while keeping its first declaration, which is what left
-  the Iceberg demo's `DEPENDS_ON` uncreated on older volumes. A model that is *partly* present now
+  the Iceberg demo's `DEPENDS_ON` uncreated on older volumes. It also checks the **traits each
+  entity type carries**, for the same reason one step further in: a model change can leave every
+  declared *name* exactly as it was and still be a change, which is precisely what adding
+  `Authorizable` / `AuthorizableResource` to both demo models did — without that check the loader
+  reports the model fully present and the authorization demo silently does nothing on an older
+  volume. (The DTO reports only directly associated traits, which is exactly what the file declares,
+  so the two compare as they stand.) A model that is *partly* present
   fails the loader with `docker compose down -v` in the message rather than skipping: the bulk
   endpoint is all-or-nothing and dies on the first existing name, so a partial change is not
   something it can apply. (`Mappings` are not probed — there is no read-by-name for one.) Both app healthchecks poll **`/actuator/health/readiness`**, not
@@ -834,7 +908,22 @@ through two different catalogs**: three as Iceberg tables in the REST catalog on
 an ordinary Parquet table in the Hive Metastore on `:9083`. Provisioning the aggregate materialises
 all four; all four are entities under the same root in one graph, whichever catalog created them.
 
-Three things about it are worth knowing before changing it:
+The data product is **also `Authorizable`**, and each port carries `AuthorizableResource` next to
+its own port trait, so the same aggregate has a second lifecycle: `POST /aggregate/{id}/authorize`
+stamps each port's `grantee` onto the table it produced — Iceberg table *properties*, Hive table
+*parameters*, the same two names (`access.status`, `access.granted-to`) either side — and
+`.../reject` withdraws it. Because both are ordinary catalog writes, the decision is visible to
+PyIceberg / Spark / Trino and to a Hive client, and (the Iceberg catalog caching each table's
+metadata on its `IcebergTable` entity) in the UI graph and over SPARQL. Authorizing before
+provisioning fails naming the table that does not exist yet; rejecting something never provisioned
+is a no-op, exactly as unprovisioning is.
+
+Note the ports mix `AuthorizableResource` in at the **entity type**, not through their port trait:
+a trait has single inheritance and `IcebergTableOutputPort` already inherits
+`ProvisionableResource`. Two capabilities therefore means two traits, which is what a type's trait
+list is for.
+
+Four things about it are worth knowing before changing it:
 
 - **The metastore speaks Thrift, so the provisioning script cannot be curl.** It shells out to
   `docker/provisioning/hive-cli/`, a small shaded Thrift client built out of the reactor by `make
@@ -845,7 +934,14 @@ Three things about it are worth knowing before changing it:
 - **One script task, two kinds of port.** `application.config.provisioning.tasks` is keyed by task
   name, so the `script` task has exactly one `path`. `provision-output-port.sh` is a dispatcher: it
   reads the port's shape — `namespace` means Iceberg, `database` means Hive — and delegates. Change
-  either schema and that line changes with it.
+  either schema and that line changes with it. The same one script serves all four operations: the
+  task passes the operation through as `$1`, so `authorize` / `reject` reach the same dispatcher and
+  the same two scripts.
+- **Hive has no grant a bare metastore can honour.** Authorization in the Hive world lives in Ranger
+  or in the query engine, so the CLI records the decision in the table's own parameters rather than
+  pretending to a privilege system. That is also why it has to *read the table first*:
+  `alter_table` replaces the row wholesale, so `HiveCli.alter` takes the loaded table and hands it
+  back with everything else intact.
 - **The Parquet table has no data behind it.** It is an external table describing a location a
   pipeline fills, which is how Hive external tables are normally used, and it is what makes the port
   readable by a Hive consumer without the demo needing a Parquet writer. What makes it *Parquet* to
@@ -868,6 +964,9 @@ Unprovisioning removes the link **before** dropping, and the order is load-beari
 the table as an aggregate, and `AggregateService` refuses that while a member is linked from outside
 it. It then drops the tables from both catalogs and leaves the Hive **database** behind on purpose:
 sibling ports share it, and the metastore refuses to drop a non-empty one.
+
+Authorizing and rejecting touch no links at all: they neither create nor destroy a table, they only
+record a decision about the one provisioning already made.
 
 ## Hive Metastore (metacatalog-hive-metastore)
 
@@ -925,10 +1024,19 @@ service interface, so implementing it literally would mean a stub file larger th
 module. `HmsIfaceProxy` satisfies it with a dynamic proxy dispatching **by name** to
 `MetacatalogHmsHandler`, which declares only the supported operations; anything else is refused
 naming the method. That trades a compile error for a runtime failure when Hive renames something, so
-`HmsIfaceProxyTests` resolves every name *and signature* the handler claims against the live
-interface. It is not optional — it immediately caught that Hive 4 replaced `get_table(db, name)` and
-`get_table_objects_by_name` with `get_table_req(GetTableRequest)` and
+`HmsIfaceProxyTests` resolves every name, *signature* **and return type** the handler claims against
+the live interface. It is not optional — it immediately caught that Hive 4 replaced
+`get_table(db, name)` and `get_table_objects_by_name` with `get_table_req(GetTableRequest)` and
 `get_table_objects_by_name_req(GetTablesRequest)`.
+
+The return-type half was added later, and paid for itself the moment it ran. A handler method
+returning `void` where the operation returns a result struct makes the proxy hand Thrift a `null`
+success field, and the client gets `TApplicationException: <op> failed: unknown result` — a message
+that names the operation and says nothing else. Two methods were wrong that way: `alter_table_req`
+(`void`, but the request-object form returns `AlterTableResponse` — so **every** `alterTable` through
+a real client failed, while the flat `alter_table` a generated client calls was fine), and
+`getStatus` (returning fb303's status as an `int` rather than `fb_status`). Both are exactly the
+shape the parameter check cannot see.
 
 Databases, tables and partitions are supported read-write. **Deliberately refused**, each naming its
 limitation: `get_partitions_by_filter` / `get_partitions_by_expr` (a Hive filter-expression parser is
@@ -959,6 +1067,10 @@ client and invisible to Thrift's generated one:
   `getFields` call `get_schema_with_environment_context` / `get_fields_with_environment_context`,
   never the flat forms. Found by the mixed demo, not by any in-build test — the pattern by now is
   that anything only a real client exercises is only ever found by a real client.
+- **The request-object forms carry result structs the flat ones do not.** `alter_table` is `void`;
+  `alter_table_req` returns `AlterTableResponse`. Getting that wrong is invisible to a generated
+  client calling the flat form and fatal to every real one. Found the same way — by the demo's Hive
+  port trying to alter a table — and now pinned by the return-type check in `HmsIfaceProxyTests`.
 
 **Tests.** `HiveModelTests` pins the model and its schemas; `HiveRegistryServiceTests` the registry,
 including a four-thread race where exactly one caller creates the table; `HmsIfaceProxyTests` the

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provisioning script for IcebergTableOutputPortType (see application-docker.yaml):
-# invoked by ScriptProvisioningTask as `bash <this> <provision|unprovision>` with the
-# port entity's JSON values on standard input, e.g.
+# invoked by ScriptProvisioningTask as `bash <this> <provision|unprovision|authorize|reject>`
+# with the port entity's JSON values on standard input, e.g.
 #   {"name":"customers","namespace":"sales_analytics","columns":[{"name":"customer_id","type":"long","required":true}, ...]}
 # On provision it creates the namespace (if missing) and the table in the Iceberg
 # REST catalog, then links the port to the materialized IcebergTable entity
@@ -20,6 +20,19 @@
 # the port by (name, namespace), the table entity by (name, namespaceKey — equal
 # to the namespace for the single-level namespaces this demo uses).
 #
+# The other two directions are the authorization lifecycle, which is independent of
+# provisioning: `authorize` stamps the access decision onto the table itself as
+# Iceberg table properties (`access.status`, `access.granted-to` from the port's
+# `grantee`), `reject` sets the status to REJECTED and removes the grantee. Both are
+# ordinary Iceberg commits, so the decision is visible to PyIceberg, Spark and Trino —
+# and, because the catalog caches each table's metadata on its IcebergTable entity,
+# in the metacatalog UI and over SPARQL too.
+#
+# Authorizing a table that does not exist fails, naming it: a grant on nothing is not a
+# grant, and the aggregate has to be provisioned first. Rejecting one that does not
+# exist is a no-op, for the same reason unprovisioning a missing table is — a
+# withdrawal that finds nothing to withdraw has already succeeded.
+#
 # Requires bash, curl and jq (installed in the runtime image). Reaches the catalog
 # at ICEBERG_CATALOG_URL and the metacatalog API at METACATALOG_API_URL (the
 # script runs inside the app container, so it defaults to localhost), with the
@@ -27,7 +40,7 @@
 # all of these).
 set -euo pipefail
 
-OPERATION="${1:?usage: provision-iceberg-table.sh <provision|unprovision>}"
+OPERATION="${1:?usage: provision-iceberg-table.sh <provision|unprovision|authorize|reject>}"
 VALUES="$(cat)"
 
 CATALOG_URL="${ICEBERG_CATALOG_URL:-http://iceberg-catalog:8181}"
@@ -39,6 +52,9 @@ API_AUTH="${METACATALOG_USER:-admin}:${METACATALOG_PASSWORD:-admin}"
 
 NAMESPACE="$(jq -r '.namespace' <<<"${VALUES}")"
 TABLE="$(jq -r '.name' <<<"${VALUES}")"
+# A port with no grantee is granted to everyone: there is no identity provider behind this demo,
+# and inventing a placeholder principal would read as one.
+GRANTEE="$(jq -r '.grantee // "everyone"' <<<"${VALUES}")"
 
 RESOURCE_LABEL="${NAMESPACE}.${TABLE}"
 # The lookup/link/unlink helpers are shared with provision-hive-table.sh; their subtleties are
@@ -72,6 +88,21 @@ unlink_port_from_table() {
   port_id="$(port_entity_id)"
   [[ -n "${port_id}" ]] || return 0
   remove_link "${port_id}" "${table_id}"
+}
+
+table_exists() {
+  curl -sf -o /dev/null "${BASE}/namespaces/${NAMESPACE}/tables/${TABLE}"
+}
+
+# Commits the given MetadataUpdate list against the table. `requirements` is deliberately empty:
+# the catalog's own compare-and-swap on the metadata pointer is what makes a commit safe, and an
+# assertion here would only add a second, weaker one.
+commit_updates() { # <updates-json-array>
+  local commit
+  commit="$(jq -n --arg ns "${NAMESPACE}" --arg t "${TABLE}" --argjson updates "$1" \
+    '{identifier: {namespace: [$ns], name: $t}, requirements: [], updates: $updates}')"
+  request '200' -X POST -H 'Content-Type: application/json' -d "${commit}" \
+    "${BASE}/namespaces/${NAMESPACE}/tables/${TABLE}" >/dev/null
 }
 
 case "${OPERATION}" in
@@ -123,6 +154,26 @@ unprovision)
   fi
   # Drop the namespace once empty (409 = still has tables, 404 = already gone).
   request '204|404|409' -X DELETE "${BASE}/namespaces/${NAMESPACE}" >/dev/null
+  ;;
+
+authorize)
+  table_exists || fail "table ${NAMESPACE}.${TABLE} does not exist; provision the data product before authorizing it"
+  commit_updates "$(jq -n --arg g "${GRANTEE}" \
+    '[{action: "set-properties", updates: {"access.status": "AUTHORIZED", "access.granted-to": $g}}]')"
+  echo "granted ${GRANTEE} access to ${NAMESPACE}.${TABLE}"
+  ;;
+
+reject)
+  if ! table_exists; then
+    echo "table ${NAMESPACE}.${TABLE} does not exist; nothing to withdraw"
+  else
+    # The status is set rather than removed: REJECTED is an answer, and a table with no access
+    # property at all is one nobody has decided about yet. The grantee goes, because it no longer
+    # holds.
+    commit_updates '[{"action": "set-properties", "updates": {"access.status": "REJECTED"}},
+                     {"action": "remove-properties", "removals": ["access.granted-to"]}]'
+    echo "withdrew access to ${NAMESPACE}.${TABLE}"
+  fi
   ;;
 
 *)

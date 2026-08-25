@@ -66,7 +66,8 @@ class UnifiedInstanceController {
     }
     model.addAttribute(
         "instances",
-        InstanceRowView.listFrom(entities, aggregateRootTypeNames(), provisionableTypeNames()));
+        InstanceRowView.listFrom(
+            entities, aggregateRootTypeNames(), provisionableTypeNames(), authorizableTypeNames()));
     model.addAttribute("selectedType", type);
     model.addAttribute("query", query);
     model.addAttribute("entityTypes", types);
@@ -196,6 +197,27 @@ class UnifiedInstanceController {
     return "redirect:/ui/instances";
   }
 
+  /**
+   * Grants access to the aggregate rooted at this entity. Asynchronous, like {@link #provision},
+   * and the same popup reports it — the poller is driven by the label the controller flashes, not
+   * by which procedure ran, so authorization needed nothing of its own there.
+   *
+   * <p>This is a separate action from provisioning rather than a mode of it: the two capabilities
+   * are independent, so a row can offer either, both or neither.
+   */
+  @PostMapping("/{id}/authorize")
+  public String authorize(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    launchProcedure(redirectAttributes, "Authorizing", id, () -> api.authorizeAggregate(id, ASYNC));
+    return "redirect:/ui/instances";
+  }
+
+  /** Withdraws that access. Asynchronous, like {@link #authorize}. */
+  @PostMapping("/{id}/reject")
+  public String reject(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    launchProcedure(redirectAttributes, "Rejecting", id, () -> api.rejectAggregate(id, ASYNC));
+    return "redirect:/ui/instances";
+  }
+
   private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
 
   private void launchProcedure(
@@ -265,6 +287,17 @@ class UnifiedInstanceController {
    */
   private Set<String> provisionableTypeNames() {
     return api.listProvisionableTypes().getBody().stream()
+        .map(EntityType::getName)
+        .collect(Collectors.toSet());
+  }
+
+  /**
+   * Which types can be authorized. Asked of the API for the same reason as {@link
+   * #provisionableTypeNames()}, and asked <em>separately</em>: the two capabilities are declared by
+   * two independent pairs of traits, so neither list implies the other.
+   */
+  private Set<String> authorizableTypeNames() {
+    return api.listAuthorizableTypes().getBody().stream()
         .map(EntityType::getName)
         .collect(Collectors.toSet());
   }
@@ -420,6 +453,9 @@ class UnifiedInstanceController {
 
   private List<InstanceRowView> allInstanceRows() {
     return InstanceRowView.listFrom(
-        api.getEntities(Optional.empty(), Optional.empty()).getBody(), Set.of(), Set.of());
+        api.getEntities(Optional.empty(), Optional.empty()).getBody(),
+        Set.of(),
+        Set.of(),
+        Set.of());
   }
 }

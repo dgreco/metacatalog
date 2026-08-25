@@ -277,6 +277,18 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity<ProcedureStatus> authorizeAggregate(
+      String aggregateId, Optional<Boolean> async) {
+    return runProcedure("AuthorizationProcedure", aggregateId, async);
+  }
+
+  @Override
+  public ResponseEntity<ProcedureStatus> rejectAggregate(
+      String aggregateId, Optional<Boolean> async) {
+    return runProcedure("RejectionProcedure", aggregateId, async);
+  }
+
+  @Override
   public ResponseEntity<ProcedureStatus> getProcedureStatus(String scheduleId) {
     var procedureStatus =
         procedureExecutor
@@ -426,6 +438,15 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             .map(dtoMapper::entityTypeToDto)
             .toList();
     return status(200).contentType(MediaType.APPLICATION_JSON).body(provisionableTypes);
+  }
+
+  @Override
+  public ResponseEntity listAuthorizableTypes() {
+    var authorizableTypes =
+        aggregateSchemaService.authorizableTypes().stream()
+            .map(dtoMapper::entityTypeToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(authorizableTypes);
   }
 
   @Override
