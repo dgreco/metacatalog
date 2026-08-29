@@ -6,11 +6,8 @@ import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
-import it.davidgreco.metacatalog.functions.provisioning.AuthorizationProcedure;
-import it.davidgreco.metacatalog.functions.provisioning.ProvisioningProcedure;
-import it.davidgreco.metacatalog.functions.provisioning.RejectionProcedure;
+import it.davidgreco.metacatalog.functions.provisioning.ProvisioningTask;
 import it.davidgreco.metacatalog.functions.provisioning.ResourceGraphBuilder;
-import it.davidgreco.metacatalog.functions.provisioning.UnprovisioningProcedure;
 import it.davidgreco.metacatalog.openapi.common.GlobalExceptionHandler;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.*;
@@ -316,25 +313,25 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   @Override
   public ResponseEntity<ProcedureStatus> provisionAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure(ProvisioningProcedure.class.getSimpleName(), aggregateId, async);
+    return runProcedure(ProvisioningTask.Operation.PROVISION.procedureName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> unprovisionAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure(UnprovisioningProcedure.class.getSimpleName(), aggregateId, async);
+    return runProcedure(ProvisioningTask.Operation.UNPROVISION.procedureName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> authorizeAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure(AuthorizationProcedure.class.getSimpleName(), aggregateId, async);
+    return runProcedure(ProvisioningTask.Operation.AUTHORIZE.procedureName(), aggregateId, async);
   }
 
   @Override
   public ResponseEntity<ProcedureStatus> rejectAggregate(
       String aggregateId, Optional<Boolean> async) {
-    return runProcedure(RejectionProcedure.class.getSimpleName(), aggregateId, async);
+    return runProcedure(ProvisioningTask.Operation.REJECT.procedureName(), aggregateId, async);
   }
 
   @Override

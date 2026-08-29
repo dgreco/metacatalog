@@ -22,16 +22,16 @@ import lombok.extern.slf4j.Slf4j;
  * the lifecycle around them, including updating the entity's provisioning status and result.
  *
  * <p>The same class also carries the authorization pair, {@link #authorize()} and {@link
- * #reject()}, driven by {@link AuthorizationProcedure} / {@link RejectionProcedure} over the {@code
- * AuthorizableResource} entities of an aggregate. Unlike the provisioning pair those two are
- * <em>not</em> abstract: the two capabilities are declared by two independent pairs of built-in
- * traits, so a type may well be a {@code ProvisionableResource} and never an {@code
- * AuthorizableResource}, and forcing every existing task to implement an authorization it does not
- * have would buy nothing. They default to failing the task, naming the class that did not implement
- * them — a resource whose type carries {@code AuthorizableResource} but whose task never overrode
- * them fails its own run loudly, exactly as a resource type with no registered factory does. A task
- * that <em>does</em> authorize must override both, for the same reason the provisioning pair is
- * abstract.
+ * #reject()}, driven by the {@code AUTHORIZE} / {@code REJECT} runs of {@link
+ * AggregateResourceProcedure} over the {@code AuthorizableResource} entities of an aggregate.
+ * Unlike the provisioning pair those two are <em>not</em> abstract: the two capabilities are
+ * declared by two independent pairs of built-in traits, so a type may well be a {@code
+ * ProvisionableResource} and never an {@code AuthorizableResource}, and forcing every existing task
+ * to implement an authorization it does not have would buy nothing. They default to failing the
+ * task, naming the class that did not implement them — a resource whose type carries {@code
+ * AuthorizableResource} but whose task never overrode them fails its own run loudly, exactly as a
+ * resource type with no registered factory does. A task that <em>does</em> authorize must override
+ * both, for the same reason the provisioning pair is abstract.
  *
  * <p>Which of the four runs is decided by the procedure that schedules the task, through {@link
  * #setOperation}; it defaults to {@link Operation#PROVISION}. After execution:
@@ -70,25 +70,46 @@ public abstract class ProvisioningTask extends Task {
    */
   public enum Operation {
     /** Create the resource; leaves it {@code PROVISIONED}. */
-    PROVISION(BuiltInCapability.PROVISIONING, "Provisioning", "PROVISIONED", false),
+    PROVISION(
+        BuiltInCapability.PROVISIONING,
+        "Provisioning",
+        "PROVISIONED",
+        false,
+        "ProvisioningProcedure"),
     /** Tear the resource down; leaves it {@code UNPROVISIONED}. */
-    UNPROVISION(BuiltInCapability.PROVISIONING, "Unprovisioning", "UNPROVISIONED", true),
+    UNPROVISION(
+        BuiltInCapability.PROVISIONING,
+        "Unprovisioning",
+        "UNPROVISIONED",
+        true,
+        "UnprovisioningProcedure"),
     /** Grant access to the resource; leaves it {@code AUTHORIZED}. */
-    AUTHORIZE(BuiltInCapability.AUTHORIZATION, "Authorizing", "AUTHORIZED", false),
+    AUTHORIZE(
+        BuiltInCapability.AUTHORIZATION,
+        "Authorizing",
+        "AUTHORIZED",
+        false,
+        "AuthorizationProcedure"),
     /** Withdraw access to the resource; leaves it {@code REJECTED}. */
-    REJECT(BuiltInCapability.AUTHORIZATION, "Rejecting", "REJECTED", true);
+    REJECT(BuiltInCapability.AUTHORIZATION, "Rejecting", "REJECTED", true, "RejectionProcedure");
 
     private final BuiltInCapability capability;
     private final String label;
     private final String successStatus;
     private final boolean dependentsFirst;
+    private final String procedureName;
 
     Operation(
-        BuiltInCapability capability, String label, String successStatus, boolean dependentsFirst) {
+        BuiltInCapability capability,
+        String label,
+        String successStatus,
+        boolean dependentsFirst,
+        String procedureName) {
       this.capability = capability;
       this.label = label;
       this.successStatus = successStatus;
       this.dependentsFirst = dependentsFirst;
+      this.procedureName = procedureName;
     }
 
     /** The lifecycle this operation is one direction of. */
@@ -109,6 +130,25 @@ public abstract class ProvisioningTask extends Task {
     /** The name a script or external tool is handed to select this direction. */
     public String command() {
       return name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * The name the {@link AggregateResourceProcedure} running this operation is registered under —
+     * the key {@code ProcedureExecutor} resolves and the name recorded in durable {@code
+     * procedure_run} rows. Kept exactly as it was when each procedure was a class of this name.
+     */
+    public String procedureName() {
+      return procedureName;
+    }
+
+    /**
+     * The success status as a sentence word — {@code Provisioned}, {@code Authorized}, … — for
+     * result messages. Derived rather than restated per task method: a hand-typed literal there
+     * could drift from the operation actually run, the same slip {@code command()} exists to
+     * prevent for the direction argument.
+     */
+    public String outcomeWord() {
+      return successStatus.charAt(0) + successStatus.substring(1).toLowerCase(Locale.ROOT);
     }
 
     /** The entity value field this operation's status is recorded in. */
@@ -153,8 +193,8 @@ public abstract class ProvisioningTask extends Task {
   private final EntityService entityService;
 
   /**
-   * Which operation {@link #apply()} performs. Defaults to provisioning, so a task scheduled by
-   * {@link ProvisioningProcedure} needs no setting up.
+   * Which operation {@link #apply()} performs. Defaults to provisioning, so a task scheduled by a
+   * plain provisioning run needs no setting up.
    */
   @Setter private Operation operation = Operation.PROVISION;
 

@@ -7,9 +7,8 @@ package it.davidgreco.metacatalog.functions.provisioning;
  * <p>{@code TaskManager.registerTaskFactory} refuses a name no entity type has, which is what
  * catches typos — but it also means a registrar driven by configuration has nothing to register
  * against when the application boots. Such a registrar implements this interface instead and is
- * asked again by the provisioning procedures ({@link ProvisioningProcedure}, {@link
- * UnprovisioningProcedure}) at the start of every run — a moment when the types involved certainly
- * exist and the plan-building transaction is open.
+ * asked again by {@link AggregateResourceProcedure} at the start of every run — a moment when the
+ * types involved certainly exist and the plan-building transaction is open.
  *
  * <p>Implementations must be <strong>idempotent and cheap</strong>: this runs on every procedure
  * execution, so skip what is already registered rather than re-registering it, and do not throw for

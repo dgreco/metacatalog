@@ -1,6 +1,7 @@
 package it.davidgreco.metacatalog.functions.provisioning;
 
-import static org.awaitility.Awaitility.await;
+import static it.davidgreco.metacatalog.functions.provisioning.MappedResourceTestSupport.awaitMappedResources;
+import static it.davidgreco.metacatalog.functions.provisioning.MappedResourceTestSupport.resources;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.CommonServiceTestingSupport;
@@ -10,7 +11,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.awaitility.Durations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,8 +29,8 @@ import org.springframework.context.ApplicationContext;
 @SpringBootTest
 class AuthorizationProcedureTests extends CommonServiceTestingSupport {
 
-  private static final String AUTHORIZE = AuthorizationProcedure.class.getSimpleName();
-  private static final String REJECT = RejectionProcedure.class.getSimpleName();
+  private static final String AUTHORIZE = ProvisioningTask.Operation.AUTHORIZE.procedureName();
+  private static final String REJECT = ProvisioningTask.Operation.REJECT.procedureName();
 
   public AuthorizationProcedureTests(ApplicationContext applicationContext) {
     super(applicationContext);
@@ -284,30 +284,5 @@ class AuthorizationProcedureTests extends CommonServiceTestingSupport {
             ServiceError.class,
             () -> procedureExecutor.executeProcedure(AUTHORIZE, outputPort.getId()));
     Assertions.assertTrue(failure.getMessage().contains("has not a trait Authorizable"));
-  }
-
-  /** Waits until the mapping updater has derived a resource under each of the two output ports. */
-  private static void awaitMappedResources(AggregateService aggregateService, String rootId) {
-    await()
-        .atMost(Durations.ONE_MINUTE)
-        .pollDelay(Durations.ONE_SECOND)
-        .pollInterval(Durations.ONE_SECOND)
-        .until(
-            () ->
-                aggregateService.read(rootId, true).elements().stream()
-                        .filter(AggregateService.Aggregate.class::isInstance)
-                        .map(AggregateService.Aggregate.class::cast)
-                        .filter(port -> !port.elements().isEmpty())
-                        .count()
-                    == 2);
-  }
-
-  /** The mapped resources of the aggregate, one per output port, in tree order. */
-  private static List<Entity> resources(AggregateService aggregateService, String rootId) {
-    var aggregate = (AggregateService.Aggregate) aggregateService.read(rootId, true);
-    return aggregate.elements().stream()
-        .map(AggregateService.Aggregate.class::cast)
-        .map(port -> ((AggregateService.AggregateElement) port.elements().getFirst()).entity())
-        .toList();
   }
 }
