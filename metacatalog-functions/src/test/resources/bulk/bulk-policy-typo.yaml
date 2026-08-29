@@ -1,0 +1,28 @@
+# The same aggregate with one character wrong: the grant names `sales-analyst`, the declaration
+# `sales-analysts`. Nothing about this document is invalid JSON Schema — the refusal has to come
+# from the policy resolution, before any task runs.
+entityType: "DataProductType"
+values:
+  name: "dp-typo"
+  principals:
+    - id: "sales-analysts"
+      type: "GROUP"
+  permissions:
+    - name: "READ"
+  grants:
+    - principals: ["sales-analyst"]
+      permissions: ["READ"]
+
+parts:
+
+- ref: "op1"
+  entityType: "FileBasedOutputPortType"
+  values:
+    name: "op1"
+
+- ref: "op2"
+  entityType: "TableBasedOutputPortType"
+  values:
+    name: "op2"
+  dependsOn:
+     - "op1"

@@ -1,0 +1,26 @@
+# The aggregate of bulk2.yaml, with an access policy on its root, for the authorization run.
+entityType: "DataProductType"
+values:
+  name: "dp3"
+  principals:
+    - id: "sales-analysts"
+      type: "GROUP"
+  permissions:
+    - name: "READ"
+  grants:
+    - principals: ["sales-analysts"]
+      permissions: ["READ"]
+
+parts:
+
+- ref: "op1"
+  entityType: "FileBasedOutputPortType"
+  values:
+    name: "op1"
+
+- ref: "op2"
+  entityType: "TableBasedOutputPortType"
+  values:
+    name: "op2"
+  dependsOn:
+     - "op1"

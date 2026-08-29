@@ -1809,6 +1809,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/{id}/access:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get an aggregate's access policy and the grants in force
+      description: >-
+        Returns what the aggregate root declares about access — the principals it recognises, the
+        permissions it can grant and the grants binding the two — together with, for each
+        AuthorizableResource it contains, the grants the last authorization run actually applied
+        there.
+
+
+        The two halves answer different questions and can legitimately disagree. The policy is
+        intent, editable at any time through the entity endpoints; a resource's grants are fact,
+        written by a run. Editing the policy does not change what is in force until the aggregate is
+        authorized again, so a resource whose grants no longer match the policy is one that has not
+        been re-run — which is exactly what an operator needs to be able to see.
+
+
+        The aggregate root must carry the Authorizable trait.
+      operationId: getAggregateAccess
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+      responses:
+        200:
+          description: The declared policy and the grants in force
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateAccess'
+        400:
+          description: The aggregate root does not carry the Authorizable trait
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/{id}/provision:
     post:
       tags:
@@ -2354,6 +2407,158 @@ components:
           items:
             type: string
           description: Names of the entity types carrying Authorizable, ordered by name.
+    AccessPrincipal:
+      type: object
+      description: >
+        A subject an aggregate's policy can name: a reference into whatever identity provider is
+        behind the deployment, not an entity in this catalog.
+      required:
+        - id
+        - type
+      properties:
+        id:
+          type: string
+          description: The identifier the identity provider knows the subject by.
+        type:
+          type: string
+          enum: [USER, GROUP, ROLE, SERVICE]
+          description: What kind of subject it is.
+        description:
+          type: string
+          description: Free text.
+    AccessPermission:
+      type: object
+      description: >
+        A permission an aggregate can grant. Abstract rather than any one catalog's native privilege
+        name: a data product can publish output ports through several catalogs at once, and a
+        consumer reading the product-level policy has to be able to tell that the two mean the same
+        thing. Translating a permission into what a given system understands is the provisioning
+        task's job.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: The permission name grants reference.
+        description:
+          type: string
+          description: Free text.
+    AccessGrant:
+      type: object
+      description: >
+        One line of the policy: these principals hold these permissions over the resources the
+        selector reaches. Both name lists reference the root's own declarations; a name that is not
+        declared is refused when the aggregate is authorized, rather than granting nothing.
+      required:
+        - principals
+        - permissions
+      properties:
+        principals:
+          type: array
+          items:
+            type: string
+          description: Principal ids, each declared in the same aggregate's principals.
+        permissions:
+          type: array
+          items:
+            type: string
+          description: Permission names, each declared in the same aggregate's permissions.
+        entityTypes:
+          type: array
+          items:
+            type: string
+          description: >
+            Entity type names the grant is narrowed to; absent or empty means every resource.
+        values:
+          type: object
+          additionalProperties: true
+          description: >
+            Value fields a resource must carry with exactly these values for the grant to reach it;
+            absent or empty means every resource.
+    EffectiveGrant:
+      type: object
+      description: What a run left one principal holding on one resource.
+      required:
+        - principal
+        - permissions
+      properties:
+        principal:
+          $ref: '#/components/schemas/AccessPrincipal'
+        permissions:
+          type: array
+          items:
+            type: string
+          description: The permissions that principal holds here, sorted.
+    ResourceAccess:
+      type: object
+      description: >
+        One AuthorizableResource of the aggregate and the grants in force on it. An empty grant list
+        beside an AUTHORIZED status means the decision was made and nobody holds anything, which is
+        deliberately different from a resource that was never authorized at all.
+      required:
+        - entityId
+        - entityTypeName
+        - grants
+      properties:
+        entityId:
+          type: string
+          description: The resource entity's id.
+        entityTypeName:
+          type: string
+          description: The resource entity's type.
+        authorizationStatus:
+          type: string
+          description: >
+            The resource's own authorizationStatus — AUTHORIZED, REJECTED or FAILED — absent when no
+            run has touched it.
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/EffectiveGrant'
+          description: The grants the last run applied here.
+    AggregateAccess:
+      type: object
+      description: >
+        An aggregate's declared access policy and the grants its resources are actually holding.
+      required:
+        - aggregateId
+        - entityTypeName
+        - principals
+        - permissions
+        - grants
+        - resources
+      properties:
+        aggregateId:
+          type: string
+          description: The aggregate root's entity id.
+        entityTypeName:
+          type: string
+          description: The aggregate root's entity type.
+        authorizationStatus:
+          type: string
+          description: >
+            The root's authorizationStatus, recording the last whole run's outcome; absent when the
+            aggregate has never been authorized.
+        principals:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessPrincipal'
+          description: The subjects this aggregate recognises.
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessPermission'
+          description: The vocabulary it can grant.
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessGrant'
+          description: The policy as declared on the root.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceAccess'
+          description: Every AuthorizableResource in the aggregate, in tree order.
     ValidationError:
       type: object
       description: Error response for client-side errors (4xx), listing all validation errors.

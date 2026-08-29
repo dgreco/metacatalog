@@ -4,12 +4,16 @@ import static it.davidgreco.metacatalog.service.ServiceUtils.hasTrait;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.AbstractEntityProcedure;
+import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.Task;
 import it.davidgreco.metacatalog.service.TaskManager;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.jgrapht.Graph;
 import org.jgrapht.graph.DefaultEdge;
 import org.springframework.beans.factory.ObjectProvider;
@@ -82,7 +86,8 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
           var resourceGraph =
               resourceGraphBuilder.buildResourceGraph(
                   aggregate, operation.capability().resourceTrait());
-          var tasks = createTasksForVertices(resourceGraph);
+          var accessGrants = resolveAccessGrants(aggregate.entity(), resourceGraph.vertexSet());
+          var tasks = createTasksForVertices(resourceGraph, accessGrants);
           wireDependencies(resourceGraph, tasks);
           var schedule = taskManager.createSchedule();
           for (var task : tasks.values()) {
@@ -94,8 +99,28 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
   }
 
   /**
-   * Creates a task per resource from its registered factory and switches it to this procedure's
-   * operation.
+   * Resolves the root's access policy into the grants that apply to each resource, for the one
+   * operation that applies a policy at all.
+   *
+   * <p>This happens here, once, inside the plan-building transaction — not in each task. The policy
+   * lives on the root; the procedure has already read the whole aggregate; and every way a policy
+   * can be wrong (a grant naming an undeclared principal or permission, a selector reaching
+   * nothing) is found before a single task runs. Because planning is wrapped in {@code
+   * recordingAround}, such a refusal is recorded as {@code FAILED} on the root rather than leaving
+   * behind the {@code AUTHORIZED} of the last run that worked.
+   *
+   * @return each resource id mapped to its grants; empty for every operation that applies no
+   *     policy, which leaves each task with the empty list it defaults to
+   */
+  private Map<String, List<AccessPolicy.EffectiveGrant>> resolveAccessGrants(
+      Entity root, Set<Entity> resources) {
+    if (!operation.appliesAccessPolicy()) return Map.of();
+    return AccessPolicy.of(root).resolve(resources);
+  }
+
+  /**
+   * Creates a task per resource from its registered factory, switches it to this procedure's
+   * operation, and hands it the grants the root's policy resolved for its resource.
    *
    * <p>A factory that does not produce a {@link ProvisioningTask} fails the run, in every
    * direction. Provisioning used to tolerate a plain {@link Task} — it happens to be the operation
@@ -106,7 +131,9 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
    *
    * @throws ServiceError if a resource's factory produces something that cannot run this operation
    */
-  private HashMap<String, Task> createTasksForVertices(Graph<Entity, DefaultEdge> resourceGraph) {
+  private HashMap<String, Task> createTasksForVertices(
+      Graph<Entity, DefaultEdge> resourceGraph,
+      Map<String, List<AccessPolicy.EffectiveGrant>> accessGrants) {
     var tasks = new HashMap<String, Task>();
     resourceGraph
         .vertexSet()
@@ -121,6 +148,7 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
                         + operation.command());
               }
               provisioningTask.setOperation(operation);
+              provisioningTask.setAccessGrants(accessGrants.getOrDefault(e.getId(), List.of()));
               tasks.put(e.getId(), task);
             });
     return tasks;

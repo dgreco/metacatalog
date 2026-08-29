@@ -1,0 +1,39 @@
+# The aggregate of bulk2.yaml, with an access policy on its root.
+#
+# The two grants differ on purpose: one reaches every resource, the other only the S3 folder. That
+# is what makes the assertions able to tell "the policy was applied" apart from "the same thing was
+# written everywhere", which a single blanket grant could not.
+entityType: "DataProductType"
+values:
+  name: "dp-policy"
+  principals:
+    - id: "sales-analysts"
+      type: "GROUP"
+      description: "BI team"
+    - id: "crm-pipeline"
+      type: "SERVICE"
+  permissions:
+    - name: "READ"
+      description: "Query the published data"
+    - name: "WRITE"
+  grants:
+    - principals: ["sales-analysts"]
+      permissions: ["READ"]
+    - principals: ["crm-pipeline"]
+      permissions: ["WRITE"]
+      resources:
+        entityTypes: ["S3FolderType"]
+
+parts:
+
+- ref: "op1"
+  entityType: "FileBasedOutputPortType"
+  values:
+    name: "op1"
+
+- ref: "op2"
+  entityType: "TableBasedOutputPortType"
+  values:
+    name: "op2"
+  dependsOn:
+     - "op1"

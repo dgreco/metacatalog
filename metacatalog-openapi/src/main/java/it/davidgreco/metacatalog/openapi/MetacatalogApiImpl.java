@@ -3,11 +3,13 @@ package it.davidgreco.metacatalog.openapi;
 import static org.springframework.http.ResponseEntity.*;
 
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.functions.ProcedureExecutor;
 import it.davidgreco.metacatalog.functions.provisioning.AuthorizationProcedure;
 import it.davidgreco.metacatalog.functions.provisioning.ProvisioningProcedure;
 import it.davidgreco.metacatalog.functions.provisioning.RejectionProcedure;
+import it.davidgreco.metacatalog.functions.provisioning.ResourceGraphBuilder;
 import it.davidgreco.metacatalog.functions.provisioning.UnprovisioningProcedure;
 import it.davidgreco.metacatalog.openapi.common.GlobalExceptionHandler;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
@@ -23,6 +25,8 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.NativeWebRequest;
 
 /**
@@ -68,6 +72,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   private final AggregateSchemaService aggregateSchemaService;
 
   private final ProcedureExecutor procedureExecutor;
+
+  private final ResourceGraphBuilder resourceGraphBuilder;
 
   private final DtoMapper dtoMapper;
 
@@ -266,6 +272,45 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   public ResponseEntity getAggregate(String aggregateId, Boolean retrieveMappedInstances) {
     var aggregateDto = readAggregateAsDto(aggregateId, retrieveMappedInstances);
     return status(200).contentType(MediaType.APPLICATION_JSON).body(aggregateDto);
+  }
+
+  /**
+   * Answers who may reach an aggregate, in one call: the policy its root declares and the grants
+   * each of its resources is holding.
+   *
+   * <p>The resource selection reuses {@link ResourceGraphBuilder}, the same walk the authorization
+   * procedure plans with, rather than re-deriving "what an aggregate contains" here — two answers
+   * to that question would eventually disagree, and this one would be the wrong one.
+   *
+   * <p>The only {@code @Transactional} method in this class, and it is not decoration: deciding
+   * whether a type carries {@code Authorizable} — and which members carry {@code
+   * AuthorizableResource} — walks the entity-type and trait inheritance chains, both lazily
+   * fetched. Every other path that asks a trait question does it inside a service that owns the
+   * transaction; this one composes two services and so has to open its own, rather than leaning on
+   * {@code spring.jpa.open-in-view}, which is a default someone will eventually turn off.
+   */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public ResponseEntity<AggregateAccess> getAggregateAccess(String aggregateId) {
+    // The trait is checked before the aggregate is read, in that order, because that is the order
+    // AbstractEntityProcedure checks it in: a caller asking about a type that has no authorization
+    // should be told so, not told that the entity is not an aggregate root — which is what reading
+    // first would answer for every intermediate node, and which names the wrong problem.
+    var root = entityService.read(aggregateId);
+    if (!ServiceUtils.hasTrait(root, BuiltInTraits.AUTHORIZABLE))
+      throw new ServiceError(
+          "Entity type: "
+              + root.getEntityType().getName()
+              + " has not a trait "
+              + BuiltInTraits.AUTHORIZABLE);
+    var aggregate = aggregateService.read(aggregateId, true);
+    var resources =
+        resourceGraphBuilder.getResourceSequence(aggregate, BuiltInTraits.AUTHORIZABLE_RESOURCE);
+    return status(200)
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(
+            dtoMapper.aggregateAccessToDto(
+                aggregate.entity(), AccessPolicy.of(aggregate.entity()), resources));
   }
 
   @Override

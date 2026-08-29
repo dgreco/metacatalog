@@ -4,6 +4,7 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.provisioning.ProvisioningTask;
 import it.davidgreco.metacatalog.service.EntityService;
 import java.util.Locale;
+import java.util.stream.Collectors;
 
 /**
  * A provisioning task that reports what it would do on standard output instead of creating or
@@ -18,7 +19,8 @@ import java.util.Locale;
  *
  * <p>It reports the authorization pair the same way, so a type carrying {@code
  * AuthorizableResource} is covered by the same registration and an authorization run is just as
- * observable as a provisioning one.
+ * observable as a provisioning one — including the grants the root's policy resolved for the
+ * resource, which is the part a real authorization task would push into a target system.
  *
  * <p>Standard output rather than the logger, deliberately: the application ships with {@code
  * logging.level.root: ERROR}, so an {@code INFO} line would never be seen.
@@ -84,9 +86,32 @@ public class StdoutProvisioningTask extends ProvisioningTask {
     // The values are printed because they are what a real task would act on — the bucket and path
     // of an S3FolderType, the database and table of an AthenaTableType.
     System.out.println(prefix + " start " + resource + " " + entity.getValues());
+    // Only for the direction that resolves a policy. Rejecting withdraws everything and is handed
+    // no grants, so printing "nobody" there would read as a decision rather than the absence of a
+    // list to make one from.
+    if (getOperation().appliesAccessPolicy()) {
+      System.out.println(prefix + " grants " + resource + " " + describeGrants());
+    }
     pause();
     System.out.println(prefix + " done  " + resource);
-    return outcome + " " + resource + " (stdout task)";
+    return outcome
+        + " "
+        + resource
+        + " (stdout task)"
+        + (getOperation().appliesAccessPolicy() ? ", granted to " + describeGrants() : "");
+  }
+
+  /**
+   * The grants in one line: {@code sales-analysts(GROUP)=[READ], crm-pipeline(SERVICE)=[WRITE]}.
+   *
+   * <p>Printed and also folded into the result recorded on the entity, so {@code
+   * authorizationResult} says what was granted rather than merely that something was.
+   */
+  private String describeGrants() {
+    if (getAccessGrants().isEmpty()) return "nobody";
+    return getAccessGrants().stream()
+        .map(g -> g.principal().id() + "(" + g.principal().type() + ")=" + g.permissions())
+        .collect(Collectors.joining(", "));
   }
 
   private void pause() {

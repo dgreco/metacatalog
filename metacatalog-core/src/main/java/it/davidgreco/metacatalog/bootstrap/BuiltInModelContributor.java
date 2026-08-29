@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
  * between the first two.
  *
  * <p>The capabilities are looped over rather than spelled out one by one: each names its own traits
- * and renders its own status schema, so this class holds no field names and a third capability is
- * declared by adding an enum constant, not by copying a block here.
+ * and renders its own root and resource schemas, so this class holds no field names and a third
+ * capability is declared by adding an enum constant, not by copying a block here.
  *
  * <p>These used to be {@code INSERT}s in the Flyway baseline. Declaring them here instead leaves a
  * single source of truth, expressed against the services rather than the tables: derived schemas,
@@ -41,12 +41,14 @@ public class BuiltInModelContributor implements ImmutableModelContributor {
     // Roots first: every capability trait inherits from one of them.
     registry.trait(BuiltInTraits.AGGREGATE);
     registry.trait(BuiltInTraits.AGGREGATE_ELEMENT);
-    // Then each capability's pair, both carrying that capability's status/result schema: on the
-    // resource the task records its own outcome, on the root the procedure records the whole run's.
+    // Then each capability's pair. Both carry that capability's status/result schema — on the
+    // resource the task records its own outcome, on the root the procedure records the whole run's
+    // — and each side adds whatever else the capability puts there: authorization's root carries
+    // the policy it is authored with, its resource the grants a run resolved for it.
     for (var capability : BuiltInCapability.values()) {
-      registry.trait(capability.rootTrait(), capability.statusSchema(), BuiltInTraits.AGGREGATE);
+      registry.trait(capability.rootTrait(), capability.rootSchema(), BuiltInTraits.AGGREGATE);
       registry.trait(
-          capability.resourceTrait(), capability.statusSchema(), BuiltInTraits.AGGREGATE_ELEMENT);
+          capability.resourceTrait(), capability.resourceSchema(), BuiltInTraits.AGGREGATE_ELEMENT);
     }
     // Composition: what makes a type able to contain another, and what AggregateSchemaService
     // projects onto the types carrying these traits to derive the aggregate model.

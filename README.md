@@ -99,30 +99,42 @@ Add `?async=true` to get a 202 with a schedule id instead, and poll
 a provisioning task is slow enough that holding the HTTP request open is not an option.
 
 The same aggregate is also `Authorizable`, which is a **second lifecycle, not a second name for
-the first**:
+the first**. What it grants is declared on the aggregate root — the subjects it recognises, the
+permissions it can grant, and the grants binding the two — and a run resolves that policy per
+resource:
 
 ```bash
 curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/authorize
 curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/reject
 
 docker logs metacatalog-app | grep -E '\[(authorizing|rejecting)\]'
-# [authorizing] start S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
-# [authorizing] done  S3FolderType id=0849185c…
-# [authorizing] start AthenaTableType id=693457a7…
-# [authorizing] done  AthenaTableType id=693457a7…
-# [rejecting]   start AthenaTableType id=693457a7…         <- reversed, as unprovisioning is
-# [rejecting]   done  AthenaTableType id=693457a7…
-# [rejecting]   start S3FolderType id=0849185c…
-# [rejecting]   done  S3FolderType id=0849185c…
+# [authorizing] start  S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
+# [authorizing] grants S3FolderType id=0849185c… analysts(GROUP)=READ, dp1-loader(SERVICE)=READ|WRITE
+# [authorizing] done   S3FolderType id=0849185c…
+# [authorizing] start  AthenaTableType id=693457a7…
+# [authorizing] grants AthenaTableType id=693457a7… analysts(GROUP)=READ
+# [authorizing] done   AthenaTableType id=693457a7…
+# [rejecting]   start  AthenaTableType id=693457a7…        <- reversed, as unprovisioning is
+# [rejecting]   done   AthenaTableType id=693457a7…
+# [rejecting]   start  S3FolderType id=0849185c…
+# [rejecting]   done   S3FolderType id=0849185c…
 ```
 
-Access is granted after — and withdrawn before — access to whatever a resource is derived from,
-the same asymmetry provisioning has and for the same reason. The outcome lands in
+The two resources hold different things because the demo's second grant is narrowed to
+`S3FolderType`. Access is granted after — and withdrawn before — access to whatever a resource is
+derived from, the same asymmetry provisioning has and for the same reason. The outcome lands in
 `authorizationStatus` / `authorizationResult` (`AUTHORIZED` / `REJECTED` / `FAILED`), a different
 pair of fields from the provisioning one: the two questions have different answers and neither
-overwrites the other. `?async=true` and the schedule poll work identically.
-`GET /metacatalog/v1/aggregate/authorizable-type` lists the types that offer it, as
-`.../provisionable-type` does for provisioning.
+overwrites the other. Each resource additionally records `effectiveGrants`, the grants that run
+applied there, so "which resources may `analysts` read?" is a query rather than a guess:
+
+```bash
+curl -s -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/access | jq
+```
+
+returns the declared policy and, per resource, the grants in force. `?async=true` and the schedule
+poll work identically. `GET /metacatalog/v1/aggregate/authorizable-type` lists the types that offer
+the capability, as `.../provisionable-type` does for provisioning.
 
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui
@@ -1104,6 +1116,70 @@ down, and one field could not hold both answers. Because a derived schema carrie
 `additionalProperties: false`, writing the wrong pair on a type that does not carry the matching
 trait is refused by validation rather than silently accepted.
 
+### The access policy
+
+*What* is granted is declared on the aggregate root, and nowhere else. `Authorizable` carries three
+fields:
+
+```yaml
+entityType: "DataProductType"
+values:
+  name: "dp1"
+  principals:                       # the subjects this product recognises
+    - { id: analysts,   type: GROUP }
+    - { id: dp1-loader, type: SERVICE }
+  permissions:                      # the vocabulary it can grant
+    - { name: READ }
+    - { name: WRITE }
+  grants:                           # the policy
+    - principals: [analysts]
+      permissions: [READ]
+    - principals: [dp1-loader]
+      permissions: [READ, WRITE]
+      resources:                    # optional; absent means every resource
+        entityTypes: [S3FolderType]
+```
+
+Three deliberate choices:
+
+- **Principals are references into an external identity provider** (`USER` / `GROUP` / `ROLE` /
+  `SERVICE`), not entities in the catalog. A directory is something a catalog federates from, not
+  something it owns — the same conclusion Ranger, Lake Formation and Unity Catalog reached.
+- **Permissions are abstract.** `READ` is not an Iceberg privilege or a Hive one, and that is the
+  point: a data product can publish through two catalogs at once, and a consumer reading the
+  product-level policy has to be able to tell that both halves mean the same thing. Turning `READ`
+  into what a given system understands is the *task's* job — the split Ranger draws between a
+  policy's accesses and a service definition's access types.
+- **Principals and permissions are referenced by name.** A group named in four grants is spelled
+  once, and a name that is not declared is **refused when the aggregate is authorized**, before any
+  task runs, naming it. So is a `resources` selector that reaches none of the aggregate's members.
+  Each of those is a typo whose only other symptom would be access quietly not being granted.
+
+Each resource records `effectiveGrants` — what the run actually applied there — which makes access a
+queryable catalog fact rather than something only the target system knows:
+
+```bash
+curl -s -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/access | jq
+```
+
+That returns the declared policy *and*, per resource, the grants in force. The two can legitimately
+differ: editing the policy does not change what is granted until the aggregate is authorized again,
+and the endpoint reports both rather than hiding the gap.
+
+**The lifecycle stays binary.** Changing access means editing the policy and re-running `authorize`
+— an idempotent re-apply that converges the target systems on the declared state, as every
+declarative policy engine in this space does. `reject` reads no policy at all: it means "no access
+to this aggregate", needs no list to say so, and so keeps working as an emergency stop even after
+the policy has been emptied.
+
+A `script` task's script receives the grants for its resource in the `METACATALOG_ACCESS`
+environment variable — the same JSON `effectiveGrants` holds — and only on `authorize`.
+
+Metacatalog is the **policy administration point**, never the decision point: it is not asked at
+query time whether alice may read a table. The `authorize` task pushes the declared decision into
+the systems that do enforce it. (Unrelated to `metacatalog-security`, which authenticates callers of
+the catalog's own API — same word, different question.)
+
 Everything else behaves exactly as provisioning does: `?async=true` returns a 202 with a schedule id
 polled at `GET /metacatalog/v1/procedure/{scheduleId}`, cycles fail the run before any task executes,
 and a run that never starts still leaves the root `FAILED` rather than showing the last successful
@@ -1114,12 +1190,14 @@ one.
 Both Docker Compose demos exercise it:
 
 - The **base stack** (`make up-d`) marks `DataProductType` `Authorizable` and its two resources
-  `AuthorizableResource`; the `stdout` task prints `[authorizing]` / `[rejecting]` lines the same
-  way it prints the provisioning ones.
-- The **data-product demo** (`make run-hive-demo`) goes all the way to the catalogs. Each output
-  port carries a `grantee`, and authorizing stamps the decision onto the real table it produced:
-  Iceberg table **properties** for the three REST-catalog ports, Hive table **parameters** for the
-  Parquet one, using the same two names either side — `access.status` and `access.granted-to`.
+  `AuthorizableResource`, and gives `dp1` a small policy; the `stdout` task prints `[authorizing]` /
+  `[rejecting]` lines the same way it prints the provisioning ones, naming the grants it applied.
+- The **data-product demo** (`make run-hive-demo`) goes all the way to the catalogs. The data
+  product declares four principals and two permissions, and its four grants use all three ways of
+  reaching a port — everything, one table by value, one port type by type. Authorizing stamps what
+  each port ends up holding onto the real table it produced: Iceberg table **properties** for the
+  three REST-catalog ports, Hive table **parameters** for the Parquet one, under the same names
+  either side.
 
 ```bash
 # after provisioning the data product
@@ -1127,9 +1205,17 @@ curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$DP/a
 
 # the grant is on the table itself, not in a side channel
 curl -s http://localhost:8181/v1/metacatalog/namespaces/sales_analytics/tables/customers \
-  | jq '.metadata.properties | {"access.status", "access.granted-to"}'
-# { "access.status": "AUTHORIZED", "access.granted-to": "crm-analysts" }
+  | jq '.metadata.properties | with_entries(select(.key | startswith("access.")))'
+# {
+#   "access.status": "AUTHORIZED",
+#   "access.granted-to": "sales-analysts,crm-analysts,sales-etl",
+#   "access.permissions": "READ,WRITE",
+#   "access.grants": "sales-analysts=READ,crm-analysts=READ,sales-etl=READ|WRITE"
+# }
 ```
+
+The `orders` table, which the CRM grant does not reach, carries the same keys with `crm-analysts`
+absent — one policy, different answers per port, and no port declaring an audience of its own.
 
 Authorizing a data product that was never provisioned fails naming the table that does not exist —
 a grant on nothing is not a grant. Rejecting one is a no-op, exactly as unprovisioning is.

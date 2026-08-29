@@ -65,7 +65,9 @@ provisioning and authorization procedures. All six are installed **immutable**, 
 The last four come in two pairs with the same shape: a root trait inheriting `Aggregate` and a
 resource trait inheriting `AggregateElement`, each carrying a status/result field pair the
 machinery writes (`provisioningStatus` / `provisioningResult`, `authorizationStatus` /
-`authorizationResult`). **The two capabilities are independent** — a type may offer provisioning,
+`authorizationResult`). The authorization pair carries more than that — its root also holds the
+[access policy](#the-access-policy) and its resource the grants a run resolved — which is why the
+two sides of a capability no longer share one schema. **The two capabilities are independent** — a type may offer provisioning,
 authorization, both or neither — which is why they are separate fields rather than one: an
 aggregate can be provisioned and not yet authorized, or authorized and torn down, and one field
 could not hold both answers. Since a derived schema carries `additionalProperties: false`, writing
@@ -73,9 +75,12 @@ the wrong pair on a type that does not carry the matching trait is refused by va
 than silently accepted.
 
 Each pair is declared once, as a `BuiltInCapability` constant (core, next to `BuiltInTraits`):
-the two trait names, the two field names, the statuses the first may take, and the base schema both
-traits carry — rendered from those same constants, so the schema can only ever admit exactly the
-fields the machinery writes. `BuiltInModelContributor` loops over the enum rather than spelling out
+the two trait names, the two field names, the statuses the first may take, and a base schema per
+side (`rootSchema()` / `resourceSchema()`) — rendered from those same constants, so the schema can
+only ever admit exactly the fields the machinery writes. `BuiltInCapabilityTests` pins that pairing
+by validating what the machinery renders against the schema an entity is actually written through:
+a field spelled differently on the two sides fails the build rather than the last write of an
+otherwise successful run. `BuiltInModelContributor` loops over the enum rather than spelling out
 a block per capability, and `ProvisioningTask.Operation` reads its field pair from the same place.
 Before that the field names lived as literals in a JSON text block in core *and* as constants in
 `metacatalog-functions`, with nothing connecting them — a typo in either half stays invisible until
@@ -511,6 +516,87 @@ One consequence of the shared `Operation` is that `AggregateProvisioningStatusRe
 name while recording either kind of run: which field pair it writes on the root comes from the
 operation, not from the class.
 
+##### The access policy
+
+Authorization is the one capability whose traits carry more than a status, and where that extra
+lives is the whole design: **the root declares who gets what, and a resource declares nothing.**
+`Authorizable` therefore adds three fields (declared in `AccessControl`, core, next to
+`BuiltInCapability`):
+
+- `principals` — the subjects this aggregate recognises, each `{id, type}` with `type` one of
+  `USER` / `GROUP` / `ROLE` / `SERVICE`. They are **references into an external identity
+  provider**, not entities in the catalog: a directory is something a catalog federates from, not
+  something it owns, which is the conclusion Ranger, Lake Formation and Unity Catalog all reached.
+- `permissions` — the vocabulary the aggregate can grant, and it is deliberately **abstract**
+  (`READ`, `WRITE`) rather than any one catalog's native privilege names. One data product can
+  publish output ports through two catalogs at once — the mixed demo does — and native names on the
+  root would leave a consumer reading the product-level policy unable to tell whether the Iceberg
+  half and the Hive half meant the same thing. Translating an abstract permission into what a given
+  system understands is the *task's* job, which is exactly the split Ranger draws between a policy's
+  accesses and a service definition's access types. A task handed a permission it cannot translate
+  must fail its resource naming it.
+- `grants` — the policy: `{principals[], permissions[], resources?}`. Both name lists reference the
+  two declarations above **by name**, so a group named in four grants is spelled once.
+
+`AuthorizableResource` gains one field, `effectiveGrants`, `readOnly` like the status pair: what the
+last run actually applied there. That is the piece that makes access a **queryable catalog fact** —
+"which tables may `sales-analysts` read?" is one jsonb query, one SPARQL query, answerable across
+resources published by different catalogs through different tasks. A resource no grant reached
+records `[]` rather than omitting the field: "decided, nobody" and "never asked" must not read the
+same. On a failure the field is *cleared* rather than left holding the previous run's answer, so a
+query never finds grants from a run that no longer describes reality.
+
+A grant's optional `resources` selector narrows which members it reaches — `entityTypes` (the
+universal filter: entities carry no name column, so the type name is the only label every resource
+is guaranteed to have) and `values` (exact match on the resource's own values), combining with AND,
+both absent meaning every resource. **Exact match rather than a path expression, deliberately**: the
+selector is evaluated in memory against an aggregate the procedure has already read, so the Postgres
+`jsonpath` that `EntityService.list` pushes into the database is not available, and reaching for
+Jayway instead would put a *second* path dialect into the model under the same name — two syntaxes
+for what looks like one concept, differing only in the cases nobody tests.
+
+`AccessPolicy` (core, `service` package) parses the root's declaration and resolves it, and
+**everything that can be wrong with a policy is wrong at plan time**: a grant naming an undeclared
+principal or permission, or a selector reaching none of the aggregate's resources, is refused naming
+it before a single task runs. Each of those is a typo whose only other symptom would be access
+quietly not being granted — the same silence a task factory registered under a misspelled entity
+type name used to produce. Since planning happens inside `recordingAround`, the refusal is recorded
+as `FAILED` on the root rather than leaving the `AUTHORIZED` of the last run that worked.
+
+The procedure resolves the policy **once**, inside the plan-building transaction, and hands each
+task its own grants through `setAccessGrants` alongside `setOperation`. A task walking `IS_PART_OF`
+upwards for itself would re-read and re-parse the same document once per resource, on whichever
+thread the executor picked.
+
+**The lifecycle stays binary, and that is the design.** Adding a policy makes the *content* of
+`AUTHORIZED` richer; it does not turn the capability into a mutable grant set. Changing access means
+editing the policy and re-running `authorize` — an idempotent re-apply that converges the target
+systems on the declared state, which is how every declarative policy engine in this space works.
+`REJECT` therefore reads no policy at all (`Operation.appliesAccessPolicy()` is true only for
+`AUTHORIZE`): it means "no access to this aggregate", needs no list to say so, and so keeps working
+as an emergency stop after the policy has been emptied or while it is malformed. It is also the only
+reading under which "empty the grants, then reject" has an answer — a grant-diffing model could not
+know what to withdraw.
+
+`ScriptProvisioningTask` hands the grants to its script in the `METACATALOG_ACCESS` environment
+variable, as the same JSON array `effectiveGrants` holds, and only on `authorize`. The environment
+rather than standard input, which stays the entity's values for all four operations, so a script
+that does not care keeps working unchanged; and not an argument, because arguments are visible to
+every process on the host through `ps`. `ScriptAuthorizationTests` pins that contract — it is a
+contract with shell scripts nothing in the build compiles against, so it would otherwise stay broken
+until someone ran `docker compose up`.
+
+`GET /metacatalog/v1/aggregate/{id}/access` answers both halves in one call: the policy the root
+declares (intent) and each resource's recorded grants (fact). They can legitimately disagree —
+editing the policy does not change what is in force until the aggregate is authorized again — and
+being able to see that is the point, so the endpoint deliberately does *not* recompute the grants.
+
+Metacatalog is the **policy administration point**, never the decision point: it is not asked at
+query time whether alice may read a table. Pushing the declared decision into the systems that do
+enforce it is what the `authorize` task is for. Note also the name collision worth keeping straight:
+`metacatalog-security` authenticates callers of the catalog's own API, while this governs access to
+the data products the catalog describes. They are unrelated today.
+
 Both provisioning operations are exposed as `POST /metacatalog/v1/aggregate/{id}/provision` and
 `.../unprovision`, and both authorization ones as `.../authorize` and `.../reject`. They are **synchronous by default** — `ProcedureExecutor.executeProcedure`
 returns only once the schedule completes and throws if any task failed — so a 204 means the whole
@@ -558,6 +644,12 @@ of truth — **edit the spec, then regenerate**, don't hand-edit generated contr
   independent pairs of traits, so none implies another, and `AggregateSchemaServiceTests` pins the
   combined answer against the three individual ones over a model that crosses them over. The three
   endpoints remain for clients wanting a single capability with the full DTOs.
+- Access: `GET /aggregate/{id}/access` returns an `Authorizable` aggregate's declared policy — its
+  principals, permission vocabulary and grants — together with, per `AuthorizableResource`, the
+  grants the last authorization run actually applied there. Intent and fact are reported separately
+  and the latter is never recomputed: editing the policy does not change what is in force until the
+  aggregate is authorized again, and seeing that gap is the reason to ask. Refused with a 400 when
+  the root does not carry `Authorizable`.
 - Aggregate authoring: `GET /aggregate/root-type` lists the aggregate root types and
   `GET /aggregate/root-type/{name}/schema` returns the combined schema for one (see
   [Aggregate schemas](#aggregate-schemas)). A document written against that schema is accepted by
@@ -816,7 +908,11 @@ mvn licensescan:audit        # fails on forbidden licenses (GPL v2.0)
   so the two compare as they stand.) A model that is *partly* present
   fails the loader with `docker compose down -v` in the message rather than skipping: the bulk
   endpoint is all-or-nothing and dies on the first existing name, so a partial change is not
-  something it can apply. (`Mappings` are not probed — there is no read-by-name for one.) Both app healthchecks poll **`/actuator/health/readiness`**, not
+  something it can apply. (`Mappings` are not probed — there is no read-by-name for one.) **Schemas
+  are not probed either, and deliberately not**: a schema change on a *built-in* trait is caught
+  one level up, by `ImmutableModelInstaller`'s drift check, which aborts startup — so the loader
+  never runs against a database the change would have broken. A schema change on a demo type is
+  the same `down -v` either way. Both app healthchecks poll **`/actuator/health/readiness`**, not
   `/actuator/health`: the latter is UP as soon as Tomcat listens, during context refresh, whereas
   `ImmutableModelInstaller` is an `ApplicationRunner` and runs after it — so a loader gated on
   `depends_on: service_healthy` could post a model before the traits it builds on existed. Both apps
@@ -952,18 +1048,34 @@ all four; all four are entities under the same root in one graph, whichever cata
 
 The data product is **also `Authorizable`**, and each port carries `AuthorizableResource` next to
 its own port trait, so the same aggregate has a second lifecycle: `POST /aggregate/{id}/authorize`
-stamps each port's `grantee` onto the table it produced — Iceberg table *properties*, Hive table
-*parameters*, the same two names (`access.status`, `access.granted-to`) either side — and
-`.../reject` withdraws it. Those two names, and the `everyone` a port with no `grantee` grants to,
-are declared once in `docker/provisioning/access-decision.sh`, sourced by both scripts, and the
-Hive side *passes them into* `hive-cli` rather than the jar holding constants of its own: the whole
-point is that a consumer of either catalog reads the same answer, and a Java constant on one side
-could have drifted from a shell literal on the other with nothing failing — the two catalogs would
-just have quietly stopped agreeing. Because both are ordinary catalog writes, the decision is visible to
-PyIceberg / Spark / Trino and to a Hive client, and (the Iceberg catalog caching each table's
-metadata on its `IcebergTable` entity) in the UI graph and over SPARQL. Authorizing before
-provisioning fails naming the table that does not exist yet; rejecting something never provisioned
-is a no-op, exactly as unprovisioning is.
+resolves the [access policy](#the-access-policy) declared on the *root* into the grants that reach
+each port, and stamps them onto the table that port produced — Iceberg table *properties*, Hive
+table *parameters*, the same names either side — while `.../reject` withdraws them.
+
+**The policy lives on the root and nowhere else**, which is what the demo is showing. Four ports do
+not carry four audiences that can drift apart; there is one declaration, and which port a grant
+reaches is said by the grant. The demo uses all three ways of saying it: the BI group reads every
+port (no selector), CRM analysts read only `customers` (selected by `values`), finance reads only
+the Hive port (selected by `entityTypes`), and the loading pipeline — a `SERVICE` principal —
+holds `READ` and `WRITE` everywhere.
+
+Those property names, and the rendering of the grants into them, are declared once in
+`docker/provisioning/access-decision.sh`, sourced by both scripts, and the Hive side *passes them
+into* `hive-cli` rather than the jar holding constants of its own: the whole point is that a
+consumer of either catalog reads the same answer, and a Java constant on one side could have
+drifted from a shell literal on the other with nothing failing — the two catalogs would just have
+quietly stopped agreeing. `authorize` writes `access.status` plus three value keys
+(`access.granted-to`, `access.permissions`, `access.grants` — who at all, which permissions at all,
+and the precise mapping the first two flatten), and `reject` removes exactly the same three from one
+shared list, so no key can be written by one direction and left behind by the other. Three fixed
+keys rather than one per permission, deliberately: a permission name is arbitrary text from the
+policy, and turning it into a property key would put the policy's vocabulary into the catalogs' key
+space, where a rename would strand the old key on every table already stamped with it.
+
+Because both are ordinary catalog writes, the decision is visible to PyIceberg / Spark / Trino and
+to a Hive client, and (the Iceberg catalog caching each table's metadata on its `IcebergTable`
+entity) in the UI graph and over SPARQL. Authorizing before provisioning fails naming the table that
+does not exist yet; rejecting something never provisioned is a no-op, exactly as unprovisioning is.
 
 Note the ports mix `AuthorizableResource` in at the **entity type**, not through their port trait:
 a trait has single inheritance and `IcebergTableOutputPort` already inherits
