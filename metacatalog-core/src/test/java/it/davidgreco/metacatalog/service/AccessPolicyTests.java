@@ -89,15 +89,42 @@ class AccessPolicyTests {
     assertEquals(json("\"sales\""), policy.grants().get(1).resources().values().get("namespace"));
   }
 
+  /**
+   * The refusal comes from the {@code Authorizable} trait's own schema fragment, so it names the
+   * exact location of the offense and the allowed values.
+   */
   @Test
-  void anUnknownPrincipalTypeIsRefusedNamingIt() {
+  void anUnknownPrincipalTypeIsRefusedNamingWhereAndWhatWasAllowed() {
     var error =
         assertThrows(
             ServiceError.class,
             () ->
                 AccessPolicy.of(root("{\"principals\": [{\"id\": \"a\", \"type\": \"ROBOT\"}]}")));
-    assertTrue(error.getMessage().contains("ROBOT"), error.getMessage());
+    assertTrue(error.getMessage().contains("principals[0].type"), error.getMessage());
     assertTrue(error.getMessage().contains("SERVICE"), error.getMessage());
+  }
+
+  /**
+   * A grant granting nothing — empty principal or permission lists — is refused rather than
+   * resolved to nobody. The old hand-rolled parser accepted this; the schema's {@code minItems}
+   * refuses it, which is the drift re-validating against the trait's fragment exists to close.
+   */
+  @Test
+  void aGrantWithAnEmptyPrincipalListIsRefused() {
+    var error =
+        assertThrows(
+            ServiceError.class,
+            () ->
+                AccessPolicy.of(
+                    root(
+                        """
+                        {
+                          %s,
+                          "grants": [{"principals": [], "permissions": ["READ"]}]
+                        }
+                        """
+                            .formatted(TWO_PRINCIPALS_TWO_PERMISSIONS))));
+    assertTrue(error.getMessage().contains("grants[0].principals"), error.getMessage());
   }
 
   @Test

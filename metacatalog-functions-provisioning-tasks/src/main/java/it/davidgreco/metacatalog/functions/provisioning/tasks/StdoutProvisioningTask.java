@@ -53,33 +53,34 @@ public class StdoutProvisioningTask extends ProvisioningTask {
 
   @Override
   public String provision() {
-    return report("Provisioned");
+    return report();
   }
 
   @Override
   public String unprovision() {
-    return report("Unprovisioned");
+    return report();
   }
 
   @Override
   public String authorize() {
-    return report("Authorized");
+    return report();
   }
 
   @Override
   public String reject() {
-    return report("Rejected");
+    return report();
   }
 
   /**
    * Prints the start/done pair and returns the outcome message.
    *
-   * <p>The line prefix — {@code [provisioning]}, {@code [authorizing]}, … — is the operation's own
-   * label rather than a constant per direction: the procedure has already selected the operation by
-   * the time this runs, so a fifth direction gets its prefix for free and no method can print a
-   * prefix belonging to another one.
+   * <p>The line prefix — {@code [provisioning]}, {@code [authorizing]}, … — and the outcome word
+   * are the operation's own label and {@code outcomeWord()} rather than a constant per direction:
+   * the procedure has already selected the operation by the time this runs, so a fifth direction
+   * gets both for free and no method can report under another one's name.
    */
-  private String report(String outcome) {
+  private String report() {
+    var outcome = getOperation().outcomeWord();
     var entity = getEntity();
     var prefix = "[" + getOperation().label().toLowerCase(Locale.ROOT) + "]";
     var resource = entity.getEntityType().getName() + " id=" + entity.getId();

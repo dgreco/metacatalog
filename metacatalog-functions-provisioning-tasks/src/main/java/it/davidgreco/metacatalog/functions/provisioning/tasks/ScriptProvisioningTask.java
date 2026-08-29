@@ -64,34 +64,36 @@ public class ScriptProvisioningTask extends ProvisioningTask {
 
   @Override
   public String provision() {
-    return runScript("Provisioned");
+    return runScript();
   }
 
   @Override
   public String unprovision() {
-    return runScript("Unprovisioned");
+    return runScript();
   }
 
   @Override
   public String authorize() {
-    return runScript("Authorized");
+    return runScript();
   }
 
   @Override
   public String reject() {
-    return runScript("Rejected");
+    return runScript();
   }
 
   /**
    * Runs the script for the operation the procedure selected.
    *
-   * <p>The argument handed to the script is {@code getOperation().command()}, not a literal per
-   * method. The procedure has already set the operation by the time this runs, so the two can never
-   * disagree — a mistyped literal here would have run the wrong direction against a real catalog
-   * while still recording the status the enum says, which is the one slip in this class with
-   * consequences outside the process.
+   * <p>Both the argument handed to the script ({@code getOperation().command()}) and the outcome
+   * word in the result message come from the operation, not from a literal per method. The
+   * procedure has already set the operation by the time this runs, so the two can never disagree —
+   * a mistyped literal here would have run the wrong direction against a real catalog while still
+   * recording the status the enum says, which is the one slip in this class with consequences
+   * outside the process.
    */
-  private String runScript(String outcome) {
+  private String runScript() {
+    var outcome = getOperation().outcomeWord();
     var entity = getEntity();
     var resource = entity.getEntityType().getName() + " id=" + entity.getId();
     try {

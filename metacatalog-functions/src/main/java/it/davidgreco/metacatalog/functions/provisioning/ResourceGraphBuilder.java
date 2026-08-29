@@ -22,11 +22,10 @@ import org.springframework.stereotype.Service;
  * Builds the graph of the resources in an aggregate that carry a given trait, with an edge from
  * each resource to the resources it depends on.
  *
- * <p>Shared by all four procedures — {@link ProvisioningProcedure} and {@link
- * UnprovisioningProcedure} over {@code ProvisionableResource}, {@link AuthorizationProcedure} and
- * {@link RejectionProcedure} over {@code AuthorizableResource} — so no two of them can disagree
- * about what an aggregate contains or how its resources relate. They differ only in the trait they
- * select on and the direction they then wire the tasks in.
+ * <p>Shared by every {@link AggregateResourceProcedure} — the provisioning pair selects on {@code
+ * ProvisionableResource}, the authorization pair on {@code AuthorizableResource} — so no two of
+ * them can disagree about what an aggregate contains or how its resources relate. They differ only
+ * in the trait they select on and the direction they then wire the tasks in.
  *
  * <p>The trait is a parameter rather than four copies of this walk because the selection is the
  * <em>only</em> thing that varies: an aggregate whose members carry both traits produces the same

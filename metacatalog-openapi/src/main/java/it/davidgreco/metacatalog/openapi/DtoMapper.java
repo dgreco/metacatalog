@@ -1,8 +1,10 @@
 package it.davidgreco.metacatalog.openapi;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.entity.AccessControl;
+import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
@@ -18,7 +20,6 @@ import it.davidgreco.metacatalog.openapi.model.ResourceAccess;
 import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.VersionResult;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
@@ -230,7 +231,7 @@ public class DtoMapper {
     return new AggregateAccess()
         .aggregateId(root.getId())
         .entityTypeName(root.getEntityType().getName())
-        .authorizationStatus(text(root.getValues(), "authorizationStatus"))
+        .authorizationStatus(text(root.getValues(), BuiltInCapability.AUTHORIZATION.statusField()))
         .principals(policy.principals().stream().map(DtoMapper::principalToDto).toList())
         .permissions(
             policy.permissions().stream()
@@ -241,7 +242,7 @@ public class DtoMapper {
                             .description(permission.description().orElse(null)))
                 .toList())
         .grants(policy.grants().stream().map(DtoMapper::grantToDto).toList())
-        .resources(resources.stream().map(DtoMapper::resourceAccessToDto).toList());
+        .resources(resources.stream().map(this::resourceAccessToDto).toList());
   }
 
   private static AccessPrincipal principalToDto(AccessPolicy.Principal principal) {
@@ -263,35 +264,22 @@ public class DtoMapper {
     return dto;
   }
 
-  private static ResourceAccess resourceAccessToDto(Entity resource) {
+  private ResourceAccess resourceAccessToDto(Entity resource) {
     var recorded =
         resource.getValues() == null
             ? null
             : resource.getValues().get(AccessControl.EFFECTIVE_GRANTS);
-    var grants = new ArrayList<EffectiveGrant>();
-    if (recorded != null && recorded.isArray()) {
-      recorded.forEach(
-          node -> {
-            var principal = node.get(AccessControl.EFFECTIVE_GRANT_PRINCIPAL);
-            var permissions = new ArrayList<String>();
-            var declared = node.get(AccessControl.PERMISSIONS);
-            if (declared != null) declared.forEach(p -> permissions.add(p.asText()));
-            grants.add(
-                new EffectiveGrant()
-                    .principal(
-                        new AccessPrincipal()
-                            .id(text(principal, AccessControl.PRINCIPAL_ID))
-                            .type(
-                                AccessPrincipal.TypeEnum.fromValue(
-                                    text(principal, AccessControl.PRINCIPAL_TYPE)))
-                            .description(text(principal, AccessControl.DESCRIPTION)))
-                    .permissions(permissions));
-          });
-    }
+    // The recorded array is exactly the spec's EffectiveGrant shape — AccessPolicy.toJson writes
+    // it and BuiltInCapabilityTests pins it — so it binds directly instead of being walked by hand.
+    List<EffectiveGrant> grants =
+        recorded != null && recorded.isArray()
+            ? jsonMapper.convertValue(recorded, new TypeReference<>() {})
+            : List.of();
     return new ResourceAccess()
         .entityId(resource.getId())
         .entityTypeName(resource.getEntityType().getName())
-        .authorizationStatus(text(resource.getValues(), "authorizationStatus"))
+        .authorizationStatus(
+            text(resource.getValues(), BuiltInCapability.AUTHORIZATION.statusField()))
         .grants(grants);
   }
 

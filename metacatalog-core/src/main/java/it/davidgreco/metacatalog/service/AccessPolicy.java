@@ -1,18 +1,26 @@
 package it.davidgreco.metacatalog.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
 import it.davidgreco.metacatalog.entity.AccessControl;
+import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.Entity;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * The access policy an {@code Authorizable} aggregate root is authored with, and the resolution of
@@ -74,7 +82,11 @@ public record AccessPolicy(
    * @param resources which of the aggregate's resources this reaches
    */
   public record Grant(
-      List<String> principals, List<String> permissions, ResourceSelector resources) {}
+      List<String> principals, List<String> permissions, ResourceSelector resources) {
+    public Grant {
+      resources = resources == null ? ResourceSelector.ALL : resources;
+    }
+  }
 
   /**
    * Which resources of an aggregate a grant reaches. The two filters combine with AND, and an empty
@@ -85,6 +97,11 @@ public record AccessPolicy(
    * @param values value fields a resource must carry with exactly these values; empty means any
    */
   public record ResourceSelector(List<String> entityTypes, Map<String, JsonNode> values) {
+
+    public ResourceSelector {
+      entityTypes = entityTypes == null ? List.of() : List.copyOf(entityTypes);
+      values = values == null ? Map.of() : Map.copyOf(values);
+    }
 
     /** The selector a grant with no {@code resources} gets: every resource in the aggregate. */
     public static final ResourceSelector ALL = new ResourceSelector(List.of(), Map.of());
@@ -147,12 +164,31 @@ public record AccessPolicy(
   public static final AccessPolicy EMPTY = new AccessPolicy(List.of(), List.of(), List.of());
 
   /**
+   * The schema the policy fields are checked against before binding: the same fragment the {@code
+   * Authorizable} trait carries, compiled once. Reusing it rather than re-implementing its checks
+   * imperatively keeps a single definition of the shape — a hand-rolled parser here once accepted
+   * empty grant lists and empty principal ids the schema refuses, which is exactly the
+   * two-definitions drift {@link BuiltInCapability} exists to prevent.
+   */
+  private static final JsonSchema ROOT_SCHEMA =
+      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+          .getSchema(BuiltInCapability.AUTHORIZATION.rootSchema());
+
+  /**
+   * Binds the validated policy fields into the records. Its own mapper: {@code Optional} needs the
+   * Jdk8 module, and this class is reachable from static contexts with no injected one.
+   */
+  private static final ObjectMapper BINDER =
+      JsonMapper.builder().addModule(new Jdk8Module()).build();
+
+  /**
    * Reads the policy off an aggregate root's values.
    *
-   * <p>Shapes are already guaranteed by the {@code Authorizable} trait's schema — but only for as
-   * long as the concrete entity type has not restated the property itself, which type linearization
-   * permits. So this parses defensively and names what it did not understand, rather than assuming
-   * validation has been here first.
+   * <p>Entity writes already validate against the type's derived schema — but only for as long as
+   * the concrete entity type has not restated the property itself, which type linearization
+   * permits. So the values are re-validated here against the {@code Authorizable} trait's own
+   * schema fragment, naming what did not conform, rather than assuming validation has been here
+   * first — and rather than restating the schema's checks as a second, weaker parser.
    *
    * @param root the aggregate root entity
    * @return its policy, or {@link #EMPTY} if it declares none
@@ -162,21 +198,35 @@ public record AccessPolicy(
     var values = root.getValues();
     if (values == null || !values.isObject()) return EMPTY;
     var where = " on aggregate root " + root.getId();
-    var principals =
-        array(values, AccessControl.PRINCIPALS, where).stream()
-            .map(node -> principal(node, where))
-            .toList();
-    var permissions =
-        array(values, AccessControl.PERMISSIONS, where).stream()
-            .map(node -> permission(node, where))
-            .toList();
-    var grants =
-        array(values, AccessControl.GRANTS, where).stream()
-            .map(node -> grant(node, where))
-            .toList();
+    var violations = ROOT_SCHEMA.validate(values);
+    if (!violations.isEmpty())
+      throw new ServiceError(
+          "Invalid access policy"
+              + where
+              + ": "
+              + violations.stream().map(Object::toString).collect(Collectors.joining("; ")));
+    var principals = bind(values, AccessControl.PRINCIPALS, Principal[].class, where);
+    var permissions = bind(values, AccessControl.PERMISSIONS, Permission[].class, where);
+    var grants = bind(values, AccessControl.GRANTS, Grant[].class, where);
     rejectDuplicates(principals.stream().map(Principal::id).toList(), "principal", where);
     rejectDuplicates(permissions.stream().map(Permission::name).toList(), "permission", where);
     return new AccessPolicy(principals, permissions, grants);
+  }
+
+  /**
+   * One schema-validated policy field as a list of bound records; an absent field is an empty one.
+   * A binding failure would mean the records and the schema fragment disagree about the shape —
+   * refused naming the field rather than letting half a policy through.
+   */
+  private static <T> List<T> bind(JsonNode values, String field, Class<T[]> type, String where) {
+    var node = values.get(field);
+    if (node == null || node.isNull()) return List.of();
+    try {
+      return List.of(BINDER.treeToValue(node, type));
+    } catch (JsonProcessingException | IllegalArgumentException e) {
+      throw new ServiceError(
+          "'" + field + "'" + where + " could not be read: " + e.getMessage(), e);
+    }
   }
 
   /**
@@ -274,79 +324,6 @@ public record AccessPolicy(
     return array;
   }
 
-  private static List<JsonNode> array(JsonNode values, String field, String where) {
-    if (!values.has(field) || values.get(field).isNull()) return List.of();
-    var node = values.get(field);
-    if (!node.isArray())
-      throw new ServiceError(
-          "'" + field + "'" + where + " must be an array, not " + node.getNodeType());
-    var elements = new ArrayList<JsonNode>();
-    node.elements().forEachRemaining(elements::add);
-    return elements;
-  }
-
-  private static Principal principal(JsonNode node, String where) {
-    var id = requiredText(node, AccessControl.PRINCIPAL_ID, AccessControl.PRINCIPALS, where);
-    var type = requiredText(node, AccessControl.PRINCIPAL_TYPE, AccessControl.PRINCIPALS, where);
-    try {
-      return new Principal(
-          id,
-          AccessControl.PrincipalType.valueOf(type),
-          optionalText(node, AccessControl.DESCRIPTION));
-    } catch (IllegalArgumentException e) {
-      throw new ServiceError(
-          "Principal '"
-              + id
-              + "'"
-              + where
-              + " has unknown "
-              + AccessControl.PRINCIPAL_TYPE
-              + " '"
-              + type
-              + "'; expected one of "
-              + List.of(AccessControl.PrincipalType.values()),
-          e);
-    }
-  }
-
-  private static Permission permission(JsonNode node, String where) {
-    return new Permission(
-        requiredText(node, AccessControl.PERMISSION_NAME, AccessControl.PERMISSIONS, where),
-        optionalText(node, AccessControl.DESCRIPTION));
-  }
-
-  private static Grant grant(JsonNode node, String where) {
-    var grantPrincipals = stringArray(node, AccessControl.PRINCIPALS, AccessControl.GRANTS, where);
-    var grantPermissions =
-        stringArray(node, AccessControl.PERMISSIONS, AccessControl.GRANTS, where);
-    var selectorNode = node.get(AccessControl.GRANT_RESOURCES);
-    var selector =
-        selectorNode == null || selectorNode.isNull()
-            ? ResourceSelector.ALL
-            : selector(selectorNode, where);
-    return new Grant(grantPrincipals, grantPermissions, selector);
-  }
-
-  private static ResourceSelector selector(JsonNode node, String where) {
-    if (!node.isObject())
-      throw new ServiceError(
-          "'" + AccessControl.GRANT_RESOURCES + "'" + where + " must be an object");
-    var entityTypes =
-        node.has(AccessControl.SELECTOR_ENTITY_TYPES)
-            ? stringArray(
-                node, AccessControl.SELECTOR_ENTITY_TYPES, AccessControl.GRANT_RESOURCES, where)
-            : List.<String>of();
-    var values = new LinkedHashMap<String, JsonNode>();
-    var valuesNode = node.get(AccessControl.SELECTOR_VALUES);
-    if (valuesNode != null && !valuesNode.isNull()) {
-      if (!valuesNode.isObject())
-        throw new ServiceError(
-            "'" + AccessControl.SELECTOR_VALUES + "'" + where + " must be an object");
-      valuesNode.properties().forEach(e -> values.put(e.getKey(), e.getValue()));
-    }
-    return new ResourceSelector(entityTypes, Collections.unmodifiableMap(values));
-  }
-
   private static void rejectDuplicates(List<String> names, String what, String where) {
     var seen = new TreeSet<String>();
     var duplicates = names.stream().filter(name -> !seen.add(name)).distinct().sorted().toList();
@@ -357,54 +334,5 @@ public record AccessPolicy(
               + (duplicates.size() == 1 ? " name " : " names ")
               + duplicates
               + where);
-  }
-
-  private static String requiredText(JsonNode node, String field, String container, String where) {
-    if (!node.isObject() || !node.has(field) || !node.get(field).isTextual())
-      throw new ServiceError(
-          "Each entry of '"
-              + container
-              + "'"
-              + where
-              + " must be an object with a textual '"
-              + field
-              + "'");
-    return node.get(field).asText();
-  }
-
-  private static List<String> stringArray(
-      JsonNode node, String field, String container, String where) {
-    if (!node.isObject() || !node.has(field) || !node.get(field).isArray())
-      throw new ServiceError(
-          "Each entry of '"
-              + container
-              + "'"
-              + where
-              + " must be an object with an array '"
-              + field
-              + "'");
-    var values = new ArrayList<String>();
-    node.get(field)
-        .elements()
-        .forEachRemaining(
-            e -> {
-              if (!e.isTextual())
-                throw new ServiceError(
-                    "'"
-                        + field
-                        + "' in '"
-                        + container
-                        + "'"
-                        + where
-                        + " must contain only strings");
-              values.add(e.asText());
-            });
-    return List.copyOf(values);
-  }
-
-  private static Optional<String> optionalText(JsonNode node, String field) {
-    return node.has(field) && node.get(field).isTextual()
-        ? Optional.of(node.get(field).asText())
-        : Optional.empty();
   }
 }

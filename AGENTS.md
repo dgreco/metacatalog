@@ -22,7 +22,7 @@ The reactor builds modules in this order (see root `pom.xml` `<modules>`):
 | Module | Purpose |
 | --- | --- |
 | `metacatalog-core` | Domain model (JPA entities), repositories, services, task engine, JSON utilities, DB migrations, Ontop mapping files, and the `bootstrap` startup extension point for modules declaring an immutable model. The heart of the system. |
-| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse, and authorizes / rejects them the same way over the second pair of traits (all four share `AbstractAggregateResourceProcedure`). Also holds the procedure abstraction (`EntityProcedure`, `AbstractEntityProcedure`, `ProcedureExecutor`, `DeferredTaskFactoryRegistrar`) and the reusable task/registrar base classes (`ProvisioningTask`, `ProvisioningTasks`) that task modules extend. Depends on core; assembled into the application. |
+| `metacatalog-functions` | Pluggable **procedures** that run over entities — the `provisioning` package provisions an aggregate's resources in dependency order and unprovisions them in reverse, and authorizes / rejects them the same way over the second pair of traits (all four are runs of the single `AggregateResourceProcedure`, one bean per operation). Also holds the procedure abstraction (`EntityProcedure`, `AbstractEntityProcedure`, `ProcedureExecutor`, `DeferredTaskFactoryRegistrar`) and the reusable task/registrar base classes (`ProvisioningTask`, `ProvisioningTasks`) that task modules extend. Depends on core; assembled into the application. |
 | `metacatalog-functions-provisioning-tasks` | The concrete provisioning **tasks** and their registrars — `StdoutProvisioningTask`(`s`) and `ScriptProvisioningTask`(`s`) plus `ProvisioningConfigProperties`, whose `tasks` map associates each task with the entity types it handles. The template for plugging in real task modules: depend on `metacatalog-functions`, subclass `ProvisioningTask`, register through a `ProvisioningTasks` registrar. Assembled into the application. |
 | `metacatalog-openapi` | The OpenAPI contract (`interface-specification.yaml`), code generated from it (spring server + client), and `MetacatalogApiImpl` (the delegate implementation wiring the generated controllers to core services and, for the provision/unprovision endpoints, to `ProcedureExecutor` in `metacatalog-functions`). |
 | `metacatalog-application` | The deployable Spring Boot app: `Application` main class, web/OpenAPI config, and profile-specific YAML (`application.yaml`, `application-docker.yaml`, `application-kubernetes.yaml`). |
@@ -331,14 +331,14 @@ abstraction — it lives here rather
 than in core because it is strictly tied to the provisioning features; `metacatalog-openapi`
 depends on this module for `ProcedureExecutor`, which backs the provision/unprovision and
 authorize/reject endpoints.
-`metacatalog-functions` also provides the concrete procedures: `ProvisioningProcedure` and
-`UnprovisioningProcedure`, which read an aggregate, build a dependency graph of
-`ProvisionableResource` entities from mapping relationships (`ResourceGraphBuilder`, shared by both
-so they cannot disagree), detect cycles, and schedule the work — plus `AuthorizationProcedure` and
-`RejectionProcedure`, the same thing over `AuthorizableResource` (see
-[Authorization](#authorization)). The authorization pair lives in the same `provisioning` package
-rather than one of its own: it shares the task type, the graph builder and the status recorder,
-and moving it out would mean widening all three to `public` for no gain.
+`metacatalog-functions` also provides the four concrete procedures — `ProvisioningProcedure`,
+`UnprovisioningProcedure`, `AuthorizationProcedure` and `RejectionProcedure` are the *names* four
+beans of the single `AggregateResourceProcedure` class answer to, declared by
+`AggregateResourceProcedures`, one per `ProvisioningTask.Operation`. The provisioning pair reads
+an aggregate, builds a dependency graph of
+`ProvisionableResource` entities from mapping relationships (`ResourceGraphBuilder`, shared by
+every run so no two can disagree), detects cycles, and schedules the work — the authorization pair
+does the same thing over `AuthorizableResource` (see [Authorization](#authorization)).
 
 **The two differ only in direction.** Provisioning makes a resource wait for what it is derived
 from; unprovisioning makes what it is derived from wait for *it*. An Athena table reading an S3
@@ -481,14 +481,17 @@ whose two resource types are handled by different tasks.
 #### Authorization
 
 Authorization is the same machinery over the second pair of traits, and the symmetry is deliberate:
-`AuthorizationProcedure` and `RejectionProcedure` act on a root carrying `Authorizable`, plan over
+the `AUTHORIZE` and `REJECT` runs act on a root carrying `Authorizable`, plan over
 the aggregate's `AuthorizableResource` members — leaves **and** intermediate nodes — and schedule
 one task per resource. The tasks are the same `ProvisioningTask`s, from the same factories
 registered per entity type name; they run `authorize()` / `reject()` instead of `provision()` /
 `unprovision()` and record into the authorization field pair.
 
-All four procedures are one class, `AbstractAggregateResourceProcedure`, and each supplies exactly
-one answer: which `ProvisioningTask.Operation` it runs. Everything else follows from it. The
+All four procedures are one class, `AggregateResourceProcedure` — four beans declared by
+`AggregateResourceProcedures`, each supplying exactly one answer: which
+`ProvisioningTask.Operation` it runs. Everything else follows from it, including the name the
+procedure is registered under (`Operation.procedureName()`), so a fifth direction is an enum
+constant and a bean method, not a new class. The
 operation names a `BuiltInCapability` (core, next to `BuiltInTraits`) that owns the trait pair and
 the status/result field pair, and carries the wiring direction itself — so a procedure *cannot*
 pair an operation with the wrong capability's traits. That combination used to be expressible and

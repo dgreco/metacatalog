@@ -19,22 +19,28 @@ import org.jgrapht.graph.DefaultEdge;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
- * The shape every procedure that walks an aggregate's resources shares: read the aggregate, select
- * the members carrying a resource trait, build their dependency graph, turn each into a task from
- * the factory registered for its entity type, wire the tasks in one direction or the other, and
- * schedule them — with the whole thing recorded on the root.
+ * The one procedure that walks an aggregate's resources: read the aggregate, select the members
+ * carrying a resource trait, build their dependency graph, turn each into a task from the factory
+ * registered for its entity type, wire the tasks in one direction or the other, and schedule them —
+ * with the whole thing recorded on the root.
  *
- * <p>Four procedures fill it in — {@link ProvisioningProcedure} and {@link
- * UnprovisioningProcedure}, {@link AuthorizationProcedure} and {@link RejectionProcedure} — and
- * each supplies exactly one answer: which {@link ProvisioningTask.Operation} it runs. Everything
- * else follows from it. The traits a run selects on come from the operation's {@link
- * it.davidgreco.metacatalog.entity.BuiltInCapability}, and so does the direction the tasks are
- * wired in, so a procedure cannot pair an operation with the wrong capability's traits.
+ * <p>Everything that distinguishes one run from another is the {@link ProvisioningTask.Operation}:
+ * the traits a run selects on come from the operation's {@link
+ * it.davidgreco.metacatalog.entity.BuiltInCapability}, and so do the direction the tasks are wired
+ * in, the status pair the outcome is recorded in and the {@linkplain #name() name} the procedure
+ * answers to — so a procedure cannot pair an operation with the wrong capability's traits. {@link
+ * AggregateResourceProcedures} declares one bean of this class per operation; a fifth direction is
+ * an enum constant and a bean method, not a new class.
  *
- * <p>They remain four classes rather than four beans of one class because {@code ProcedureExecutor}
- * resolves a procedure by {@code EntityProcedure.name()}, which defaults to the simple class name.
+ * <p><b>The direction is the part worth reading twice.</b> Building up ({@code PROVISION}, {@code
+ * AUTHORIZE}) makes a resource wait for what it is derived from; tearing down ({@code UNPROVISION},
+ * {@code REJECT}) makes what it is derived from wait for <em>it</em>. An Athena table reading an S3
+ * folder is created after the folder and destroyed before it, and by the same token access to it is
+ * granted after — and withdrawn before — access to the folder it reads, so nothing is ever left
+ * holding a grant on something it can no longer reach. {@code ProvisioningProcedureTests} and
+ * {@code AuthorizationProcedureTests} assert both orders.
  */
-public abstract class AbstractAggregateResourceProcedure extends AbstractEntityProcedure {
+public final class AggregateResourceProcedure extends AbstractEntityProcedure {
 
   private final ProvisioningTask.Operation operation;
   private final AggregateService aggregateService;
@@ -49,7 +55,7 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
    */
   private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
 
-  protected AbstractAggregateResourceProcedure(
+  AggregateResourceProcedure(
       ProvisioningTask.Operation operation,
       AggregateService aggregateService,
       ResourceGraphBuilder resourceGraphBuilder,
@@ -62,6 +68,17 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
     this.taskManager = taskManager;
     this.statusRecorder = statusRecorder;
     this.deferredRegistrars = deferredRegistrars;
+  }
+
+  /**
+   * The operation's own {@link ProvisioningTask.Operation#procedureName()} — {@code
+   * ProvisioningProcedure}, {@code AuthorizationProcedure}, … — kept from when each was a class of
+   * that name, since it is the registry key {@code ProcedureExecutor} resolves and the name in
+   * durable {@code procedure_run} rows.
+   */
+  @Override
+  public String name() {
+    return operation.procedureName();
   }
 
   /**
@@ -131,7 +148,7 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
    *
    * @throws ServiceError if a resource's factory produces something that cannot run this operation
    */
-  private HashMap<String, Task> createTasksForVertices(
+  private Map<String, Task> createTasksForVertices(
       Graph<Entity, DefaultEdge> resourceGraph,
       Map<String, List<AccessPolicy.EffectiveGrant>> accessGrants) {
     var tasks = new HashMap<String, Task>();
@@ -155,8 +172,7 @@ public abstract class AbstractAggregateResourceProcedure extends AbstractEntityP
   }
 
   /** Wires the tasks in the direction the operation asks for. */
-  private void wireDependencies(
-      Graph<Entity, DefaultEdge> resourceGraph, HashMap<String, Task> tasks) {
+  private void wireDependencies(Graph<Entity, DefaultEdge> resourceGraph, Map<String, Task> tasks) {
     tasks
         .values()
         .forEach(
