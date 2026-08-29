@@ -30,6 +30,7 @@ EntityTypes:
       properties: {}
     traits:
       - Provisionable
+      - Authorizable
       - WithName
 
   - name: OutputPortType
@@ -64,6 +65,7 @@ EntityTypes:
           type: string
     traits:
       - ProvisionableResource
+      - AuthorizableResource
 
   - name: AthenaTableType
     schema:
@@ -77,6 +79,7 @@ EntityTypes:
           type: string
     traits:
       - ProvisionableResource
+      - AuthorizableResource
 
 ---
 Mappings:

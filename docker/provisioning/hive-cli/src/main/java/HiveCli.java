@@ -27,16 +27,27 @@ import org.apache.thrift.transport.TSocket;
  * <pre>
  *   echo '{"database":"sales","table":"returns","location":"s3://...","columns":[...]}' \
  *     | java -jar hive-cli.jar create thrift://host:9083
- *   echo '{"database":"sales","table":"returns","grantee":"finance-reporting"}' \
+ *   echo '{"database":"sales","table":"returns","accessStatusKey":"access.status",
+ *          "accessProperties":{"access.granted-to":"finance-reporting"},
+ *          "accessRemovals":["access.granted-to"]}' \
  *     | java -jar hive-cli.jar authorize thrift://host:9083
  * </pre>
  *
  * <p>{@code create} / {@code drop} are the provisioning lifecycle; {@code authorize} / {@code
  * reject} are the authorization one, which is independent of it. The latter pair writes the
- * decision into the table's own parameters ({@code access.status}, {@code access.granted-to}), so
- * a Hive-speaking consumer reads it from the table it is already looking at rather than from a
- * side channel. Hive has no grant primitive a bare metastore can honour — authorization lives in
- * Ranger or a query engine — so a parameter is the honest thing for a metastore to record.
+ * decision into the table's own parameters, so a Hive-speaking consumer reads it from the table it
+ * is already looking at rather than from a side channel. Hive has no grant primitive a bare
+ * metastore can honour — authorization lives in Ranger or a query engine — so a parameter is the
+ * honest thing for a metastore to record.
+ *
+ * <p><b>This class decides nothing about what the decision says.</b> The parameter names, and the
+ * strings the aggregate root's grants are rendered into, arrive in the request; {@code authorize}
+ * sets exactly {@code accessProperties} and {@code reject} removes exactly {@code accessRemovals}.
+ * The Iceberg script writes the same names and the same strings as table <em>properties</em>, and
+ * the mixed demo only means anything while both catalogs answer the access question identically —
+ * a constant on this side could drift from the shell one on the other with nothing failing, leaving
+ * the two catalogs' consumers quietly disagreeing. Both are handed them from {@code
+ * access-decision.sh}.
  *
  * <p>All four are idempotent, because a provisioning function may be retried and the demo stack
  * restarts freely: creating what exists is a no-op, dropping what is missing is a no-op, and
@@ -168,9 +179,8 @@ public final class HiveCli {
               .formatted(database, table));
       return;
     }
-    var grantee = text(values, "grantee");
-    decide(client, values, database, table, existing, "AUTHORIZED", grantee);
-    System.out.println("granted " + grantee + " access to " + database + "." + table);
+    decide(client, values, database, table, existing, "AUTHORIZED", true);
+    System.out.println("recorded access decision on " + database + "." + table);
   }
 
   /** Withdraws that access. A table that does not exist has nothing to withdraw. */
@@ -182,22 +192,21 @@ public final class HiveCli {
       System.out.println("table " + database + "." + table + " does not exist; nothing to withdraw");
       return;
     }
-    decide(client, values, database, table, existing, "REJECTED", null);
+    decide(client, values, database, table, existing, "REJECTED", false);
     System.out.println("withdrew access to " + database + "." + table);
   }
 
   /**
-   * Records the decision in the table's parameters and writes the table back. A {@code null}
-   * grantee removes the name rather than writing one: on reject it no longer holds. The status is
-   * always set, never removed — REJECTED is an answer, and a table with no access parameter at all
-   * is one nobody has decided about.
+   * Records the decision in the table's parameters and writes the table back.
    *
-   * <p>The two parameter names come from the request rather than from constants here. The Iceberg
-   * script writes the same two names as table <em>properties</em>, and the mixed demo only means
-   * anything while both catalogs answer the access question identically — a Java constant on this
-   * side could drift from the shell one on the other with nothing failing, leaving the two
-   * catalogs' consumers quietly disagreeing. They are declared once, in {@code access-decision.sh},
-   * and handed to both sides.
+   * <p>Granting sets exactly the parameters the request carries; withdrawing removes exactly the
+   * ones it lists. Both lists come from the same place, so no key can be written by one direction
+   * and left behind by the other. The status is always set, never removed — REJECTED is an answer,
+   * and a table with no access parameter at all is one nobody has decided about.
+   *
+   * <p>An empty {@code accessProperties} is a real decision too: the run resolved a policy and
+   * nothing reached this table. The status still says AUTHORIZED and the values say nothing was
+   * granted, which is different from the table carrying no access parameters at all.
    */
   private static void decide(
       ThriftHiveMetastore.Client client,
@@ -206,16 +215,19 @@ public final class HiveCli {
       String table,
       Table existing,
       String status,
-      String grantee)
+      boolean granting)
       throws Exception {
     var statusKey = required(values, "accessStatusKey");
-    var granteeKey = required(values, "accessGrantedToKey");
     var parameters = parametersOf(existing);
     parameters.put(statusKey, status);
-    if (grantee == null) {
-      parameters.remove(granteeKey);
+    if (granting) {
+      var properties = values.get("accessProperties");
+      if (properties != null && properties.isObject())
+        properties.properties().forEach(e -> parameters.put(e.getKey(), e.getValue().asText()));
     } else {
-      parameters.put(granteeKey, grantee);
+      var removals = values.get("accessRemovals");
+      if (removals != null && removals.isArray())
+        removals.forEach(removal -> parameters.remove(removal.asText()));
     }
     alter(client, database, table, existing, parameters);
   }

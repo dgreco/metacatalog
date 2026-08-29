@@ -589,5 +589,61 @@ class MetacatalogApiTests {
 
       System.out.println(contents);
     }
+
+    assertAggregateAccess(api, dp1, op1);
+  }
+
+  /**
+   * The access endpoint reports both halves of the answer: what the root declares, and what each of
+   * its {@code AuthorizableResource}s is holding.
+   *
+   * <p>Asserted from inside the round-trip test rather than as one of its own, because this class
+   * resets the database once for the whole class: a second test loading the same model would die on
+   * the first name it already holds.
+   *
+   * <p>Nothing has been authorized here — this module registers no task factories — so every
+   * resource comes back with an empty grant list. That is the assertion worth making: the endpoint
+   * reports what is <em>in force</em>, and a policy that has never been applied is in force
+   * nowhere. Reporting the policy resolved against each resource instead would have shown two
+   * confident grants that nothing had ever acted on.
+   */
+  private void assertAggregateAccess(MetaCatalogManagerApi api, Entity dp1, Entity op1) {
+    var access = api.getAggregateAccess(dp1.getId());
+
+    Assertions.assertEquals(dp1.getId(), access.getAggregateId());
+    Assertions.assertEquals("DataProductType", access.getEntityTypeName());
+    Assertions.assertNull(access.getAuthorizationStatus(), "never authorized");
+    Assertions.assertEquals(
+        List.of("analysts", "dp1-loader"),
+        access.getPrincipals().stream().map(AccessPrincipal::getId).toList());
+    Assertions.assertEquals(
+        AccessPrincipal.TypeEnum.SERVICE, access.getPrincipals().get(1).getType());
+    Assertions.assertEquals(
+        List.of("READ", "WRITE"),
+        access.getPermissions().stream().map(AccessPermission::getName).toList());
+    Assertions.assertEquals(2, access.getGrants().size());
+    // The selector survives the round trip; without it the second grant would read as reaching
+    // everything, which is a different policy.
+    Assertions.assertEquals(List.of(), access.getGrants().getFirst().getEntityTypes());
+    Assertions.assertEquals(List.of("S3FolderType"), access.getGrants().get(1).getEntityTypes());
+
+    // One resource per output port, derived by the mapping engine, both AuthorizableResource and
+    // both listed with nothing in force.
+    Assertions.assertEquals(2, access.getResources().size());
+    for (var resource : access.getResources()) {
+      Assertions.assertEquals(List.of(), resource.getGrants());
+      Assertions.assertNull(resource.getAuthorizationStatus());
+    }
+
+    // An output port is a legitimate aggregate in its own right but carries no Authorizable, so it
+    // has no access question to answer — refused naming the trait, rather than answered with an
+    // empty policy that would read as "nobody has access".
+    var failure =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.getAggregateAccess(op1.getId()));
+    Assertions.assertEquals(400, failure.getStatusCode().value());
+    Assertions.assertTrue(
+        failure.getResponseBodyAsString().contains("Authorizable"),
+        failure.getResponseBodyAsString());
   }
 }

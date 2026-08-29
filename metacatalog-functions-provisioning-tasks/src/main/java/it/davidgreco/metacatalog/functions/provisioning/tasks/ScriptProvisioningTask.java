@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.functions.provisioning.tasks;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.functions.provisioning.ProvisioningTask;
+import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import java.io.IOException;
@@ -23,6 +24,15 @@ import java.util.concurrent.TimeUnit;
  * and vice versa: which operations reach it is decided by the traits its entity type carries, not
  * by the task. One that handles both should branch on the argument rather than assume.
  *
+ * <p>On an {@code authorize} run the script additionally finds the grants the aggregate root's
+ * policy resolved for this resource in the {@link #ACCESS_ENVIRONMENT_VARIABLE} environment
+ * variable, as the same JSON array that is recorded in {@code effectiveGrants}. It is passed in the
+ * environment rather than on standard input, which stays the entity's values for all four
+ * operations: a script that does not care about access keeps working unchanged, and one that does
+ * reads it with {@code jq} in one line. It is not an argument either — arguments are visible to
+ * every process on the host through {@code ps}, and who holds which permission is not something to
+ * publish there.
+ *
  * <p>A non-zero exit status fails the task (and with it the run), as does a script still running
  * after {@link #TIMEOUT_MINUTES} minutes — provisioning is synchronous, so a hanging script would
  * otherwise hang the whole procedure call.
@@ -31,6 +41,14 @@ public class ScriptProvisioningTask extends ProvisioningTask {
 
   /** How long the script may run before the task gives up and fails. */
   static final long TIMEOUT_MINUTES = 5;
+
+  /**
+   * The environment variable carrying the resolved grants, as the JSON array {@code
+   * effectiveGrants} holds. Always set on an operation that applies a policy — as {@code []} when
+   * no grant reached this resource, so a script can tell "granted to nobody" from a run that never
+   * resolved a policy at all, where the variable is absent.
+   */
+  public static final String ACCESS_ENVIRONMENT_VARIABLE = "METACATALOG_ACCESS";
 
   private final String scriptPath;
 
@@ -77,10 +95,15 @@ public class ScriptProvisioningTask extends ProvisioningTask {
     var entity = getEntity();
     var resource = entity.getEntityType().getName() + " id=" + entity.getId();
     try {
-      var process =
+      var processBuilder =
           new ProcessBuilder("bash", scriptPath, getOperation().command())
-              .redirectErrorStream(true)
-              .start();
+              .redirectErrorStream(true);
+      if (getOperation().appliesAccessPolicy()) {
+        processBuilder
+            .environment()
+            .put(ACCESS_ENVIRONMENT_VARIABLE, AccessPolicy.toJson(getAccessGrants()).toString());
+      }
+      var process = processBuilder.start();
       try (var stdin = process.getOutputStream()) {
         stdin.write(entity.getValues().toString().getBytes(StandardCharsets.UTF_8));
       }

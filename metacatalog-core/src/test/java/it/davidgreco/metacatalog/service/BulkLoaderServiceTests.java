@@ -92,6 +92,12 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
     var bulkDir = java.nio.file.Path.of("..", "docker", "bulk");
     // The same model also ships as the bulk1.yaml test fixture, so another test in this class may
     // have loaded it already — mirror the compose loader and only load it when it is missing.
+    //
+    // The two files must therefore stay byte-identical in what they declare. They drifted once,
+    // when the docker model gained Authorizable / AuthorizableResource and the fixture did not:
+    // the probe below found WithName, skipped the load, and this test went on validating the
+    // docker demo's aggregate against the *fixture's* DataProductType — silently, until that
+    // aggregate grew a field only the docker model's traits admit. Keep them in sync.
     var traitService = getApplicationContext().getBean(TraitService.class);
     boolean modelLoaded;
     try {

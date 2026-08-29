@@ -22,11 +22,16 @@
 #
 # The other two directions are the authorization lifecycle, which is independent of
 # provisioning: `authorize` stamps the access decision onto the table itself as
-# Iceberg table properties (`access.status`, `access.granted-to` from the port's
-# `grantee`), `reject` sets the status to REJECTED and removes the grantee. Both are
-# ordinary Iceberg commits, so the decision is visible to PyIceberg, Spark and Trino —
-# and, because the catalog caches each table's metadata on its IcebergTable entity,
-# in the metacatalog UI and over SPARQL too.
+# Iceberg table properties, `reject` sets the status to REJECTED and removes the value
+# properties. Both are ordinary Iceberg commits, so the decision is visible to
+# PyIceberg, Spark and Trino — and, because the catalog caches each table's metadata on
+# its IcebergTable entity, in the metacatalog UI and over SPARQL too.
+#
+# The decision comes from the *data product*, not from the port: the aggregate root
+# declares principals, permissions and grants, and ScriptProvisioningTask hands this
+# script the ones that apply to this table in METACATALOG_ACCESS. See
+# access-decision.sh for the property names and how the grants are rendered into
+# them — both catalogs use that one file, which is what keeps their answers identical.
 #
 # Authorizing a table that does not exist fails, naming it: a grant on nothing is not a
 # grant, and the aggregate has to be provisioned first. Rejecting one that does not
@@ -50,10 +55,10 @@ BASE="${CATALOG_URL}/v1/${PREFIX}"
 API="${METACATALOG_API_URL:-http://localhost:8080}/metacatalog/v1"
 API_AUTH="${METACATALOG_USER:-admin}:${METACATALOG_PASSWORD:-admin}"
 
-# One jq pass for all three: the script is exec'd once per output port, and an aggregate's ports
+# One jq pass for both: the script is exec'd once per output port, and an aggregate's ports
 # provision in parallel.
-IFS=$'\t' read -r NAMESPACE TABLE GRANTEE < <(
-  jq -r '[.namespace, .name, (.grantee // "")] | @tsv' <<<"${VALUES}")
+IFS=$'\t' read -r NAMESPACE TABLE < <(
+  jq -r '[.namespace, .name] | @tsv' <<<"${VALUES}")
 
 RESOURCE_LABEL="${NAMESPACE}.${TABLE}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,11 +66,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # documented there and are the same either side of the two catalogs.
 # shellcheck source=metacatalog-api.sh
 source "${HERE}/metacatalog-api.sh"
-# The two names the access decision is recorded under, shared with the Hive side so both catalogs
-# answer the question identically.
+# The names the access decision is recorded under and the rendering of its values, shared with the
+# Hive side so both catalogs answer the question identically.
 # shellcheck source=access-decision.sh
 source "${HERE}/access-decision.sh"
-GRANTEE="${GRANTEE:-${DEFAULT_GRANTEE}}"
 
 table_entity_id() {
   entity_id IcebergTable "\$ ? (@.name == \"${TABLE}\" && @.namespaceKey == \"${NAMESPACE}\")"
@@ -163,11 +167,14 @@ unprovision)
 
 authorize)
   table_exists || fail "table ${NAMESPACE}.${TABLE} does not exist; provision the data product before authorizing it"
-  commit_updates "$(jq -n --arg g "${GRANTEE}" \
-    --arg statusKey "${ACCESS_STATUS_KEY}" --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+  # One commit: the status plus whatever the root's policy resolved for this table, rendered by
+  # access-decision.sh so the Hive side writes the same strings.
+  commit_updates "$(jq -n \
+    --arg statusKey "${ACCESS_STATUS_KEY}" \
+    --argjson properties "$(access_properties)" \
     '[{action: "set-properties",
-       updates: {($statusKey): "AUTHORIZED", ($granteeKey): $g}}]')"
-  echo "granted ${GRANTEE} access to ${NAMESPACE}.${TABLE}"
+       updates: ($properties + {($statusKey): "AUTHORIZED"})}]')"
+  echo "granted access to ${NAMESPACE}.${TABLE}: $(access_summary)"
   ;;
 
 reject)
@@ -175,12 +182,14 @@ reject)
     echo "table ${NAMESPACE}.${TABLE} does not exist; nothing to withdraw"
   else
     # The status is set rather than removed: REJECTED is an answer, and a table with no access
-    # property at all is one nobody has decided about yet. The grantee goes, because it no longer
-    # holds.
+    # property at all is one nobody has decided about yet. The value properties go, because they no
+    # longer hold — and they are removed from the same list authorize writes, so neither direction
+    # can grow a key the other does not know about.
     commit_updates "$(jq -n \
-      --arg statusKey "${ACCESS_STATUS_KEY}" --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+      --arg statusKey "${ACCESS_STATUS_KEY}" \
+      --argjson removals "$(printf '%s\n' "${ACCESS_VALUE_KEYS[@]}" | jq -R . | jq -s .)" \
       '[{action: "set-properties", updates: {($statusKey): "REJECTED"}},
-        {action: "remove-properties", removals: [$granteeKey]}]')"
+        {action: "remove-properties", removals: $removals}]')"
     echo "withdrew access to ${NAMESPACE}.${TABLE}"
   fi
   ;;

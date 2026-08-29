@@ -1,14 +1,25 @@
 package it.davidgreco.metacatalog.openapi;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import it.davidgreco.metacatalog.entity.AccessControl;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.entity.TraitVersion;
+import it.davidgreco.metacatalog.openapi.model.AccessGrant;
+import it.davidgreco.metacatalog.openapi.model.AccessPermission;
+import it.davidgreco.metacatalog.openapi.model.AccessPrincipal;
 import it.davidgreco.metacatalog.openapi.model.Aggregate;
+import it.davidgreco.metacatalog.openapi.model.AggregateAccess;
+import it.davidgreco.metacatalog.openapi.model.EffectiveGrant;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
+import it.davidgreco.metacatalog.openapi.model.ResourceAccess;
+import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.VersionResult;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -196,4 +207,104 @@ public class DtoMapper {
           };
         }
       };
+
+  /**
+   * Assembles an aggregate's access view: the policy its root declares, and the grants each of its
+   * resources is actually holding.
+   *
+   * <p>The two halves are read from different places on purpose. The policy comes from the root's
+   * declaration — intent, editable at any moment. The per-resource grants come from each resource's
+   * recorded {@code effectiveGrants} — fact, written by a run. They are not recomputed here: doing
+   * so would report what the <em>next</em> run would do while presenting it as what is in force,
+   * and would make a read endpoint fail on a policy that is mid-edit. A resource whose grants no
+   * longer match the policy is one that has not been authorized since the policy changed, and being
+   * able to see that is the point.
+   *
+   * @param root the aggregate root
+   * @param policy the policy parsed from the root
+   * @param resources every {@code AuthorizableResource} the aggregate contains, in tree order
+   * @return the DTO
+   */
+  public AggregateAccess aggregateAccessToDto(
+      Entity root, AccessPolicy policy, List<Entity> resources) {
+    return new AggregateAccess()
+        .aggregateId(root.getId())
+        .entityTypeName(root.getEntityType().getName())
+        .authorizationStatus(text(root.getValues(), "authorizationStatus"))
+        .principals(policy.principals().stream().map(DtoMapper::principalToDto).toList())
+        .permissions(
+            policy.permissions().stream()
+                .map(
+                    permission ->
+                        new AccessPermission()
+                            .name(permission.name())
+                            .description(permission.description().orElse(null)))
+                .toList())
+        .grants(policy.grants().stream().map(DtoMapper::grantToDto).toList())
+        .resources(resources.stream().map(DtoMapper::resourceAccessToDto).toList());
+  }
+
+  private static AccessPrincipal principalToDto(AccessPolicy.Principal principal) {
+    return new AccessPrincipal()
+        .id(principal.id())
+        .type(AccessPrincipal.TypeEnum.fromValue(principal.type().name()))
+        .description(principal.description().orElse(null));
+  }
+
+  private static AccessGrant grantToDto(AccessPolicy.Grant grant) {
+    var dto = new AccessGrant().principals(grant.principals()).permissions(grant.permissions());
+    if (!grant.resources().entityTypes().isEmpty())
+      dto.entityTypes(grant.resources().entityTypes());
+    if (!grant.resources().values().isEmpty()) {
+      var values = new LinkedHashMap<String, Object>();
+      grant.resources().values().forEach((key, value) -> values.put(key, unwrap(value)));
+      dto.values(values);
+    }
+    return dto;
+  }
+
+  private static ResourceAccess resourceAccessToDto(Entity resource) {
+    var recorded =
+        resource.getValues() == null
+            ? null
+            : resource.getValues().get(AccessControl.EFFECTIVE_GRANTS);
+    var grants = new ArrayList<EffectiveGrant>();
+    if (recorded != null && recorded.isArray()) {
+      recorded.forEach(
+          node -> {
+            var principal = node.get(AccessControl.EFFECTIVE_GRANT_PRINCIPAL);
+            var permissions = new ArrayList<String>();
+            var declared = node.get(AccessControl.PERMISSIONS);
+            if (declared != null) declared.forEach(p -> permissions.add(p.asText()));
+            grants.add(
+                new EffectiveGrant()
+                    .principal(
+                        new AccessPrincipal()
+                            .id(text(principal, AccessControl.PRINCIPAL_ID))
+                            .type(
+                                AccessPrincipal.TypeEnum.fromValue(
+                                    text(principal, AccessControl.PRINCIPAL_TYPE)))
+                            .description(text(principal, AccessControl.DESCRIPTION)))
+                    .permissions(permissions));
+          });
+    }
+    return new ResourceAccess()
+        .entityId(resource.getId())
+        .entityTypeName(resource.getEntityType().getName())
+        .authorizationStatus(text(resource.getValues(), "authorizationStatus"))
+        .grants(grants);
+  }
+
+  /** The JSON scalar as the plain Java value the generated {@code values} map holds. */
+  private static Object unwrap(JsonNode node) {
+    if (node.isNumber()) return node.numberValue();
+    if (node.isBoolean()) return node.booleanValue();
+    return node.asText();
+  }
+
+  private static String text(JsonNode node, String field) {
+    if (node == null) return null;
+    var value = node.get(field);
+    return value == null || value.isNull() ? null : value.asText();
+  }
 }

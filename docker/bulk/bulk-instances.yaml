@@ -2,6 +2,31 @@ entityType: "DataProductType"
 values:
   name: "dp1"
 
+  # The access policy. It lives on the root because that is where the question "who can read this
+  # data product?" has one answer; the two output ports below declare nothing about access, and an
+  # authorization run records on each of them the grants that reached it.
+  #
+  # The second grant is narrowed to one resource type, so the two resources come out of a run
+  # holding different things — which is what makes the `[authorizing] grants …` lines in the log
+  # worth reading rather than the same line twice.
+  principals:
+    - id: "analysts"
+      type: "GROUP"
+      description: "Reads the published data"
+    - id: "dp1-loader"
+      type: "SERVICE"
+      description: "The pipeline that writes it"
+  permissions:
+    - name: "READ"
+    - name: "WRITE"
+  grants:
+    - principals: ["analysts"]
+      permissions: ["READ"]
+    - principals: ["dp1-loader"]
+      permissions: ["READ", "WRITE"]
+      resources:
+        entityTypes: ["S3FolderType"]
+
 parts:
 
 - ref: "op1"

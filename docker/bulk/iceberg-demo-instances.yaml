@@ -3,18 +3,68 @@
 # creates the three tables in the Iceberg REST catalog under the sales_analytics
 # namespace; unprovisioning drops them again.
 #
-# The same aggregate is also Authorizable: POST /metacatalog/v1/aggregate/{id}/authorize stamps
-# each port's `grantee` onto the real table it produced — Iceberg table properties, Hive table
-# parameters — and .../reject withdraws it. That is a second lifecycle, not a second name for the
-# first: a port can be provisioned and not granted, and each records its own status. Authorizing
-# before provisioning fails naming the table that does not exist yet, which is the point.
+# The same aggregate is also Authorizable: POST /metacatalog/v1/aggregate/{id}/authorize resolves
+# the policy below into the grants that apply to each port and stamps them onto the real table it
+# produced — Iceberg table properties, Hive table parameters, the same names either side — and
+# .../reject withdraws them. That is a second lifecycle, not a second name for the first: a port can
+# be provisioned and not granted, and each records its own status. Authorizing before provisioning
+# fails naming the table that does not exist yet, which is the point.
 #
-# The grantees differ per port on purpose: they are what a real data product's access policy looks
-# like, and they make the stamped properties tell you which port you are looking at.
+# The policy lives here, on the root, and nowhere else. The ports carry no audience of their own:
+# asking "who can read this data product?" has one place to look, and four ports cannot drift into
+# four different answers to it. Which port a grant reaches is said by the grant, through an optional
+# selector — which is what lets the finance grant name the Hive port without the Hive port having to
+# know it was named.
 entityType: "IcebergDataProductType"
 values:
   name: "sales_analytics"
   description: "Sales analytics data product exposing its datasets as Iceberg tables"
+
+  # The subjects this data product recognises. Ids as whatever identity provider is behind the
+  # deployment knows them; this demo has none, which is exactly why they are plain references and
+  # not entities in the catalog.
+  principals:
+    - id: "sales-analysts"
+      type: "GROUP"
+      description: "BI team building sales dashboards"
+    - id: "crm-analysts"
+      type: "GROUP"
+      description: "Customer-facing analysts"
+    - id: "finance-reporting"
+      type: "GROUP"
+      description: "Finance, for refund reporting"
+    - id: "sales-etl"
+      type: "SERVICE"
+      description: "The pipeline that loads these tables"
+
+  # What this product can grant. Abstract on purpose: the same two names have to mean the same thing
+  # to an Iceberg consumer and a Hive one, and neither catalog's native privilege vocabulary would.
+  # Turning READ into whatever a given system understands is the provisioning script's job.
+  permissions:
+    - name: "READ"
+      description: "Query the published data"
+    - name: "WRITE"
+      description: "Append to it"
+
+  # Four grants, none of which repeats itself on a port:
+  #  - the BI team reads everything;
+  #  - CRM analysts read only the customers table, selected by value;
+  #  - finance reads only the Hive port, selected by entity type;
+  #  - the loading pipeline writes everything, and reads it back.
+  grants:
+    - principals: ["sales-analysts"]
+      permissions: ["READ"]
+    - principals: ["crm-analysts"]
+      permissions: ["READ"]
+      resources:
+        values:
+          name: "customers"
+    - principals: ["finance-reporting"]
+      permissions: ["READ"]
+      resources:
+        entityTypes: ["HiveTableOutputPortType"]
+    - principals: ["sales-etl"]
+      permissions: ["READ", "WRITE"]
 
 parts:
 
@@ -28,7 +78,6 @@ parts:
       - { name: "name", type: "string", required: true }
       - { name: "email", type: "string" }
       - { name: "created_at", type: "timestamp" }
-    grantee: "crm-analysts"
 
 - ref: "orders"
   entityType: "IcebergTableOutputPortType"
@@ -40,7 +89,6 @@ parts:
       - { name: "customer_id", type: "long", required: true }
       - { name: "total", type: "double" }
       - { name: "ordered_at", type: "timestamp" }
-    grantee: "sales-analysts"
 
 - ref: "order_items"
   entityType: "IcebergTableOutputPortType"
@@ -52,7 +100,6 @@ parts:
       - { name: "sku", type: "string", required: true }
       - { name: "quantity", type: "int" }
       - { name: "price", type: "double" }
-    grantee: "sales-analysts"
 
 # The fourth port is not an Iceberg table. It is an ordinary Parquet dataset described in the Hive
 # Metastore, so a consumer that only speaks Hive can read it — the same data product publishing
@@ -72,4 +119,3 @@ parts:
       - { name: "reason", type: "string" }
       - { name: "refunded", type: "decimal(10,2)" }
       - { name: "returned_at", type: "timestamp" }
-    grantee: "finance-reporting"

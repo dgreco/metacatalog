@@ -8,10 +8,13 @@
 # ports of the same data product share it, and the metastore refuses to drop a non-empty one.
 #
 # `authorize` and `reject` are the second, independent lifecycle: they stamp the access decision
-# into the table's own parameters (`access.status`, `access.granted-to` from the port's `grantee`),
-# the same two names the Iceberg script writes as table properties, so both catalogs answer the
-# question the same way in their own vocabulary. A Hive-speaking consumer reads it off the table it
-# is already looking at.
+# into the table's own parameters, under the same names — and rendered into the same strings — the
+# Iceberg script writes as table properties, so both catalogs answer the question the same way in
+# their own vocabulary. A Hive-speaking consumer reads it off the table it is already looking at.
+#
+# The decision comes from the data product's root, which declares principals, permissions and
+# grants; ScriptProvisioningTask hands this script the ones resolved for this table in
+# METACATALOG_ACCESS. See access-decision.sh.
 #
 # All four directions are idempotent, because a provisioning procedure may retry and the demo stack
 # restarts freely.
@@ -87,16 +90,20 @@ unlink_port_from_table() {
 # The CLI takes the port definition as-is; it reads `database`, `name` -> table, `location`,
 # `columns` and the optional `description`.
 #
-# `grantee` is resolved here rather than in the CLI, and the two access parameter names are handed
-# to it rather than compiled into it: they are shared with the Iceberg script (see
-# access-decision.sh), and a Java constant on this side could drift from the shell one on the other
-# without anything failing — the two catalogs would just quietly stop agreeing.
-REQUEST="$(jq --arg grantee "$(grantee_of "${VALUES}")" \
-              --arg statusKey "${ACCESS_STATUS_KEY}" \
-              --arg granteeKey "${ACCESS_GRANTED_TO_KEY}" \
+# The access decision is resolved *here*, not in the CLI: the parameter names and the rendering of
+# the grants into them are shared with the Iceberg script (see access-decision.sh), and a Java
+# constant on this side could drift from the shell one on the other without anything failing — the
+# two catalogs would just quietly stop agreeing, which is the one thing the mixed demo exists to
+# demonstrate cannot happen. The CLI is handed the finished parameters to set and the exact list to
+# remove, and decides nothing about either.
+REQUEST="$(jq --arg statusKey "${ACCESS_STATUS_KEY}" \
+              --argjson accessProperties "$(access_properties)" \
+              --argjson accessRemovals "$(printf '%s\n' "${ACCESS_VALUE_KEYS[@]}" | jq -R . | jq -s .)" \
            '{database: .database, table: .name, location: .location,
-             description: .description, columns: .columns, grantee: $grantee,
-             accessStatusKey: $statusKey, accessGrantedToKey: $granteeKey}' <<<"${VALUES}")"
+             description: .description, columns: .columns,
+             accessStatusKey: $statusKey,
+             accessProperties: $accessProperties,
+             accessRemovals: $accessRemovals}' <<<"${VALUES}")"
 
 case "${OPERATION}" in
 provision)
@@ -112,6 +119,7 @@ authorize)
   # No link work here: authorization does not create or destroy the table, it only records a
   # decision about the one provisioning already made.
   java -jar "${CLI}" authorize "${METASTORE_URI}" <<<"${REQUEST}"
+  echo "granted access to ${RESOURCE_LABEL}: $(access_summary)"
   ;;
 reject)
   java -jar "${CLI}" reject "${METASTORE_URI}" <<<"${REQUEST}"

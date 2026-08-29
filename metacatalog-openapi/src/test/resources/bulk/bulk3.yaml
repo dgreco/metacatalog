@@ -1,6 +1,24 @@
 entityType: "DataProductType"
 values:
   name: "dp1"
+  # The access policy GET /aggregate/{id}/access reports back. dp2 below deliberately declares
+  # none, so the endpoint is exercised both ways.
+  principals:
+    - id: "analysts"
+      type: "GROUP"
+      description: "Reads the published data"
+    - id: "dp1-loader"
+      type: "SERVICE"
+  permissions:
+    - name: "READ"
+    - name: "WRITE"
+  grants:
+    - principals: ["analysts"]
+      permissions: ["READ"]
+    - principals: ["dp1-loader"]
+      permissions: ["READ", "WRITE"]
+      resources:
+        entityTypes: ["S3FolderType"]
 
 parts:
 

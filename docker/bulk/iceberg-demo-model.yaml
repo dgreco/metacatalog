@@ -20,8 +20,12 @@
 # and they record into different fields, so neither overwrites the other's answer.
 # Authorizing runs the same `script` task in the `authorize` direction, and the
 # script stamps the access decision onto the *real* table: Iceberg table
-# properties, Hive table parameters. A port's optional `grantee` says who the
-# grant is for.
+# properties, Hive table parameters.
+#
+# Note that no port type declares anything about access. The Authorizable trait puts
+# the principals, the permission vocabulary and the grants on the *root*, and a run
+# resolves them per port and records the answer in each port's `effectiveGrants` — so
+# the port schemas below describe only what a port is, never who may read it.
 #
 # Note the ports mix AuthorizableResource in at the entity-type level rather than
 # through their port trait: a trait has single inheritance, and
@@ -108,13 +112,6 @@ EntityTypes:
                 type: string
               required:
                 type: boolean
-        # Who the port's data is granted to. Read by the provisioning script when the
-        # authorization procedure runs, and stamped onto the real table as
-        # `access.granted-to`. Optional: a port with no grantee is granted to
-        # `everyone`, which is the honest default for a demo with no identity provider
-        # behind it.
-        grantee:
-          type: string
     traits:
       - IcebergTableOutputPort
       - AuthorizableResource
@@ -160,10 +157,6 @@ EntityTypes:
                 type: string
               comment:
                 type: string
-        # As on the Iceberg port; stamped onto the Hive table as the `access.granted-to`
-        # table parameter.
-        grantee:
-          type: string
     traits:
       - HiveTableOutputPort
       - AuthorizableResource

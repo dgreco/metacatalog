@@ -3,9 +3,11 @@ package it.davidgreco.metacatalog.functions.provisioning;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.Entity;
+import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.EntityService;
 import it.davidgreco.metacatalog.service.ServiceError;
 import it.davidgreco.metacatalog.service.Task;
+import java.util.List;
 import java.util.Locale;
 import lombok.Getter;
 import lombok.Setter;
@@ -131,6 +133,20 @@ public abstract class ProvisioningTask extends Task {
     boolean dependentsFirst() {
       return dependentsFirst;
     }
+
+    /**
+     * Whether a run of this operation resolves the root's {@link
+     * it.davidgreco.metacatalog.service.AccessPolicy} and hands each task the grants that apply to
+     * its resource. Only {@code AUTHORIZE} does.
+     *
+     * <p>Tearing down deliberately does not. {@code REJECT} means "no access to this aggregate" and
+     * needs no list to say it, which is what keeps it working as an emergency stop after the policy
+     * has been emptied — or when it is malformed enough that resolving it would fail. Provisioning
+     * has no policy to read in the first place.
+     */
+    public boolean appliesAccessPolicy() {
+      return capability.grantsField().isPresent() && !dependentsFirst;
+    }
   }
 
   /** Service for updating entity values after provisioning. */
@@ -141,6 +157,22 @@ public abstract class ProvisioningTask extends Task {
    * {@link ProvisioningProcedure} needs no setting up.
    */
   @Setter private Operation operation = Operation.PROVISION;
+
+  /**
+   * The grants the root's policy resolves for this task's resource, set by the procedure alongside
+   * {@link #setOperation} and empty for every operation that {@linkplain
+   * Operation#appliesAccessPolicy() applies none}.
+   *
+   * <p>A task is handed this rather than fetching it: the policy lives on the aggregate root, the
+   * procedure has already read the whole aggregate to build the plan, and a task walking {@code
+   * IS_PART_OF} upwards for itself would re-read and re-parse the same document once per resource,
+   * on whichever thread the executor happened to pick.
+   *
+   * <p>Subclasses translate these abstract permissions into whatever the system they drive actually
+   * understands. One that is handed a permission it cannot translate must fail the resource naming
+   * it — quietly ignoring it is the version of this bug that an auditor finds.
+   */
+  @Setter private List<AccessPolicy.EffectiveGrant> accessGrants = List.of();
 
   /**
    * Creates a new provisioning task for the given entity.
@@ -192,6 +224,22 @@ public abstract class ProvisioningTask extends Task {
     return null;
   }
 
+  /**
+   * Records the outcome, and for a capability that grants anything, what this run left holding
+   * here.
+   *
+   * <p>The grants are written from {@link #getAccessGrants()} on success and cleared to an empty
+   * array on failure. Clearing rather than leaving the previous run's answer in place is the safe
+   * reading of a failure: a query asking who may reach this resource would otherwise find grants
+   * from a run that no longer describes reality, sitting beside a status field it never looked at.
+   * An empty list next to {@code FAILED} says the catalog is claiming nothing, which is true.
+   *
+   * <p>The field is written only when the capability {@linkplain BuiltInCapability#grantsField()
+   * has one}. Writing {@code effectiveGrants} onto a resource that carries only {@code
+   * ProvisionableResource} would be refused by validation — a derived schema carries {@code
+   * additionalProperties: false} — and would fail a provisioning run for a field it has no business
+   * setting.
+   */
   private void writeStatus(String status, String result) {
     if (!(getEntity().getValues() instanceof ObjectNode values)) {
       throw new ServiceError(
@@ -203,6 +251,14 @@ public abstract class ProvisioningTask extends Task {
     }
     values.put(operation.statusField(), status);
     values.put(operation.resultField(), result);
+    operation
+        .capability()
+        .grantsField()
+        .ifPresent(
+            field ->
+                values.set(
+                    field,
+                    AccessPolicy.toJson(STATUS_FAILED.equals(status) ? List.of() : accessGrants)));
     getEntityService().updateValues(getEntity().getId(), values.toPrettyString());
   }
 
