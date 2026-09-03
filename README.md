@@ -22,6 +22,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Iceberg REST Catalog**: an independent application implementing the standard Apache Iceberg REST catalog API over the metacatalog — Spark / Trino / PyIceberg can use it as their table catalog, and every namespace, table and schema version becomes a first-class, linkable catalog entity (see [Iceberg REST Catalog](#iceberg-rest-catalog))
+- **Hive Metastore**: an independent application implementing the Apache Hive Metastore Thrift protocol over the metacatalog — Hive / Spark / Trino can use it as their metastore, and every database, table and partition becomes a first-class, linkable catalog entity (see [Hive Metastore](#hive-metastore))
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
 - **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, instance search by type and JSONPath, and provision / unprovision / authorize / reject actions with a site-wide progress popup
 
@@ -238,9 +239,12 @@ metacatalog/
 ├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
 ├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
 ├── metacatalog-application/    # Spring Boot application (aggregates all modules)
-└── metacatalog-iceberg-catalog/  # Independent app: Apache Iceberg REST catalog over the
+├── metacatalog-iceberg-catalog/  # Independent app: Apache Iceberg REST catalog over the
                                 #   metacatalog (own port/image; + pyiceberg-test, a
                                 #   uv-managed Python smoke-test project)
+└── metacatalog-hive-metastore/  # Independent app: Apache Hive Metastore Thrift server
+                                #   over the metacatalog (own port/image; + hive-test, a
+                                #   Maven smoke-test project outside the reactor)
 ```
 
 The UI module is a library that is served by `metacatalog-application` on the same
@@ -496,6 +500,37 @@ make run-iceberg                                  # if the stack is not already 
 cd metacatalog-iceberg-catalog/pyiceberg-test
 uv run pytest
 ```
+
+## Hive Metastore
+
+`metacatalog-hive-metastore` is a **third, independent deployable application** (own port,
+own Docker image) that implements the standard [Apache Hive Metastore Thrift protocol](https://hive.apache.org/)
+over the core service layer — Hive, Spark, Trino or any Hive-aware client can use the
+metacatalog as its metastore, and every database, table and partition becomes a first-class,
+linkable catalog entity.
+
+Run it on top of the base stack:
+
+```bash
+make up-hive-d        # base stack + the Hive Metastore Thrift server on :9083
+make down-hive-d      # stop the Hive stack (ARGS=-v drops the DB and warehouse volumes)
+make hive-cli         # run a small shaded Thrift client built out of the reactor
+```
+
+For a full end-to-end demo of the authorization flow through both catalogs, see
+`make run-hive-demo` (base + Iceberg + Hive stacks) in [Authorization](#authorization).
+
+### Endpoints
+
+`metacatalog-hive-metastore` exposes the standard Hive Metastore Thrift API on port 9083
+(`thrift://localhost:9083`). It does **not** expose a REST layer — the metastore protocol
+is Thrift-only.
+
+### Testing
+
+`metacatalog-hive-metastore/hive-test` is a Maven project **outside the reactor** that drives
+a *running* stack with the real `HiveMetaStoreClient` on JDK 21, in a container, exactly as
+`pyiceberg-test` does for the Iceberg catalog.
 
 ## API Documentation
 
