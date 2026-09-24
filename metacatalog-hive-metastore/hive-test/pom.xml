@@ -5,8 +5,8 @@
   It exists to answer the one question the in-build tests cannot: does the metastore satisfy the
   client real consumers actually use? Spark, Trino, Flink and Hive all talk to a metastore through
   HiveMetaStoreClient, which calls Subject.getSubject() — removed in JDK 24 and impossible to
-  re-enable on JDK 26, where -Djava.security.manager=allow is rejected at VM startup. The main
-  build runs on 26, so this cannot live there. It runs on 21, in a container, against a running
+  re-enable on JDK 24+, where -Djava.security.manager=allow is rejected at VM startup. The main
+  build runs on 25, so this cannot live there. It runs on 21, in a container, against a running
   stack, exactly as pyiceberg-test does for the Iceberg catalog.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

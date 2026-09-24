@@ -31,7 +31,7 @@ import org.junit.jupiter.api.TestMethodOrder;
  * Flink and Hive all use.
  *
  * <p>This is the check the Maven build cannot make. {@code HiveMetaStoreClient} calls {@code
- * Subject.getSubject()}, removed in JDK 24 and impossible to re-enable on JDK 26, so the in-build
+ * Subject.getSubject()}, removed in JDK 24 and impossible to re-enable on JDK 24+, so the in-build
  * end-to-end test has to use Thrift's generated client instead. That proves the wire protocol; it
  * does not prove the wrapper is satisfied, and the wrapper does considerably more — it negotiates
  * configuration on connect, wraps calls in retries, and reaches for operations a hand-written

@@ -22,8 +22,8 @@
 # The metastore speaks Thrift, not HTTP, so this cannot be curl. It shells out to hive-cli.jar,
 # a small shaded Thrift client mounted into this container by docker-compose.hive-demo.yml. The
 # jar uses Thrift's generated client rather than HiveMetaStoreClient, which is what lets it run on
-# this image's JDK 26 at all — the wrapper calls Subject.getSubject(), removed in JDK 24, and
-# -Djava.security.manager=allow is rejected at VM startup on 26.
+# this image's JDK 25 at all — the wrapper calls Subject.getSubject(), removed in JDK 24, and
+# -Djava.security.manager=allow is rejected at VM startup on 24+.
 #
 # No Parquet files are written. This is an external table describing data a pipeline produces,
 # which is how Hive external tables are normally used, and it is what makes the port readable by a

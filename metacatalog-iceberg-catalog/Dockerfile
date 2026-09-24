@@ -5,12 +5,12 @@
 # (spring.context.exit=onRefresh returns before the ApplicationRunners); the JVM
 # writes app.aot on the way out. A cache the runtime JVM deems stale is ignored
 # with a warning, never an error (AOTMode=auto). See the root Dockerfile.
-FROM eclipse-temurin:26-jre-alpine AS aot
+FROM eclipse-temurin:25-jre-alpine AS aot
 WORKDIR /app
 COPY target/*.jar /tmp/app.jar
 RUN java -Djarmode=tools -jar /tmp/app.jar extract --destination /app
 # AOTClassLinking off: with it on, the production JVM dies loading aot-linked classes
-# (Temurin 26, alpine and glibc alike); see the root Dockerfile.
+# (Temurin 25, alpine and glibc alike); see the root Dockerfile.
 RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
     java -XX:AOTCacheOutput=app.aot \
     -Dspring.context.exit=onRefresh \
@@ -20,7 +20,7 @@ RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
     -Dapplication.config.automaticEntitiesMapping=false \
     -jar app.jar
 
-FROM eclipse-temurin:26-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 RUN addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app

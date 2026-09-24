@@ -28,7 +28,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ## Technology Stack
 
-- **Java 26**
+- **Java 25**
 - **Spring Boot 4.1.0**
 - **PostgreSQL** (JDBC driver 42.7.13, server 18+)
 - **Maven 3.9.9+**
@@ -36,7 +36,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 ## Prerequisites
 
-- Java 26
+- Java 25
 - Maven 3.9.9 or higher
 - PostgreSQL 18+
 - Docker (for testing with Testcontainers)

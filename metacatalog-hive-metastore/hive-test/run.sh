@@ -2,9 +2,9 @@
 # Runs the Hive metastore client smoke test against a running stack.
 #
 # In a JDK 21 container, on the compose network, because HiveMetaStoreClient cannot run on the
-# project's JDK 26 at all: it calls Subject.getSubject(), removed in JDK 24, and the escape hatch
-# -Djava.security.manager=allow is rejected at VM startup on 26. That is a client-side limit — the
-# server is fine on 26 — but it is why this test lives outside the Maven build.
+# project's JDK 25 at all: it calls Subject.getSubject(), removed in JDK 24, and the escape hatch
+# -Djava.security.manager=allow is rejected at VM startup on 24+. That is a client-side limit — the
+# server is fine on 25 — but it is why this test lives outside the Maven build.
 #
 #   make up-hive-d              # start the stack first
 #   ./run.sh

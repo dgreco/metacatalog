@@ -9,8 +9,8 @@
   provisioning scripts.
 
   It uses Thrift's *generated* ThriftHiveMetastore.Client, not HiveMetaStoreClient. That is what
-  makes it runnable at all on the application image's JDK 26: the wrapper calls Subject.getSubject(),
-  removed in JDK 24, and -Djava.security.manager=allow is rejected at VM startup on 26. The
+  makes it runnable at all on the application image's JDK 25: the wrapper calls Subject.getSubject(),
+  removed in JDK 24, and -Djava.security.manager=allow is rejected at VM startup on 24+. The
   generated client has no such dependency.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

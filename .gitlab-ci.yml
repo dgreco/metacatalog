@@ -15,7 +15,7 @@ stages:
 # Build, test, and push Docker image
 build:
   stage: build
-  image: maven:3-eclipse-temurin-26
+  image: maven:3-eclipse-temurin-25
   services:
     - docker:28-dind
   cache:

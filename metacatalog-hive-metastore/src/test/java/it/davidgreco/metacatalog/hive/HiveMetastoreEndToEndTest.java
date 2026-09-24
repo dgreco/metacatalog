@@ -44,9 +44,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * HiveMetaStoreClient}. That is not a shortcut: {@code HiveMetaStoreClient} calls {@code
  * Subject.getSubject()}, which throws {@code UnsupportedOperationException} on JDK 24 and later,
  * and the usual escape hatch {@code -Djava.security.manager=allow} is <em>rejected at VM
- * startup</em> on JDK 26. It cannot run in this build at all. That is a client-side limit and does
- * not affect real consumers, which run their own JVMs — but it does mean the wrapper's behaviour
- * has to be proven against a Trino or Spark container outside the Maven build rather than here.
+ * startup</em> on JDK 24 and later. It cannot run in this build at all. That is a client-side limit
+ * and does not affect real consumers, which run their own JVMs — but it does mean the wrapper's
+ * behaviour has to be proven against a Trino or Spark container outside the Maven build rather than
+ * here.
  *
  * <p>Every assertion checks both sides: what the protocol returns, and what the catalog graph holds
  * behind it.

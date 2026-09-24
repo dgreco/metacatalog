@@ -16,7 +16,7 @@
 #   * Requires BuildKit (default on Docker 23.0+ / buildx).
 
 # --- Build stage: compile the reactor and package the application jar ---
-FROM maven:3-eclipse-temurin-26 AS build
+FROM maven:3-eclipse-temurin-25 AS build
 
 # Which deployable module this image runs: metacatalog-application (default) or
 # metacatalog-iceberg-catalog. docker-compose.yml passes it per service.
@@ -58,7 +58,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 # cache is only accepted by the exact JVM build and classpath it was trained with.
 # The jar is extracted first (jarmode=tools) because the cache cannot map classes out
 # of the nested-jar fat layout; the runtime stage inherits the extracted layout too.
-FROM eclipse-temurin:26-jre-alpine AS aot
+FROM eclipse-temurin:25-jre-alpine AS aot
 WORKDIR /app
 COPY --from=build /workspace/app.jar /tmp/app.jar
 RUN java -Djarmode=tools -jar /tmp/app.jar extract --destination /app
@@ -70,7 +70,7 @@ RUN java -Djarmode=tools -jar /tmp/app.jar extract --destination /app
 # and a cache the JVM deems stale is ignored with a warning, never an error (AOTMode=auto).
 # AOTClassLinking is disabled in the assembly phase: with it on, the production JVM dies at
 # startup ("Unexpected exception when loading aot-linked classes" — an InternalError from
-# AppClassLoader.<clinit>) on both the alpine and glibc Temurin 26 builds. Without it the
+# AppClassLoader.<clinit>) on both the alpine and glibc Temurin 25 builds. Without it the
 # cache still carries the class metadata (CDS) layer, worth ~30% of startup; re-enable when
 # a JDK update fixes the crash.
 RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
@@ -84,7 +84,7 @@ RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
     -jar app.jar
 
 # --- Runtime stage: slim JRE running the extracted jar as a non-root user ---
-FROM eclipse-temurin:26-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 # bash + curl + jq for the `script` provisioning task (ScriptProvisioningTask runs
 # `bash <path>`; the Iceberg demo script drives the REST catalog with curl/jq).
 RUN apk add --no-cache bash curl jq \

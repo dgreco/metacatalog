@@ -13,7 +13,7 @@ Meta Catalog is a metadata management system: entities, entity types, traits, re
 mappings and aggregates, with a REST API, a server-rendered UI, a SPARQL endpoint, an Iceberg REST
 catalog and a Hive Metastore over the same model.
 
-Java 26, Spring Boot 4.1.0, PostgreSQL 18+, Maven 3.9.9+. A JDK 26+ builds it.
+Java 25, Spring Boot 4.1.0, PostgreSQL 18+, Maven 3.9.9+. A JDK 25+ builds it.
 
 ## Layout
 
@@ -128,7 +128,7 @@ Conventions that matter:
 
 ## CI
 
-GitLab CI, one `build` stage on `maven:3-eclipse-temurin-26` with a Docker-in-Docker service for
+GitLab CI, one `build` stage on `maven:3-eclipse-temurin-25` with a Docker-in-Docker service for
 Testcontainers. It runs `mvn clean install spotless:check test -B`, then on `main` / `master` /
 `develop` builds and pushes the application and Iceberg catalog images. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.
