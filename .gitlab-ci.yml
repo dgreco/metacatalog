@@ -169,15 +169,18 @@ coverage-wiki:
 
       if retry 4 clone_wiki; then
         branch="$(git -C wiki symbolic-ref --short HEAD 2>/dev/null || echo main)"
-      elif grep -q '403' clone.err; then
+      elif grep -qE '403|Access denied' clone.err; then
         # Refused, not absent. Pushing cannot fix a permission, and attempting it buries the real
-        # message under a second failure.
+        # message under a second failure. 403 is a token that exists but may not read the wiki;
+        # "HTTP Basic: Access denied" is a 401 — a token GitLab does not recognise for this
+        # project at all, which is what a token minted on another project looks like.
         echo "coverage-wiki: WIKI_TOKEN is not allowed to read this wiki. git said:"
         sed 's/^/    /' clone.err
         echo
-        echo "  A project access token needs BOTH of these, and the role is the one usually missed:"
-        echo "    scope: write_repository   (Settings > Access tokens)"
-        echo "    role:  Developer or above — Guest and Reporter are refused with this exact message"
+        echo "  A project access token needs ALL of these, and the last two are the ones usually missed:"
+        echo "    project: this one — a token from another project is refused with 'Access denied'"
+        echo "    scope:   write_repository   (Settings > Access tokens)"
+        echo "    role:    Developer or above — Guest and Reporter are refused with a 403"
         exit 1
       else
         # Absent rather than refused: a wiki has no git repository until it has a page, and
