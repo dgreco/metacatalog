@@ -128,10 +128,16 @@ Conventions that matter:
 
 ## CI
 
-GitLab CI, one `build` stage on `maven:3-eclipse-temurin-25` with a Docker-in-Docker service for
-Testcontainers. It runs `mvn clean install spotless:check test -B`, then on `main` / `master` /
-`develop` builds and pushes the application and Iceberg catalog images. Keep the build green
+Two pipelines, one logic. GitHub Actions (`.github/workflows/ci.yml`) and GitLab CI
+(`.gitlab-ci.yml`) both call `ci/build.sh` — `mvn clean install spotless:check test -B` — and then
+`ci/publish-images.sh`, which on `main` / `master` / `develop` builds and pushes the application,
+Iceberg catalog and Hive Metastore images (GitHub to GHCR, GitLab to its own registry). Change
+pipeline behaviour in the scripts, not in the platform files, so the two cannot drift. GitLab needs
+a Docker-in-Docker service for Testcontainers; the GitHub runner has a daemon. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.
+
+`LICENSE` is Apache 2.0 and `CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` are the
+public-facing contributor documents; keep them consistent with this file when conventions change.
 
 ## Before you finish
 

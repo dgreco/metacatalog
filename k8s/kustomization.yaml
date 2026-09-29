@@ -21,5 +21,5 @@ labels:
     includeSelectors: true
 
 images:
-  - name: gitlab.davidgreco.it:5050/dgreco/metacatalog
+  - name: ghcr.io/dgreco/metacatalog
     newTag: latest

@@ -1,7 +1,8 @@
+# GitLab CI. The GitHub Actions workflow in .github/workflows/ci.yml runs the same two
+# scripts from ci/, so keep pipeline logic there and only the platform plumbing here.
 variables:
   DOCKER_DRIVER: "overlay2"
   TESTCONTAINERS_RYUK_DISABLED: "true"
-  KUBE_NAMESPACE: "applications"
   # --- DinD / Testcontainers (global so all jobs get it) ---
   DOCKER_HOST: "tcp://docker:2376"
   DOCKER_TLS_VERIFY: "1"
@@ -10,9 +11,8 @@ variables:
 
 stages:
   - build
-  - deploy
 
-# Build, test, and push Docker image
+# Build, test, and (on main/master/develop) push the images to the GitLab registry.
 build:
   stage: build
   image: maven:3-eclipse-temurin-25
@@ -34,60 +34,10 @@ build:
     - docker info
     - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
-    # Build and test (install to local repo for multi-module dependencies)
-    - mvn clean install spotless:check test -B
-    # Build and push Docker images (only on main/master/develop)
-    - |
-      if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ] || [ "$CI_COMMIT_BRANCH" == "develop" ]; then
-        echo "Building and pushing Docker images..."
-
-        # Build the application JAR for packaging
-        mvn package -pl metacatalog-application -B -DskipTests
-
-        # Build and push Docker image with commit SHA tag
-        docker build -t "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" metacatalog-application/
-        docker push "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}"
-
-        # Tag and push 'latest'
-        docker tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}:latest"
-        docker push "${CI_REGISTRY_IMAGE}:latest"
-
-        # Also tag with version on main/master
-        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-          VERSION=$(grep -m2 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed '1d')
-          docker tag "${CI_REGISTRY_IMAGE}:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}:${VERSION}"
-          docker push "${CI_REGISTRY_IMAGE}:${VERSION}"
-        fi
-
-        # Build and push the Iceberg REST catalog image (own name suffix, same tags)
-        mvn package -pl metacatalog-iceberg-catalog -B -DskipTests
-
-        docker build -t "${CI_REGISTRY_IMAGE}/iceberg-catalog:${CI_COMMIT_SHORT_SHA}" metacatalog-iceberg-catalog/
-        docker push "${CI_REGISTRY_IMAGE}/iceberg-catalog:${CI_COMMIT_SHORT_SHA}"
-
-        docker tag "${CI_REGISTRY_IMAGE}/iceberg-catalog:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/iceberg-catalog:latest"
-        docker push "${CI_REGISTRY_IMAGE}/iceberg-catalog:latest"
-
-        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-          docker tag "${CI_REGISTRY_IMAGE}/iceberg-catalog:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/iceberg-catalog:${VERSION}"
-          docker push "${CI_REGISTRY_IMAGE}/iceberg-catalog:${VERSION}"
-        fi
-
-        # Build and push the Hive Metastore image (own name suffix, same tags).
-        # Must stay after the VERSION= assignment above, which is only in scope here.
-        mvn package -pl metacatalog-hive-metastore -B -DskipTests
-
-        docker build -t "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" metacatalog-hive-metastore/
-        docker push "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}"
-
-        docker tag "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/hive-metastore:latest"
-        docker push "${CI_REGISTRY_IMAGE}/hive-metastore:latest"
-
-        if [ "$CI_COMMIT_BRANCH" == "main" ] || [ "$CI_COMMIT_BRANCH" == "master" ]; then
-          docker tag "${CI_REGISTRY_IMAGE}/hive-metastore:${CI_COMMIT_SHORT_SHA}" "${CI_REGISTRY_IMAGE}/hive-metastore:${VERSION}"
-          docker push "${CI_REGISTRY_IMAGE}/hive-metastore:${VERSION}"
-        fi
-      fi
+    - ci/build.sh
+    # The script itself skips branches that do not publish, and CI_COMMIT_BRANCH is empty
+    # on merge-request pipelines, so pass a harmless value there.
+    - IMAGE_BASE="$CI_REGISTRY_IMAGE" GIT_BRANCH="${CI_COMMIT_BRANCH:-merge-request}" GIT_SHA="$CI_COMMIT_SHORT_SHA" ci/publish-images.sh
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == 'master'

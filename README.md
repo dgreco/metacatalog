@@ -1,5 +1,9 @@
 # Meta Catalog
 
+[![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](#technology-stack)
+
 A comprehensive metadata management system built with Spring Boot for managing entities, entity types, traits, and their relationships with integrated ontology support.
 
 ## Features
@@ -51,7 +55,7 @@ pre-published image is required:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/dgreco/metacatalog.git
 cd metacatalog
 
 # Build the application image from source and start everything
@@ -197,7 +201,7 @@ to confirm the container is running exactly the code you expect.
 #### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/dgreco/metacatalog.git
 cd metacatalog
 ```
 
@@ -280,6 +284,29 @@ mvn test
 
 # All tests including integration tests
 mvn verify
+```
+
+### Continuous Integration
+
+The same pipeline runs on **GitHub Actions** (`.github/workflows/ci.yml`) and **GitLab CI**
+(`.gitlab-ci.yml`). Neither file holds build logic: both call the two scripts in `ci/`, so the
+pipelines cannot drift apart.
+
+- `ci/build.sh` runs `mvn clean install spotless:check test -B` — the build every push and pull
+  request must pass. Integration tests need a Docker daemon (GitHub's runner has one; GitLab uses a
+  Docker-in-Docker service).
+- `ci/publish-images.sh` builds and pushes the three images — the application, the Iceberg REST
+  catalog and the Hive Metastore — tagged with the short commit SHA and `latest`, plus the Maven
+  project version on `main`/`master`. It runs only on pushes to `main`, `master` or `develop`;
+  GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}`, GitLab to
+  the project's container registry.
+
+To run the images from GHCR instead of building locally:
+
+```bash
+docker pull ghcr.io/dgreco/metacatalog:latest
+docker pull ghcr.io/dgreco/metacatalog/iceberg-catalog:latest
+docker pull ghcr.io/dgreco/metacatalog/hive-metastore:latest
 ```
 
 ### Stress Test (on demand)
@@ -1509,21 +1536,28 @@ Spring Boot Actuator endpoints are enabled for monitoring (exposed set: `health`
 
 ## Contributing
 
-1. Create a feature branch from `main`
-2. Make your changes
-3. Run `mvn spotless:apply` to format code
-4. Run `mvn verify` to ensure tests pass
-5. Commit and push your changes
-6. Create a pull request
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup, the checks a change
+must pass and how to submit it; [AGENTS.md](AGENTS.md) describes the codebase conventions and the
+boundaries the modules are built around. In short: branch from `main`, run `mvn spotless:apply`
+and `mvn verify`, and open a pull request. Participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-[Add your license information here]
+Copyright 2024-2026 David Greco.
+
+Licensed under the [Apache License, Version 2.0](LICENSE). Third-party components are used under
+their own licenses; see [NOTICE](NOTICE).
 
 ## Support
 
-For issues and questions, please use the project's issue tracker.
+For bugs and questions use the
+[GitHub issue tracker](https://github.com/dgreco/metacatalog/issues). Security problems should be
+reported privately as described in [SECURITY.md](SECURITY.md).
 
 ## Additional Documentation
 
-For detailed project information, see [CLAUDE.md](CLAUDE.md) (also available as `AGENTS.md`) which contains comprehensive documentation for developers and AI assistants.
+- [AGENTS.md](AGENTS.md) — how to work in the codebase: layout, commands, boundaries, conventions
+  (`CLAUDE.md` simply includes it).
+- [docs/authorization-model.md](docs/authorization-model.md) — the authorization model in depth.
+- [docs/er-diagram.png](docs/er-diagram.png) — the database entity-relationship diagram.

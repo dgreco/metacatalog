@@ -66,7 +66,7 @@ spec:
   backup:
     barmanObjectStore:
       destinationPath: s3://postgresql-backups/applications/metacatalog
-      endpointURL: https://doc.fairytales.local:4443
+      endpointURL: https://s3.example.com
 
       s3Credentials:
         accessKeyId:

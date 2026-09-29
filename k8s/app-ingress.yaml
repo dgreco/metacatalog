@@ -15,10 +15,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - metacatalog.fairytales.local
+        - metacatalog.example.com
       secretName: metacatalog-tls
   rules:
-    - host: metacatalog.fairytales.local
+    - host: metacatalog.example.com
       http:
         paths:
           - path: /

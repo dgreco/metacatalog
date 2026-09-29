@@ -15,6 +15,39 @@
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Meta Catalog</name>
+    <description>Metadata management system: entities, entity types, traits, relationships, mappings and
+        aggregates behind a REST API, a server-rendered UI, a SPARQL endpoint, an Iceberg REST catalog and a
+        Hive Metastore over the same model.</description>
+    <url>https://github.com/dgreco/metacatalog</url>
+    <inceptionYear>2024</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>dgreco</id>
+            <name>David Greco</name>
+            <url>https://github.com/dgreco</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/dgreco/metacatalog.git</connection>
+        <developerConnection>scm:git:git@github.com:dgreco/metacatalog.git</developerConnection>
+        <url>https://github.com/dgreco/metacatalog</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/dgreco/metacatalog/issues</url>
+    </issueManagement>
 
     <properties>
         <!-- Project Properties -->

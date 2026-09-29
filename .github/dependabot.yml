@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /metacatalog-application
+      - /metacatalog-iceberg-catalog
+      - /metacatalog-hive-metastore
+    schedule:
+      interval: weekly
