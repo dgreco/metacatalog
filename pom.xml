@@ -68,7 +68,7 @@
              (tools.jackson.*), while this codebase still uses Jackson 2
              (com.fasterxml.jackson.*) and passes Jackson-2 JsonNode instances to the
              validator. Migrating to 3.x requires moving the whole codebase to Jackson 3. -->
-        <json-schema-validator.version>1.5.9</json-schema-validator.version>
+        <json-schema-validator.version>3.0.7</json-schema-validator.version>
         <json-path.version>3.0.0</json-path.version>
 
         <!--   Misc -->
