@@ -40,7 +40,7 @@ jobs:
       # github.repository preserves the owner's casing, hence the tr.
       - name: Log in to GHCR
         if: github.event_name == 'push'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
