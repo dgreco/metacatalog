@@ -79,7 +79,7 @@ jobs:
           ./scripts/coverage.sh | tee -a "$GITHUB_STEP_SUMMARY" || true
           ./scripts/coverage-site.sh target/coverage-site || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-report
@@ -87,7 +87,7 @@ jobs:
           path: target/coverage-site/
           if-no-files-found: ignore
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()                 # reports are most wanted exactly when the build failed
         with:
           name: test-reports
