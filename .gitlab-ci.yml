@@ -84,7 +84,32 @@ build:
     paths:
       - "*/target/surefire-reports/"
       - "metacatalog-*/target/site/jacoco/jacoco.csv"
+      - "metacatalog-*/target/site/jacoco/jacoco.xml"
       - target/coverage-site/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
+
+# Coverage on the merge request diff itself: GitLab colours covered and uncovered lines from a
+# Cobertura report, and reads no other format. JaCoCo does not emit one, so scripts/ converts —
+# in-tree rather than the published converter image, which is amd64-only against an arm64 runner
+# and carries no versioned tag. This is the half of coverage publishing that does not need Pages,
+# and the half that changes behaviour: the number lands where the decision is made.
+coverage-report:
+  stage: deploy
+  image: python:3.13-slim
+  needs: [build]
+  script:
+    - python3 scripts/jacoco-to-cobertura.py metacatalog-*/target/site/jacoco/jacoco.xml > cobertura.xml
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: cobertura.xml
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == 'master'

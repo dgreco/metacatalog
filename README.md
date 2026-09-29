@@ -324,6 +324,7 @@ this page opens the one belonging to the host you are reading it on:
 |---|---|---|
 | GitHub | `coverage-pages` | the browsable per-module reports on [GitHub Pages](https://dgreco.github.io/metacatalog/), and the total in the run summary |
 | GitLab | `build` | the percentage on the MR widget and the project badge, from the `coverage:` keyword; the reports as downloadable artifacts |
+| GitLab | `coverage-report` | **covered and uncovered lines painted onto the merge request diff**, from a Cobertura report that [`scripts/jacoco-to-cobertura.py`](scripts/jacoco-to-cobertura.py) converts out of the JaCoCo XML |
 | GitLab | `coverage-wiki` | the report as a **wiki page** the badge links to, rendered in the browser: totals, per module, per package |
 | GitLab | `pages` | the browsable HTML site on that instance's Pages, where it has them |
 
