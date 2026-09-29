@@ -16,7 +16,7 @@
 #   * Requires BuildKit (default on Docker 23.0+ / buildx).
 
 # --- Build stage: compile the reactor and package the application jar ---
-FROM maven:3-eclipse-temurin-25 AS build
+FROM maven:3-eclipse-temurin-26 AS build
 
 # Which deployable module this image runs: metacatalog-application (default) or
 # metacatalog-iceberg-catalog. docker-compose.yml passes it per service.
