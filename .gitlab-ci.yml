@@ -1,5 +1,11 @@
 # GitLab CI. The GitHub Actions workflow in .github/workflows/ci.yml runs the same two
 # scripts from ci/, so keep pipeline logic there and only the platform plumbing here.
+#
+# Stages
+#   verify   the README guard — no toolchain needed, fails in seconds
+#   build    ci/build.sh with coverage, then ci/publish-images.sh on main/master/develop
+#   deploy   publishes coverage: the report as a wiki page (where the README badge points) and,
+#            on an instance that has Pages, the browsable HTML site
 variables:
   DOCKER_DRIVER: "overlay2"
   TESTCONTAINERS_RYUK_DISABLED: "true"
@@ -10,7 +16,22 @@ variables:
   TESTCONTAINERS_HOST_OVERRIDE: "docker"
 
 stages:
+  - verify
   - build
+  - deploy
+
+# The two READMEs are generated from one body, and drift is invisible until somebody reads the
+# wrong one: a GitLab reader sent to github.io, or a GitHub reader to a page they cannot open.
+readme-sync:
+  stage: verify
+  image: debian:bookworm-slim
+  script:
+    - ./scripts/readme-sync.sh --check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_COMMIT_BRANCH == 'master'
+    - if: $CI_COMMIT_BRANCH == 'main'
+    - if: $CI_COMMIT_BRANCH == 'develop'
 
 # Build, test, and (on main/master/develop) push the images to the GitLab registry.
 build:
@@ -38,8 +59,150 @@ build:
     # The script itself skips branches that do not publish, and CI_COMMIT_BRANCH is empty
     # on merge-request pipelines, so pass a harmless value there.
     - IMAGE_BASE="$CI_REGISTRY_IMAGE" GIT_BRANCH="${CI_COMMIT_BRANCH:-merge-request}" GIT_SHA="$CI_COMMIT_SHORT_SHA" ci/publish-images.sh
+  # Scraped from the job log by the `coverage` keyword, which is what puts the number on the MR
+  # widget, the pipeline page and the project badge. The line comes from scripts/coverage.sh so
+  # that the two pipelines cannot disagree about what the project's coverage is.
+  coverage: '/TOTAL coverage: (\d+\.\d+)%/'
+  after_script:
+    # One-line summaries in the job log, and the browsable site assembled for the deploy jobs.
+    # Counts <testcase> elements: the testsuite "tests" attribute can undercount @Nested classes.
+    - |
+      ./scripts/coverage.sh || true
+      ./scripts/coverage-site.sh target/coverage-site || true
+      if ls */target/surefire-reports/TEST-*.xml >/dev/null 2>&1; then
+        printf 'TOTAL testcases=%s failures=%s errors=%s skipped=%s\n' \
+          "$(grep -h -c '<testcase ' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+          "$(grep -h -c '<failure' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+          "$(grep -h -c '<error' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+          "$(grep -h -c '<skipped' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')"
+      fi
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    reports:
+      junit: "*/target/surefire-reports/TEST-*.xml"
+    paths:
+      - "*/target/surefire-reports/"
+      - "metacatalog-*/target/site/jacoco/jacoco.csv"
+      - target/coverage-site/
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
+
+# The report as a wiki page, because an instance without Pages cannot show it any other way. A
+# wiki page is Markdown, which GitLab renders natively at a stable URL — unlike an HTML artifact,
+# which it refuses to display without the Pages daemon. What it loses is JaCoCo's clickable source
+# view; what it keeps is the part anybody reads.
+#
+# Opt-in, and silent when it is not set up: WIKI_TOKEN is a project access token with the
+# `write_repository` scope, because CI_JOB_TOKEN cannot write a wiki. Without it the job explains
+# itself and exits green, so a clone of this repository elsewhere does not fail a pipeline over a
+# wiki it has no business writing to.
+coverage-wiki:
+  stage: deploy
+  image: alpine:3.21
+  needs: [build]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - apk add --no-cache git python3
+    # Generated first, so the artifact below exists whether or not the page can be published.
+    - python3 scripts/coverage-markdown.py "Coverage" metacatalog-*/target/site/jacoco/jacoco.csv > Coverage.md
+    - |
+      if [ -z "${WIKI_TOKEN:-}" ]; then
+        echo "coverage-wiki: not published — no WIKI_TOKEN set."
+        echo
+        echo "  CI_JOB_TOKEN cannot write a wiki, so this needs a project access token:"
+        echo "    Settings > Access tokens   — add one with the write_repository scope, role Developer"
+        echo "    Settings > CI/CD > Variables — add it as WIKI_TOKEN, masked"
+        echo
+        echo "  The report itself is attached to this job as Coverage.md."
+        exit 0
+      fi
+    - |
+      set -eu
+      # The token stays out of the URL and out of argv: a credential helper hands it to git only
+      # when git asks. An embedded token would otherwise appear in every error message git prints
+      # about the remote, and those are exactly the messages this job needs to show.
+      remote="https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.wiki.git"
+      export WIKI_TOKEN
+      helper='!f() { echo username=oauth2; echo "password=$WIKI_TOKEN"; }; f'
+
+      retry() {
+        attempts="$1"; shift; i=1
+        while :; do
+          if "$@"; then return 0; fi
+          if [ "$i" -ge "$attempts" ]; then return 1; fi
+          echo "  attempt $i failed, retrying in $((i * 5))s"
+          sleep $((i * 5)); i=$((i + 1))
+        done
+      }
+      clone_wiki() { rm -rf wiki; git -c credential.helper="$helper" clone --quiet "$remote" wiki 2>clone.err; }
+      push_wiki()  { git -C wiki push origin "HEAD:$branch"; }
+
+      if retry 4 clone_wiki; then
+        branch="$(git -C wiki symbolic-ref --short HEAD 2>/dev/null || echo main)"
+      elif grep -q '403' clone.err; then
+        # Refused, not absent. Pushing cannot fix a permission, and attempting it buries the real
+        # message under a second failure.
+        echo "coverage-wiki: WIKI_TOKEN is not allowed to read this wiki. git said:"
+        sed 's/^/    /' clone.err
+        echo
+        echo "  A project access token needs BOTH of these, and the role is the one usually missed:"
+        echo "    scope: write_repository   (Settings > Access tokens)"
+        echo "    role:  Developer or above — Guest and Reporter are refused with this exact message"
+        exit 1
+      else
+        # Absent rather than refused: a wiki has no git repository until it has a page, and
+        # GitLab creates one on the first push.
+        echo "coverage-wiki: no wiki repository yet. git said:"
+        sed 's/^/    /' clone.err
+        echo
+        echo "  If that is a 404, this is the first page and the push below creates the wiki."
+        echo "  If the wiki is switched off entirely, turn it on at"
+        echo "    Settings > General > Visibility, project features, permissions > Wiki"
+        rm -rf wiki && mkdir -p wiki && git -C wiki init --quiet --initial-branch=main
+        branch=main
+      fi
+
+      cp Coverage.md wiki/Coverage.md
+      git -C wiki config user.email "ci@${CI_SERVER_HOST}"
+      git -C wiki config user.name "metacatalog CI"
+      git -C wiki config credential.helper "$helper"
+      git -C wiki remote remove origin 2>/dev/null || true
+      git -C wiki remote add origin "$remote"
+      git -C wiki add Coverage.md
+      if git -C wiki diff --cached --quiet; then
+        echo "coverage-wiki: unchanged since the last pipeline"
+      else
+        git -C wiki commit --quiet -m "Coverage for ${CI_COMMIT_SHORT_SHA}"
+        retry 4 push_wiki
+        echo "coverage-wiki: published to ${CI_PROJECT_URL}/-/wikis/Coverage"
+      fi
+  # A report that cannot be published is not a reason to fail a build. The job still goes red on
+  # its own row, with git's own words in the log, which is what makes it fixable.
+  allow_failure: true
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths: [Coverage.md]
+
+# GitLab Pages is a job named `pages` whose artifact is a directory called `public`. Default
+# branch only, and only where Pages actually exists: GitLab predefines CI_PAGES_URL when the
+# feature is enabled for the instance, so this skips cleanly on one without it and starts
+# publishing by itself the day somebody sets pages_external_url.
+pages:
+  stage: deploy
+  image: debian:bookworm-slim
+  needs: [build]
+  script:
+    - test -f target/coverage-site/index.html
+    - mkdir -p public
+    - cp -R target/coverage-site/. public/
+  artifacts:
+    paths: [public]
+    expire_in: 4 weeks
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PAGES_URL

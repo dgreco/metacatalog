@@ -52,7 +52,9 @@ asked to change, however good the rest is.
 - **Javadoc on public API**, including record components and enum constants.
 - **Bug fixes come with a failing test first.** Confirm it fails without the fix, then fix it.
 - **Anything that could hang gets a `@Timeout`.**
-- **`README.md` is updated** whenever behaviour, API or configuration changes.
+- **`README.md` is updated** whenever behaviour, API or configuration changes. Edit the root
+  file only and run `./scripts/readme-sync.sh` afterwards: `.github/README.md` is generated from
+  it, and CI fails if the two drift.
 
 ## Submitting a change
 

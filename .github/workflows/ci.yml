@@ -1,5 +1,13 @@
-# GitHub Actions. Mirrors .gitlab-ci.yml: both run ci/build.sh and ci/publish-images.sh,
-# so pipeline logic lives in those scripts and this file is only the platform plumbing.
+# GitHub Actions. Mirrors .gitlab-ci.yml: both run ci/build.sh and ci/publish-images.sh, so
+# pipeline logic lives in those scripts and this file is only the platform plumbing.
+#
+# Jobs
+#   verify          the README guard — the two host-flavoured READMEs are generated from one body
+#                   and drift is invisible until somebody reads the wrong one (no toolchain needed)
+#   build           ci/build.sh, then the test and coverage totals in the run summary, then
+#                   ci/publish-images.sh on main/master/develop pushes
+#   coverage-pages  publishes the JaCoCo reports to GitHub Pages, so the README's coverage badge
+#                   links to something readable rather than to a zip nobody downloads (main only)
 name: CI
 
 on:
@@ -12,14 +20,25 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 env:
   # Testcontainers talks to the runner's own Docker daemon; no DinD service needed here.
   TESTCONTAINERS_RYUK_DISABLED: "true"
 
 jobs:
+  verify:
+    name: README guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/readme-sync.sh --check
+
   build:
     name: Build and test
     runs-on: ubuntu-latest
+    needs: [verify]
     permissions:
       contents: read
       packages: write
@@ -34,6 +53,47 @@ jobs:
 
       - name: Build and test
         run: ci/build.sh
+
+      # GitHub has no first-party equivalent of GitLab's `reports: junit:` — nothing renders the
+      # XML into the run summary. Rather than take a third-party action, the same one-line total
+      # the GitLab job prints is written to the run summary and the raw XML is uploaded. Counts
+      # <testcase> elements: the testsuite "tests" attribute can undercount @Nested classes.
+      - name: Summarise the test run
+        if: always()
+        run: |
+          if ls */target/surefire-reports/TEST-*.xml >/dev/null 2>&1; then
+            printf 'TOTAL testcases=%s failures=%s errors=%s skipped=%s\n' \
+              "$(grep -h -c '<testcase ' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+              "$(grep -h -c '<failure' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+              "$(grep -h -c '<error' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+              "$(grep -h -c '<skipped' */target/surefire-reports/TEST-*.xml | awk '{s+=$1} END{print s}')" \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The same line the GitLab job prints, from the same script, so the two pipelines cannot
+      # disagree about what the project's coverage is. GitHub has no coverage widget of its own,
+      # so the number goes to the run summary and the browsable site to an artifact.
+      - name: Summarise coverage
+        if: always()
+        run: |
+          ./scripts/coverage.sh | tee -a "$GITHUB_STEP_SUMMARY" || true
+          ./scripts/coverage-site.sh target/coverage-site || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          retention-days: 14
+          path: target/coverage-site/
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        if: always()                 # reports are most wanted exactly when the build failed
+        with:
+          name: test-reports
+          retention-days: 14
+          path: "*/target/surefire-reports/"
+          if-no-files-found: ignore
 
       # Images are published only from main/master/develop pushes, to the GitHub Container
       # Registry under this repository. GHCR requires a lowercase image path, and
@@ -54,3 +114,46 @@ jobs:
           IMAGE_BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" \
           GIT_SHA="${GITHUB_SHA::7}" \
           ci/publish-images.sh
+
+  # The coverage report, somewhere a person can read it. An artifact is a zip behind a login and
+  # two clicks; Pages is a URL, which is what a badge needs to be worth clicking.
+  #
+  # Main only: a pull request from a fork cannot be given `pages: write`, and publishing a report
+  # from an unmerged branch would make the badge lie about main. workflow_dispatch as well as
+  # push, so a failed deploy can be re-run without landing a commit.
+  coverage-pages:
+    name: Publish the coverage report
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      pages: write
+      id-token: write
+    # Its own group: a queued deployment should wait for the one in flight rather than cancel it,
+    # which is the opposite of what the workflow-level group does for ordinary jobs.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: site
+
+      # `enablement: true` turns Pages on the first time this runs, so the repository does not
+      # need a setting flipped by hand before the job can work.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

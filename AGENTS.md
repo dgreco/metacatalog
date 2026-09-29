@@ -136,6 +136,14 @@ pipeline behaviour in the scripts, not in the platform files, so the two cannot 
 a Docker-in-Docker service for Testcontainers; the GitHub runner has a daemon. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.
 
+**Two READMEs, one body.** `README.md` (what GitLab renders) and `.github/README.md` (what GitHub
+renders) differ only in the badge block; `scripts/readme-sync.sh` generates both and `--check`
+runs first in both pipelines. Edit the root `README.md`, then run the script — never edit
+`.github/README.md` by hand. The static badge figures (coverage, test count) live at the top of
+that script and must agree with the numbers stated under *Coverage* in the README; refresh both
+when they move. `scripts/coverage.sh` is the one source of the coverage total both pipelines
+publish.
+
 `LICENSE` is Apache 2.0 and `CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` are the
 public-facing contributor documents; keep them consistent with this file when conventions change.
 

@@ -1,3 +1,4 @@
+<!-- Generated from ../README.md by scripts/readme-sync.sh. Edit that one. -->
 # Meta Catalog
 
 <!--
@@ -12,10 +13,10 @@
   The coverage and test figures are the ones stated under Coverage, refreshed when those move.
 -->
 <!-- BADGES:START -->
-[![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
-[![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
+[![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/badge/coverage-55.1%25-brightgreen)](https://dgreco.github.io/metacatalog/)
 [![tests](https://img.shields.io/badge/tests-345-brightgreen)](#coverage)
-[![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
+[![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18%2B-4169E1)](#prerequisites)
@@ -328,7 +329,7 @@ this page opens the one belonging to the host you are reading it on:
 | GitLab | `pages` | the browsable HTML site on that instance's Pages, where it has them |
 
 Without Pages, GitLab will not render an HTML artifact in the browser at all, so `coverage-wiki`
-writes the report to the project wiki with [`scripts/coverage-markdown.py`](scripts/coverage-markdown.py)
+writes the report to the project wiki with [`scripts/coverage-markdown.py`](../scripts/coverage-markdown.py)
 and the badge opens that. The job is opt-in and silent when unconfigured: `CI_JOB_TOKEN` cannot
 write a wiki, so it needs a project access token with the `write_repository` scope in a masked CI
 variable named `WIKI_TOKEN`. The `pages` job runs only where `CI_PAGES_URL` is defined, so it skips
@@ -336,7 +337,7 @@ cleanly on an instance without Pages and starts publishing by itself on one with
 
 That works because the two hosts read different files: GitHub renders `.github/README.md` in
 preference to the root one, GitLab renders only the root one. Both are generated from one body by
-[`scripts/readme-sync.sh`](scripts/readme-sync.sh) — edit the root file, run the script, and the
+[`scripts/readme-sync.sh`](../scripts/readme-sync.sh) — edit the root file, run the script, and the
 verify stage of both pipelines fails the build if either copy is stale.
 
 ### Continuous Integration
@@ -1531,7 +1532,7 @@ below) and consists of 12 tables covering entity types, traits, entities, their
 relationships, the mapping system, the entity lifecycle audit log, the async
 procedure-run registry, and the append-only version history for types.
 
-![E/R diagram of the Meta Catalog database schema](docs/er-diagram.png)
+![E/R diagram of the Meta Catalog database schema](../docs/er-diagram.png)
 
 The source Graphviz file is `docs/er-diagram.dot` — regenerate the image with
 `dot -Tpng -Gdpi=150 docs/er-diagram.dot -o docs/er-diagram.png` after editing
@@ -1593,28 +1594,28 @@ Spring Boot Actuator endpoints are enabled for monitoring (exposed set: `health`
 
 ## Contributing
 
-Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the setup, the checks a change
-must pass and how to submit it; [AGENTS.md](AGENTS.md) describes the codebase conventions and the
+Contributions are welcome. [CONTRIBUTING.md](../CONTRIBUTING.md) covers the setup, the checks a change
+must pass and how to submit it; [AGENTS.md](../AGENTS.md) describes the codebase conventions and the
 boundaries the modules are built around. In short: branch from `main`, run `mvn spotless:apply`
 and `mvn verify`, and open a pull request. Participation is governed by the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+[Code of Conduct](../CODE_OF_CONDUCT.md).
 
 ## License
 
 Copyright 2024-2026 David Greco.
 
-Licensed under the [Apache License, Version 2.0](LICENSE). Third-party components are used under
-their own licenses; see [NOTICE](NOTICE).
+Licensed under the [Apache License, Version 2.0](../LICENSE). Third-party components are used under
+their own licenses; see [NOTICE](../NOTICE).
 
 ## Support
 
 For bugs and questions use the
 [GitHub issue tracker](https://github.com/dgreco/metacatalog/issues). Security problems should be
-reported privately as described in [SECURITY.md](SECURITY.md).
+reported privately as described in [SECURITY.md](../SECURITY.md).
 
 ## Additional Documentation
 
-- [AGENTS.md](AGENTS.md) — how to work in the codebase: layout, commands, boundaries, conventions
+- [AGENTS.md](../AGENTS.md) — how to work in the codebase: layout, commands, boundaries, conventions
   (`CLAUDE.md` simply includes it).
-- [docs/authorization-model.md](docs/authorization-model.md) — the authorization model in depth.
-- [docs/er-diagram.png](docs/er-diagram.png) — the database entity-relationship diagram.
+- [docs/authorization-model.md](../docs/authorization-model.md) — the authorization model in depth.
+- [docs/er-diagram.png](../docs/er-diagram.png) — the database entity-relationship diagram.
