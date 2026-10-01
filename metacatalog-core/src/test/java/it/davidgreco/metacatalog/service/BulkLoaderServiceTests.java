@@ -1,9 +1,11 @@
 package it.davidgreco.metacatalog.service;
 
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import it.davidgreco.metacatalog.entity.RelationType;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import org.awaitility.Durations;
@@ -75,6 +77,62 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
     assertTrue(
         ex.getMessage().contains("never declared"),
         "error must mention the undeclared ref; got: " + ex.getMessage());
+  }
+
+  /**
+   * A node depending on several others gets a {@code DEPENDS_ON} link to every one of them. The
+   * pending links were once collected in a map keyed by the depending entity, so each new entry
+   * overwrote the previous one and only the last name in {@code dependsOn} was ever linked — with
+   * no error, which left lineage silently incomplete.
+   */
+  @Test
+  void bulkAggregateCreationLinksEveryDependsOnEntry() {
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var model =
+        """
+        Traits:
+          - name: MultiDepComponent
+        ---
+        Relationships:
+          - sourceTrait: MultiDepComponent
+            relationshipType: IS_REQUIRED_BY
+            targetTrait: MultiDepComponent
+        ---
+        EntityTypes:
+          - name: MultiDepRootType
+            schema: { type: object, properties: { name: { type: string } } }
+            traits: [Aggregate]
+          - name: MultiDepPartType
+            schema: { type: object, properties: { name: { type: string } } }
+            traits: [AggregateElement, MultiDepComponent]
+        """;
+    bulkLoaderService.bulkModelCreation(
+        new ByteArrayInputStream(model.getBytes(StandardCharsets.UTF_8)));
+
+    var instances =
+        """
+        entityType: "MultiDepRootType"
+        values: { name: "root" }
+        parts:
+          - { ref: "a", entityType: "MultiDepPartType", values: { name: "a" } }
+          - { ref: "b", entityType: "MultiDepPartType", values: { name: "b" } }
+          - { ref: "c", entityType: "MultiDepPartType", values: { name: "c" }, dependsOn: ["a", "b"] }
+        """;
+    bulkLoaderService.bulkAggregateCreation(
+        new ByteArrayInputStream(instances.getBytes(StandardCharsets.UTF_8)));
+
+    var c =
+        entityService.list("MultiDepPartType", "").stream()
+            .filter(e -> "c".equals(e.getValues().get("name").asText()))
+            .findFirst()
+            .orElseThrow();
+    var dependencies =
+        entityService.linked(c.getId(), RelationType.DEPENDS_ON).stream()
+            .map(e -> e.getValues().get("name").asText())
+            .collect(java.util.stream.Collectors.toSet());
+    assertEquals(java.util.Set.of("a", "b"), dependencies);
   }
 
   /**
