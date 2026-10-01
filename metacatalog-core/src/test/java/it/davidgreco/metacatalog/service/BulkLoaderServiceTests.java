@@ -136,6 +136,44 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
   }
 
   /**
+   * Loads the medallion lakehouse under {@code examples/medallion} the way its README does. The
+   * example is walked through in published material, so it has to keep loading as the model
+   * evolves: the model and the aggregate must be accepted, the mapping engine must derive every
+   * zone and physical table, and each gold table must keep both of its lineage links.
+   */
+  @Test
+  void medallionExampleLoadsAndDerivesItsResources() throws java.io.IOException {
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+
+    var exampleDir = java.nio.file.Path.of("..", "examples", "medallion");
+    try (var model =
+        java.nio.file.Files.newInputStream(exampleDir.resolve("medallion-model.yaml"))) {
+      bulkLoaderService.bulkModelCreation(model);
+    }
+    try (var instances =
+        java.nio.file.Files.newInputStream(exampleDir.resolve("medallion-instances.yaml"))) {
+      bulkLoaderService.bulkAggregateCreation(instances);
+    }
+
+    await()
+        .atMost(java.time.Duration.ofSeconds(30))
+        .until(
+            () ->
+                entityService.list("LakeZoneType", "").size() == 3
+                    && entityService.list("LakeTableType", "").size() == 8);
+
+    var goldTables = entityService.list("GoldTableType", "");
+    assertEquals(2, goldTables.size());
+    for (var gold : goldTables) {
+      assertEquals(
+          2,
+          entityService.linked(gold.getId(), RelationType.DEPENDS_ON).size(),
+          gold.getValues().get("name").asText() + " must depend on both of its silver tables");
+    }
+  }
+
+  /**
    * Replays the docker demo flow against the real files under {@code docker/bulk}: load the model,
    * load the aggregate, let the mapping engine derive the resources, delete the aggregate from the
    * catalog (as the UI does), and load the aggregate file again. The reload is what the compose

@@ -1,0 +1,14 @@
+# Registers the medallion example's two resource types with the demo `stdout` task, which prints
+# what it would provision instead of touching anything. Stack it on top of the data-product demo,
+# from the repository root, after `make run-hive-demo` has run once (it builds the Hive client that
+# demo mounts):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.iceberg.yml -f docker-compose.hive.yml \
+#     -f docker-compose.hive-demo.yml -f examples/medallion/docker-compose.medallion.yml up --build -d
+#
+# The list replaces the one in application-docker.yaml rather than adding to it, which is why the
+# base demo's S3FolderType and AthenaTableType are repeated here.
+services:
+  app:
+    environment:
+      SPRING_APPLICATION_JSON: '{"application":{"config":{"provisioning":{"tasks":{"stdout":{"entity-types":["S3FolderType","AthenaTableType","LakeZoneType","LakeTableType"],"delay":"500ms"}}}}}}'
