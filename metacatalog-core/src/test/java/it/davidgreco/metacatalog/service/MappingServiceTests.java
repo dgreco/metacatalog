@@ -395,10 +395,24 @@ class MappingServiceTests extends CommonServiceTestingSupport {
                     {"a": 2}
                     """);
 
+    // Both targets already exist from the first round, so waiting for them to exist returned at
+    // once and raced the scheduler: a slow runner saw the old values. Wait for the update itself
+    // to come through both mappings of the chain.
     await()
         .atMost(Durations.TEN_SECONDS)
-        .pollDelay(Durations.ONE_SECOND)
-        .until(() -> !entityRepository.findByEntityType(targeType).isEmpty());
+        .until(
+            () -> {
+              var targets = entityRepository.findByEntityType(targeType);
+              var anotherTargets = entityRepository.findByEntityType(anotherTargetType);
+              if (targets.isEmpty() || anotherTargets.isEmpty()) return false;
+              var b =
+                  new WrappedJsonNode(targets.getFirst().getValues())
+                      .getValue(Integer.class, "$.b");
+              var d =
+                  new WrappedJsonNode(anotherTargets.getFirst().getValues())
+                      .getValue(Integer.class, "$.d");
+              return b == 12 && d == 22;
+            });
 
     {
       var int1 =

@@ -20,6 +20,10 @@
         .sparql-meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.75rem; }
         .sparql-meta code { background: var(--panel-2); padding: 0.05rem 0.32rem; border-radius: var(--radius-xs); }
         #yasgui { height: calc(100vh - 130px); }
+        /* Yasgui ships light styles only: in the dark theme its results table kept a white
+           background but inherited the page's pale text, so results were unreadable. Give the
+           widget a light surface of its own instead. */
+        [data-theme="dark"] #yasgui { background: #fff; color: #212529; border-radius: var(--radius-xs); }
     </style>
 </head>
 <body>

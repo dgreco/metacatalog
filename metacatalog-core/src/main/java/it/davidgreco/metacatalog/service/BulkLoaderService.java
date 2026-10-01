@@ -13,8 +13,10 @@ import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.StreamSupport;
@@ -233,7 +235,8 @@ public class BulkLoaderService {
     log.info("Bulk aggregate creation started");
     try {
       var refs = new HashMap<String, Entity>();
-      var depends = new HashMap<String, String>();
+      // One entry per dependsOn name, not per entity: a node may depend on several others.
+      var depends = new ArrayList<Map.Entry<String, String>>();
       List<ObjectNode> docs;
       try (var yamlParser = yamlMapper.createParser(is)) {
         docs = yamlMapper.readValues(yamlParser, new TypeReference<ObjectNode>() {}).readAll();
@@ -253,7 +256,7 @@ public class BulkLoaderService {
           if (dependsOn.isPresent()) {
             var dependsOnIds = (ArrayNode) dependsOn.get();
             for (JsonNode dependsOnId : dependsOnIds)
-              depends.put(aggregate.getId(), dependsOnId.asText());
+              depends.add(Map.entry(aggregate.getId(), dependsOnId.asText()));
           }
           var parts = (ArrayNode) doc.get("parts");
           if (parts == null) return aggregate;
@@ -270,7 +273,9 @@ public class BulkLoaderService {
       var ids = docs.stream().map(new CreateEntity()).map(Entity::getId).toList();
       // Linking refs
       depends.forEach(
-          (entity, dependsOnId) -> {
+          dependsOnEntry -> {
+            var entity = dependsOnEntry.getKey();
+            var dependsOnId = dependsOnEntry.getValue();
             var dependency = refs.get(dependsOnId);
             if (dependency == null) {
               throw new ServiceError(
