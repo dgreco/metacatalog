@@ -97,9 +97,6 @@
         <!--   Flyway -->
         <flyway.version>13.9.0</flyway.version>
 
-        <!--   Logback -->
-        <logback.version>1.5.38</logback.version>
-
         <!--   Ontop & RDF4J (metacatalog-sparql) -->
         <ontop.version>5.5.0</ontop.version>
         <rdf4j.version>6.1.0</rdf4j.version>
