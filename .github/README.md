@@ -14,7 +14,7 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-55.1%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![coverage](https://img.shields.io/badge/coverage-55.2%25-brightgreen)](https://dgreco.github.io/metacatalog/)
 [![tests](https://img.shields.io/badge/tests-352-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
@@ -311,7 +311,7 @@ for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-met
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.1% of instructions, 38.0% of branches, 57.5% of lines**.
+**55.2% of instructions, 37.9% of branches, 57.5% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
