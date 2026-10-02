@@ -1,12 +1,22 @@
-# Registers the medallion example's two resource types with the demo `stdout` task, which prints
-# what it would provision instead of touching anything. Stack it on the base compose file, from the
-# repository root:
+# Runs the medallion example on its own. Stacked on the base compose file, it points the base
+# stack's bulk loader at the medallion model and lakehouse instead of the base data-product demo,
+# and registers the example's two derived resource types with the demo `stdout` task, which prints
+# what it would provision instead of touching anything. From the repository root:
 #
 #   docker compose -f docker-compose.yml -f examples/medallion/docker-compose.medallion.yml up --build -d
 #
-# The list replaces the one in application-docker.yaml rather than adding to it, which is why the
-# base demo's S3FolderType and AthenaTableType are repeated here.
+# The task list replaces the one in application-docker.yaml rather than adding to it, so the base
+# demo's types have no task here. On a volume the base stack has already filled, its data product
+# (dp1) is still in the catalog; start from an empty one (`down -v`) for the medallion alone.
 services:
   app:
     environment:
-      SPRING_APPLICATION_JSON: '{"application":{"config":{"provisioning":{"tasks":{"stdout":{"entity-types":["S3FolderType","AthenaTableType","LakeZoneType","LakeTableType"],"delay":"500ms"}}}}}}'
+      SPRING_APPLICATION_JSON: '{"application":{"config":{"provisioning":{"tasks":{"stdout":{"entity-types":["LakeZoneType","LakeTableType"],"delay":"500ms"}}}}}}'
+
+  bulk-loader:
+    # Relative to the first compose file, i.e. the repository root.
+    volumes:
+      - ./examples/medallion:/medallion:ro
+    environment:
+      MODEL_FILE: /medallion/medallion-model.yaml
+      INSTANCES_FILE: /medallion/medallion-instances.yaml
