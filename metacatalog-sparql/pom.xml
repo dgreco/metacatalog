@@ -28,16 +28,23 @@
 
 
     <dependencies>
-        <!-- Spring MVC + embedded servlet container for the SPARQL endpoint -->
+        <!--
+            Spring MVC + embedded servlet container for the SPARQL endpoint, and
+            Thymeleaf for its query UI. Provided, like spring-boot-jdbc below: the
+            application ships both starters (metacatalog-ui and the application
+            declare them), and the shade plugin bundles only compile and runtime
+            scope, so none of their tree (Tomcat, Jackson, logback, ...) ends up
+            duplicated inside the shaded jar.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+            <scope>provided</scope>
         </dependency>
-
-        <!-- Thymeleaf for the server-side rendered SPARQL query UI -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!--
@@ -94,6 +101,29 @@
             <groupId>com.github.jsqlparser</groupId>
             <artifactId>jsqlparser</artifactId>
             <scope>compile</scope>
+        </dependency>
+
+        <!--
+            Ontop's own Tomcat and Jackson dependencies, declared here so they reach
+            the application as ordinary jars: the shade plugin leaves the Tomcat and
+            Jackson groups out of the shaded jar (see below), and the application
+            excludes Ontop's tree, so nothing else would bring these two in. The
+            application already ships jackson-core/databind/annotations 2.x, and
+            tomcat-juli's classes come with tomcat-embed-core, which ships them too.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>tomcat-jdbc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.tomcat</groupId>
+                    <artifactId>tomcat-juli</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!--
@@ -246,7 +276,8 @@
                 Cherry-picking (via <artifactSet><includes>) orphaned Ontop's
                 non-bundled transitives (Guice, OWL API) under the reduced POM,
                 causing NoClassDefFoundError at runtime. Bundling everything and
-                excluding only RDF4J + Spring + Lombok + test deps keeps the
+                excluding only RDF4J, Spring, the libraries the application ships
+                as jars (Tomcat, Jackson, logback), Lombok and test deps keeps the
                 shaded jar self-contained.
             -->
             <plugin>
@@ -272,6 +303,17 @@
                                     <exclude>org.mockito:*</exclude>
                                     <exclude>org.testcontainers:*</exclude>
                                     <exclude>org.junit.platform:*</exclude>
+                                    <!-- Tomcat, Jackson and logback: the application ships
+                                         them as jars, so a bundled copy would only race
+                                         them on the classpath. Ontop's own Tomcat and
+                                         Jackson artifacts are declared as dependencies
+                                         above instead. -->
+                                    <exclude>org.apache.tomcat:*</exclude>
+                                    <exclude>org.apache.tomcat.embed:*</exclude>
+                                    <exclude>com.fasterxml.jackson.core:*</exclude>
+                                    <exclude>com.fasterxml.jackson.datatype:*</exclude>
+                                    <exclude>tools.jackson.core:*</exclude>
+                                    <exclude>ch.qos.logback:*</exclude>
                                     <!-- Lombok: annotation processor, not runtime -->
                                     <exclude>org.projectlombok:*</exclude>
                                     <!-- other metacatalog modules: keep them out of the sparql uber-jar.

@@ -1,11 +1,18 @@
 package it.davidgreco.metacatalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import it.davidgreco.metacatalog.sparql.OntopRepositoryConfig;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -53,6 +60,41 @@ class ShadedOntopClasspathTest {
   void log4jOneIsNotOnTheClasspath() throws IOException {
     assertThat(resources("org/apache/log4j/net/JMSAppender.class")).isEmpty();
     assertThat(resources("org/apache/log4j/net/SocketServer.class")).isEmpty();
+  }
+
+  /**
+   * The shaded jar holds Ontop and the libraries only Ontop needs. Tomcat, Jackson and logback
+   * reached it as transitive dependencies of the Spring Boot starters and of Ontop, unrelocated,
+   * beside the jars the application ships anyway: two copies of each class, with classpath order
+   * deciding which loads, the way it did for JGraphT.
+   */
+  @Test
+  void sparqlJarBundlesNoTomcatJacksonOrLogback() throws IOException, URISyntaxException {
+    Path sparql =
+        Path.of(
+            OntopRepositoryConfig.class
+                .getProtectionDomain()
+                .getCodeSource()
+                .getLocation()
+                .toURI());
+    assumeTrue(
+        Files.isRegularFile(sparql),
+        "a reactor build that stops before `package` hands over target/classes, which bundles"
+            + " nothing");
+    List<String> bundledElsewhere =
+        List.of(
+            "org/apache/catalina/",
+            "org/apache/coyote/",
+            "org/apache/tomcat/",
+            "org/apache/juli/",
+            "com/fasterxml/jackson/",
+            "tools/jackson/",
+            "ch/qos/logback/");
+    try (ZipFile jar = new ZipFile(sparql.toFile())) {
+      assertThat(jar.stream().map(ZipEntry::getName))
+          .filteredOn(name -> bundledElsewhere.stream().anyMatch(name::startsWith))
+          .isEmpty();
+    }
   }
 
   private static List<URL> resources(String name) throws IOException {
