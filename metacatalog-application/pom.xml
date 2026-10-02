@@ -52,10 +52,28 @@
             <artifactId>metacatalog-ui</artifactId>
         </dependency>
 
-        <!-- SPARQL module: embedded Ontop endpoint + query UI -->
+        <!--
+            SPARQL module: embedded Ontop endpoint + query UI.
+
+            Ontop is excluded because the sparql jar already bundles it, shaded, with its
+            JGraphT 0.9.3 relocated. The dependency-reduced POM hides Ontop only from builds
+            that resolve this module from a repository. A reactor build (Docker, CI,
+            `mvn install` from the root) reads the original POM and would package Ontop's
+            whole unshaded tree next to the shaded jar. org.javabits.jgrapht 0.9.3 would then
+            share the org.jgrapht package with core's 1.5.3, and whenever its Graph loaded
+            first, aggregate provisioning failed with NoSuchMethodError: Graph.getType().
+            Excluding only the old JGraphT would not help: Ontop is compiled against its
+            DirectedGraph, which 1.5.3 removed. ShadedOntopClasspathTest guards this.
+        -->
         <dependency>
             <groupId>it.davidgreco.metacatalog</groupId>
             <artifactId>metacatalog-sparql</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>it.unibz.inf.ontop</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

@@ -68,7 +68,9 @@
             while Spring Data JPA 4.1 (metacatalog-core) calls the 5.x-only
             Select.getPlainSelect() — the two jsqlparser lines cannot coexist on one
             classpath. The shade plugin's dependency-reduced POM strips Ontop from the
-            transitive graph so the app only gets the shaded copy.
+            transitive graph of consumers that resolve this module from a repository;
+            reactor builds read this POM instead, so metacatalog-application excludes
+            it.unibz.inf.ontop from its dependency on this module.
         -->
         <dependency>
             <groupId>it.unibz.inf.ontop</groupId>
@@ -84,8 +86,9 @@
             jsqlparser 4.4: bundled shaded (relocated) with Ontop so Ontop's
             Select.getSelectBody() calls resolve against the private copy. Compile
             scope so the shade plugin includes it; the reduced POM strips it from
-            the transitive graph. Version/scope forced by this module's
-            dependencyManagement above (overriding the parent's 5.3 test pin).
+            the transitive graph, and in reactor builds the parent's test-scope pin
+            keeps it off the application's classpath. Version/scope forced by this
+            module's dependencyManagement above (overriding the parent's 5.3 test pin).
         -->
         <dependency>
             <groupId>com.github.jsqlparser</groupId>
@@ -96,9 +99,9 @@
         <!--
             RDF4J core API modules the sparql code references directly
             (Repository, Query/TupleQuery/GraphQuery, TurtleWriter). Declared
-            explicitly — not transitive from the RIO writers below, and the
-            shade plugin's reduced POM strips Ontop (which would otherwise
-            bring them in transitively).
+            explicitly — not transitive from the RIO writers below, and Ontop
+            (which would otherwise bring them in transitively) is stripped from
+            the application's classpath.
         -->
         <dependency>
             <groupId>org.eclipse.rdf4j</groupId>
@@ -219,7 +222,9 @@
                 maven-shade-plugin: bundle Ontop + ALL its transitives into the
                 sparql jar, relocating the two packages that clash with metacatalog-core.
                 createDependencyReducedPom=true strips the bundled artifacts from the
-                published POM so the app gets them only from this (shaded) jar.
+                published POM. A reactor build still reads the original one and would
+                package Ontop unshaded next to this jar, so metacatalog-application
+                excludes it.unibz.inf.ontop from its dependency on this module.
 
                 Two relocations are mandatory:
                   - net.sf.jsqlparser: Ontop 5.5.0 calls jsqlparser 4.x API
