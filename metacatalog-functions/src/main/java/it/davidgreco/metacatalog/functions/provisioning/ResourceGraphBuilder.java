@@ -2,7 +2,6 @@ package it.davidgreco.metacatalog.functions.provisioning;
 
 import static it.davidgreco.metacatalog.service.ServiceUtils.hasTrait;
 
-import io.vavr.Tuple2;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.service.AggregateService;
 import it.davidgreco.metacatalog.service.EntityPathResolver;
@@ -102,19 +101,13 @@ public class ResourceGraphBuilder {
   public Graph<Entity, DefaultEdge> buildResourceGraph(
       AggregateService.AggregatePart aggregate, String resourceTrait) {
     Graph<Entity, DefaultEdge> resourceGraph = new DefaultDirectedGraph<>(DefaultEdge.class);
-    var resourceSequence = getResourceSequence(aggregate, resourceTrait);
-    resourceSequence.stream()
-        .map(e -> new Tuple2<>(e, getMappingDependencies(e, resourceTrait)))
-        .toList()
-        .forEach(
-            t -> {
-              if (!resourceGraph.containsVertex(t._1)) resourceGraph.addVertex(t._1);
-              t._2.forEach(
-                  e -> {
-                    if (!resourceGraph.containsVertex(e)) resourceGraph.addVertex(e);
-                    resourceGraph.addEdge(t._1, e);
-                  });
-            });
+    for (var resource : getResourceSequence(aggregate, resourceTrait)) {
+      if (!resourceGraph.containsVertex(resource)) resourceGraph.addVertex(resource);
+      for (var dependency : getMappingDependencies(resource, resourceTrait)) {
+        if (!resourceGraph.containsVertex(dependency)) resourceGraph.addVertex(dependency);
+        resourceGraph.addEdge(resource, dependency);
+      }
+    }
     if (new CycleDetector<>(resourceGraph).detectCycles())
       throw new ServiceError("Cycle detected in the " + resourceTrait + " graph");
     return resourceGraph;

@@ -21,7 +21,7 @@ class AggregateResourceProcedures {
   private final AggregateService aggregateService;
   private final ResourceGraphBuilder resourceGraphBuilder;
   private final TaskManager taskManager;
-  private final AggregateProvisioningStatusRecorder statusRecorder;
+  private final AggregateRunStatusRecorder statusRecorder;
   private final ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars;
 
   private AggregateResourceProcedure procedure(ProvisioningTask.Operation operation) {

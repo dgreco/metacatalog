@@ -40,9 +40,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * then handed an already-completed future so its callback runs inline in that outer transaction.
  */
 @SpringBootTest
-class AggregateProvisioningStatusRecorderTests extends CommonServiceTestingSupport {
+class AggregateRunStatusRecorderTests extends CommonServiceTestingSupport {
 
-  public AggregateProvisioningStatusRecorderTests(ApplicationContext applicationContext) {
+  public AggregateRunStatusRecorderTests(ApplicationContext applicationContext) {
     super(applicationContext);
   }
 
@@ -112,7 +112,7 @@ class AggregateProvisioningStatusRecorderTests extends CommonServiceTestingSuppo
   @Test
   void testTheStatusWriteDoesNotRevertWhatTheRunCommitted() {
     var entityService = getApplicationContext().getBean(EntityService.class);
-    var recorder = getApplicationContext().getBean(AggregateProvisioningStatusRecorder.class);
+    var recorder = getApplicationContext().getBean(AggregateRunStatusRecorder.class);
     var transactionManager = getApplicationContext().getBean(PlatformTransactionManager.class);
 
     var rootId = freshAggregate();
