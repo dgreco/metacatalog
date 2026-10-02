@@ -187,4 +187,18 @@ class BuiltInCapabilityTests {
             derivedSchemaOf(BuiltInCapability.AUTHORIZATION.resourceSchema()),
             "{\"" + AccessControl.EFFECTIVE_GRANTS + "\": []}"));
   }
+
+  /**
+   * The success status a run writes comes from the capability's own {@code statuses}, in the {@code
+   * [build-up, tear-down, FAILED]} order {@link BuiltInCapability#successStatus} indexes into. A
+   * reordering would silently change what a successful run records — a {@code PROVISION} writing
+   * {@code UNPROVISIONED} — so the mapping is pinned here.
+   */
+  @Test
+  void successStatusComesFromTheCapabilitysOwnStatuses() {
+    assertEquals("PROVISIONED", BuiltInCapability.PROVISIONING.successStatus(false));
+    assertEquals("UNPROVISIONED", BuiltInCapability.PROVISIONING.successStatus(true));
+    assertEquals("AUTHORIZED", BuiltInCapability.AUTHORIZATION.successStatus(false));
+    assertEquals("REJECTED", BuiltInCapability.AUTHORIZATION.successStatus(true));
+  }
 }
