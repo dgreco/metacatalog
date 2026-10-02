@@ -500,14 +500,14 @@
         </dependency>
         <!--
             Force the Guava JRE variant. Ontop 5.5.0 needs
-            ImmutableList.toImmutableList() (present in 32.0.1-jre, absent in the
+            ImmutableList.toImmutableList() (present in the -jre releases, absent in the
             android variant that swagger-parser pulls in transitively).
             metacatalog does not use Guava directly, so the jre variant is safe.
         -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>32.0.1-jre</version>
+            <version>33.7.2-jre</version>
         </dependency>
             <!-- Testing & Checking-->
             <dependency>
