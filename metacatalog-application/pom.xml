@@ -180,6 +180,30 @@
                 </configuration>
             </plugin>
 
+            <!--
+                Writes this application's runtime classpath for ShadedSparqlJarTest, which
+                checks the shaded sparql jar against the jars the application ships. The test
+                classpath would not do: it also holds test-only libraries, which could hide one
+                the shaded jar needs and the application no longer ships.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>runtime-classpath</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>build-classpath</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/runtime-classpath.txt</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <!-- SpringBoot Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>

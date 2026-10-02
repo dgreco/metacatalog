@@ -14,8 +14,8 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-55.1%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-351-brightgreen)](#coverage)
+[![coverage](https://img.shields.io/badge/coverage-55.2%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![tests](https://img.shields.io/badge/tests-352-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -305,13 +305,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 8 = **351, 0 failures**.
+for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **352, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.1% of instructions, 37.8% of branches, 57.4% of lines**.
+**55.2% of instructions, 37.8% of branches, 57.5% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -499,12 +499,16 @@ and is configured under the `application.sparql.*` prefix in `application.yaml`:
 
 ### Shading
 
-Ontop's transitive graph is shaded into the `metacatalog-sparql` jar with
-`net.sf.jsqlparser` and `org.jgrapht` relocated to private packages
-(`it.davidgreco.metacatalog.sparql.shaded.*`). This keeps Ontop's pinned
-`jsqlparser` 4.x / `jgrapht` 0.9.x from clashing with the versions Spring
-Data JPA / metacatalog-core use at runtime. RDF4J is managed separately at
-5.3.0 and is **not** shaded.
+Ontop, and the libraries only Ontop needs, are shaded into the
+`metacatalog-sparql` jar with `net.sf.jsqlparser` and `org.jgrapht` relocated
+to private packages (`it.davidgreco.metacatalog.sparql.shaded.*`). This keeps
+Ontop's pinned `jsqlparser` 4.x / `jgrapht` 0.9.x from clashing with the
+versions Spring Data JPA / metacatalog-core use at runtime. Libraries Ontop
+shares with the application (Tomcat, Jackson, logback, Guava, the Commons
+libraries, RDF4J, ...) are **not** shaded: the application ships each as a
+jar, and Ontop runs on that copy rather than racing a second one on the
+classpath. `ShadedSparqlJarTest` fails if one is bundled again, or if the
+application stops shipping one Ontop needs.
 
 The relocated copy is the only way Ontop runs: Ontop 5.5.0 (the latest
 release) is compiled against JGraphT 0.9.x's `DirectedGraph`, which 1.5.x
