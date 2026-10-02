@@ -2,11 +2,12 @@ package it.davidgreco.metacatalog.common;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
@@ -16,13 +17,20 @@ class JsonUtilsTests {
 
   private final JsonUtils jsonUtils = newJsonUtils();
 
+  private static JsonNode resource(String path) {
+    try (var in = Thread.currentThread().getContextClassLoader().getResourceAsStream(path)) {
+      return new ObjectMapper().readTree(in);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
+
   private static JsonUtils newJsonUtils() {
     var jsonMapper = new ObjectMapper();
     jsonMapper.registerModule(new Jdk8Module());
     var yamlMapper = new ObjectMapper(new YAMLFactory());
     yamlMapper.registerModule(new Jdk8Module());
-    return new JsonUtils(
-        jsonMapper, yamlMapper, JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012));
+    return new JsonUtils(jsonMapper, yamlMapper, JsonUtils.newSchemaRegistry());
   }
 
   @Test
@@ -64,32 +72,11 @@ class JsonUtilsTests {
                   "additionalProperties" : false
                 }""";
 
-    var baseSchema =
-        jsonUtils
-            .jsonSchemaFactory()
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/base_schema.json"))
-            .getSchemaNode();
+    var baseSchema = resource("jsons/base_schema.json");
 
-    var middleSchema =
-        jsonUtils
-            .jsonSchemaFactory()
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/middle_schema.json"))
-            .getSchemaNode();
+    var middleSchema = resource("jsons/middle_schema.json");
 
-    var leafSchema =
-        jsonUtils
-            .jsonSchemaFactory()
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/leaf_schema.json"))
-            .getSchemaNode();
+    var leafSchema = resource("jsons/leaf_schema.json");
 
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
         .assertIsMatch(
@@ -133,13 +120,7 @@ class JsonUtilsTests {
             }
             """;
 
-    var baseSchema =
-        jsonUtils
-            .jsonSchemaFactory()
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/base_schema.json"));
+    var baseSchema = jsonUtils.schemaOf(resource("jsons/base_schema.json"));
 
     JsonAssert.comparator(JSONCompareMode.NON_EXTENSIBLE)
         .assertIsMatch(

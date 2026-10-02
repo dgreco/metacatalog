@@ -16,7 +16,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * End-to-end integration test for the SPARQL module: boots the Spring context with the real Ontop
@@ -28,7 +28,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 class SparqlEndpointIntegrationTest {
 
   // Reused singleton container (started once, cleaned on JVM shutdown).
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
   @BeforeAll
   static void beforeAll() {

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** Mirrors the same-named class in core, the functions modules and the Iceberg catalog. */
 @Getter
@@ -21,7 +21,7 @@ public class CommonServiceTestingSupport {
   // stopped per class: stopping it in @AfterAll would kill the DB while Spring's cached
   // ApplicationContext (and its Hikari pool) still points at the old mapped port, breaking
   // subsequent test classes. The container is cleaned up on JVM shutdown.
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
   /** Claimed once, before any context starts, so every test class in the module shares it. */
   static final int freePort = freePort();

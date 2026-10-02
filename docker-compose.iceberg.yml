@@ -116,7 +116,7 @@ services:
   # Waits for the iceberg-catalog too: the demo model's Relationships section
   # references IcebergTableTrait, which that app's startup contributor creates.
   iceberg-demo-loader:
-    image: curlimages/curl:8.10.1
+    image: curlimages/curl:8.22.0
     container_name: metacatalog-iceberg-demo-loader
     depends_on:
       app:

@@ -24,7 +24,7 @@ stages:
 # wrong one: a GitLab reader sent to github.io, or a GitHub reader to a page they cannot open.
 readme-sync:
   stage: verify
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   script:
     - ./scripts/readme-sync.sh --check
   rules:
@@ -38,7 +38,7 @@ build:
   stage: build
   image: maven:3-eclipse-temurin-25
   services:
-    - docker:28-dind
+    - docker:29-dind
   cache:
     policy: pull-push
     key: "maven-cache-$CI_COMMIT_REF_SLUG"
@@ -99,7 +99,7 @@ build:
 # and the half that changes behaviour: the number lands where the decision is made.
 coverage-report:
   stage: deploy
-  image: python:3.13-slim
+  image: python:3.14-slim
   needs: [build]
   script:
     - python3 scripts/jacoco-to-cobertura.py metacatalog-*/target/site/jacoco/jacoco.xml > cobertura.xml
@@ -127,7 +127,7 @@ coverage-report:
 # wiki it has no business writing to.
 coverage-wiki:
   stage: deploy
-  image: alpine:3.21
+  image: alpine:3.24
   needs: [build]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -223,7 +223,7 @@ coverage-wiki:
 # publishing by itself the day somebody sets pages_external_url.
 pages:
   stage: deploy
-  image: debian:bookworm-slim
+  image: debian:trixie-slim
   needs: [build]
   script:
     - test -f target/coverage-site/index.html

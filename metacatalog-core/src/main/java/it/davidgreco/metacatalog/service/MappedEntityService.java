@@ -128,7 +128,7 @@ public class MappedEntityService {
                     sourceEntity.getValues(),
                     additionalEntitiesValues,
                     mappingRelationship.getMappingValues(),
-                    jsonUtils.jsonSchemaFactory().getSchema(targetVersion.getSchema()));
+                    jsonUtils.schemaOf(targetVersion.getSchema()));
             var mappedEntity = new Entity();
             mappedEntity.setEntityType(targetEntityType);
             mappedEntity.setEntityTypeVersion(targetVersion);
@@ -244,7 +244,7 @@ public class MappedEntityService {
                   sourceEntity.getValues(),
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
-                  jsonUtils.jsonSchemaFactory().getSchema(targetVersion.getSchema()));
+                  jsonUtils.schemaOf(targetVersion.getSchema()));
           mappedEntity.setValues(mappedValues);
           mappedEntity.setEntityTypeVersion(targetVersion);
           entityRepository.save(mappedEntity);

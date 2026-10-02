@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
@@ -58,54 +58,51 @@
 
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
-        <spring-boot.version>4.1.0</spring-boot.version>
+        <spring-boot.version>4.1.1</spring-boot.version>
 
         <!--   Hypersistence -->
-        <hypersistence.version>3.15.4</hypersistence.version>
+        <hypersistence.version>3.16.0</hypersistence.version>
 
         <!--   Json Schema & Json Path -->
         <!--   json-schema-validator stays on the 1.x line: 3.0.x is built on Jackson 3
              (tools.jackson.*), while this codebase still uses Jackson 2
              (com.fasterxml.jackson.*) and passes Jackson-2 JsonNode instances to the
              validator. Migrating to 3.x requires moving the whole codebase to Jackson 3. -->
-        <json-schema-validator.version>1.5.9</json-schema-validator.version>
+        <json-schema-validator.version>3.0.8</json-schema-validator.version>
         <json-path.version>3.0.0</json-path.version>
 
         <!--   Misc -->
-        <lombok.version>1.18.46</lombok.version>
+        <lombok.version>1.18.48</lombok.version>
         <vavr.version>1.0.1</vavr.version>
-        <jsqlparser.version>5.3</jsqlparser.version>
+        <jsqlparser.version>5.4</jsqlparser.version>
         <spring-retry.version>2.0.13</spring-retry.version>
 
         <!--   OpenApi Related -->
-        <swagger-annotations.version>2.2.52</swagger-annotations.version>
-        <swagger-parser.version>2.1.45</swagger-parser.version>
-        <springdoc.version>3.0.3</springdoc.version>
+        <swagger-annotations.version>2.2.55</swagger-annotations.version>
+        <swagger-parser.version>2.1.48</swagger-parser.version>
+        <springdoc.version>3.1.1</springdoc.version>
 
         <!-- JGraphT -->
         <jgrapht.version>1.5.3</jgrapht.version>
 
         <!--   Apache Iceberg (metacatalog-iceberg-catalog) -->
-        <iceberg.version>1.11.0</iceberg.version>
+        <iceberg.version>1.12.0</iceberg.version>
         <!-- Hive Metastore Thrift API types, used by metacatalog-hive-metastore. Only the
              generated protocol classes are wanted; see that module's exclusions. -->
-        <hive.version>4.2.0</hive.version>
+        <hive.version>4.2.1</hive.version>
 
         <!--   Postgresql -->
         <postgresql.version>42.7.13</postgresql.version>
 
         <!--   Flyway -->
-        <flyway.version>12.11.0</flyway.version>
-
-        <!--   Logback -->
-        <logback.version>1.5.38</logback.version>
+        <flyway.version>13.9.0</flyway.version>
 
         <!--   Ontop & RDF4J (metacatalog-sparql) -->
         <ontop.version>5.5.0</ontop.version>
-        <rdf4j.version>5.3.0</rdf4j.version>
+        <rdf4j.version>6.1.0</rdf4j.version>
 
         <!--   Testing & Checking -->
-        <testcontainers.version>1.21.4</testcontainers.version>
+        <selenium.version>4.50.0</selenium.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
 
         <!-- JUnit tag filtering: tests tagged "stress" are excluded from normal builds
@@ -172,14 +169,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>${testcontainers.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-
             <!-- SpringBoot & Openapi -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -217,7 +206,7 @@
             <dependency>
                 <groupId>org.openapitools</groupId>
                 <artifactId>jackson-databind-nullable</artifactId>
-                <version>0.2.10</version>
+                <version>0.2.12</version>
             </dependency>
             <dependency>
                 <groupId>io.swagger.core.v3</groupId>
@@ -240,16 +229,16 @@
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
             </dependency>
-            <!-- JAXB dependencies for Java 9+ (removed from JDK) -->
+            <!-- JAXB dependencies for Java 9+ (removed from JDK), at the versions Spring Boot manages -->
             <dependency>
                 <groupId>jakarta.xml.bind</groupId>
                 <artifactId>jakarta.xml.bind-api</artifactId>
-                <version>4.0.2</version>
+                <version>${jakarta-xml-bind.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.glassfish.jaxb</groupId>
                 <artifactId>jaxb-runtime</artifactId>
-                <version>4.0.9</version>
+                <version>${glassfish-jaxb.version}</version>
             </dependency>
             <!-- Old javax JAXB for backward compatibility with Swagger -->
             <dependency>
@@ -362,7 +351,7 @@
         <!--
             Ontop pins old logback (1.2.x), slf4j (1.7.x) and its own RDF4J
             5.1.4 (+ the ancient 2.2.2 pulled by owlapi-rio); the metacatalog
-            parent uses logback 1.5.x / slf4j 2.x and RDF4J 5.3.0, so logback,
+            parent uses logback 1.5.x / slf4j 2.x and RDF4J 6.1.0, so logback,
             slf4j and the whole org.eclipse.rdf4j group are excluded here and
             the parent's versions win. Ontop also depends on jsqlparser 4.x
             (Select.getSelectBody()) and the ancient org.javabits.jgrapht 0.9.3
@@ -499,19 +488,19 @@
         </dependency>
         <!--
             Force the Guava JRE variant. Ontop 5.5.0 needs
-            ImmutableList.toImmutableList() (present in 32.0.1-jre, absent in the
+            ImmutableList.toImmutableList() (present in the -jre releases, absent in the
             android variant that swagger-parser pulls in transitively).
             metacatalog does not use Guava directly, so the jre variant is safe.
         -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>32.0.1-jre</version>
+            <version>33.7.2-jre</version>
         </dependency>
             <!-- Testing & Checking-->
             <dependency>
                 <groupId>org.testcontainers</groupId>
-                <artifactId>postgresql</artifactId>
+                <artifactId>testcontainers-postgresql</artifactId>
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
             </dependency> 
@@ -589,7 +578,7 @@
                 <plugin>
                     <groupId>org.openapitools</groupId>
                     <artifactId>openapi-generator-maven-plugin</artifactId>
-                    <version>7.23.0</version>
+                    <version>7.25.0</version>
                 </plugin>
 
                 <!-- JaCoCo Plugin -->
@@ -617,7 +606,7 @@
                 <plugin>
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
-                    <version>3.8.0</version>
+                    <version>3.10.3</version>
                     <configuration>
                         <java>
                             <includes>
@@ -644,7 +633,7 @@
                 <plugin>
                     <groupId>org.owasp</groupId>
                     <artifactId>dependency-check-maven</artifactId>
-                    <version>12.2.2</version>
+                    <version>13.0.0</version>
                     <configuration>
                         <failBuildOnCVSS>9</failBuildOnCVSS>
                         <suppressionFiles>
@@ -687,7 +676,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.5.6</version>
+                    <version>3.6.0</version>
                     <configuration>
                         <groups>${test.groups}</groups>
                         <excludedGroups>${test.excluded.groups}</excludedGroups>

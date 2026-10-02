@@ -33,7 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Boots the real application against a Testcontainers PostgreSQL and drives it over a real Thrift
@@ -55,7 +55,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class HiveMetastoreEndToEndTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
   static ConfigurableApplicationContext context;
   static ThriftHiveMetastore.Client client;
   static TSocket transport;

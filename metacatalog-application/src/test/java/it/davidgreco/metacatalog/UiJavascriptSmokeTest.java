@@ -22,8 +22,8 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.testcontainers.containers.BrowserWebDriverContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.testcontainers.selenium.BrowserWebDriverContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
@@ -38,9 +38,9 @@ import org.testcontainers.utility.DockerImageName;
  */
 class UiJavascriptSmokeTest {
 
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
-  static BrowserWebDriverContainer<?> chrome;
+  static BrowserWebDriverContainer chrome;
 
   static ConfigurableApplicationContext context;
 
@@ -73,10 +73,9 @@ class UiJavascriptSmokeTest {
     // chromium flavor is published multi-arch, and the default's amd64-only image dies with
     // "exec format error" on ARM64 runners (e.g. the GitLab CI host).
     chrome =
-        new BrowserWebDriverContainer<>(
-                DockerImageName.parse("selenium/standalone-chromium:4.43.0")
-                    .asCompatibleSubstituteFor("selenium/standalone-chrome"))
-            .withCapabilities(new ChromeOptions());
+        new BrowserWebDriverContainer(
+            DockerImageName.parse("selenium/standalone-chromium:4.49.0")
+                .asCompatibleSubstituteFor("selenium/standalone-chrome"));
     chrome.start();
     driver = new RemoteWebDriver(chrome.getSeleniumAddress(), new ChromeOptions());
   }

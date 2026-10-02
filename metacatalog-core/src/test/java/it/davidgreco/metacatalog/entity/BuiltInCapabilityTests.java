@@ -4,13 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.networknt.schema.InputFormat;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import it.davidgreco.metacatalog.common.JsonSchema;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.service.AccessPolicy;
 import java.util.ArrayList;
@@ -33,9 +31,7 @@ class BuiltInCapabilityTests {
 
   private static final JsonUtils JSON_UTILS =
       new JsonUtils(
-          new ObjectMapper(),
-          new ObjectMapper(new YAMLFactory()),
-          JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012));
+          new ObjectMapper(), new ObjectMapper(new YAMLFactory()), JsonUtils.newSchemaRegistry());
 
   /**
    * The schema an entity of a type carrying only this trait would actually be validated against.
@@ -48,7 +44,7 @@ class BuiltInCapabilityTests {
     assertFalse(
         merged.get().get("additionalProperties").asBoolean(true),
         "mergeSchemas is expected to close the schema");
-    return JSON_UTILS.jsonSchemaFactory().getSchema(merged.get());
+    return JSON_UTILS.schemaOf(merged.get());
   }
 
   private static List<String> propertyNames(String schema) {
@@ -60,7 +56,11 @@ class BuiltInCapabilityTests {
   }
 
   private static List<String> validate(JsonSchema schema, String document) {
-    return schema.validate(document, InputFormat.JSON).stream().map(Object::toString).toList();
+    try {
+      return schema.validate(JSON_UTILS.jsonMapper().readTree(document));
+    } catch (JsonProcessingException e) {
+      throw new IllegalArgumentException(e);
+    }
   }
 
   @Test

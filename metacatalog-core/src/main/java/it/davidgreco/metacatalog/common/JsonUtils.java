@@ -6,7 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.networknt.schema.*;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaLocation;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SchemaRegistryConfig;
+import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.dialect.DialectId;
+import com.networknt.schema.path.PathType;
 import io.vavr.Tuple2;
 import io.vavr.control.Either;
 import java.util.*;
@@ -15,7 +21,7 @@ import java.util.*;
  * Spring-managed JSON utility component providing JSON Schema validation, schema merging, and
  * aggregate value conversion.
  *
- * <p>The underlying {@link ObjectMapper} instances, {@link JsonSchemaFactory}, and JSON Path {@link
+ * <p>The underlying {@link ObjectMapper} instances, {@link SchemaRegistry}, and JSON Path {@link
  * com.jayway.jsonpath.Configuration} are registered as Spring beans in {@link
  * it.davidgreco.metacatalog.CoreConfig} and injected here, replacing the previous mutable static
  * singletons.
@@ -34,17 +40,34 @@ public class JsonUtils {
 
   private final ObjectMapper jsonMapper;
   private final ObjectMapper yamlMapper;
-  private final JsonSchemaFactory jsonSchemaFactory;
-  private final JsonSchema jsonSchemaSchema;
+  private final SchemaRegistry schemaRegistry;
+  private final Schema jsonSchemaSchema;
 
   public JsonUtils(
-      ObjectMapper jsonMapper, ObjectMapper yamlMapper, JsonSchemaFactory jsonSchemaFactory) {
+      ObjectMapper jsonMapper, ObjectMapper yamlMapper, SchemaRegistry schemaRegistry) {
     this.jsonMapper = jsonMapper;
     this.yamlMapper = yamlMapper;
-    this.jsonSchemaFactory = jsonSchemaFactory;
+    this.schemaRegistry = schemaRegistry;
+    // From a registry of its own, keeping the default JSON Pointer locations: errors in a schema
+    // have always read "/type: ...", while errors in values read "$.items[1].name: ...".
     this.jsonSchemaSchema =
-        jsonSchemaFactory.getSchema(
-            SchemaLocation.of(SchemaId.V202012), SchemaValidatorsConfig.builder().build());
+        SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
+            .getSchema(SchemaLocation.of(DialectId.DRAFT_2020_12));
+  }
+
+  /**
+   * Creates the registry metacatalog compiles schemas with: JSON Schema 2020-12, reporting where a
+   * value failed as a JSONPath ({@code $.items[1].name}), the form validation errors have always
+   * reached API clients in. json-schema-validator 3 defaults to JSON Pointers instead.
+   *
+   * @return a new schema registry
+   */
+  public static SchemaRegistry newSchemaRegistry() {
+    return SchemaRegistry.withDefaultDialect(
+        SpecificationVersion.DRAFT_2020_12,
+        builder ->
+            builder.schemaRegistryConfig(
+                SchemaRegistryConfig.builder().pathType(PathType.LEGACY).build()));
   }
 
   public ObjectMapper jsonMapper() {
@@ -55,8 +78,14 @@ public class JsonUtils {
     return yamlMapper;
   }
 
-  public JsonSchemaFactory jsonSchemaFactory() {
-    return jsonSchemaFactory;
+  /**
+   * Compiles a schema document with this instance's registry.
+   *
+   * @param schemaNode the schema document
+   * @return the compiled schema
+   */
+  public JsonSchema schemaOf(JsonNode schemaNode) {
+    return JsonSchema.compile(schemaRegistry, schemaNode);
   }
 
   private static final Set<String> notAllowedKeywords =
@@ -124,24 +153,18 @@ public class JsonUtils {
   public Either<List<String>, JsonSchema> convertToMappingSchema(JsonSchema schema) {
     var node = schema.getSchemaNode().deepCopy();
     convertFieldTypeToStringType(node.get(PROPERTIES));
-    return Either.right(jsonSchemaFactory.getSchema(node));
+    return Either.right(schemaOf(node));
   }
 
   public Either<List<String>, JsonSchema> stringToJsonSchema(String json) {
     try {
       var schemaNode = jsonMapper.readTree(json);
-      var res =
-          jsonSchemaSchema.validate(
-              schemaNode.toPrettyString(),
-              InputFormat.JSON,
-              executionContext ->
-                  executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
+      var res = JsonSchema.validateWithFormatAssertions(jsonSchemaSchema, schemaNode.toString());
       if (checkNotAllowedKeywords(schemaNode))
         return Either.left(List.of("The schema contains not allowed keywords"));
-      if (res.isEmpty()) return Either.right(jsonSchemaFactory.getSchema(schemaNode));
+      if (res.isEmpty()) return Either.right(schemaOf(schemaNode));
       else {
-        List<String> errors =
-            new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
+        List<String> errors = new ArrayList<>(JsonSchema.messages(res));
         return Either.left(errors);
       }
     } catch (JsonProcessingException e) {
@@ -196,14 +219,10 @@ public class JsonUtils {
     mergedSchemaJson.set(REQUIRED, required);
     mergedSchemaJson.put("additionalProperties", false);
     var res =
-        jsonSchemaSchema.validate(
-            mergedSchemaJson.toPrettyString(),
-            InputFormat.JSON,
-            executionContext ->
-                executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
+        JsonSchema.validateWithFormatAssertions(jsonSchemaSchema, mergedSchemaJson.toString());
     if (res.isEmpty()) return Either.right(mergedSchemaJson);
     else {
-      List<String> errors = new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
+      List<String> errors = new ArrayList<>(JsonSchema.messages(res));
       return Either.left(errors);
     }
   }

@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import com.networknt.schema.SchemaRegistry;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.AdvisoryLockManager;
 import it.davidgreco.metacatalog.repository.*;
@@ -57,8 +56,8 @@ public class CoreConfig {
   }
 
   @Bean
-  public JsonSchemaFactory jsonSchemaFactory() {
-    return JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+  public SchemaRegistry jsonSchemaRegistry() {
+    return JsonUtils.newSchemaRegistry();
   }
 
   @Bean
@@ -72,8 +71,8 @@ public class CoreConfig {
   public JsonUtils jsonUtils(
       ObjectMapper jsonMapper,
       @Qualifier("yamlMapper") ObjectMapper yamlMapper,
-      JsonSchemaFactory jsonSchemaFactory) {
-    return new JsonUtils(jsonMapper, yamlMapper, jsonSchemaFactory);
+      SchemaRegistry jsonSchemaRegistry) {
+    return new JsonUtils(jsonMapper, yamlMapper, jsonSchemaRegistry);
   }
 
   /**

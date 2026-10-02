@@ -6,8 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import it.davidgreco.metacatalog.common.JsonSchema;
+import it.davidgreco.metacatalog.common.JsonUtils;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -43,8 +43,6 @@ class MappingValueEvaluatorTests {
   }
 
   private static final ObjectMapper jsonMapper = createJsonMapper();
-  private static final JsonSchemaFactory jsonSchemaFactory =
-      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
 
   private static JsonNode source(String json) throws Exception {
     return jsonMapper.readTree(json);
@@ -66,8 +64,8 @@ class MappingValueEvaluatorTests {
    * A permissive target schema so that any successfully evaluated expression passes validation. The
    * RCE vectors are expected to fail at evaluation time, not at validation time.
    */
-  private static final com.networknt.schema.JsonSchema PERMISSIVE_SCHEMA =
-      jsonSchemaFactory.getSchema("{\"type\": \"object\"}");
+  private static final JsonSchema PERMISSIVE_SCHEMA =
+      JsonSchema.compile(JsonUtils.newSchemaRegistry(), "{\"type\": \"object\"}");
 
   @Test
   void typeReferenceRceIsRejected() throws Exception {

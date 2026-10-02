@@ -21,7 +21,7 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Pins what the Compose healthchecks rely on, because getting it wrong is invisible in the build
@@ -46,7 +46,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class ReadinessProbeStartupTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
   static ConfigurableApplicationContext context;
   static Path warehouse;
   static int port;

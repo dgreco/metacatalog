@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-352-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-369-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -53,7 +53,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Spring Boot 4.1.0**
 - **PostgreSQL** (JDBC driver 42.7.13, server 18+)
 - **Maven 3.9.9+**
-- **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 5.3.0** (SPARQL protocol + result serialisation)
+- **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 6.1.0** (SPARQL protocol + result serialisation)
 
 ## Prerequisites
 
@@ -80,7 +80,7 @@ docker compose up --build
 ```
 
 This starts:
-- **PostgreSQL 18.4** on port 5432
+- **PostgreSQL 18.6** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
   traits, entity types and entities from `docker/bulk/` once the app is healthy
@@ -304,13 +304,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **352, 0 failures**.
+for the Testcontainers PostgreSQL): core 188 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **369, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.2% of instructions, 37.8% of branches, 57.5% of lines**.
+**55.2% of instructions, 37.9% of branches, 57.5% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -652,7 +652,7 @@ When the application is running, access the documentation:
 - **Flyway**: Database migration management
 - **Testcontainers**: Integration testing with PostgreSQL
 - **Ontop 5.5.0**: Virtual knowledge graph (SPARQL-to-SQL over Postgres)
-- **RDF4J 5.3.0**: SPARQL protocol parsing and result serialisation
+- **RDF4J 6.1.0**: SPARQL protocol parsing and result serialisation
 - **Yasgui**: Browser SPARQL query editor (loaded from CDN at the `/sparql` UI)
 
 ## Type Versioning

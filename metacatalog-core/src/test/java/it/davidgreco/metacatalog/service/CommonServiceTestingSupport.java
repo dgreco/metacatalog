@@ -1,6 +1,10 @@
 package it.davidgreco.metacatalog.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.bootstrap.ImmutableModelInstaller;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
@@ -10,7 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Getter
 @RequiredArgsConstructor
@@ -20,7 +24,7 @@ class CommonServiceTestingSupport {
   // stopped per class: stopping it in @AfterAll would kill the DB while Spring's cached
   // ApplicationContext (and its Hikari pool) still points at the old mapped port, breaking
   // subsequent test classes. The container is cleaned up on JVM shutdown.
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
   @BeforeAll
   static void beforeAll() throws Exception {
@@ -79,4 +83,18 @@ class CommonServiceTestingSupport {
   }
 
   private final ApplicationContext applicationContext;
+
+  /**
+   * Reads a JSON document from the test classpath, such as a schema under {@code jsons/}.
+   *
+   * @param path the resource path
+   * @return the parsed document
+   */
+  static JsonNode schemaResource(String path) {
+    try (var in = Thread.currentThread().getContextClassLoader().getResourceAsStream(path)) {
+      return new ObjectMapper().readTree(in);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
 }

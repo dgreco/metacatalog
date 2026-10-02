@@ -1,7 +1,6 @@
 package it.davidgreco.metacatalog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.networknt.schema.ValidationMessage;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.EntityType;
@@ -273,7 +272,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
         mappingEntityTypeRelationshipRepository.findMappingEntityTypeRelationshipByTarget(live);
     if (mappings.isEmpty()) return;
     var validatingSchemaEither =
-        jsonUtils.convertToMappingSchema(jsonUtils.jsonSchemaFactory().getSchema(live.getSchema()));
+        jsonUtils.convertToMappingSchema(jsonUtils.schemaOf(live.getSchema()));
     if (validatingSchemaEither.isLeft())
       throw new SchemaValidationError(validatingSchemaEither.getLeft());
     var validatingSchema = validatingSchemaEither.get();
@@ -288,9 +287,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
                 + " to "
                 + live.getName()
                 + " does not satisfy the new schema ("
-                + messages.stream()
-                    .map(ValidationMessage::getMessage)
-                    .collect(java.util.stream.Collectors.joining("; "))
+                + String.join("; ", messages)
                 + "). Update or delete the mapping first.");
       }
     }
