@@ -25,12 +25,12 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest
 @RequiredArgsConstructor
 class MetacatalogApiTests {
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
+  static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
   @DynamicPropertySource
   static void datasourceProperties(DynamicPropertyRegistry registry) {

@@ -1,7 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.entity.RelationType.*;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.JsonSchemaFactory;

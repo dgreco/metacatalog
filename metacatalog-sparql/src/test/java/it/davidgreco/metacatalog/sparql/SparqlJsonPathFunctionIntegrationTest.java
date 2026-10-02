@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
  * Integration test for the {@code mtfn:jsonPathExists} SPARQL extension function: a SQL/JSON path
@@ -35,7 +35,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @AutoConfigureMockMvc
 class SparqlJsonPathFunctionIntegrationTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
+  static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:18.6");
 
   static String tripsTableId;
   static String zonesTableId;

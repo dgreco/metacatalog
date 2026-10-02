@@ -106,7 +106,6 @@
 
         <!--   Testing & Checking -->
         <selenium.version>4.50.0</selenium.version>
-        <testcontainers.version>1.21.4</testcontainers.version>
         <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
 
         <!-- JUnit tag filtering: tests tagged "stress" are excluded from normal builds
@@ -171,14 +170,6 @@
                 <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-hive-metastore</artifactId>
                 <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>${testcontainers.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
             </dependency>
 
             <!-- SpringBoot & Openapi -->
@@ -512,7 +503,7 @@
             <!-- Testing & Checking-->
             <dependency>
                 <groupId>org.testcontainers</groupId>
-                <artifactId>postgresql</artifactId>
+                <artifactId>testcontainers-postgresql</artifactId>
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
             </dependency> 
