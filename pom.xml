@@ -91,9 +91,6 @@
              generated protocol classes are wanted; see that module's exclusions. -->
         <hive.version>4.2.1</hive.version>
 
-        <!--   Postgresql -->
-        <postgresql.version>42.7.13</postgresql.version>
-
         <!--   Flyway -->
         <flyway.version>13.9.0</flyway.version>
 
