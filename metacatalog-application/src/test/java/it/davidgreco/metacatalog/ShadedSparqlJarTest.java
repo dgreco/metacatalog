@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.junit.jupiter.api.BeforeAll;
@@ -81,9 +82,14 @@ class ShadedSparqlJarTest {
                     .split(File.pathSeparator))
             .map(Path::of)
             .toList();
+    // By directory, not file name: the entry is metacatalog-sparql/target/classes when the reactor
+    // has not packaged the module in this run, as in the second, `test`-only pass of CI's build.
     sparqlJar =
         runtime.stream()
-            .filter(p -> p.getFileName().toString().startsWith("metacatalog-sparql"))
+            .filter(
+                p ->
+                    StreamSupport.stream(p.spliterator(), false)
+                        .anyMatch(element -> element.toString().equals("metacatalog-sparql")))
             .findFirst()
             .orElseThrow();
     assumeTrue(
