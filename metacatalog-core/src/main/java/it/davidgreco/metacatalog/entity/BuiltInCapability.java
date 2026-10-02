@@ -42,7 +42,7 @@ public enum BuiltInCapability {
       List.of("PROVISIONED", "UNPROVISIONED", "FAILED"),
       List.of(),
       List.of(),
-      null),
+      Optional.empty()),
 
   /**
    * Granting and withdrawing access to them. The root additionally carries the policy that decides
@@ -56,7 +56,7 @@ public enum BuiltInCapability {
       List.of("AUTHORIZED", "REJECTED", "FAILED"),
       AccessControl.ROOT_PROPERTIES,
       AccessControl.RESOURCE_PROPERTIES,
-      AccessControl.EFFECTIVE_GRANTS);
+      Optional.of(AccessControl.EFFECTIVE_GRANTS));
 
   /**
    * The machinery sets the status pair, not the user, so both are {@code readOnly}: the UI renders
@@ -84,7 +84,7 @@ public enum BuiltInCapability {
   private final List<String> statuses;
   private final List<String> rootProperties;
   private final List<String> resourceProperties;
-  private final String grantsField;
+  private final Optional<String> grantsField;
 
   BuiltInCapability(
       String rootTrait,
@@ -94,7 +94,7 @@ public enum BuiltInCapability {
       List<String> statuses,
       List<String> rootProperties,
       List<String> resourceProperties,
-      String grantsField) {
+      Optional<String> grantsField) {
     this.rootTrait = rootTrait;
     this.resourceTrait = resourceTrait;
     this.statusField = statusField;
@@ -126,6 +126,22 @@ public enum BuiltInCapability {
   }
 
   /**
+   * The status a successful run of one direction leaves behind, taken from this capability's own
+   * {@code statuses} list — the same list the derived schema's {@code enum} renders, so the status
+   * written on success and the statuses the schema admits can never disagree.
+   *
+   * <p>{@code statuses} is ordered {@code [build-up, tear-down, FAILED]}, so {@code
+   * dependentsFirst} {@code false} (building up — {@code PROVISION} / {@code AUTHORIZE}) picks
+   * {@code statuses[0]} and {@code true} (tearing down — {@code UNPROVISION} / {@code REJECT})
+   * picks {@code statuses[1]}.
+   *
+   * @param dependentsFirst the wiring direction of the run
+   */
+  public String successStatus(boolean dependentsFirst) {
+    return statuses.get(dependentsFirst ? 1 : 0);
+  }
+
+  /**
    * The entity value field a run records, on each resource, the grants it applied there — empty for
    * a capability that grants nothing.
    *
@@ -135,7 +151,7 @@ public enum BuiltInCapability {
    * write it when this is present and not otherwise, rather than testing which capability they are.
    */
   public Optional<String> grantsField() {
-    return Optional.ofNullable(grantsField);
+    return grantsField;
   }
 
   /**

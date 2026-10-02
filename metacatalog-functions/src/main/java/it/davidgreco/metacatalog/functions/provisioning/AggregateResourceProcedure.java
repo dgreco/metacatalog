@@ -46,7 +46,7 @@ public final class AggregateResourceProcedure extends AbstractEntityProcedure {
   private final AggregateService aggregateService;
   private final ResourceGraphBuilder resourceGraphBuilder;
   private final TaskManager taskManager;
-  private final AggregateProvisioningStatusRecorder statusRecorder;
+  private final AggregateRunStatusRecorder statusRecorder;
 
   /**
    * Registrars whose task factories key off entity types created at runtime, so they cannot
@@ -60,7 +60,7 @@ public final class AggregateResourceProcedure extends AbstractEntityProcedure {
       AggregateService aggregateService,
       ResourceGraphBuilder resourceGraphBuilder,
       TaskManager taskManager,
-      AggregateProvisioningStatusRecorder statusRecorder,
+      AggregateRunStatusRecorder statusRecorder,
       ObjectProvider<DeferredTaskFactoryRegistrar> deferredRegistrars) {
     this.operation = operation;
     this.aggregateService = aggregateService;
@@ -110,8 +110,7 @@ public final class AggregateResourceProcedure extends AbstractEntityProcedure {
           for (var task : tasks.values()) {
             schedule.addTask(task);
           }
-          return new AggregateProvisioningStatusRecorder.Plan(
-              taskManager.schedule(schedule), tasks.size());
+          return new AggregateRunStatusRecorder.Plan(taskManager.schedule(schedule), tasks.size());
         });
   }
 

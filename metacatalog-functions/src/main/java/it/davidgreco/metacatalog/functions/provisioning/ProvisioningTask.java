@@ -71,44 +71,32 @@ public abstract class ProvisioningTask extends Task {
   public enum Operation {
     /** Create the resource; leaves it {@code PROVISIONED}. */
     PROVISION(
-        BuiltInCapability.PROVISIONING,
-        "Provisioning",
-        "PROVISIONED",
-        false,
-        "ProvisioningProcedure"),
+        BuiltInCapability.PROVISIONING, "Provisioning", false, false, "ProvisioningProcedure"),
     /** Tear the resource down; leaves it {@code UNPROVISIONED}. */
     UNPROVISION(
-        BuiltInCapability.PROVISIONING,
-        "Unprovisioning",
-        "UNPROVISIONED",
-        true,
-        "UnprovisioningProcedure"),
+        BuiltInCapability.PROVISIONING, "Unprovisioning", true, false, "UnprovisioningProcedure"),
     /** Grant access to the resource; leaves it {@code AUTHORIZED}. */
     AUTHORIZE(
-        BuiltInCapability.AUTHORIZATION,
-        "Authorizing",
-        "AUTHORIZED",
-        false,
-        "AuthorizationProcedure"),
+        BuiltInCapability.AUTHORIZATION, "Authorizing", false, true, "AuthorizationProcedure"),
     /** Withdraw access to the resource; leaves it {@code REJECTED}. */
-    REJECT(BuiltInCapability.AUTHORIZATION, "Rejecting", "REJECTED", true, "RejectionProcedure");
+    REJECT(BuiltInCapability.AUTHORIZATION, "Rejecting", true, false, "RejectionProcedure");
 
     private final BuiltInCapability capability;
     private final String label;
-    private final String successStatus;
     private final boolean dependentsFirst;
+    private final boolean appliesAccessPolicy;
     private final String procedureName;
 
     Operation(
         BuiltInCapability capability,
         String label,
-        String successStatus,
         boolean dependentsFirst,
+        boolean appliesAccessPolicy,
         String procedureName) {
       this.capability = capability;
       this.label = label;
-      this.successStatus = successStatus;
       this.dependentsFirst = dependentsFirst;
+      this.appliesAccessPolicy = appliesAccessPolicy;
       this.procedureName = procedureName;
     }
 
@@ -117,9 +105,14 @@ public abstract class ProvisioningTask extends Task {
       return capability;
     }
 
-    /** The status a successful run of this operation leaves behind. */
+    /**
+     * The status a successful run of this operation leaves behind, taken from the capability's own
+     * {@code statuses} list rather than restated here — the same list the derived schema's {@code
+     * enum} renders, so the status written on success and the statuses the schema admits can never
+     * disagree.
+     */
     String successStatus() {
-      return successStatus;
+      return capability.successStatus(dependentsFirst);
     }
 
     /** The human label used in log lines and result messages. */
@@ -148,7 +141,8 @@ public abstract class ProvisioningTask extends Task {
      * prevent for the direction argument.
      */
     public String outcomeWord() {
-      return successStatus.charAt(0) + successStatus.substring(1).toLowerCase(Locale.ROOT);
+      var status = successStatus();
+      return status.charAt(0) + status.substring(1).toLowerCase(Locale.ROOT);
     }
 
     /** The entity value field this operation's status is recorded in. */
@@ -177,7 +171,7 @@ public abstract class ProvisioningTask extends Task {
     /**
      * Whether a run of this operation resolves the root's {@link
      * it.davidgreco.metacatalog.service.AccessPolicy} and hands each task the grants that apply to
-     * its resource. Only {@code AUTHORIZE} does.
+     * its resource. Declared per constant: only {@code AUTHORIZE} does.
      *
      * <p>Tearing down deliberately does not. {@code REJECT} means "no access to this aggregate" and
      * needs no list to say it, which is what keeps it working as an emergency stop after the policy
@@ -185,7 +179,7 @@ public abstract class ProvisioningTask extends Task {
      * has no policy to read in the first place.
      */
     public boolean appliesAccessPolicy() {
-      return capability.grantsField().isPresent() && !dependentsFirst;
+      return appliesAccessPolicy;
     }
   }
 
@@ -240,7 +234,7 @@ public abstract class ProvisioningTask extends Task {
             case AUTHORIZE -> authorize();
             case REJECT -> reject();
           };
-      writeStatus(operation.successStatus, result);
+      writeStatus(operation.successStatus(), result);
     } catch (Exception e) {
       log.error("{} failed for entity {}", operation.label, getEntity().getId(), e);
       try {

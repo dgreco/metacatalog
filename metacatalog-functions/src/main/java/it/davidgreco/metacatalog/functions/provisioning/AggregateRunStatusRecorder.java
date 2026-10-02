@@ -46,7 +46,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  */
 @Slf4j
 @Service
-public class AggregateProvisioningStatusRecorder {
+public class AggregateRunStatusRecorder {
 
   private final EntityService entityService;
 
@@ -68,7 +68,7 @@ public class AggregateProvisioningStatusRecorder {
    */
   private final TransactionTemplate ownTransaction;
 
-  AggregateProvisioningStatusRecorder(
+  AggregateRunStatusRecorder(
       EntityService entityService, PlatformTransactionManager transactionManager) {
     this.entityService = entityService;
     this.ownTransaction = new TransactionTemplate(transactionManager);

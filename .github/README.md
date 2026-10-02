@@ -15,7 +15,7 @@
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
 [![coverage](https://img.shields.io/badge/coverage-55.2%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-369-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-370-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -305,13 +305,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 188 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **369, 0 failures**.
+for the Testcontainers PostgreSQL): core 189 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **370, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.2% of instructions, 37.9% of branches, 57.5% of lines**.
+**55.2% of instructions, 38.0% of branches, 57.5% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
