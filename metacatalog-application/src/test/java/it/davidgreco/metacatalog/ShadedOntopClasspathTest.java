@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * reactor builds (Docker, CI, {@code mvn install}) that produce the application jar; there the
  * exclusion on the {@code metacatalog-sparql} dependency is what does it.
  *
- * <p>No Spring context: both assertions are about the test classpath, which Maven resolves exactly
+ * <p>No Spring context: the assertions are about the test classpath, which Maven resolves exactly
  * as it resolves the runtime one packaged into the jar.
  */
 class ShadedOntopClasspathTest {
@@ -40,6 +40,19 @@ class ShadedOntopClasspathTest {
   void ontopComesOnlyFromTheSparqlModule() throws IOException {
     assertThat(resources("it/unibz/inf/ontop/spec/ontology/impl/ClassifiedTBoxImpl.class"))
         .allSatisfy(url -> assertThat(url.toString()).contains("metacatalog-sparql"));
+  }
+
+  /**
+   * log4j 1.x is end-of-life, with unfixed CVEs in classes such as {@code JMSAppender}
+   * (CVE-2021-4104) and {@code SocketServer} (CVE-2019-17571). Ontop pulls it in through {@code
+   * org.protege.xmlcatalog}, whose log4j calls {@code log4j-over-slf4j} answers, and the shade
+   * plugin bundled it into the sparql jar, unrelocated, where its {@code Logger} won over the
+   * bridge's.
+   */
+  @Test
+  void log4jOneIsNotOnTheClasspath() throws IOException {
+    assertThat(resources("org/apache/log4j/net/JMSAppender.class")).isEmpty();
+    assertThat(resources("org/apache/log4j/net/SocketServer.class")).isEmpty();
   }
 
   private static List<URL> resources(String name) throws IOException {

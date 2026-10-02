@@ -378,6 +378,11 @@
             repository: reactor builds read the original POM, so
             metacatalog-application also excludes Ontop from its metacatalog-sparql
             dependency.
+
+            log4j:log4j 1.2.17 (via org.protege.xmlcatalog) is excluded too: it is
+            the real log4j 1.x, end-of-life with unfixed CVEs, and the shade plugin
+            bundled it into the sparql jar. log4j-over-slf4j, on the same path,
+            provides every log4j class xmlcatalog uses.
         -->
         <dependency>
             <groupId>it.unibz.inf.ontop</groupId>
@@ -399,6 +404,10 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -422,6 +431,10 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

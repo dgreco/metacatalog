@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-349-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-350-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -304,7 +304,7 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 6 = **349, 0 failures**.
+for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 7 = **350, 0 failures**.
 
 ### Coverage
 
