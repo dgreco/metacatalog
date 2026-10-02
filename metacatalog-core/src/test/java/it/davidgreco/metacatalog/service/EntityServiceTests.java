@@ -4,7 +4,6 @@ import static it.davidgreco.metacatalog.entity.RelationType.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.io.IOException;
 import java.util.List;
@@ -28,17 +27,9 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);
-    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
     var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
 
-    var schema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/simple_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var schema = schemaResource("jsons/simple_schema.json").toPrettyString();
 
     var values =
         jsonMapper

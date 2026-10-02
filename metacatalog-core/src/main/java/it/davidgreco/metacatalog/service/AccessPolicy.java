@@ -7,9 +7,8 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
+import it.davidgreco.metacatalog.common.JsonSchema;
+import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.AccessControl;
 import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.Entity;
@@ -20,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 /**
  * The access policy an {@code Authorizable} aggregate root is authored with, and the resolution of
@@ -171,8 +169,8 @@ public record AccessPolicy(
    * two-definitions drift {@link BuiltInCapability} exists to prevent.
    */
   private static final JsonSchema ROOT_SCHEMA =
-      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
-          .getSchema(BuiltInCapability.AUTHORIZATION.rootSchema());
+      JsonSchema.compile(
+          JsonUtils.newSchemaRegistry(), BuiltInCapability.AUTHORIZATION.rootSchema());
 
   /**
    * Binds the validated policy fields into the records. Its own mapper: {@code Optional} needs the
@@ -201,10 +199,7 @@ public record AccessPolicy(
     var violations = ROOT_SCHEMA.validate(values);
     if (!violations.isEmpty())
       throw new ServiceError(
-          "Invalid access policy"
-              + where
-              + ": "
-              + violations.stream().map(Object::toString).collect(Collectors.joining("; ")));
+          "Invalid access policy" + where + ": " + String.join("; ", violations));
     var principals = bind(values, AccessControl.PRINCIPALS, Principal[].class, where);
     var permissions = bind(values, AccessControl.PERMISSIONS, Permission[].class, where);
     var grants = bind(values, AccessControl.GRANTS, Grant[].class, where);

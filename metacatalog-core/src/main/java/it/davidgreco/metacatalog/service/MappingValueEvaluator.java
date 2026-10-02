@@ -9,12 +9,9 @@ import com.fasterxml.jackson.databind.node.IntNode;
 import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
-import com.networknt.schema.InputFormat;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.ValidationMessage;
+import it.davidgreco.metacatalog.common.JsonSchema;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import org.springframework.expression.Expression;
 import org.springframework.expression.ExpressionParser;
@@ -74,17 +71,11 @@ final class MappingValueEvaluator {
     var mappedValues = mappingValues.deepCopy();
     evaluateMappingValues(mappedValues, context);
 
-    var res =
-        targetSchema.validate(
-            mappedValues.toPrettyString(),
-            InputFormat.JSON,
-            executionContext ->
-                executionContext.getExecutionConfig().setFormatAssertionsEnabled(true));
+    var res = targetSchema.validateWithFormatAssertions(mappedValues);
     if (res.isEmpty()) {
       return mappedValues;
     }
-    List<String> errors = new ArrayList<>(res.stream().map(ValidationMessage::toString).toList());
-    throw new SchemaValidationError(errors);
+    throw new SchemaValidationError(new ArrayList<>(res));
   }
 
   private static void evaluateMappingValues(

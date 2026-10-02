@@ -25,7 +25,7 @@ check=""
 # keyword), so only the GitHub flavour needs the number; the test count is static on both.
 # Refresh them when the figures under "Coverage" in README.md move — the two are meant to agree.
 COVERAGE="55.2"
-TESTS="352"
+TESTS="369"
 
 GITHUB_REPO="https://github.com/dgreco/metacatalog"
 GITLAB_REPO="https://gitlab.davidgreco.it/dgreco/metacatalog"

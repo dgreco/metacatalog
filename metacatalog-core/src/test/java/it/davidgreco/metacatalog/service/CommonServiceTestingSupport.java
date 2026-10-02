@@ -1,6 +1,10 @@
 package it.davidgreco.metacatalog.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.bootstrap.ImmutableModelInstaller;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.flywaydb.core.Flyway;
@@ -79,4 +83,18 @@ class CommonServiceTestingSupport {
   }
 
   private final ApplicationContext applicationContext;
+
+  /**
+   * Reads a JSON document from the test classpath, such as a schema under {@code jsons/}.
+   *
+   * @param path the resource path
+   * @return the parsed document
+   */
+  static JsonNode schemaResource(String path) {
+    try (var in = Thread.currentThread().getContextClassLoader().getResourceAsStream(path)) {
+      return new ObjectMapper().readTree(in);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
 }

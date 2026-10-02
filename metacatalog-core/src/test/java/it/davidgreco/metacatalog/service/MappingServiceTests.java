@@ -7,7 +7,7 @@ import static org.awaitility.Awaitility.await;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.IntNode;
-import com.networknt.schema.JsonSchemaFactory;
+import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.common.WrappedJsonNode;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.repository.EntityRepository;
@@ -264,7 +264,7 @@ class MappingServiceTests extends CommonServiceTestingSupport {
   @Test
   void testGenerateMappedValues() throws JsonProcessingException, ServiceError {
     var jsonMapper = getApplicationContext().getBean(ObjectMapper.class);
-    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
+    var jsonUtils = getApplicationContext().getBean(JsonUtils.class);
     var sourceValues =
         jsonMapper.readTree(
             """
@@ -281,10 +281,11 @@ class MappingServiceTests extends CommonServiceTestingSupport {
             """
                         {"b": "#source.getValue('$.a').intValue() + #as.getValue('$.c').intValue()*10"}""");
     var targetSchema =
-        jsonSchemaFactory.getSchema(
-            """
+        jsonUtils.schemaOf(
+            jsonMapper.readTree(
+                """
                 { "type": "object", "properties": { "b": { "type": "integer" } } }
-                """);
+                """));
 
     var wnode =
         new WrappedJsonNode(

@@ -1,8 +1,7 @@
 package it.davidgreco.metacatalog.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.ValidationMessage;
+import it.davidgreco.metacatalog.common.JsonSchema;
 import java.util.List;
 import lombok.Getter;
 
@@ -38,8 +37,7 @@ public class SchemaValidationError extends ServiceError {
   public static void validateOrThrow(JsonSchema schema, JsonNode values) {
     var messages = schema.validate(values);
     if (!messages.isEmpty()) {
-      throw new SchemaValidationError(
-          messages.stream().map(ValidationMessage::getMessage).toList());
+      throw new SchemaValidationError(messages);
     }
   }
 }

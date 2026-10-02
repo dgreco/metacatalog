@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.networknt.schema.JsonSchemaFactory;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import java.util.List;
 import java.util.Optional;
@@ -25,16 +24,8 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   @Test
   void testCreateDeleteExists() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
-    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
-    var baseSchema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/base_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var baseSchema = schemaResource("jsons/base_schema.json").toPrettyString();
 
     entityTypeService.create("NewType", List.of(), Optional.empty(), baseSchema);
 
@@ -95,7 +86,6 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   void testInheritance() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var traitService = getApplicationContext().getBean(TraitService.class);
-    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
     var inheritedSchema =
         """
@@ -137,41 +127,13 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
                   additionalProperties : false
                 }""";
 
-    var baseSchema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/base_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var baseSchema = schemaResource("jsons/base_schema.json").toPrettyString();
 
-    var middleSchema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/middle_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var middleSchema = schemaResource("jsons/middle_schema.json").toPrettyString();
 
-    var leafSchema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/leaf_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var leafSchema = schemaResource("jsons/leaf_schema.json").toPrettyString();
 
-    var traitSchema1 =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/trait_schema1.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var traitSchema1 = schemaResource("jsons/trait_schema1.json").toPrettyString();
 
     traitService.create("Trait1", Optional.of(traitSchema1), Optional.empty());
 
@@ -309,16 +271,8 @@ class EntityTypeServiceTests extends CommonServiceTestingSupport {
   @Test
   void testList() {
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
-    var jsonSchemaFactory = getApplicationContext().getBean(JsonSchemaFactory.class);
 
-    var baseSchema =
-        jsonSchemaFactory
-            .getSchema(
-                Thread.currentThread()
-                    .getContextClassLoader()
-                    .getResourceAsStream("jsons/base_schema.json"))
-            .getSchemaNode()
-            .toPrettyString();
+    var baseSchema = schemaResource("jsons/base_schema.json").toPrettyString();
 
     entityTypeService.create("ListTestType1", List.of(), Optional.empty(), baseSchema);
     entityTypeService.create("ListTestType2", List.of(), Optional.empty(), baseSchema);

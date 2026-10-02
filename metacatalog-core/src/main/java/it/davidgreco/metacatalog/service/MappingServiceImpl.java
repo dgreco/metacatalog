@@ -133,8 +133,7 @@ public class MappingServiceImpl implements MappingService {
       mapping.setTargetEntityTypeVersion(targetEntityType.getVersion());
       var mappingValuesNode = jsonUtils.jsonMapper().readTree(mappingValues);
       var validatingSchemaEither =
-          jsonUtils.convertToMappingSchema(
-              jsonUtils.jsonSchemaFactory().getSchema(targetEntityType.getSchema()));
+          jsonUtils.convertToMappingSchema(jsonUtils.schemaOf(targetEntityType.getSchema()));
       if (validatingSchemaEither.isLeft())
         throw new SchemaValidationError(validatingSchemaEither.getLeft());
       var validatingSchema = validatingSchemaEither.get();

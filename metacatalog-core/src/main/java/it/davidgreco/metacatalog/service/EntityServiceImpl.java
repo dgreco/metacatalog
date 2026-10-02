@@ -88,7 +88,7 @@ public class EntityServiceImpl implements EntityService {
 
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       SchemaValidationError.validateOrThrow(
-          jsonUtils.jsonSchemaFactory().getSchema(currentVersion.getSchema()), valuesJsonNode);
+          jsonUtils.schemaOf(currentVersion.getSchema()), valuesJsonNode);
       var typedEntity = new Entity();
       typedEntity.setEntityType(entityType);
       typedEntity.setEntityTypeVersion(currentVersion);
@@ -162,8 +162,7 @@ public class EntityServiceImpl implements EntityService {
 
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       var schema = entity.getEntityTypeVersion().getSchema();
-      SchemaValidationError.validateOrThrow(
-          jsonUtils.jsonSchemaFactory().getSchema(schema), valuesJsonNode);
+      SchemaValidationError.validateOrThrow(jsonUtils.schemaOf(schema), valuesJsonNode);
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
       if (ServiceUtils.isMappingSourceEntityType(
@@ -210,8 +209,7 @@ public class EntityServiceImpl implements EntityService {
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       var schema = entity.getEntityTypeVersion().getSchema();
-      SchemaValidationError.validateOrThrow(
-          jsonUtils.jsonSchemaFactory().getSchema(schema), valuesJsonNode);
+      SchemaValidationError.validateOrThrow(jsonUtils.schemaOf(schema), valuesJsonNode);
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
       log.info("Updated values for entity with id {}", entityId);
