@@ -63,6 +63,8 @@ class ShadedSparqlJarTest {
           "org/antlr/v4/",
           "org/apache/http/",
           "org/checkerframework/",
+          "org/jetbrains/annotations/",
+          "org/intellij/lang/",
           "org/jspecify/",
           "org/slf4j/");
 

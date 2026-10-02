@@ -301,7 +301,7 @@
                 cherry-picking artifacts: cherry-picking (via <artifactSet><includes>)
                 orphaned Ontop's non-bundled transitives (Guice, OWL API) under the
                 reduced POM, causing NoClassDefFoundError at runtime. The list leaves
-                out RDF4J (managed separately at 5.3.0), Spring, Lombok, test deps, and
+                out RDF4J (managed separately at 6.1.0), Spring, Lombok, test deps, and
                 every library the application ships as a jar anyway (Tomcat, Jackson,
                 logback, Guava, the Commons libraries, ...): a bundled, unrelocated copy
                 of one would only race the application's on the classpath, so Ontop
@@ -318,7 +318,7 @@
                         <configuration>
                             <artifactSet>
                                 <excludes>
-                                    <!-- RDF4J managed separately at 5.3.0 -->
+                                    <!-- RDF4J managed separately at 6.1.0 -->
                                     <exclude>org.eclipse.rdf4j:*</exclude>
                                     <!-- Spring managed by Spring Boot parent -->
                                     <exclude>org.springframework:*</exclude>
@@ -371,6 +371,7 @@
                                     <exclude>org.apache.commons:commons-text</exclude>
                                     <exclude>org.apache.httpcomponents:httpcore</exclude>
                                     <exclude>org.checkerframework:checker-qual</exclude>
+                                    <exclude>org.jetbrains:annotations</exclude>
                                     <exclude>org.jspecify:jspecify</exclude>
                                     <exclude>org.slf4j:jcl-over-slf4j</exclude>
                                     <exclude>org.slf4j:slf4j-api</exclude>

@@ -53,7 +53,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Spring Boot 4.1.0**
 - **PostgreSQL** (JDBC driver 42.7.13, server 18+)
 - **Maven 3.9.9+**
-- **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 5.3.0** (SPARQL protocol + result serialisation)
+- **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 6.1.0** (SPARQL protocol + result serialisation)
 
 ## Prerequisites
 
@@ -652,7 +652,7 @@ When the application is running, access the documentation:
 - **Flyway**: Database migration management
 - **Testcontainers**: Integration testing with PostgreSQL
 - **Ontop 5.5.0**: Virtual knowledge graph (SPARQL-to-SQL over Postgres)
-- **RDF4J 5.3.0**: SPARQL protocol parsing and result serialisation
+- **RDF4J 6.1.0**: SPARQL protocol parsing and result serialisation
 - **Yasgui**: Browser SPARQL query editor (loaded from CDN at the `/sparql` UI)
 
 ## Type Versioning
