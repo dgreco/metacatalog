@@ -369,9 +369,20 @@
             (DirectedGraph interface), both of which conflict with metacatalog-core's
             versions (jsqlparser 5.x, org.jgrapht 1.5.3). The metacatalog-sparql
             module shades Ontop's FULL transitive graph (minus RDF4J) with
-            net.sf.jsqlparser and org.jgrapht relocated to private packages; the
-            shade plugin's dependency-reduced POM strips the bundled artifacts so
-            only the shaded/relocated copies reach the app.
+            net.sf.jsqlparser and org.jgrapht relocated to private packages.
+            Ontop 5.5.0 is compiled against 0.9.3's DirectedGraph, so excluding the
+            old JGraphT here to let 1.5.3 win breaks Ontop at startup
+            (NoClassDefFoundError in ClassifiedTBoxImpl); the relocated copy is the
+            only way it runs. The shade plugin's dependency-reduced POM keeps the
+            bundled artifacts away only from consumers resolving the module from a
+            repository: reactor builds read the original POM, so
+            metacatalog-application also excludes Ontop from its metacatalog-sparql
+            dependency.
+
+            log4j:log4j 1.2.17 (via org.protege.xmlcatalog) is excluded too: it is
+            the real log4j 1.x, end-of-life with unfixed CVEs, and the shade plugin
+            bundled it into the sparql jar. log4j-over-slf4j, on the same path,
+            provides every log4j class xmlcatalog uses.
         -->
         <dependency>
             <groupId>it.unibz.inf.ontop</groupId>
@@ -393,6 +404,10 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -416,6 +431,10 @@
                 <exclusion>
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

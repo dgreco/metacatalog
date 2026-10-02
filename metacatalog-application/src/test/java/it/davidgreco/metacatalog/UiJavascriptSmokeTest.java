@@ -52,10 +52,10 @@ class UiJavascriptSmokeTest {
   static void beforeAll() {
     postgres.start();
 
-    // The SPARQL endpoint is disabled: in a full reactor build the metacatalog-sparql dependency
-    // is its UNSHADED target/classes (relocation of org.jgrapht happens only when the jar is
-    // packaged), so Ontop would clash with the modern JGraphT the core module uses. The UI pages
-    // under test do not involve SPARQL.
+    // The SPARQL endpoint is disabled: in a reactor build that stops before `package` the
+    // metacatalog-sparql dependency is its target/classes, without the Ontop the shaded jar
+    // bundles (the application excludes Ontop's own jars), so the endpoint could not start. The UI
+    // pages under test do not involve SPARQL.
     context =
         SpringApplication.run(
             Application.class,

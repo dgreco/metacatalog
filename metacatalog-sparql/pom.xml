@@ -17,6 +17,32 @@
 
     <dependencyManagement>
         <dependencies>
+            <!--
+                The versions the application ships of libraries Ontop shares with it.
+                They are not bundled into the shaded jar (see the shade plugin below), so
+                at runtime Ontop runs on the application's copies; pinning them here makes
+                this module's tests run it on the same ones, not on Ontop's older picks.
+            -->
+            <dependency>
+                <groupId>com.github.jsonld-java</groupId>
+                <artifactId>jsonld-java</artifactId>
+                <version>0.13.4</version>
+            </dependency>
+            <dependency>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-runtime</artifactId>
+                <version>4.13.2</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.22.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.checkerframework</groupId>
+                <artifactId>checker-qual</artifactId>
+                <version>3.55.1</version>
+            </dependency>
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
@@ -28,16 +54,23 @@
 
 
     <dependencies>
-        <!-- Spring MVC + embedded servlet container for the SPARQL endpoint -->
+        <!--
+            Spring MVC + embedded servlet container for the SPARQL endpoint, and
+            Thymeleaf for its query UI. Provided, like spring-boot-jdbc below: the
+            application ships both starters (metacatalog-ui and the application
+            declare them), and the shade plugin bundles only compile and runtime
+            scope, so none of their tree (Tomcat, Jackson, logback, ...) ends up
+            duplicated inside the shaded jar.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+            <scope>provided</scope>
         </dependency>
-
-        <!-- Thymeleaf for the server-side rendered SPARQL query UI -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!--
@@ -68,7 +101,9 @@
             while Spring Data JPA 4.1 (metacatalog-core) calls the 5.x-only
             Select.getPlainSelect() — the two jsqlparser lines cannot coexist on one
             classpath. The shade plugin's dependency-reduced POM strips Ontop from the
-            transitive graph so the app only gets the shaded copy.
+            transitive graph of consumers that resolve this module from a repository;
+            reactor builds read this POM instead, so metacatalog-application excludes
+            it.unibz.inf.ontop from its dependency on this module.
         -->
         <dependency>
             <groupId>it.unibz.inf.ontop</groupId>
@@ -84,8 +119,9 @@
             jsqlparser 4.4: bundled shaded (relocated) with Ontop so Ontop's
             Select.getSelectBody() calls resolve against the private copy. Compile
             scope so the shade plugin includes it; the reduced POM strips it from
-            the transitive graph. Version/scope forced by this module's
-            dependencyManagement above (overriding the parent's 5.3 test pin).
+            the transitive graph, and in reactor builds the parent's test-scope pin
+            keeps it off the application's classpath. Version/scope forced by this
+            module's dependencyManagement above (overriding the parent's 5.3 test pin).
         -->
         <dependency>
             <groupId>com.github.jsqlparser</groupId>
@@ -94,11 +130,34 @@
         </dependency>
 
         <!--
+            Ontop's own Tomcat and Jackson dependencies, declared here so they reach
+            the application as ordinary jars: the shade plugin leaves the Tomcat and
+            Jackson groups out of the shaded jar (see below), and the application
+            excludes Ontop's tree, so nothing else would bring these two in. The
+            application already ships jackson-core/databind/annotations 2.x, and
+            tomcat-juli's classes come with tomcat-embed-core, which ships them too.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-guava</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>tomcat-jdbc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.tomcat</groupId>
+                    <artifactId>tomcat-juli</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!--
             RDF4J core API modules the sparql code references directly
             (Repository, Query/TupleQuery/GraphQuery, TurtleWriter). Declared
-            explicitly — not transitive from the RIO writers below, and the
-            shade plugin's reduced POM strips Ontop (which would otherwise
-            bring them in transitively).
+            explicitly — not transitive from the RIO writers below, and Ontop
+            (which would otherwise bring them in transitively) is stripped from
+            the application's classpath.
         -->
         <dependency>
             <groupId>org.eclipse.rdf4j</groupId>
@@ -216,10 +275,12 @@
             </plugin>
 
             <!--
-                maven-shade-plugin: bundle Ontop + ALL its transitives into the
-                sparql jar, relocating the two packages that clash with metacatalog-core.
+                maven-shade-plugin: bundle Ontop and the libraries only Ontop needs into
+                the sparql jar, relocating the two packages that clash with metacatalog-core.
                 createDependencyReducedPom=true strips the bundled artifacts from the
-                published POM so the app gets them only from this (shaded) jar.
+                published POM. A reactor build still reads the original one and would
+                package Ontop unshaded next to this jar, so metacatalog-application
+                excludes it.unibz.inf.ontop from its dependency on this module.
 
                 Two relocations are mandatory:
                   - net.sf.jsqlparser: Ontop 5.5.0 calls jsqlparser 4.x API
@@ -236,13 +297,16 @@
                     Both cannot coexist — bundle Ontop's 0.9.3 and relocate
                     org.jgrapht to a private package.
 
-                We bundle the full Ontop transitive graph (minus RDF4J, which is
-                managed separately at 5.3.0) rather than cherry-picking artifacts.
-                Cherry-picking (via <artifactSet><includes>) orphaned Ontop's
-                non-bundled transitives (Guice, OWL API) under the reduced POM,
-                causing NoClassDefFoundError at runtime. Bundling everything and
-                excluding only RDF4J + Spring + Lombok + test deps keeps the
-                shaded jar self-contained.
+                We bundle Ontop's transitive graph minus an explicit list rather than
+                cherry-picking artifacts: cherry-picking (via <artifactSet><includes>)
+                orphaned Ontop's non-bundled transitives (Guice, OWL API) under the
+                reduced POM, causing NoClassDefFoundError at runtime. The list leaves
+                out RDF4J (managed separately at 5.3.0), Spring, Lombok, test deps, and
+                every library the application ships as a jar anyway (Tomcat, Jackson,
+                logback, Guava, the Commons libraries, ...): a bundled, unrelocated copy
+                of one would only race the application's on the classpath, so Ontop
+                uses the application's. ShadedSparqlJarTest in metacatalog-application
+                checks both directions against the application's runtime classpath.
             -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -267,6 +331,49 @@
                                     <exclude>org.mockito:*</exclude>
                                     <exclude>org.testcontainers:*</exclude>
                                     <exclude>org.junit.platform:*</exclude>
+                                    <!-- Tomcat, Jackson and logback: the application ships
+                                         them as jars, so a bundled copy would only race
+                                         them on the classpath. Ontop's own Tomcat and
+                                         Jackson artifacts are declared as dependencies
+                                         above instead. -->
+                                    <exclude>org.apache.tomcat:*</exclude>
+                                    <exclude>org.apache.tomcat.embed:*</exclude>
+                                    <exclude>com.fasterxml.jackson.core:*</exclude>
+                                    <exclude>com.fasterxml.jackson.datatype:*</exclude>
+                                    <exclude>tools.jackson.core:*</exclude>
+                                    <exclude>ch.qos.logback:*</exclude>
+                                    <!-- Every other library Ontop shares with the application:
+                                         the application ships each of these as a jar, so Ontop
+                                         uses that copy. ShadedSparqlJarTest (application module)
+                                         fails if one is bundled again, or if the application
+                                         stops shipping one Ontop needs (aopalliance's classes
+                                         come with spring-aop). Ontop's old JGraphT is
+                                         not here: it shares only a name with the application's,
+                                         and stays bundled, relocated. -->
+                                    <exclude>aopalliance:aopalliance</exclude>
+                                    <exclude>com.github.jsonld-java:jsonld-java</exclude>
+                                    <exclude>com.google.code.findbugs:jsr305</exclude>
+                                    <exclude>com.google.errorprone:error_prone_annotations</exclude>
+                                    <exclude>com.google.guava:failureaccess</exclude>
+                                    <exclude>com.google.guava:guava</exclude>
+                                    <exclude>com.google.guava:listenablefuture</exclude>
+                                    <exclude>com.google.j2objc:j2objc-annotations</exclude>
+                                    <exclude>com.opencsv:opencsv</exclude>
+                                    <exclude>com.zaxxer:HikariCP</exclude>
+                                    <exclude>commons-beanutils:commons-beanutils</exclude>
+                                    <exclude>commons-codec:commons-codec</exclude>
+                                    <exclude>commons-collections:commons-collections</exclude>
+                                    <exclude>commons-io:commons-io</exclude>
+                                    <exclude>no.hasmac:hasmac-json-ld</exclude>
+                                    <exclude>org.antlr:antlr4-runtime</exclude>
+                                    <exclude>org.apache.commons:commons-collections4</exclude>
+                                    <exclude>org.apache.commons:commons-lang3</exclude>
+                                    <exclude>org.apache.commons:commons-text</exclude>
+                                    <exclude>org.apache.httpcomponents:httpcore</exclude>
+                                    <exclude>org.checkerframework:checker-qual</exclude>
+                                    <exclude>org.jspecify:jspecify</exclude>
+                                    <exclude>org.slf4j:jcl-over-slf4j</exclude>
+                                    <exclude>org.slf4j:slf4j-api</exclude>
                                     <!-- Lombok: annotation processor, not runtime -->
                                     <exclude>org.projectlombok:*</exclude>
                                     <!-- other metacatalog modules: keep them out of the sparql uber-jar.
@@ -281,6 +388,17 @@
                                     <exclude>it.davidgreco.metacatalog:metacatalog-application</exclude>
                                 </excludes>
                             </artifactSet>
+                            <!-- nullanno redefines jsr305's javax.annotation.Nonnull and
+                                 Nullable; the application ships jsr305, so only nullanno's
+                                 own Eclipse annotations are bundled. -->
+                            <filters>
+                                <filter>
+                                    <artifact>io.github.solf:nullanno</artifact>
+                                    <excludes>
+                                        <exclude>javax/annotation/**</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <relocations>
                                 <relocation>
                                     <pattern>net.sf.jsqlparser</pattern>
