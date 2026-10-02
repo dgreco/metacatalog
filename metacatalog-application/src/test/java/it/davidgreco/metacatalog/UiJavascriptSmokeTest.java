@@ -38,7 +38,7 @@ import org.testcontainers.utility.DockerImageName;
  */
 class UiJavascriptSmokeTest {
 
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
 
   static BrowserWebDriverContainer<?> chrome;
 
@@ -74,7 +74,7 @@ class UiJavascriptSmokeTest {
     // "exec format error" on ARM64 runners (e.g. the GitLab CI host).
     chrome =
         new BrowserWebDriverContainer<>(
-                DockerImageName.parse("selenium/standalone-chromium:4.43.0")
+                DockerImageName.parse("selenium/standalone-chromium:4.49.0")
                     .asCompatibleSubstituteFor("selenium/standalone-chrome"))
             .withCapabilities(new ChromeOptions());
     chrome.start();

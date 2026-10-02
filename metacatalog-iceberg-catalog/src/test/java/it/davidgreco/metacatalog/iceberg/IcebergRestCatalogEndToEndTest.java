@@ -45,7 +45,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class IcebergRestCatalogEndToEndTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
   static ConfigurableApplicationContext context;
   static Path warehouse;
   static RESTCatalog catalog;

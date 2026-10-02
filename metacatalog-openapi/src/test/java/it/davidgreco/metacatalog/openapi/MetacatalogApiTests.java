@@ -30,7 +30,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @SpringBootTest
 @RequiredArgsConstructor
 class MetacatalogApiTests {
-  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
 
   @DynamicPropertySource
   static void datasourceProperties(DynamicPropertyRegistry registry) {

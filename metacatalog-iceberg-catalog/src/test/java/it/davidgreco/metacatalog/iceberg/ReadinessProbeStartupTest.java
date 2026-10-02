@@ -46,7 +46,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
  */
 class ReadinessProbeStartupTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
   static ConfigurableApplicationContext context;
   static Path warehouse;
   static int port;

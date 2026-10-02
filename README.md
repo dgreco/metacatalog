@@ -80,7 +80,7 @@ docker compose up --build
 ```
 
 This starts:
-- **PostgreSQL 18.4** on port 5432
+- **PostgreSQL 18.6** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
   traits, entity types and entities from `docker/bulk/` once the app is healthy
@@ -310,7 +310,7 @@ for the Testcontainers PostgreSQL): core 171 · ui 69 · security 23 · hive-met
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.2% of instructions, 37.8% of branches, 57.5% of lines**.
+**55.1% of instructions, 38.0% of branches, 57.5% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no

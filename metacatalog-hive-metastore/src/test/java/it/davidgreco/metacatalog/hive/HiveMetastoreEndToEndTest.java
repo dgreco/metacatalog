@@ -55,7 +55,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class HiveMetastoreEndToEndTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
   static ConfigurableApplicationContext context;
   static ThriftHiveMetastore.Client client;
   static TSocket transport;

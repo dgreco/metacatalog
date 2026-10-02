@@ -44,7 +44,7 @@ mvn test -Dtest=TaskManagerTests -pl metacatalog-core   # one class
 ```
 
 Most tests need a **running Docker daemon**: anything `@SpringBootTest` runs against a real
-PostgreSQL 18.4 through Testcontainers — the database is never mocked. A few suites are plain unit
+PostgreSQL 18.6 through Testcontainers — the database is never mocked. A few suites are plain unit
 tests with no Spring context at all (`TaskEngineTest`, for instance); those need nothing.
 
 The stress test is tagged `stress` and excluded from `mvn test`, `mvn verify` and CI:

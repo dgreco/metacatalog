@@ -35,7 +35,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @AutoConfigureMockMvc
 class SparqlJsonPathFunctionIntegrationTest {
 
-  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.4");
+  static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:18.6");
 
   static String tripsTableId;
   static String zonesTableId;
