@@ -11,11 +11,10 @@ A bronze / silver / gold lakehouse modelled with nothing but the public API: one
 
 ## Running it
 
-From the repository root, after `make run-hive-demo` has run once:
+From the repository root:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.iceberg.yml -f docker-compose.hive.yml \
-  -f docker-compose.hive-demo.yml -f examples/medallion/docker-compose.medallion.yml up --build -d
+docker compose -f docker-compose.yml -f examples/medallion/docker-compose.medallion.yml up --build -d
 
 API=http://localhost:8080/metacatalog/v1
 curl -u admin:admin -X POST -H 'Content-Type: application/octet-stream' \
