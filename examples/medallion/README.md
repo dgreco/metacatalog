@@ -7,7 +7,7 @@ A bronze / silver / gold lakehouse modelled with nothing but the public API: one
 | --- | --- |
 | `medallion-model.yaml` | Traits, entity types and mappings. Each layer has its own table contract: bronze tables declare their source and ingestion mode, silver tables a primary key, gold tables a business owner. |
 | `medallion-instances.yaml` | The `acme_retail` lakehouse. Lineage between tables is plain `dependsOn`; the policy grants by the `layer` the mappings stamp on every physical resource. |
-| `docker-compose.medallion.yml` | Registers the two derived resource types (`LakeZoneType`, `LakeTableType`) with the demo `stdout` task, which prints what it would provision instead of touching anything. |
+| `docker-compose.medallion.yml` | Runs the example on its own: points the base stack's bulk loader at the two files above instead of the base data-product demo, and registers the two derived resource types (`LakeZoneType`, `LakeTableType`) with the demo `stdout` task, which prints what it would provision instead of touching anything. |
 
 ## Running it
 
@@ -15,13 +15,19 @@ From the repository root:
 
 ```bash
 docker compose -f docker-compose.yml -f examples/medallion/docker-compose.medallion.yml up --build -d
+```
 
+Once the application is healthy, the bulk loader loads the model and the `acme_retail` lakehouse
+(`docker logs metacatalog-bulk-loader`); on a restart it skips whatever is already there. The base
+stack's own data-product demo is not loaded, so the catalog holds the medallion alone — unless the
+volume already has that demo from an earlier run of the base stack, in which case its `dp1` stays.
+Start from an empty volume to avoid that:
+`docker compose -f docker-compose.yml -f examples/medallion/docker-compose.medallion.yml down -v`.
+
+Then provision and authorize the lakehouse:
+
+```bash
 API=http://localhost:8080/metacatalog/v1
-curl -u admin:admin -X POST -H 'Content-Type: application/octet-stream' \
-     --data-binary @examples/medallion/medallion-model.yaml $API/bulk-creation
-curl -u admin:admin -X POST -H 'Content-Type: application/octet-stream' \
-     --data-binary @examples/medallion/medallion-instances.yaml $API/aggregate/yaml
-
 LH=$(curl -s -u admin:admin "$API/entity?entityTypeName=LakehouseType" | jq -r '.[0].id')
 curl -X POST -u admin:admin $API/aggregate/$LH/provision
 curl -X POST -u admin:admin $API/aggregate/$LH/authorize
