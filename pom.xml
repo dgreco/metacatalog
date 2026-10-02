@@ -95,7 +95,7 @@
         <postgresql.version>42.7.13</postgresql.version>
 
         <!--   Flyway -->
-        <flyway.version>12.11.0</flyway.version>
+        <flyway.version>13.9.0</flyway.version>
 
         <!--   Logback -->
         <logback.version>1.5.38</logback.version>
