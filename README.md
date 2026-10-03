@@ -354,8 +354,9 @@ pipelines cannot drift apart.
 - `ci/publish-images.sh` builds and pushes the three images — the application, the Iceberg REST
   catalog and the Hive Metastore — tagged with the short commit SHA and `latest`, plus the Maven
   project version on `main`/`master`. It runs only on pushes to `main`, `master` or `develop`;
-  GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}`, GitLab to
-  the project's container registry.
+  GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}` for both
+  `linux/amd64` and `linux/arm64` (the arm64 half built under QEMU), GitLab to the project's
+  container registry for its runner's architecture (arm64) only.
 - After the build, both pipelines print the test totals and the `scripts/coverage.sh` line and
   publish the coverage report to their own host, as described under [Coverage](#coverage).
 
