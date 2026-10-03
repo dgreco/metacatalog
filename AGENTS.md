@@ -131,7 +131,8 @@ Conventions that matter:
 Two pipelines, one logic. GitHub Actions (`.github/workflows/ci.yml`) and GitLab CI
 (`.gitlab-ci.yml`) both call `ci/build.sh` — `mvn clean install spotless:check test -B` — and then
 `ci/publish-images.sh`, which on `main` / `master` / `develop` builds and pushes the application,
-Iceberg catalog and Hive Metastore images (GitHub to GHCR, GitLab to its own registry). Change
+Iceberg catalog and Hive Metastore images (GitHub to GHCR for amd64 and arm64, through buildx when
+the pipeline sets `PLATFORMS`; GitLab to its own registry for its arm64 runner only). Change
 pipeline behaviour in the scripts, not in the platform files, so the two cannot drift. GitLab needs
 a Docker-in-Docker service for Testcontainers; the GitHub runner has a daemon. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.

@@ -106,10 +106,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The runner is amd64, but the images also run on arm64 machines: QEMU runs the arm64 half
+      # of the build (the AOT training run included) and buildx pushes both as one image.
+      - name: Set up QEMU
+        if: github.event_name == 'push'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        if: github.event_name == 'push'
+        uses: docker/setup-buildx-action@v4
+
       - name: Publish images
         if: github.event_name == 'push'
         env:
           GIT_BRANCH: ${{ github.ref_name }}
+          PLATFORMS: linux/amd64,linux/arm64
         run: |
           IMAGE_BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" \
           GIT_SHA="${GITHUB_SHA::7}" \
