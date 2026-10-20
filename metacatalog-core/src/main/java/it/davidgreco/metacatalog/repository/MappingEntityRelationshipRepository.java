@@ -4,10 +4,14 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Repository interface for {@link MappingEntityRelationship} persistence operations.
@@ -68,4 +72,36 @@ public interface MappingEntityRelationshipRepository
    */
   List<MappingEntityRelationship> findBySourceAndRelationType(
       Entity source, RelationType relationType);
+
+  /**
+   * Finds every mapping instance between live entities, leaving out those inside frozen copies of
+   * past aggregate versions.
+   *
+   * @return the mapping instances between live entities
+   */
+  @Query(
+      "SELECT r FROM MappingEntityRelationship r LEFT JOIN FETCH r.mappingEntityTypeRelationship"
+          + " WHERE r.source.frozenVersionOf IS NULL AND r.target.frozenVersionOf IS NULL")
+  List<MappingEntityRelationship> findAllBetweenLiveEntities();
+
+  /**
+   * Finds one mapping instance of the given rule inside a frozen copy, if any: the rule is then
+   * still needed to describe that past version, and cannot be deleted.
+   *
+   * @param mappingId the id of the mapping rule
+   * @return a mapping instance of that rule whose source is frozen, if one exists
+   */
+  Optional<MappingEntityRelationship>
+      findFirstByMappingEntityTypeRelationshipIdAndSourceFrozenVersionOfIsNotNull(String mappingId);
+
+  /**
+   * Deletes every mapping instance either end of which is one of the given entities.
+   *
+   * @param entities the entities whose mapping instances to delete
+   */
+  @Modifying
+  @Query(
+      "DELETE FROM MappingEntityRelationship r WHERE r.source IN :entities OR r.target IN"
+          + " :entities")
+  void deleteTouching(@Param("entities") Collection<Entity> entities);
 }

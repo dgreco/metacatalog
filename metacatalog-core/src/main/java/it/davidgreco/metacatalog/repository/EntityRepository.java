@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -37,6 +38,14 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
    * @return the number of entities pinned to the specified snapshot
    */
   long countByEntityTypeVersion(EntityTypeVersion entityTypeVersion);
+
+  /**
+   * Counts the entities of frozen copies of past aggregate versions pinned to a given type version.
+   *
+   * @param entityTypeVersion the snapshot to count instances of
+   * @return the number of frozen entities pinned to it
+   */
+  long countByEntityTypeVersionAndFrozenVersionOfIsNotNull(EntityTypeVersion entityTypeVersion);
 
   /**
    * Finds all entities of a given type, eagerly fetching the pinned {@link EntityTypeVersion} so
@@ -94,8 +103,63 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
           """
                SELECT * FROM entity
                WHERE entity_type_id = :entityTypeId
+                 AND frozen_version_of IS NULL
                  AND jsonb_path_exists(values, CAST(:jsonPath AS jsonpath))
                """,
       nativeQuery = true)
   List<Entity> findByEntityTypeIdAndJsonPath(String entityTypeId, String jsonPath);
+
+  /**
+   * Finds the live entities of a given type: every one but the entities of frozen copies of past
+   * aggregate versions, which are reached only through their version.
+   *
+   * @param entityType the entity type to list instances of
+   * @return the live entities of the type
+   */
+  @EntityGraph(
+      attributePaths = {"entityTypeVersion"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  List<Entity> findByEntityTypeAndFrozenVersionOfIsNull(EntityType entityType);
+
+  /**
+   * Finds every live entity, leaving out the entities of frozen copies of past aggregate versions.
+   *
+   * @return the live entities
+   */
+  @EntityGraph(
+      attributePaths = {"entityTypeVersion"},
+      type = EntityGraph.EntityGraphType.LOAD)
+  List<Entity> findByFrozenVersionOfIsNull();
+
+  /**
+   * Finds the entities of every frozen copy of a root's past versions.
+   *
+   * @param rootId the id of the live aggregate root
+   * @return the entities of all its frozen copies
+   */
+  List<Entity> findByFrozenVersionOf(String rootId);
+
+  /**
+   * Finds the entities of one frozen copy: the copy made for the given version of a root.
+   *
+   * @param rootId the id of the live aggregate root
+   * @param version the version the copy was made for
+   * @return the copy's entities
+   */
+  List<Entity> findByFrozenVersionOfAndFrozenVersion(String rootId, Integer version);
+
+  /**
+   * Moves a frozen copy to another version number: when the version a shared copy was made for is
+   * deleted, the copy is then named after the earliest version still using it.
+   *
+   * @param rootId the id of the live aggregate root
+   * @param from the version the copy is named after
+   * @param to the version to name it after
+   */
+  @Modifying
+  @Query(
+      "UPDATE Entity e SET e.frozenVersion = :to"
+          + " WHERE e.frozenVersionOf = :rootId AND e.frozenVersion = :from")
+  void renumberFrozenCopy(
+      @Param("rootId") String rootId, @Param("from") Integer from, @Param("to") Integer to);
 }

@@ -130,6 +130,10 @@ ALTER TABLE trait_version
 --
 -- version is the entity's own version number when its type carries the built-in Versionable trait,
 -- and NULL for an entity that has never been versioned.
+--
+-- frozen_version_of / frozen_version mark a frozen copy: an entity of the runnable copy of a past
+-- version of an aggregate root (the root's id and that version). Functions can run on a copy and
+-- write their results onto it; nothing else may change it. NULL on every live entity.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE entity
@@ -139,6 +143,8 @@ CREATE TABLE entity
     entity_type_id         VARCHAR(255) NOT NULL,
     entity_type_version_id VARCHAR(255) NOT NULL,
     version                INT,
+    frozen_version_of      VARCHAR(255),
+    frozen_version         INT,
     CONSTRAINT pk_entity PRIMARY KEY (id)
 );
 
@@ -146,11 +152,16 @@ CREATE INDEX idx_entity_entity_type_id_unq ON entity (entity_type_id);
 
 CREATE INDEX idx_entity_entity_type_version_id ON entity (entity_type_version_id);
 
+CREATE INDEX idx_entity_frozen_version_of ON entity (frozen_version_of);
+
 ALTER TABLE entity
     ADD CONSTRAINT FK_ENTITY_ON_ENTITY_TYPE FOREIGN KEY (entity_type_id) REFERENCES entity_type (id);
 
 ALTER TABLE entity
     ADD CONSTRAINT FK_ENTITY_ON_ENTITY_TYPE_VERSION FOREIGN KEY (entity_type_version_id) REFERENCES entity_type_version (id);
+
+ALTER TABLE entity
+    ADD CONSTRAINT FK_ENTITY_ON_FROZEN_VERSION_OF FOREIGN KEY (frozen_version_of) REFERENCES entity (id);
 
 -- ---------------------------------------------------------------------------------------------
 -- Entity version history: append-only snapshots of Versionable entities
@@ -161,8 +172,10 @@ ALTER TABLE entity
 -- state was validated against, which can move on regeneration for a mapped entity. Rows are only
 -- ever removed together with their entity.
 --
--- aggregate is set only on the versions of an aggregate root: the whole authored aggregate (root,
--- HAS_PART tree, DEPENDS_ON links) frozen at that version, while values stays the root's own.
+-- aggregate is set only on the versions of an aggregate root: the whole aggregate (root, HAS_PART
+-- tree, DEPENDS_ON links, derived entities) frozen at that version, while values stays the root's
+-- own. frozen_root_id points at the runnable frozen copy of a past version; versions differing only
+-- in run results share one copy.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE entity_version
@@ -175,6 +188,7 @@ CREATE TABLE entity_version
     previous_version_id    VARCHAR(255),
     created_at             TIMESTAMP WITHOUT TIME ZONE NOT NULL,
     aggregate              JSONB,
+    frozen_root_id         VARCHAR(255),
     CONSTRAINT pk_entity_version PRIMARY KEY (id)
 );
 
@@ -192,6 +206,11 @@ ALTER TABLE entity_version
 
 ALTER TABLE entity_version
     ADD CONSTRAINT FK_ENTITY_VERSION_ON_PREVIOUS FOREIGN KEY (previous_version_id) REFERENCES entity_version (id);
+
+ALTER TABLE entity_version
+    ADD CONSTRAINT FK_ENTITY_VERSION_ON_FROZEN_ROOT FOREIGN KEY (frozen_root_id) REFERENCES entity (id);
+
+CREATE INDEX idx_entity_version_frozen_root_id ON entity_version (frozen_root_id);
 
 -- ---------------------------------------------------------------------------------------------
 -- Relationships

@@ -13,7 +13,7 @@
     <h1 th:text="${readOnly != null and readOnly} ? 'View Instance' : (${instanceId != null} ? 'Edit Instance' : 'New Instance')">Instance</h1>
     <nav>
         <a class="btn" th:href="@{/ui/instances}">Back</a>
-        <a class="btn" th:if="${readOnly == true and instanceId != null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
+        <a class="btn" th:if="${readOnly == true and instanceId != null and frozenVersionOf == null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
         <a class="btn" th:if="${readOnly == true and entityVersion != null}"
            th:href="@{/ui/instances/{id}/versions(id=${instanceId})}"
            th:text="|History (v${entityVersion})|">History</a>
@@ -22,6 +22,13 @@
 
 <main>
     <div class="error" th:if="${error}" th:text="${error}"></div>
+    <!-- An entity of a past version's frozen copy: say so, and lead back to the live history. -->
+    <div class="flash" th:if="${frozenVersionOf != null}">
+        Part of the frozen copy of
+        <a th:href="@{/ui/instances/{id}/versions(id=${frozenVersionOf})}"
+           th:text="|version ${frozenVersion}|">version 1</a>
+        of an aggregate. It cannot be changed; functions run on it record their results here.
+    </div>
 
     <form method="post"
           th:action="${instanceId != null} ? @{/ui/instances/{id}(id=${instanceId})} : @{/ui/instances}"

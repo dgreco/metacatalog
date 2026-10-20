@@ -3,9 +3,13 @@ package it.davidgreco.metacatalog.repository;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -70,4 +74,25 @@ public interface EntityRelationshipRepository extends JpaRepository<EntityRelati
    * @return list of matching relationships
    */
   List<EntityRelationship> findByTarget(Entity target);
+
+  /**
+   * Finds every relationship between live entities, leaving out the links inside frozen copies of
+   * past aggregate versions. A copy never links to a live entity, so checking the source suffices
+   * for a well-formed copy; the target is checked too so that nothing half-frozen leaks.
+   *
+   * @return the relationships between live entities
+   */
+  @Query(
+      "SELECT r FROM EntityRelationship r"
+          + " WHERE r.source.frozenVersionOf IS NULL AND r.target.frozenVersionOf IS NULL")
+  List<EntityRelationship> findAllBetweenLiveEntities();
+
+  /**
+   * Deletes every relationship either end of which is one of the given entities.
+   *
+   * @param entities the entities whose links to delete
+   */
+  @Modifying
+  @Query("DELETE FROM EntityRelationship r WHERE r.source IN :entities OR r.target IN :entities")
+  void deleteTouching(@Param("entities") Collection<Entity> entities);
 }

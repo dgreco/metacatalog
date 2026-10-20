@@ -18,7 +18,7 @@ source		SELECT "id", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST(
 
 mappingId	MAPPING-ID-ENTITY
 target		mt:Entity/{id} a mt:Entity ; mt:id {id}^^xsd:string ; mt:values {values}^^xsd:string ; mt:hasEntityType mt:EntityType/{entity_type_id} ; mt:pinnedToVersion mt:EntityTypeVersion/{entity_type_version_id} .
-source		SELECT "id", CAST("values" AS TEXT) AS "values", "entity_type_id", "entity_type_version_id" FROM "entity"
+source		SELECT "id", CAST("values" AS TEXT) AS "values", "entity_type_id", "entity_type_version_id" FROM "entity" WHERE "frozen_version_of" IS NULL
 
 mappingId	MAPPING-ID-ENTITY-TYPE-VERSION
 target		mt:EntityTypeVersion/{id} a mt:EntityTypeVersion ; mt:id {id}^^xsd:string ; mt:versionGroupId {version_group_id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:fatherName {father_name}^^xsd:string ; mt:traits {traits}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime .
@@ -90,26 +90,26 @@ source		SELECT "source_id", "target_id" FROM "trait_relationship" WHERE "relatio
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-DEPENDS-ON
 target		mt:Entity/{source_id} mt:dependsOn mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'DEPENDS_ON'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'DEPENDS_ON'
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-REQUIRED-BY
 target		mt:Entity/{source_id} mt:isRequiredBy mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_REQUIRED_BY'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'IS_REQUIRED_BY'
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-HAS-PART
 target		mt:Entity/{source_id} mt:hasPart mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'HAS_PART'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'HAS_PART'
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-PART-OF
 target		mt:Entity/{source_id} mt:isPartOf mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_PART_OF'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'IS_PART_OF'
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-MAPPED-TO
 target		mt:Entity/{source_id} mt:mappedTo mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'MAPPED_TO'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'MAPPED_TO'
 
 mappingId	MAPPING-ID-ENTITY-RELATIONSHIP-IS-MAPPED-BY
 target		mt:Entity/{source_id} mt:isMappedBy mt:Entity/{target_id} .
-source		SELECT "source_id", "target_id" FROM "entity_relationship" WHERE "relation_type" = 'IS_MAPPED_BY'
+source		SELECT "r"."source_id", "r"."target_id" FROM "entity_relationship" AS "r", "entity" AS "s" WHERE "r"."source_id" = "s"."id" AND "s"."frozen_version_of" IS NULL AND "r"."relation_type" = 'IS_MAPPED_BY'
 
 ]]

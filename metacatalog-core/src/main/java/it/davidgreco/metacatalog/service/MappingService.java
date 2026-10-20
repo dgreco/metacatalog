@@ -59,9 +59,10 @@ public interface MappingService extends CommonService<MappingEntityTypeRelations
   List<MappingEntityTypeRelationship> list();
 
   /**
-   * Lists all mapping entity-to-entity relationships.
+   * Lists all mapping entity-to-entity relationships between live entities, leaving out those
+   * inside frozen copies of past aggregate versions.
    *
-   * @return all mapping entity relationships
+   * @return all mapping entity relationships between live entities
    */
   List<MappingEntityRelationship> listAllEntityRelationships();
 

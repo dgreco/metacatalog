@@ -214,6 +214,15 @@ class MetacatalogApiTests {
             HttpClientErrorException.class, () -> api.listEntityVersions("no-such-entity"));
     Assertions.assertEquals(404, missingEntity.getStatusCode().value());
 
+    var notCurrent =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.deleteEntityVersion(id, 2));
+    Assertions.assertEquals(400, notCurrent.getStatusCode().value());
+    api.deleteAllEntityVersions(id);
+    Assertions.assertEquals(
+        List.of(2), api.listEntityVersions(id).stream().map(EntityVersion::getVersion).toList());
+    Assertions.assertNull(api.listEntityVersions(id).getFirst().getPreviousVersionId());
+
     var plain = new Entity();
     plain.setEntityType("ApiUnversioned");
     plain.setValues("{\"name\":\"one\"}");
@@ -229,7 +238,9 @@ class MetacatalogApiTests {
 
   /**
    * A Versionable aggregate root records its whole aggregate: one version for the creation, holding
-   * the root, its parts and their dependencies. A versionable part type is refused.
+   * the root, its parts and their dependencies. A versionable part type is refused. The version a
+   * new one supersedes is frozen into a copy that the API exposes, hides from listings, refuses to
+   * change, and deletes with its version.
    */
   @Test
   void testVersionableAggregateRecordsTheWholeTree() throws IOException {
@@ -335,6 +346,35 @@ class MetacatalogApiTests {
             .toList();
     Assertions.assertEquals(
         List.of("{\"label\":\"a-derived\"}", "{\"label\":\"b-derived\"}"), derivedLabels);
+
+    var copyRootId = api.listEntityVersions(rootId).getFirst().getFrozenRootId();
+    Assertions.assertNotNull(copyRootId, "v1 is frozen once v2 supersedes it");
+    Assertions.assertNull(latest.getFrozenRootId(), "the current version is the live aggregate");
+    var copyRoot = api.getEntity(copyRootId);
+    Assertions.assertEquals(rootId, copyRoot.getFrozenVersionOf());
+    Assertions.assertEquals(1, copyRoot.getFrozenVersion());
+    Assertions.assertNull(api.getEntity(rootId).getFrozenVersionOf());
+    Assertions.assertEquals(
+        List.of(rootId),
+        api.getEntities("ApiAvRoot", null).stream().map(Entity::getId).toList(),
+        "a copy is reached through its version, not listed");
+    var copy = api.getAggregate(copyRootId, true);
+    Assertions.assertEquals(2, copy.getParts().size(), "the copy has v1's two parts");
+    var refusedUpdate =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.updateEntity(copyRootId, rename));
+    Assertions.assertEquals(400, refusedUpdate.getStatusCode().value());
+    Assertions.assertTrue(
+        refusedUpdate.getResponseBodyAsString().contains("version 1 of aggregate"),
+        refusedUpdate.getResponseBodyAsString());
+
+    api.deleteEntityVersion(rootId, 1);
+    Assertions.assertEquals(
+        List.of(2),
+        api.listEntityVersions(rootId).stream().map(EntityVersion::getVersion).toList());
+    var gone =
+        Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntity(copyRootId));
+    Assertions.assertEquals(404, gone.getStatusCode().value());
   }
 
   @Test

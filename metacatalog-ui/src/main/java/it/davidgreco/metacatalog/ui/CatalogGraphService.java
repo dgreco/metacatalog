@@ -274,14 +274,15 @@ public class CatalogGraphService {
       }
     }
 
-    addVersionNodesAndEdges(
-        types.stream().map(VersionRow::of).toList(),
-        api.listAllEntityTypeVersions().getBody().stream().map(VersionRow::of).toList(),
-        TYPE_VERSION_PREFIX,
-        liveRow -> TYPE_PREFIX + liveRow.name(),
-        "entityTypeVersion",
-        nodes,
-        edges);
+    var currentTypeSnapshots =
+        addVersionNodesAndEdges(
+            types.stream().map(VersionRow::of).toList(),
+            api.listAllEntityTypeVersions().getBody().stream().map(VersionRow::of).toList(),
+            TYPE_VERSION_PREFIX,
+            liveRow -> TYPE_PREFIX + liveRow.name(),
+            "entityTypeVersion",
+            nodes,
+            edges);
     addVersionNodesAndEdges(
         traits.stream().map(VersionRow::of).toList(),
         api.listAllTraitVersions().getBody().stream().map(VersionRow::of).toList(),
@@ -292,7 +293,7 @@ public class CatalogGraphService {
         edges);
 
     if (showEntities) {
-      addEntityInstanceNodesAndEdges(nodes, edges, showInverses);
+      addEntityInstanceNodesAndEdges(nodes, edges, showInverses, currentTypeSnapshots);
     }
 
     return new GraphModel(nodes, edges);
@@ -315,7 +316,10 @@ public class CatalogGraphService {
   }
 
   private void addEntityInstanceNodesAndEdges(
-      List<GraphModel.Node> nodes, List<GraphModel.Edge> edges, boolean showInverses) {
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges,
+      boolean showInverses,
+      Map<String, String> currentTypeSnapshots) {
     var versionsById =
         api.listAllEntityTypeVersions().getBody().stream()
             .filter(v -> v.getId().isPresent())
@@ -336,10 +340,12 @@ public class CatalogGraphService {
           Optional.ofNullable(entity.getEntityTypeVersionId())
               .map(versionsById::get)
               .filter(Objects::nonNull);
+      // Pinned to the type's current version, the entity is an instance of the live type node,
+      // which stands in for that version's snapshot.
       var instanceOfTarget =
           pinnedVersion
               .flatMap(EntityType::getId)
-              .map(id -> TYPE_VERSION_PREFIX + id)
+              .map(id -> currentTypeSnapshots.getOrDefault(id, TYPE_VERSION_PREFIX + id))
               .orElse(TYPE_PREFIX + typeName);
       var instanceOfLabel =
           pinnedVersion
@@ -355,8 +361,8 @@ public class CatalogGraphService {
               entityNodeId, instanceOfTarget, "instance-of", "instance-of", null, null));
     }
 
-    // Versionable entities get the same treatment as types: one node per recorded version, chained
-    // by successor-of, with the live entity leading the chain.
+    // Versionable entities get the same treatment as types: one node per past version, chained by
+    // successor-of, behind the live entity.
     var recordedVersions = api.listAllEntityVersions().getBody();
     var entityVersions =
         recordedVersions.stream()
@@ -369,20 +375,24 @@ public class CatalogGraphService {
                             .map(t -> t.getName() + " (v" + t.getVersion().orElse(null) + ")")
                             .orElse(null)))
             .toList();
-    addVersionNodesAndEdges(
-        liveEntities,
-        entityVersions,
-        ENTITY_VERSION_PREFIX,
-        liveRow -> ENTITY_PREFIX + liveRow.id(),
-        "entityVersion",
-        nodes,
-        edges);
+    var currentEntitySnapshots =
+        addVersionNodesAndEdges(
+            liveEntities,
+            entityVersions,
+            ENTITY_VERSION_PREFIX,
+            liveRow -> ENTITY_PREFIX + liveRow.id(),
+            "entityVersion",
+            nodes,
+            edges);
+    // The current version is the live root, whose live aggregate is already drawn; only past
+    // versions bring a recorded copy of theirs.
     for (var version : recordedVersions)
-      version
-          .getAggregate()
-          .ifPresent(
-              tree ->
-                  addRecordedAggregate(version, tree, liveEntityIds, showInverses, nodes, edges));
+      if (!currentEntitySnapshots.containsKey(version.getId()))
+        version
+            .getAggregate()
+            .ifPresent(
+                tree ->
+                    addRecordedAggregate(version, tree, liveEntityIds, showInverses, nodes, edges));
 
     for (var rel : api.listEntityRelationships().getBody()) {
       var rt = rel.getRelationType().orElse(null);
@@ -531,10 +541,18 @@ public class CatalogGraphService {
   }
 
   /**
-   * Adds version-snapshot nodes and {@code successor-of} edges to the graph, chaining each snapshot
-   * to the one it succeeds and each live row to the head of its chain.
+   * Adds the version history of traits, entity types or entities to the graph: one node per past
+   * version, chained to the one it succeeds by {@code successor-of}, behind the live node.
+   *
+   * <p>Entity types and entities keep a snapshot of their <em>current</em> version too, so that
+   * there is a row to pin to. That snapshot gets no node of its own: it is the live object, and
+   * drawing both would show the same state twice. The live node stands in for it, and once there is
+   * history behind it, it carries its version number to tell it apart from the older ones.
+   *
+   * @return the ids of the snapshots folded into a live node, mapped to that node's id, so that
+   *     edges aimed at one of them can be aimed at the live node instead
    */
-  private void addVersionNodesAndEdges(
+  private Map<String, String> addVersionNodesAndEdges(
       List<VersionRow> live,
       List<VersionRow> snapshots,
       String snapPrefix,
@@ -542,11 +560,25 @@ public class CatalogGraphService {
       String nodeType,
       List<GraphModel.Node> nodes,
       List<GraphModel.Edge> edges) {
+    var liveByGroup =
+        live.stream()
+            .filter(l -> l.versionGroupId() != null)
+            .collect(
+                Collectors.toMap(VersionRow::versionGroupId, Function.identity(), (a, _) -> a));
+    var current = new java.util.HashMap<String, String>();
+    for (var snap : snapshots) {
+      var liveRow = snap.versionGroupId() == null ? null : liveByGroup.get(snap.versionGroupId());
+      if (snap.id() != null && liveRow != null && Objects.equals(liveRow.version(), snap.version()))
+        current.put(snap.id(), liveNodeId.apply(liveRow));
+    }
+    Function<String, String> nodeIdOf = id -> current.getOrDefault(id, snapPrefix + id);
     var snapshotIds =
         snapshots.stream().map(VersionRow::id).filter(Objects::nonNull).collect(Collectors.toSet());
 
+    var groupsWithHistory = new HashSet<String>();
     for (var snap : snapshots) {
-      if (snap.id() == null) continue;
+      if (snap.id() == null || current.containsKey(snap.id())) continue;
+      if (snap.versionGroupId() != null) groupsWithHistory.add(snap.versionGroupId());
       nodes.add(
           new GraphModel.Node(
               snapPrefix + snap.id(),
@@ -563,27 +595,24 @@ public class CatalogGraphService {
           || !snapshotIds.contains(snap.previousVersionId())) continue;
       edges.add(
           new GraphModel.Edge(
-              snapPrefix + snap.id(),
-              snapPrefix + snap.previousVersionId(),
+              nodeIdOf.apply(snap.id()),
+              nodeIdOf.apply(snap.previousVersionId()),
               SUCCESSOR_OF,
               SUCCESSOR_OF,
               null,
               null));
     }
 
-    var liveByGroup =
-        live.stream()
-            .filter(l -> l.versionGroupId() != null)
-            .collect(
-                Collectors.toMap(VersionRow::versionGroupId, Function.identity(), (a, _) -> a));
-    // A snapshot no other snapshot succeeds is the head of its chain; the live row follows it.
+    // A chain whose newest snapshot is a past version — a trait keeps none of its current one —
+    // still needs the live node in front of it.
     var succeeded =
         snapshots.stream()
             .map(VersionRow::previousVersionId)
             .filter(Objects::nonNull)
             .collect(Collectors.toSet());
     for (var snap : snapshots) {
-      if (snap.id() == null || succeeded.contains(snap.id())) continue;
+      if (snap.id() == null || succeeded.contains(snap.id()) || current.containsKey(snap.id()))
+        continue;
       var liveRow = snap.versionGroupId() == null ? null : liveByGroup.get(snap.versionGroupId());
       if (liveRow == null) continue;
       edges.add(
@@ -594,6 +623,29 @@ public class CatalogGraphService {
               SUCCESSOR_OF,
               null,
               null));
+    }
+
+    for (var liveRow : liveByGroup.values())
+      if (groupsWithHistory.contains(liveRow.versionGroupId()) && liveRow.version() != null)
+        relabel(nodes, liveNodeId.apply(liveRow), " (v" + liveRow.version() + ")");
+    return current;
+  }
+
+  /** Appends {@code suffix} to the label of the node with the given id, if it is on the graph. */
+  private static void relabel(List<GraphModel.Node> nodes, String nodeId, String suffix) {
+    for (var i = 0; i < nodes.size(); i++) {
+      var node = nodes.get(i);
+      if (!node.id().equals(nodeId)) continue;
+      nodes.set(
+          i,
+          new GraphModel.Node(
+              node.id(),
+              node.label() + suffix,
+              node.kind(),
+              node.father(),
+              node.traits(),
+              node.schema()));
+      return;
     }
   }
 }

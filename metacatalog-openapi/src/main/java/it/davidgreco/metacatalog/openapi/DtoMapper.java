@@ -128,6 +128,8 @@ public class DtoMapper {
     dtoEntity.setEntityTypeVersionId(entity.getEntityTypeVersion().getId());
     dtoEntity.setValues(entity.getValues().toPrettyString());
     dtoEntity.setVersion(Optional.ofNullable(entity.getVersion()));
+    dtoEntity.setFrozenVersionOf(Optional.ofNullable(entity.getFrozenVersionOf()));
+    dtoEntity.setFrozenVersion(Optional.ofNullable(entity.getFrozenVersion()));
     return dtoEntity;
   }
 
@@ -142,6 +144,7 @@ public class DtoMapper {
     dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
     dto.setCreatedAt(v.getCreatedAt().toString());
     if (v.getAggregate() != null) dto.aggregate(aggregateTreeToDto(v.getAggregate()));
+    dto.setFrozenRootId(Optional.ofNullable(v.getFrozenRootId()));
     return dto;
   }
 

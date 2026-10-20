@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -173,6 +174,76 @@ class SparqlEndpointIntegrationTest {
             .getContentAsString();
     assert aggregateBody.contains("part-one")
         : "Expected the recorded aggregate, got: " + aggregateBody;
+  }
+
+  /**
+   * The entities of a frozen copy of a past aggregate version are reached through their version
+   * only: neither they nor the links inside the copy are {@code mt:Entity} facts, while the live
+   * entity they copy is.
+   */
+  @Test
+  void frozenCopiesAreLeftOutOfEntitiesAndTheirLinks() throws Exception {
+    var typeId = java.util.UUID.randomUUID().toString();
+    var typeVersionId = java.util.UUID.randomUUID().toString();
+    var group = java.util.UUID.randomUUID().toString();
+    var liveId = java.util.UUID.randomUUID().toString();
+    var copyRootId = java.util.UUID.randomUUID().toString();
+    var copyPartId = java.util.UUID.randomUUID().toString();
+    jdbcTemplate.update(
+        "INSERT INTO entity_type (id, name, base_schema, version, version_group_id) "
+            + "VALUES (?, 'SparqlFrozen', '{}'::jsonb, 1, ?)",
+        typeId,
+        group);
+    jdbcTemplate.update(
+        "INSERT INTO entity_type_version (id, version_group_id, version, name, base_schema, traits,"
+            + " created_at) VALUES (?, ?, 1, 'SparqlFrozen', '{}'::jsonb, '[]'::jsonb, now())",
+        typeVersionId,
+        group);
+    jdbcTemplate.update(
+        "INSERT INTO entity (id, values, entity_type_id, entity_type_version_id) "
+            + "VALUES (?, '{}'::jsonb, ?, ?)",
+        liveId,
+        typeId,
+        typeVersionId);
+    for (var copyId : List.of(copyRootId, copyPartId))
+      jdbcTemplate.update(
+          "INSERT INTO entity (id, values, entity_type_id, entity_type_version_id,"
+              + " frozen_version_of, frozen_version) VALUES (?, '{}'::jsonb, ?, ?, ?, 1)",
+          copyId,
+          typeId,
+          typeVersionId,
+          liveId);
+    jdbcTemplate.update(
+        "INSERT INTO entity_relationship (id, source_id, target_id, relation_type) "
+            + "VALUES (?, ?, ?, 'HAS_PART')",
+        java.util.UUID.randomUUID().toString(),
+        copyRootId,
+        copyPartId);
+
+    String entities =
+        query(
+            "PREFIX mt: <http://metacatalog/> SELECT ?id WHERE { ?e a mt:Entity ; mt:hasEntityType"
+                + " ?t ; mt:id ?id . ?t mt:id \""
+                + typeId
+                + "\" . }");
+    assert entities.contains(liveId) && !entities.contains(copyRootId)
+        : "Expected the live entity only, got: " + entities;
+    String links =
+        query(
+            "PREFIX mt: <http://metacatalog/> SELECT ?s WHERE { ?s mt:hasPart <http://metacatalog/Entity/"
+                + copyPartId
+                + "> . }");
+    assert !links.contains(copyRootId) : "Expected no link inside the copy, got: " + links;
+  }
+
+  private String query(String sparql) throws Exception {
+    return mockMvc
+        .perform(
+            get("/sparql/query").param("query", sparql).accept("application/sparql-results+json"))
+        .andExpect(status().isOk())
+        .andReturn()
+        .getResponse()
+        .getContentAsString();
   }
 
   @Test

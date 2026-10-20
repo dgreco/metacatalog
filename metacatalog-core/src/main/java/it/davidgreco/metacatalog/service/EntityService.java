@@ -67,6 +67,9 @@ public interface EntityService extends CommonService<Entity, String> {
   /**
    * Lists entities of the specified type, optionally filtered by a JSON path query.
    *
+   * <p>The entities of frozen copies of past aggregate versions are left out: they are reached
+   * through their version, or by id.
+   *
    * @param typeName the entity type name
    * @param queryPath a JSON path query; empty string returns all entities of the type
    * @return matching entities
@@ -74,16 +77,18 @@ public interface EntityService extends CommonService<Entity, String> {
   List<Entity> list(String typeName, String queryPath);
 
   /**
-   * Lists every entity in the catalog, regardless of type.
+   * Lists every live entity in the catalog, regardless of type: every entity but those of frozen
+   * copies of past aggregate versions.
    *
-   * @return all entities
+   * @return all live entities
    */
   List<Entity> listAll();
 
   /**
-   * Lists all entity-to-entity relationships.
+   * Lists all relationships between live entities, leaving out the links inside frozen copies of
+   * past aggregate versions.
    *
-   * @return all entity relationships
+   * @return all relationships between live entities
    */
   List<EntityRelationship> listAllRelationships();
 
@@ -115,6 +120,30 @@ public interface EntityService extends CommonService<Entity, String> {
    * @return all entity snapshots
    */
   List<EntityVersion> listAllVersions();
+
+  /**
+   * Deletes one past version of an entity, and the frozen copy of it unless another remaining
+   * version shares that copy.
+   *
+   * <p>The version's successor is relinked to its predecessor, and version numbers are never
+   * reused: the next version recorded still follows the current one.
+   *
+   * @param entityId the entity ID
+   * @param version the number of the version to delete
+   * @throws NotFoundException if the entity or the version does not exist
+   * @throws ServiceError if the version is the current one, or its frozen copy is still provisioned
+   *     or authorized
+   */
+  void deleteVersion(String entityId, int version);
+
+  /**
+   * Deletes every past version of an entity and their frozen copies, keeping the current version.
+   *
+   * @param entityId the entity ID
+   * @throws NotFoundException if the entity does not exist
+   * @throws ServiceError if a frozen copy of one of them is still provisioned or authorized
+   */
+  void deleteAllVersions(String entityId);
 
   /**
    * Links two entities with the given relation type.

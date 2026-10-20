@@ -74,6 +74,29 @@ public class Entity {
   private Integer version;
 
   /**
+   * For an entity of a frozen copy — the runnable copy of a past version of an aggregate root — the
+   * id of the live root it is a version of; {@code null} for every live entity.
+   *
+   * <p>A frozen copy is hidden from listings and accepts no changes except the status a function
+   * run writes onto it. It is deleted with its version, or with the live root.
+   */
+  @Column(name = "frozen_version_of")
+  private String frozenVersionOf;
+
+  /** For an entity of a frozen copy, the root version it captures; {@code null} otherwise. */
+  @Column(name = "frozen_version")
+  private Integer frozenVersion;
+
+  /**
+   * Whether this entity belongs to a frozen copy of a past aggregate version.
+   *
+   * @return true for a frozen copy's entity
+   */
+  public boolean isFrozen() {
+    return frozenVersionOf != null;
+  }
+
+  /**
    * Creates a new entity with the specified type and values.
    *
    * @param entityType the type of the entity
