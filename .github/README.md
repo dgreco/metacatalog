@@ -14,8 +14,8 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-55.9%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-394-brightgreen)](#coverage)
+[![coverage](https://img.shields.io/badge/coverage-56.7%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![tests](https://img.shields.io/badge/tests-407-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -306,13 +306,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 204 · ui 75 · security 23 · hive-metastore 22 · openapi 21 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **394, 0 failures**.
+for the Testcontainers PostgreSQL): core 215 · ui 76 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **407, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.9% of instructions, 38.3% of branches, 58.1% of lines**.
+**56.7% of instructions, 39.6% of branches, 58.9% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -826,7 +826,18 @@ curl -X POST http://localhost:8080/metacatalog/v1/entity-type \
 It is honoured however the type comes to carry it: directly, through a trait that inherits from
 `Versionable`, or through a father type that carries it.
 
+Inside an aggregate, **only the root can be versionable**: a type that carries both `Versionable`
+and `AggregateElement` (a part or an intermediate node, however it comes to carry either) is refused
+with a `400`. The check runs when a type is created or versioned, when a father type is versioned
+(its subtypes inherit the change), and when a trait is versioned (its new father can bring either
+trait with it). A root's versions already record its parts (see
+[Versionable aggregates](#versionable-aggregates)), so a part's own history would only record a slice
+of the same change.
+
 ### What gets recorded
+
+This section covers an entity outside the aggregate model. An aggregate root is versioned as a whole,
+once per transaction (see [Versionable aggregates](#versionable-aggregates)).
 
 - **On create**, a versionable entity gets version 1.
 - **On every change to its values**, the new state is recorded as the next version. Every write path
@@ -884,12 +895,57 @@ The same history is visible in three other places:
   `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself
   carries `mt:version`.
 
+### Versionable aggregates
+
+When the versionable type is an **aggregate root** (it carries `Aggregate` but not
+`AggregateElement`), each version records the **whole aggregate**, not just the root's values:
+
+- **What a version holds.** The root's own values stay in `values`, as for any entity. Alongside
+  them, `aggregate` holds the tree as it stood at that version, in the same shape
+  `GET /aggregate/{id}` returns: the root and every part reachable through `HAS_PART`, each with its
+  values, and the `DEPENDS_ON` links between them. Entities derived from the parts by mappings (the
+  provisioned resources) are not included. They are recomputed from the parts, and recording their
+  asynchronous regeneration would add versions nobody authored. Status written back onto the root
+  (`provisioningStatus`, `authorizationStatus`) is included, because it is part of the root's values.
+- **When a version is recorded.** A version is recorded whenever the aggregate changes:
+  - the root's values or any part's values change;
+  - a `HAS_PART` or `DEPENDS_ON` link inside it is added or removed.
+- **One version per transaction.** Building or changing an aggregate takes many operations, so the
+  version is taken when the transaction commits, not after each one. Creating an aggregate with
+  `POST /aggregate/yaml` (or through the bulk loader) records exactly v1, with every part in it.
+- **No-op changes.** A change that leaves the aggregate as last recorded records nothing.
+- **Concurrent writers.** The root is locked and re-read when the version is taken. Concurrent
+  changes to the same aggregate therefore get consecutive numbers, and recording one writer's part
+  edit never writes back a stale copy of the root over another writer's root edit.
+- **Deleting.** Deleting the aggregate (`DELETE /aggregate/{id}`) deletes the root's history with it.
+
+There is one difference from an entity outside an aggregate. A root type that gains `Versionable`
+later gets **no backfill**: its first version is the aggregate as it stands when its first change
+commits.
+
+```bash
+curl -s http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1
+# { "version": 1, "values": "{ \"name\" : \"dp1\", … }",
+#   "aggregate": { "id": "…", "entityType": "DataProductType", "values": "{…}",
+#                  "parts": [ { "id": "…", "entityType": "FileBasedOutputPortType", "values": "{ \"name\" : \"op1\" }" },
+#                             { "id": "…", "entityType": "TableBasedOutputPortType", "values": "{ \"name\" : \"op2\" }",
+#                               "dependencies": [ "…op1's id…" ] } ] }, … }
+```
+
+The UI's history page shows the recorded tree under **Whole aggregate**. SPARQL exposes it as
+`mt:aggregate` on the `mt:EntityVersion`.
+
 ### In the demo
 
-The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`, so `dp1` starts at
-v1 with a **History** link on the Instances page. Each provision, unprovision, authorize or reject run
-then adds one version, because the run's outcome is written back onto the root: provisioning takes it
-to v2 (`provisioningStatus: PROVISIONED`), authorizing to v3. Editing `dp1` in the UI adds one more. Tick *Show entities* on the graph to see the chain grow behind it.
+The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`. It is an aggregate
+root, so each version of `dp1` records the whole data product, its output ports included.
+
+- `dp1` starts at v1 with a **History** link on the Instances page.
+- Each provision, unprovision, authorize or reject run adds one version, because the run's outcome is
+  written back onto the root: provisioning takes it to v2 (`provisioningStatus: PROVISIONED`) and
+  authorizing to v3.
+- Editing `dp1`, or one of its output ports `op1` and `op2`, in the UI adds one more.
+- Tick *Show entities* on the graph to see the chain grow behind it.
 
 ### Interaction with type versions
 
@@ -1657,7 +1713,8 @@ Notes:
   The live row is the current version; the `*_version` tables hold the immutable
   history snapshots (see [Type Versioning](#type-versioning)).
 - `entity_version` holds the history of entities whose type carries `Versionable`
-  (see [Entity versioning](#entity-versioning)). Unlike the type history, it is
+  (see [Entity versioning](#entity-versioning)); for an aggregate root its `aggregate` column
+  holds the whole aggregate each version recorded. Unlike the type history, it is
   linked to its entity by a real foreign key (`entity_id`), since history is only
   ever deleted together with its entity. It also references the type version each
   state was validated against (`entity_type_version_id`), and chains its

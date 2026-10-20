@@ -10,6 +10,7 @@ import it.davidgreco.metacatalog.entity.Trait;
 import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.entity.TraitVersion;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
+import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import it.davidgreco.metacatalog.repository.TraitVersionRepository;
@@ -44,6 +45,12 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
   private final EntityRelationshipRepository entityRelationshipRepository;
 
   private final JsonUtils jsonUtils;
+
+  /**
+   * Used to refuse a version whose new father makes a type that carries this trait a versionable
+   * aggregate part.
+   */
+  private final EntityTypeRepository entityTypeRepository;
 
   /**
    * Creates a new Trait with the specified name, optional schema, and optional father.
@@ -164,6 +171,9 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
           || carriedElement != ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE_ELEMENT)) {
         checkAggregateContainmentsStillHold(live);
       }
+      entityTypeRepository.findAll().stream()
+          .filter(type -> ServiceUtils.implementsTrait(type, name))
+          .forEach(ServiceUtils::checkVersionableOnlyOnAggregateRoots);
       live.setVersion(live.getVersion() + 1);
       var saved = traitRepository.save(live);
       log.info("Created new version of Trait: {}", name);

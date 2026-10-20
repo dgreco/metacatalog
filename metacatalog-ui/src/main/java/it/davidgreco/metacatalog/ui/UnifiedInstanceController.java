@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.ui;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.EntityVersion;
@@ -382,7 +383,8 @@ class UnifiedInstanceController {
                 v == history.getLast(),
                 typeVersions.get(v.getEntityTypeVersionId()),
                 prettyJson(v.getValues()),
-                v.getCreatedAt()));
+                v.getCreatedAt(),
+                v.getAggregate().map(this::aggregateJson).orElse(null)));
       }
       model.addAttribute("instanceId", id);
       model.addAttribute(
@@ -394,6 +396,35 @@ class UnifiedInstanceController {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
       return "redirect:/ui/instances";
     }
+  }
+
+  /**
+   * Renders a recorded aggregate for reading: the API carries each node's values as a JSON string,
+   * which printed as-is would show every part's document as one escaped line.
+   */
+  private String aggregateJson(Aggregate aggregate) {
+    try {
+      return jsonMapper
+          .writerWithDefaultPrettyPrinter()
+          .writeValueAsString(aggregateTree(aggregate));
+    } catch (JsonProcessingException e) {
+      return aggregate.toString();
+    }
+  }
+
+  private com.fasterxml.jackson.databind.node.ObjectNode aggregateTree(Aggregate aggregate)
+      throws JsonProcessingException {
+    var node = jsonMapper.createObjectNode();
+    aggregate.getId().ifPresent(id -> node.put("id", id));
+    node.put("entityType", aggregate.getEntityType());
+    node.set("values", jsonMapper.readTree(aggregate.getValues()));
+    if (!aggregate.getDependencies().isEmpty())
+      node.set("dependencies", jsonMapper.valueToTree(aggregate.getDependencies()));
+    if (!aggregate.getParts().isEmpty()) {
+      var parts = node.putArray("parts");
+      for (var part : aggregate.getParts()) parts.add(aggregateTree(part));
+    }
+    return node;
   }
 
   private String prettyJson(String values) {

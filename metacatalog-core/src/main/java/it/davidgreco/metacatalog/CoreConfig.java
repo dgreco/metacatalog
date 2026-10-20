@@ -84,6 +84,8 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository, used to refuse removing
    *     a trait relationship that existing instance links rely on
    * @param jsonUtils the JSON helpers
+   * @param entityTypeRepository the entity type repository, used to refuse a version that would
+   *     make an aggregate part versionable
    * @return the trait service
    */
   // @Primary because immutableTraitWriter below re-exposes this very instance under a second bean
@@ -95,13 +97,15 @@ public class CoreConfig {
       TraitRelationshipRepository traitRelationshipRepository,
       TraitVersionRepository traitVersionRepository,
       EntityRelationshipRepository entityRelationshipRepository,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityTypeRepository entityTypeRepository) {
     return new TraitServiceImpl(
         traitRepository,
         traitRelationshipRepository,
         traitVersionRepository,
         entityRelationshipRepository,
-        jsonUtils);
+        jsonUtils,
+        entityTypeRepository);
   }
 
   /**
@@ -229,12 +233,20 @@ public class CoreConfig {
    * @param entityRepository the entity repository, used to lock an entity before numbering a
    *     version
    * @param entityVersionRepository the entity version history repository
+   * @param entityRelationshipRepository the entity relationship repository, used to find the
+   *     aggregate root above a changed part and to read an aggregate's tree
+   * @param entityManager the shared entity manager, used to re-read an aggregate under a row lock
+   *     when it is recorded at commit
    * @return the entity version recorder
    */
   @Bean
   public EntityVersionRecorder entityVersionRecorder(
-      EntityRepository entityRepository, EntityVersionRepository entityVersionRepository) {
-    return new EntityVersionRecorder(entityRepository, entityVersionRepository);
+      EntityRepository entityRepository,
+      EntityVersionRepository entityVersionRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      jakarta.persistence.EntityManager entityManager) {
+    return new EntityVersionRecorder(
+        entityRepository, entityVersionRepository, entityRelationshipRepository, entityManager);
   }
 
   /**

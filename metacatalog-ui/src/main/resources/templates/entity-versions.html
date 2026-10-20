@@ -52,6 +52,10 @@
             </td>
             <td>
                 <pre class="schema document-pane" th:text="${v.values}">{}</pre>
+                <details th:if="${v.aggregate != null}">
+                    <summary>Whole aggregate</summary>
+                    <pre class="schema document-pane" th:text="${v.aggregate}">{}</pre>
+                </details>
             </td>
         </tr>
         </tbody>

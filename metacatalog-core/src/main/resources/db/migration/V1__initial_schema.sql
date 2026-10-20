@@ -160,6 +160,9 @@ ALTER TABLE entity
 -- reads never have to splice the live row in. entity_type_version_id records the type version each
 -- state was validated against, which can move on regeneration for a mapped entity. Rows are only
 -- ever removed together with their entity.
+--
+-- aggregate is set only on the versions of an aggregate root: the whole authored aggregate (root,
+-- HAS_PART tree, DEPENDS_ON links) frozen at that version, while values stays the root's own.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE entity_version
@@ -171,6 +174,7 @@ CREATE TABLE entity_version
     entity_type_version_id VARCHAR(255)                NOT NULL,
     previous_version_id    VARCHAR(255),
     created_at             TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    aggregate              JSONB,
     CONSTRAINT pk_entity_version PRIMARY KEY (id)
 );
 

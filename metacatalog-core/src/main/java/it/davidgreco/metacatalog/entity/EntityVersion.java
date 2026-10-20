@@ -79,4 +79,14 @@ public class EntityVersion {
   /** When this snapshot was recorded. */
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
+
+  /**
+   * For a version of an aggregate root, the whole authored aggregate at that version: the root and
+   * every part reachable through {@code HAS_PART}, each with its id, entity type, pinned type
+   * version, values and {@code DEPENDS_ON} targets. {@code null} for an entity outside the
+   * aggregate model, whose history is its {@link #values} alone.
+   */
+  @Type(JsonBinaryType.class)
+  @Column(name = "aggregate", columnDefinition = "jsonb")
+  private JsonNode aggregate;
 }

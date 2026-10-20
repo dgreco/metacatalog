@@ -140,6 +140,27 @@ public class DtoMapper {
     dto.setEntityTypeVersionId(v.getEntityTypeVersion().getId());
     dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
     dto.setCreatedAt(v.getCreatedAt().toString());
+    if (v.getAggregate() != null) dto.aggregate(aggregateTreeToDto(v.getAggregate()));
+    return dto;
+  }
+
+  /**
+   * Turns the aggregate tree an aggregate root's version stores into the same {@code Aggregate}
+   * shape {@code GET /aggregate/{id}} answers with, so a client reads a past aggregate the way it
+   * reads the live one.
+   */
+  private Aggregate aggregateTreeToDto(com.fasterxml.jackson.databind.JsonNode node) {
+    var dto = new Aggregate();
+    dto.setId(Optional.of(node.get("id").asText()));
+    dto.setEntityType(node.get("entityType").asText());
+    dto.setValues(node.get("values").toPrettyString());
+    var dependencies = new java.util.ArrayList<String>();
+    if (node.has("dependencies"))
+      node.get("dependencies").forEach(d -> dependencies.add(d.asText()));
+    dto.setDependencies(dependencies);
+    var parts = new java.util.ArrayList<Aggregate>();
+    if (node.has("parts")) node.get("parts").forEach(p -> parts.add(aggregateTreeToDto(p)));
+    dto.setParts(parts);
     return dto;
   }
 

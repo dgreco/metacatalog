@@ -115,6 +115,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
         entityType.setFather(father);
       }
       entityType.setDerivedSchema(computeDerivedSchema(entityType));
+      ServiceUtils.checkVersionableOnlyOnAggregateRoots(entityType);
       var saved = entityTypeRepository.save(entityType);
       saveCurrentSnapshot(saved, null);
       log.info("Created EntityType: {}", name);
@@ -197,6 +198,11 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               != ServiceUtils.implementsTrait(live, BuiltInTraits.AGGREGATE_ELEMENT)) {
         checkAggregateContainmentsStillHold(live);
       }
+      // Subtypes inherit the new traits too, so a part type below this one can be the one that
+      // ends up carrying both.
+      entityTypeRepository.findAll().stream()
+          .filter(type -> CommonTypeService.loadInheritanceChain(type).contains(live))
+          .forEach(ServiceUtils::checkVersionableOnlyOnAggregateRoots);
       live.setVersion(live.getVersion() + 1);
       var saved = entityTypeRepository.save(live);
       var latestSnapshot =

@@ -126,6 +126,11 @@ class SparqlEndpointIntegrationTest {
         insertVersion, firstId, entityId, 1, "{\"name\":\"first\"}", typeVersionId, null);
     jdbcTemplate.update(
         insertVersion, secondId, entityId, 2, "{\"name\":\"second\"}", typeVersionId, firstId);
+    // As recorded for an aggregate root: the whole tree, here with one part.
+    jdbcTemplate.update(
+        "UPDATE entity_version SET aggregate = ?::jsonb WHERE id = ?",
+        "{\"id\":\"" + entityId + "\",\"parts\":[{\"values\":{\"name\":\"part-one\"}}]}",
+        secondId);
 
     String sparql =
         "PREFIX mt: <http://metacatalog/> "
@@ -150,6 +155,24 @@ class SparqlEndpointIntegrationTest {
             .getContentAsString();
     assert body.contains("second") && body.contains("first") && body.contains("\"2\"")
         : "Expected the second version, its predecessor and the current version, got: " + body;
+
+    String aggregateQuery =
+        "PREFIX mt: <http://metacatalog/> SELECT ?aggregate WHERE { ?v a mt:EntityVersion ;"
+            + " mt:id \""
+            + secondId
+            + "\" ; mt:aggregate ?aggregate . }";
+    String aggregateBody =
+        mockMvc
+            .perform(
+                get("/sparql/query")
+                    .param("query", aggregateQuery)
+                    .accept("application/sparql-results+json"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assert aggregateBody.contains("part-one")
+        : "Expected the recorded aggregate, got: " + aggregateBody;
   }
 
   @Test

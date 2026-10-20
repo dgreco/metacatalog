@@ -198,6 +198,8 @@ class MetacatalogApiTests {
     Assertions.assertNull(versions.getFirst().getPreviousVersionId());
     Assertions.assertEquals(versions.getFirst().getId(), versions.getLast().getPreviousVersionId());
     Assertions.assertNotNull(versions.getFirst().getCreatedAt());
+    Assertions.assertNull(
+        versions.getFirst().getAggregate(), "an entity outside an aggregate records no aggregate");
     Assertions.assertEquals(
         json.readTree("{\"name\":\"one\"}"),
         json.readTree(api.getEntityVersion(id, 1).getValues()));
@@ -223,6 +225,82 @@ class MetacatalogApiTests {
     api.deleteEntity(plainId);
     api.deleteEntityType("ApiVersioned");
     api.deleteEntityType("ApiUnversioned");
+  }
+
+  /**
+   * A Versionable aggregate root records its whole aggregate: one version for the creation, holding
+   * the root, its parts and their dependencies. A versionable part type is refused.
+   */
+  @Test
+  void testVersionableAggregateRecordsTheWholeTree() throws IOException {
+    var api = getMetaCatalogManagerApi();
+    var schema = "{ \"type\": \"object\", \"properties\": { \"name\": { \"type\": \"string\" } } }";
+
+    var partTrait = new Trait();
+    partTrait.setName("ApiAvPart");
+    partTrait.setInheritsFrom("AggregateElement");
+    api.createTrait(partTrait);
+    var sanction = new LinkTraitRequest();
+    sanction.sourceTrait("ApiAvPart");
+    sanction.relationshipTypeName("DEPENDS_ON");
+    sanction.targetTrait("ApiAvPart");
+    api.linkTrait(sanction);
+    var rootType = new EntityType();
+    rootType.setName("ApiAvRoot");
+    rootType.setSchema(schema);
+    rootType.setTraits(List.of("Aggregate", "Versionable"));
+    api.createEntityType(rootType);
+    var leafType = new EntityType();
+    leafType.setName("ApiAvLeaf");
+    leafType.setSchema(schema);
+    leafType.setTraits(List.of("ApiAvPart"));
+    api.createEntityType(leafType);
+
+    var badLeaf = new EntityType();
+    badLeaf.setName("ApiAvBadLeaf");
+    badLeaf.setSchema(schema);
+    badLeaf.setTraits(List.of("ApiAvPart", "Versionable"));
+    var refused =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.createEntityType(badLeaf));
+    Assertions.assertEquals(400, refused.getStatusCode().value());
+    Assertions.assertTrue(
+        refused.getResponseBodyAsString().contains("only the root can be versionable"),
+        refused.getResponseBodyAsString());
+
+    var document = Files.createTempFile("aggregate", ".yaml");
+    Files.writeString(
+        document,
+        """
+        entityType: "ApiAvRoot"
+        values:
+          name: "api-root"
+        parts:
+        - ref: "a"
+          entityType: "ApiAvLeaf"
+          values:
+            name: "a"
+        - ref: "b"
+          entityType: "ApiAvLeaf"
+          values:
+            name: "b"
+          dependsOn:
+            - "a"
+        """);
+    api.createAggregateAsYaml(document.toFile());
+
+    var rootId = api.getEntities("ApiAvRoot", null).getFirst().getId();
+    var versions = api.listEntityVersions(rootId);
+    Assertions.assertEquals(1, versions.size(), "the creation is one version");
+    var tree = versions.getFirst().getAggregate();
+    Assertions.assertEquals(rootId, tree.getId());
+    Assertions.assertEquals("ApiAvRoot", tree.getEntityType());
+    var parts = tree.getParts();
+    Assertions.assertEquals(2, parts.size());
+    var a = parts.stream().filter(p -> p.getValues().contains("\"a\"")).findFirst().orElseThrow();
+    var b = parts.stream().filter(p -> p.getValues().contains("\"b\"")).findFirst().orElseThrow();
+    Assertions.assertEquals("ApiAvLeaf", a.getEntityType());
+    Assertions.assertEquals(List.of(a.getId()), b.getDependencies());
   }
 
   @Test

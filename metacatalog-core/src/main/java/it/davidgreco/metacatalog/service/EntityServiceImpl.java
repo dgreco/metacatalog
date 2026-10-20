@@ -446,6 +446,7 @@ public class EntityServiceImpl implements EntityService {
     if (relType.hasInverse()) {
       checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
     }
+    entityVersionRecorder.aggregateChanged(source, target);
     log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
   }
 
@@ -550,6 +551,8 @@ public class EntityServiceImpl implements EntityService {
                               + source.getId()));
     }
     checkIsNotReferredByMapping(directRel, inverseRel);
+    // Before the rows go: the walk up to an aggregate's root follows them.
+    entityVersionRecorder.aggregateChanged(source, target);
     entityRelationshipRepository.delete(directRel);
     if (inverseRel != null) entityRelationshipRepository.delete(inverseRel);
 

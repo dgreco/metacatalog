@@ -45,6 +45,10 @@
     <owl:DatatypeProperty rdf:about="http://metacatalog/traits">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
     </owl:DatatypeProperty>
+    <!-- on a version of an aggregate root: the whole aggregate it recorded, as JSON -->
+    <owl:DatatypeProperty rdf:about="http://metacatalog/aggregate">
+        <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    </owl:DatatypeProperty>
     <owl:DatatypeProperty rdf:about="http://metacatalog/createdAt">
         <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#dateTime"/>
     </owl:DatatypeProperty>

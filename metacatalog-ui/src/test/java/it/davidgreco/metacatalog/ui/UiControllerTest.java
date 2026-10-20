@@ -1088,6 +1088,47 @@ class UiControllerTest {
     org.junit.jupiter.api.Assertions.assertEquals(
         List.of(1, 2), rows.stream().map(EntityVersionView::typeVersion).toList());
     org.junit.jupiter.api.Assertions.assertTrue(rows.getFirst().values().contains("\"Al\""));
+    org.junit.jupiter.api.Assertions.assertNull(
+        rows.getFirst().aggregate(), "a version of an entity outside an aggregate has no tree");
+  }
+
+  /**
+   * A version of an aggregate root offers the whole aggregate it recorded, with every part's values
+   * shown as JSON rather than as the escaped string the API carries them in.
+   */
+  @Test
+  void instanceHistoryOffersTheWholeAggregateOfARootVersion() throws Exception {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("root-1"));
+    root.setEntityType("Product");
+    root.setValues("{\"name\":\"dp1\"}");
+    given(api.getEntity("root-1")).willReturn(ResponseEntity.ok(root));
+    var part = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    part.setId(java.util.Optional.of("part-1"));
+    part.setEntityType("Port");
+    part.setValues("{\"name\":\"op1\"}");
+    var tree = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    tree.setId(java.util.Optional.of("root-1"));
+    tree.setEntityType("Product");
+    tree.setValues("{\"name\":\"dp1\"}");
+    tree.setParts(List.of(part));
+    var version = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    version.aggregate(tree);
+    given(api.listEntityVersions("root-1")).willReturn(ResponseEntity.ok(List.of(version)));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/instances/root-1/versions"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<EntityVersionView>) result.getModelAndView().getModel().get("versions");
+    var aggregate = mapper.readTree(rows.getFirst().aggregate());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "op1", aggregate.get("parts").get(0).get("values").get("name").asText());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "Port", aggregate.get("parts").get(0).get("entityType").asText());
   }
 
   @Test

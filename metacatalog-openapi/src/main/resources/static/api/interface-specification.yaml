@@ -2427,6 +2427,13 @@ components:
           type: string
           readOnly: true
           description: When this version was recorded, as an ISO-8601 instant.
+        aggregate:
+          $ref: '#/components/schemas/Aggregate'
+          description: >
+            Only on a version of an aggregate root - the whole authored aggregate at this
+            version - the root, every part reachable through HAS_PART with its values, and the
+            DEPENDS_ON links between them. Entities derived from the parts by mappings are not
+            included. Absent for an entity outside an aggregate.
     Mapping:
       type: object
       description: >

@@ -10,6 +10,13 @@ package it.davidgreco.metacatalog.ui;
  *     it could not be resolved
  * @param values the values at this version, pretty-printed JSON
  * @param createdAt when the version was recorded, as an ISO-8601 instant
+ * @param aggregate for a version of an aggregate root, the whole aggregate it recorded as
+ *     pretty-printed JSON; null otherwise
  */
 public record EntityVersionView(
-    int version, boolean current, Integer typeVersion, String values, String createdAt) {}
+    int version,
+    boolean current,
+    Integer typeVersion,
+    String values,
+    String createdAt,
+    String aggregate) {}

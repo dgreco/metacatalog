@@ -37,6 +37,32 @@ public final class ServiceUtils {
   }
 
   /**
+   * Refuses a type that is versionable but sits inside an aggregate rather than at its root.
+   *
+   * <p>A version of an aggregate root records the whole aggregate, so a part has nothing of its own
+   * to version: its changes already become versions of its root. A part that also kept a history
+   * would duplicate the root's, each version recording a different slice of the same change. Parts
+   * and intermediate nodes are exactly the types carrying {@code AggregateElement}.
+   *
+   * @param entityType the type, in the state it is about to be saved in
+   * @throws ServiceError if the type carries both {@code Versionable} and {@code AggregateElement}
+   */
+  public static void checkVersionableOnlyOnAggregateRoots(EntityType entityType) {
+    var traits = traitNamesOf(entityType);
+    if (traits.contains(BuiltInTraits.VERSIONABLE)
+        && traits.contains(BuiltInTraits.AGGREGATE_ELEMENT))
+      throw new ServiceError(
+          "Entity type "
+              + entityType.getName()
+              + " carries both "
+              + BuiltInTraits.VERSIONABLE
+              + " and "
+              + BuiltInTraits.AGGREGATE_ELEMENT
+              + ": within an aggregate only the root can be versionable, and a version of the root"
+              + " records the whole aggregate");
+  }
+
+  /**
    * Checks if a trait carries another trait: the trait itself or any ancestor of its father chain.
    *
    * @param trait the trait to check
