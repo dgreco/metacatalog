@@ -884,6 +884,13 @@ The same history is visible in three other places:
   `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself
   carries `mt:version`.
 
+### In the demo
+
+The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`, so `dp1` starts at
+v1 with a **History** link on the Instances page. Each provision, unprovision, authorize or reject run
+then adds one version, because the run's outcome is written back onto the root: provisioning takes it
+to v2 (`provisioningStatus: PROVISIONED`), authorizing to v3. Editing `dp1` in the UI adds one more. Tick *Show entities* on the graph to see the chain grow behind it.
+
 ### Interaction with type versions
 
 A type version that entity history still references cannot be deleted, just like one a live entity
