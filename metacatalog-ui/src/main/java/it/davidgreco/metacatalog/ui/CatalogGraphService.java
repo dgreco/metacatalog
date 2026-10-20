@@ -2,14 +2,18 @@ package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
+import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.EntityVersion;
 import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -37,6 +41,7 @@ public class CatalogGraphService {
   private static final String TYPE_VERSION_PREFIX = "type-version:";
   private static final String ENTITY_PREFIX = "entity:";
   private static final String ENTITY_VERSION_PREFIX = "entity-version:";
+  private static final String ENTITY_VERSION_PART_PREFIX = "entity-version-part:";
   private static final String SUCCESSOR_OF = "successor-of";
   private static final String EXTENDS = "extends";
   private static final String MAPPING = "mapping";
@@ -317,10 +322,12 @@ public class CatalogGraphService {
             .collect(Collectors.toMap(v -> v.getId().orElseThrow(), Function.identity()));
 
     var liveEntities = new ArrayList<VersionRow>();
+    var liveEntityIds = new HashSet<String>();
     for (var entity : api.getEntities(Optional.empty(), Optional.empty()).getBody()) {
       var typeName = entity.getEntityType();
       if (typeName == null) continue;
       var entityId = entity.getId().orElse("");
+      liveEntityIds.add(entityId);
       var label = entityLabel(entity);
       if (entity.getVersion().isPresent())
         liveEntities.add(
@@ -350,8 +357,9 @@ public class CatalogGraphService {
 
     // Versionable entities get the same treatment as types: one node per recorded version, chained
     // by successor-of, with the live entity leading the chain.
+    var recordedVersions = api.listAllEntityVersions().getBody();
     var entityVersions =
-        api.listAllEntityVersions().getBody().stream()
+        recordedVersions.stream()
             .map(
                 v ->
                     VersionRow.of(
@@ -369,6 +377,12 @@ public class CatalogGraphService {
         "entityVersion",
         nodes,
         edges);
+    for (var version : recordedVersions)
+      version
+          .getAggregate()
+          .ifPresent(
+              tree ->
+                  addRecordedAggregate(version, tree, liveEntityIds, showInverses, nodes, edges));
 
     for (var rel : api.listEntityRelationships().getBody()) {
       var rt = rel.getRelationType().orElse(null);
@@ -396,6 +410,77 @@ public class CatalogGraphService {
               rt,
               rel.getMappingValues().orElse(null),
               rel.getEntityPathReferences().orElse(null)));
+    }
+  }
+
+  /**
+   * Draws the aggregate a root version recorded as frozen copies of its parts, so a past version
+   * shows the aggregate as it was rather than as it is now: each copy carries the values the part
+   * had, hangs off the version (or off its copied parent) by {@code HAS_PART}, and depends by
+   * {@code DEPENDS_ON} on the copies it depended on then. A dependency outside the aggregate points
+   * at that entity's live node, the only one there is.
+   */
+  private void addRecordedAggregate(
+      EntityVersion version,
+      Aggregate tree,
+      Set<String> liveEntityIds,
+      boolean showInverses,
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges) {
+    var copies = new java.util.LinkedHashMap<String, Aggregate>();
+    addRecordedParts(
+        ENTITY_VERSION_PREFIX + version.getId(), version, tree, copies, showInverses, nodes, edges);
+    var copyIdsByPartId = new java.util.HashMap<String, String>();
+    copies.forEach((copyId, part) -> copyIdsByPartId.put(part.getId().orElse(""), copyId));
+    copies.forEach(
+        (copyId, part) -> {
+          for (var dependencyId : part.getDependencies()) {
+            var target =
+                copyIdsByPartId.containsKey(dependencyId)
+                    ? copyIdsByPartId.get(dependencyId)
+                    : liveEntityIds.contains(dependencyId) ? ENTITY_PREFIX + dependencyId : null;
+            if (target != null) addRelationEdges(copyId, "DEPENDS_ON", target, showInverses, edges);
+          }
+        });
+  }
+
+  private void addRecordedParts(
+      String parentNodeId,
+      EntityVersion version,
+      Aggregate parent,
+      Map<String, Aggregate> copies,
+      boolean showInverses,
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges) {
+    for (var part : parent.getParts()) {
+      var partId = part.getId().orElse("");
+      var copyId = ENTITY_VERSION_PART_PREFIX + version.getId() + ":" + partId;
+      if (copies.containsKey(copyId)) continue; // a part reached twice is drawn once
+      copies.put(copyId, part);
+      nodes.add(
+          new GraphModel.Node(
+              copyId,
+              entityLabel(part.getValues(), partId) + " @v" + version.getVersion(),
+              "entityVersion",
+              part.getEntityType(),
+              null,
+              part.getValues()));
+      addRelationEdges(parentNodeId, "HAS_PART", copyId, showInverses, edges);
+      addRecordedParts(copyId, version, part, copies, showInverses, nodes, edges);
+    }
+  }
+
+  /** A relationship edge, plus its inverse when inverses are shown, as stored rows would give. */
+  private static void addRelationEdges(
+      String source,
+      String relationType,
+      String target,
+      boolean showInverses,
+      List<GraphModel.Edge> edges) {
+    edges.add(new GraphModel.Edge(source, target, relationType, relationType, null, null));
+    if (showInverses) {
+      var inverse = inverseOf(relationType);
+      edges.add(new GraphModel.Edge(target, source, inverse, inverse, null, null));
     }
   }
 

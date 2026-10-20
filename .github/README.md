@@ -15,7 +15,7 @@
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
 [![coverage](https://img.shields.io/badge/coverage-56.7%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-407-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-408-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -306,7 +306,7 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 215 · ui 76 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **407, 0 failures**.
+for the Testcontainers PostgreSQL): core 215 · ui 77 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **408, 0 failures**.
 
 ### Coverage
 
@@ -932,7 +932,13 @@ curl -s http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1
 #                               "dependencies": [ "…op1's id…" ] } ] }, … }
 ```
 
-The UI's history page shows the recorded tree under **Whole aggregate**. SPARQL exposes it as
+The UI's history page shows the recorded tree under **Whole aggregate**. On the graph, with *Show
+entities* on, each root version carries its own frozen copy of the aggregate:
+- every part as it was then, labelled `op1 @v2`, with that version's values in its popup;
+- `HAS_PART` edges from the version node to those copies, and `DEPENDS_ON` edges between them as
+  they were then.
+
+So a past version shows the aggregate it recorded, not today's. SPARQL exposes the tree as
 `mt:aggregate` on the `mt:EntityVersion`.
 
 ### In the demo

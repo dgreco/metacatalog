@@ -1131,6 +1131,63 @@ class UiControllerTest {
         "Port", aggregate.get("parts").get(0).get("entityType").asText());
   }
 
+  /**
+   * A version of an aggregate root brings its recorded aggregate onto the graph as frozen copies of
+   * the parts — labelled with the name they had and the root version they belong to, hanging off
+   * that version by HAS_PART, and depending on each other by DEPENDS_ON as they did then.
+   */
+  @Test
+  void graphDuplicatesTheRecordedAggregateUnderEachRootVersion() {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("root-1"));
+    root.setEntityType("Product");
+    root.setValues("{\"name\":\"dp1\"}");
+    root.setVersion(java.util.Optional.of(1));
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root)));
+    var op1 = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    op1.setId(java.util.Optional.of("p-1"));
+    op1.setEntityType("Port");
+    op1.setValues("{\"name\":\"op1\"}");
+    var op2 = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    op2.setId(java.util.Optional.of("p-2"));
+    op2.setEntityType("Port");
+    op2.setValues("{\"name\":\"op2\"}");
+    op2.setDependencies(List.of("p-1"));
+    var tree = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    tree.setId(java.util.Optional.of("root-1"));
+    tree.setEntityType("Product");
+    tree.setValues("{\"name\":\"dp1\"}");
+    tree.setParts(List.of(op1, op2));
+    var version = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    version.aggregate(tree);
+    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of(version)));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, true);
+
+    var partCopies =
+        graph.nodes().stream()
+            .filter(n -> n.id().startsWith("entity-version-part:"))
+            .map(n -> n.label() + " [" + n.kind() + ", " + n.father() + "]")
+            .sorted()
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("op1 @v1 [entityVersion, Port]", "op2 @v1 [entityVersion, Port]"), partCopies);
+    var copyEdges =
+        graph.edges().stream()
+            .filter(e -> e.target().startsWith("entity-version-part:"))
+            .map(e -> e.source() + " -" + e.kind() + "-> " + e.target())
+            .sorted()
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(
+            "entity-version-part:v-1:p-2 -DEPENDS_ON-> entity-version-part:v-1:p-1",
+            "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-1",
+            "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-2"),
+        copyEdges);
+  }
+
   @Test
   void instanceHistoryOfAMissingInstanceRedirectsWithTheError() throws Exception {
     given(api.getEntity("gone")).willThrow(apiError("Entity with id gone not found"));
