@@ -155,8 +155,6 @@ public class MappedEntityService {
             inverseMappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
             inverseMappingEntityRelationship.setRelationType(IS_MAPPED_BY);
             mappingEntityRelationshipRepository.save(inverseMappingEntityRelationship);
-            // Now that the entity is linked to its source, its aggregate can be found and recorded.
-            entityVersionRecorder.aggregateChanged(mappedEntity);
             createMappedEntities(mappedEntity.getId());
           } else {
             createMappedEntities(existingMappingEntityRels.getFirst().getTarget().getId());
@@ -255,7 +253,7 @@ public class MappedEntityService {
           mappedEntity.setValues(mappedValues);
           mappedEntity.setEntityTypeVersion(targetVersion);
           entityRepository.save(mappedEntity);
-          entityVersionRecorder.recordUpdated(mappedEntity, previousValues, previousPin);
+          entityVersionRecorder.recordDerived(mappedEntity, previousValues, previousPin);
           entityLifeCycleEventRepository.save(
               new EntityLifeCycleEvent(
                   mappedEntity.getId(),
