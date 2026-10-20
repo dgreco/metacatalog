@@ -61,9 +61,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *       once per transaction, when the transaction commits. Building or changing an aggregate takes
  *       many operations, and a version per operation would record each half-built state in between.
  *       Its parts are never versionable themselves ({@link
- *       ServiceUtils#checkVersionableOnlyOnAggregateRoots}): their changes, and their derived
- *       entities' changes, are versions of the root. A derived entity is regenerated in a
- *       transaction of its own after its source changes, so that is a version of its own too.
+ *       ServiceUtils#checkVersionableOnlyOnAggregateRoots}): their changes are versions of the
+ *       root, and so are writes to their derived entities — a resource's status, say — except the
+ *       mapping updater's own deriving and re-deriving ({@link #recordDerived}).
  * </ul>
  */
 @Slf4j
@@ -125,6 +125,33 @@ public class EntityVersionRecorder {
   @Transactional(propagation = Propagation.MANDATORY)
   public void recordUpdated(Entity entity, JsonNode previousValues, EntityTypeVersion previousPin) {
     aggregateChanged(entity);
+    recordOwnVersion(entity, previousValues, previousPin);
+  }
+
+  /**
+   * Records a write the mapping updater made to an entity it derives: the entity's own history as
+   * for any write, but not a version of the aggregate it was derived into.
+   *
+   * <p>Deriving is a consequence of a change already recorded — the source's — and happens in a
+   * transaction of its own a moment later, so counting it would add a version per derived entity
+   * after every change, each recording nothing anyone did. The derived entity is still part of the
+   * aggregate: the next version taken for any other reason records it as it then is.
+   *
+   * @param entity the derived entity, holding its new values and pin
+   * @param previousValues the values before the write
+   * @param previousPin the type version the entity was pinned to before the write
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void recordDerived(Entity entity, JsonNode previousValues, EntityTypeVersion previousPin) {
+    if (isAggregateRoot(entity)) {
+      if (isVersionable(entity)) recordAtCommit(entity.getId());
+      return;
+    }
+    recordOwnVersion(entity, previousValues, previousPin);
+  }
+
+  private void recordOwnVersion(
+      Entity entity, JsonNode previousValues, EntityTypeVersion previousPin) {
     if (isAggregateRoot(entity) || !isVersionable(entity)) return;
     entityRepository.findByIdForUpdate(entity.getId());
     var latest = entityVersionRepository.findFirstByEntityIdOrderByVersionDesc(entity.getId());

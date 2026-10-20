@@ -24,7 +24,7 @@ check=""
 # The figures the static badges show. GitLab's coverage badge is live (from the `coverage:`
 # keyword), so only the GitHub flavour needs the number; the test count is static on both.
 # Refresh them when the figures under "Coverage" in README.md move — the two are meant to agree.
-COVERAGE="56.3"
+COVERAGE="56.4"
 TESTS="410"
 
 GITHUB_REPO="https://github.com/dgreco/metacatalog"

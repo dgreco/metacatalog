@@ -314,16 +314,19 @@ class MetacatalogApiTests {
     Assertions.assertEquals(List.of(a.getId()), b.getDependencies());
     Assertions.assertTrue(a.getMapped().isEmpty(), "v1 is recorded before anything is derived");
 
-    // The mapping updater derives one entity per part afterwards; each derivation is a version of
-    // the aggregate, and the latest records the derived entities under their sources.
+    // The mapping updater derives one entity per part afterwards. That records no version of its
+    // own; the next version taken for another reason records the derived entities under their
+    // sources.
     await()
         .atMost(Durations.TEN_SECONDS)
-        .until(
-            () ->
-                api.listEntityVersions(rootId).getLast().getAggregate().getParts().stream()
-                    .allMatch(part -> part.getMapped().size() == 1));
+        .until(() -> api.getEntities("ApiAvDerived", null).size() == 2);
+    Assertions.assertEquals(1, api.listEntityVersions(rootId).size(), "deriving is not a version");
+    var rename = new Entity();
+    rename.setEntityType("ApiAvRoot");
+    rename.setValues("{\"name\":\"api-root-renamed\"}");
+    api.updateEntity(rootId, rename);
     var latest = api.listEntityVersions(rootId).getLast();
-    Assertions.assertTrue(latest.getVersion() > 1);
+    Assertions.assertEquals(2, latest.getVersion());
     var derivedLabels =
         latest.getAggregate().getParts().stream()
             .map(part -> part.getMapped().getFirst().getValues())
