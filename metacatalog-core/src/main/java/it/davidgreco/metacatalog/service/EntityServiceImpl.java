@@ -10,6 +10,7 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
+import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.ArrayList;
@@ -47,6 +48,10 @@ public class EntityServiceImpl implements EntityService {
   private final EntityPathResolver entityPathResolver;
 
   private final JsonUtils jsonUtils;
+
+  private final EntityVersionRepository entityVersionRepository;
+
+  private final EntityVersionRecorder entityVersionRecorder;
 
   /**
    * Creates a new entity based on the given type name and JSON values.
@@ -94,6 +99,7 @@ public class EntityServiceImpl implements EntityService {
       typedEntity.setEntityTypeVersion(currentVersion);
       typedEntity.setValues(valuesJsonNode);
       var en = entityRepository.save(typedEntity);
+      entityVersionRecorder.recordCreated(en);
       if (ServiceUtils.isMappingSourceEntityType(
           mappingEntityTypeRelationshipRepository, entityType))
         entityLifeCycleEventRepository.save(
@@ -140,6 +146,9 @@ public class EntityServiceImpl implements EntityService {
    * creation time). If the entity has no pin (legacy row created before pinning was introduced),
    * validation falls back to the live {@link EntityType#getSchema()}.
    *
+   * <p>If the entity's type is versionable, the new state is recorded as a version (see {@link
+   * EntityVersionRecorder}).
+   *
    * <p>Entities whose type is the target of a mapping relationship cannot be updated through this
    * method. Internal system updates (e.g. provisioning) should use {@link #updateValues}.
    *
@@ -163,8 +172,10 @@ public class EntityServiceImpl implements EntityService {
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       var schema = entity.getEntityTypeVersion().getSchema();
       SchemaValidationError.validateOrThrow(jsonUtils.schemaOf(schema), valuesJsonNode);
+      var previousValues = entity.getValues();
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
+      entityVersionRecorder.recordUpdated(entity, previousValues, entity.getEntityTypeVersion());
       if (ServiceUtils.isMappingSourceEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
         entityLifeCycleEventRepository.save(
@@ -210,8 +221,10 @@ public class EntityServiceImpl implements EntityService {
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
       var schema = entity.getEntityTypeVersion().getSchema();
       SchemaValidationError.validateOrThrow(jsonUtils.schemaOf(schema), valuesJsonNode);
+      var previousValues = entity.getValues();
       entity.setValues(valuesJsonNode);
       entityRepository.save(entity);
+      entityVersionRecorder.recordUpdated(entity, previousValues, entity.getEntityTypeVersion());
       log.info("Updated values for entity with id {}", entityId);
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
@@ -282,6 +295,8 @@ public class EntityServiceImpl implements EntityService {
   }
 
   private void deleteAndRecord(Entity entity) {
+    // History goes with the entity: the snapshots hold a foreign key onto it.
+    entityVersionRepository.deleteByEntity(entity);
     entityRepository.delete(entity);
     entityLifeCycleEventRepository.save(
         new EntityLifeCycleEvent(
@@ -350,6 +365,36 @@ public class EntityServiceImpl implements EntityService {
     return entityRelationshipRepository.findAll();
   }
 
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public List<EntityVersion> listVersions(String entityId) {
+    log.info("Listing versions of entity with id {}", entityId);
+    if (!entityRepository.existsById(entityId))
+      throw new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND);
+    return entityVersionRepository.findByEntityIdOrderByVersionAsc(entityId);
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public EntityVersion readVersion(String entityId, int version) {
+    log.info("Reading version {} of entity with id {}", version, entityId);
+    if (!entityRepository.existsById(entityId))
+      throw new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND);
+    return entityVersionRepository
+        .findByEntityIdAndVersion(entityId, version)
+        .orElseThrow(
+            () ->
+                new NotFoundException(
+                    "Version " + version + " of " + ENTITY_WITH_ID + entityId + NOT_FOUND));
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public List<EntityVersion> listAllVersions() {
+    log.info("Listing all entity versions");
+    return entityVersionRepository.findAllByOrderByEntityIdAscVersionAsc();
+  }
+
   /**
    * Links two entities with a given relation type.
    *
@@ -401,6 +446,7 @@ public class EntityServiceImpl implements EntityService {
     if (relType.hasInverse()) {
       checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
     }
+    entityVersionRecorder.aggregateChanged(source, target);
     log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
   }
 
@@ -505,6 +551,8 @@ public class EntityServiceImpl implements EntityService {
                               + source.getId()));
     }
     checkIsNotReferredByMapping(directRel, inverseRel);
+    // Before the rows go: the walk up to an aggregate's root follows them.
+    entityVersionRecorder.aggregateChanged(source, target);
     entityRelationshipRepository.delete(directRel);
     if (inverseRel != null) entityRelationshipRepository.delete(inverseRel);
 

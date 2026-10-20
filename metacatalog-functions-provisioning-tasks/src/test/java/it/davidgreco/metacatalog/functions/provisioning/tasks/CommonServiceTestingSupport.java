@@ -42,6 +42,7 @@ public class CommonServiceTestingSupport {
             .dataSource(lockTimeoutUrl, postgres.getUsername(), postgres.getPassword())
             .cleanDisabled(false)
             .load();
+    var sequences = lastSequenceValues();
     for (var attempt = 1; ; attempt++) {
       try {
         flyway.clean();
@@ -52,6 +53,49 @@ public class CommonServiceTestingSupport {
       }
     }
     flyway.migrate();
+    restoreSequenceValues(sequences);
+  }
+
+  /**
+   * The last value of every sequence that has handed one out, read before the clean resets them.
+   *
+   * <p>Each cached Spring context keeps a Hibernate pooled optimizer that holds a block of ids it
+   * fetched from a sequence, and keeps drawing on it across the clean. A sequence restarted at 1
+   * hands the same ids out again — to the current class's context, and to any other context still
+   * alive (one built for a class with its own configuration, whose scheduled mapping updater keeps
+   * inserting lifecycle events into this database) — and two inserts collide on the primary key.
+   */
+  private static java.util.Map<String, Long> lastSequenceValues() throws Exception {
+    var values = new java.util.LinkedHashMap<String, Long>();
+    try (var connection =
+            java.sql.DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        var rows =
+            connection
+                .createStatement()
+                .executeQuery(
+                    "SELECT sequencename, last_value FROM pg_sequences"
+                        + " WHERE schemaname = current_schema() AND last_value IS NOT NULL")) {
+      while (rows.next()) values.put(rows.getString(1), rows.getLong(2));
+    }
+    return values;
+  }
+
+  /**
+   * Moves each re-created sequence past where its predecessor stopped, so every id it hands out
+   * from now on is above any id a context's optimizer may still hold from before the clean.
+   */
+  private static void restoreSequenceValues(java.util.Map<String, Long> values) throws Exception {
+    try (var connection =
+            java.sql.DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        var setval = connection.prepareStatement("SELECT setval(?::regclass, ?)")) {
+      for (var entry : values.entrySet()) {
+        setval.setString(1, entry.getKey());
+        setval.setLong(2, entry.getValue());
+        setval.execute();
+      }
+    }
   }
 
   /**

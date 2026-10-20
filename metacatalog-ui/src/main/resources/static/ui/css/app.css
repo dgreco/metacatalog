@@ -731,6 +731,7 @@ select[multiple].traits-select {
 .graph-legend .lg-type::before { background: var(--accent); }
 .graph-legend .lg-trait::before { background: #0d9488; }
 .graph-legend .lg-entity::before { background: #f59e0b; }
+.graph-legend .lg-entity-version::before { background: #fcd34d; }
 .graph-legend .lg-edge::before { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
 .graph-legend .lg-extends::before { border-top-color: #94a3b8; }
 .graph-legend .lg-has-trait::before { border-top-color: #94a3b8; border-top-style: dashed; }
@@ -778,6 +779,7 @@ select[multiple].traits-select {
 .graph-node-entityType .graph-node-dot { fill: var(--accent); }
 .graph-node-trait .graph-node-dot { fill: #0d9488; }
 .graph-node-entity .graph-node-dot { fill: #f59e0b; }
+.graph-node-entityVersion .graph-node-dot { fill: #fcd34d; }
 .graph-node-label { font-size: 11px; fill: var(--text); text-anchor: middle; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; pointer-events: none; }
 .graph-edge-hit { stroke: transparent; stroke-width: 14px; fill: none; pointer-events: stroke; cursor: help; }
 /* graph hover popups */

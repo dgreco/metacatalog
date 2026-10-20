@@ -27,6 +27,7 @@ EntityTypes:
     traits:
       - Provisionable
       - Authorizable
+      - Versionable
       - WithName
 
   - name: OutputPortType

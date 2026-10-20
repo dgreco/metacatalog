@@ -84,6 +84,8 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository, used to refuse removing
    *     a trait relationship that existing instance links rely on
    * @param jsonUtils the JSON helpers
+   * @param entityTypeRepository the entity type repository, used to refuse a version that would
+   *     make an aggregate part versionable
    * @return the trait service
    */
   // @Primary because immutableTraitWriter below re-exposes this very instance under a second bean
@@ -95,13 +97,15 @@ public class CoreConfig {
       TraitRelationshipRepository traitRelationshipRepository,
       TraitVersionRepository traitVersionRepository,
       EntityRelationshipRepository entityRelationshipRepository,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityTypeRepository entityTypeRepository) {
     return new TraitServiceImpl(
         traitRepository,
         traitRelationshipRepository,
         traitVersionRepository,
         entityRelationshipRepository,
-        jsonUtils);
+        jsonUtils,
+        entityTypeRepository);
   }
 
   /**
@@ -147,6 +151,9 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository, used to refuse a new
    *     version whose carriage change would leave an existing containment violating the
    *     aggregate-model rules
+   * @param jsonUtils the JSON utilities
+   * @param entityVersionRepository the entity version history repository, used to refuse deleting a
+   *     type version that entity history still records
    * @return the entity type service
    */
   // @Primary for the same reason as traitService: immutableEntityTypeWriter re-exposes it.
@@ -159,7 +166,8 @@ public class CoreConfig {
       EntityRepository entityRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       EntityRelationshipRepository entityRelationshipRepository,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRepository entityVersionRepository) {
     return new EntityTypeServiceImpl(
         entityTypeRepository,
         traitRepository,
@@ -167,7 +175,8 @@ public class CoreConfig {
         entityRepository,
         mappingEntityTypeRelationshipRepository,
         entityRelationshipRepository,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRepository);
   }
 
   /**
@@ -184,6 +193,8 @@ public class CoreConfig {
    * @param entityLifeCycleEventRepository the lifecycle event repository
    * @param entityPathResolver the path resolver, used to re-resolve mapping path references when
    *     checking whether a link about to be removed is traversed by one
+   * @param entityVersionRepository the entity version history repository
+   * @param entityVersionRecorder the recorder of entity version history
    * @return the entity service
    */
   @Bean
@@ -197,7 +208,9 @@ public class CoreConfig {
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
       EntityPathResolver entityPathResolver,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRepository entityVersionRepository,
+      EntityVersionRecorder entityVersionRecorder) {
     return new EntityServiceImpl(
         entityTypeRepository,
         entityTypeVersionRepository,
@@ -208,7 +221,39 @@ public class CoreConfig {
         mappingEntityRelationshipRepository,
         entityLifeCycleEventRepository,
         entityPathResolver,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRepository,
+        entityVersionRecorder);
+  }
+
+  /**
+   * Creates the recorder of entity version history, shared by every path that writes entity values
+   * so that all of them version the same way.
+   *
+   * @param entityRepository the entity repository, used to lock an entity before numbering a
+   *     version
+   * @param entityVersionRepository the entity version history repository
+   * @param entityRelationshipRepository the entity relationship repository, used to find the
+   *     aggregate root above a changed part and to read an aggregate's tree
+   * @param mappingEntityRelationshipRepository the mapping relationship repository, used likewise
+   *     for the entities derived from an aggregate's members
+   * @param entityManager the shared entity manager, used to re-read an aggregate under a row lock
+   *     when it is recorded at commit
+   * @return the entity version recorder
+   */
+  @Bean
+  public EntityVersionRecorder entityVersionRecorder(
+      EntityRepository entityRepository,
+      EntityVersionRepository entityVersionRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
+      jakarta.persistence.EntityManager entityManager) {
+    return new EntityVersionRecorder(
+        entityRepository,
+        entityVersionRepository,
+        entityRelationshipRepository,
+        mappingEntityRelationshipRepository,
+        entityManager);
   }
 
   /**
@@ -264,6 +309,7 @@ public class CoreConfig {
    * @param transactionManager the transaction manager
    * @param applicationConfigurationProperties the application configuration
    * @param entityPathResolver the entity path resolver
+   * @param entityVersionRecorder the recorder of entity version history
    * @return the mapped entity service
    */
   @Bean
@@ -276,7 +322,8 @@ public class CoreConfig {
       PlatformTransactionManager transactionManager,
       CoreConfigProperties applicationConfigurationProperties,
       EntityPathResolver entityPathResolver,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRecorder entityVersionRecorder) {
     return new MappedEntityService(
         entityRepository,
         entityTypeVersionRepository,
@@ -286,7 +333,8 @@ public class CoreConfig {
         transactionManager,
         applicationConfigurationProperties,
         entityPathResolver,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRecorder);
   }
 
   /**

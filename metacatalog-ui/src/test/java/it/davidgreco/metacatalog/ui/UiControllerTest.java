@@ -58,10 +58,13 @@ class UiControllerTest {
     given(api.getTypeCapabilities())
         .willReturn(ResponseEntity.ok(capabilities(List.of(), List.of(), List.of())));
     given(api.listEntityTypeVersions(any())).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listEntityVersions(any())).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
+                new RootController(),
                 new GraphUiController(api, catalogGraphService),
                 new TraitUiController(api, catalogGraphService),
                 new EntityTypeUiController(api),
@@ -79,6 +82,19 @@ class UiControllerTest {
 
   private static RuntimeException apiError(String message) {
     return new RuntimeException(message);
+  }
+
+  /**
+   * The bare root must reach the dashboard through its controller. Unmapped, Spring Boot's
+   * welcome-page support renders the {@code index} template at {@code /} with none of the model the
+   * dashboard fills, and the page fails with a 500.
+   */
+  @Test
+  void rootRedirectsToTheDashboard() throws Exception {
+    mockMvc
+        .perform(get("/"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
   }
 
   @Test
@@ -1007,5 +1023,299 @@ class UiControllerTest {
         .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
 
     verify(api).unlinkEntity("ent-1", "HAS_PART", "ent-2");
+  }
+
+  private static it.davidgreco.metacatalog.openapi.model.EntityVersion entityVersion(
+      String id,
+      String entityId,
+      int version,
+      String values,
+      String typeVersionId,
+      String previous) {
+    var v = new it.davidgreco.metacatalog.openapi.model.EntityVersion();
+    v.setId(id);
+    v.setEntityId(entityId);
+    v.setVersion(version);
+    v.setValues(values);
+    v.setEntityTypeVersionId(typeVersionId);
+    v.setPreviousVersionId(java.util.Optional.ofNullable(previous));
+    v.setCreatedAt("2026-10-20T10:00:0" + version + "Z");
+    return v;
+  }
+
+  /**
+   * The history page lists every version oldest first, marks the last one current and labels each
+   * with the number of the type version it was validated against.
+   */
+  @Test
+  void instanceHistoryListsVersionsWithTheirTypeVersions() throws Exception {
+    var entity = new Entity();
+    entity.setId(java.util.Optional.of("ent-1"));
+    entity.setEntityType("Person");
+    entity.setValues("{\"name\":\"Alice\"}");
+    entity.setVersion(java.util.Optional.of(2));
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+    var oldType = new EntityType();
+    oldType.setId(java.util.Optional.of("type-snap-1"));
+    oldType.setVersion(java.util.Optional.of(1));
+    var currentType = new EntityType();
+    currentType.setId(java.util.Optional.of("type-snap-2"));
+    currentType.setVersion(java.util.Optional.of(2));
+    given(api.listAllEntityTypeVersions())
+        .willReturn(ResponseEntity.ok(List.of(oldType, currentType)));
+    given(api.listEntityVersions("ent-1"))
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    entityVersion("v-1", "ent-1", 1, "{\"name\":\"Al\"}", "type-snap-1", null),
+                    entityVersion(
+                        "v-2", "ent-1", 2, "{\"name\":\"Alice\"}", "type-snap-2", "v-1"))));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/instances/ent-1/versions"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("entity-versions"))
+            .andExpect(model().attribute("instanceName", "Alice"))
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<EntityVersionView>) result.getModelAndView().getModel().get("versions");
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(1, 2), rows.stream().map(EntityVersionView::version).toList());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(false, true), rows.stream().map(EntityVersionView::current).toList());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(1, 2), rows.stream().map(EntityVersionView::typeVersion).toList());
+    org.junit.jupiter.api.Assertions.assertTrue(rows.getFirst().values().contains("\"Al\""));
+    org.junit.jupiter.api.Assertions.assertNull(
+        rows.getFirst().aggregate(), "a version of an entity outside an aggregate has no tree");
+  }
+
+  /**
+   * A version of an aggregate root offers the whole aggregate it recorded, with every part's values
+   * shown as JSON rather than as the escaped string the API carries them in.
+   */
+  @Test
+  void instanceHistoryOffersTheWholeAggregateOfARootVersion() throws Exception {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("root-1"));
+    root.setEntityType("Product");
+    root.setValues("{\"name\":\"dp1\"}");
+    given(api.getEntity("root-1")).willReturn(ResponseEntity.ok(root));
+    var part = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    part.setId(java.util.Optional.of("part-1"));
+    part.setEntityType("Port");
+    part.setValues("{\"name\":\"op1\"}");
+    var derived = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    derived.setId(java.util.Optional.of("d-1"));
+    derived.setEntityType("S3Folder");
+    derived.setValues("{\"path\":\"/root/dp1/op1\"}");
+    part.setMapped(List.of(derived));
+    var tree = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    tree.setId(java.util.Optional.of("root-1"));
+    tree.setEntityType("Product");
+    tree.setValues("{\"name\":\"dp1\"}");
+    tree.setParts(List.of(part));
+    var version = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    version.aggregate(tree);
+    given(api.listEntityVersions("root-1")).willReturn(ResponseEntity.ok(List.of(version)));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/instances/root-1/versions"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<EntityVersionView>) result.getModelAndView().getModel().get("versions");
+    var aggregate = mapper.readTree(rows.getFirst().aggregate());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "op1", aggregate.get("parts").get(0).get("values").get("name").asText());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "Port", aggregate.get("parts").get(0).get("entityType").asText());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "/root/dp1/op1",
+        aggregate.get("parts").get(0).get("mapped").get(0).get("values").get("path").asText());
+  }
+
+  /**
+   * A version of an aggregate root brings its recorded aggregate onto the graph as frozen copies of
+   * the parts — labelled with the name they had and the root version they belong to, hanging off
+   * that version by HAS_PART, and depending on each other by DEPENDS_ON as they did then.
+   */
+  @Test
+  void graphDuplicatesTheRecordedAggregateUnderEachRootVersion() {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("root-1"));
+    root.setEntityType("Product");
+    root.setValues("{\"name\":\"dp1\"}");
+    root.setVersion(java.util.Optional.of(1));
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root)));
+    var op1 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    op1.setId(java.util.Optional.of("p-1"));
+    op1.setEntityType("Port");
+    op1.setValues("{\"name\":\"op1\"}");
+    var s3 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    s3.setId(java.util.Optional.of("d-1"));
+    s3.setEntityType("S3Folder");
+    s3.setValues("{\"name\":\"s3-op1\"}");
+    op1.setMapped(List.of(s3));
+    var op2 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    op2.setId(java.util.Optional.of("p-2"));
+    op2.setEntityType("Port");
+    op2.setValues("{\"name\":\"op2\"}");
+    op2.setDependencies(List.of("p-1"));
+    var tree = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    tree.setId(java.util.Optional.of("root-1"));
+    tree.setEntityType("Product");
+    tree.setValues("{\"name\":\"dp1\"}");
+    tree.setParts(List.of(op1, op2));
+    var version = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    version.aggregate(tree);
+    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of(version)));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, true);
+
+    var partCopies =
+        graph.nodes().stream()
+            .filter(n -> n.id().startsWith("entity-version-part:"))
+            .map(n -> n.label() + " [" + n.kind() + ", " + n.father() + "]")
+            .sorted()
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(
+            "op1 @v1 [entityVersion, Port]",
+            "op2 @v1 [entityVersion, Port]",
+            "s3-op1 @v1 [entityVersion, S3Folder]"),
+        partCopies);
+    var copyEdges =
+        graph.edges().stream()
+            .filter(e -> e.target().startsWith("entity-version-part:"))
+            .map(e -> e.source() + " -" + e.kind() + "-> " + e.target())
+            .sorted()
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(
+            "entity-version-part:v-1:p-1 -mapping-> entity-version-part:v-1:d-1",
+            "entity-version-part:v-1:p-2 -DEPENDS_ON-> entity-version-part:v-1:p-1",
+            "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-1",
+            "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-2"),
+        copyEdges);
+  }
+
+  @Test
+  void instanceHistoryOfAMissingInstanceRedirectsWithTheError() throws Exception {
+    given(api.getEntity("gone")).willThrow(apiError("Entity with id gone not found"));
+
+    mockMvc
+        .perform(get("/ui/instances/gone/versions"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("error", "Entity with id gone not found"));
+  }
+
+  /**
+   * The list shows the type version an instance is pinned to as its number, resolved from the
+   * snapshot id the instance carries. The current version's snapshot counts too: it is listed by
+   * {@code GET /entity-type/versions} under its own id, unlike in the per-type list.
+   */
+  @Test
+  void instancesListShowsThePinnedTypeVersionNumber() throws Exception {
+    var pinned = new Entity();
+    pinned.setId(java.util.Optional.of("ent-1"));
+    pinned.setEntityType("Doc");
+    pinned.setValues("{}");
+    pinned.setEntityTypeVersionId("snap-2");
+    var unresolved = new Entity();
+    unresolved.setId(java.util.Optional.of("ent-2"));
+    unresolved.setEntityType("Doc");
+    unresolved.setValues("{}");
+    unresolved.setEntityTypeVersionId("snap-unknown");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(pinned, unresolved)));
+    var v1 = new EntityType();
+    v1.setId(java.util.Optional.of("snap-1"));
+    v1.setVersion(java.util.Optional.of(1));
+    var v2 = new EntityType();
+    v2.setId(java.util.Optional.of("snap-2"));
+    v2.setVersion(java.util.Optional.of(2));
+    given(api.listAllEntityTypeVersions()).willReturn(ResponseEntity.ok(List.of(v1, v2)));
+
+    var rows = instanceRows();
+
+    org.junit.jupiter.api.Assertions.assertEquals(2, rows.get(0).entityTypeVersion());
+    org.junit.jupiter.api.Assertions.assertEquals("snap-2", rows.get(0).entityTypeVersionId());
+    org.junit.jupiter.api.Assertions.assertNull(rows.get(1).entityTypeVersion());
+  }
+
+  @Test
+  void onlyVersionedInstancesOfferTheirHistory() throws Exception {
+    var versioned = new Entity();
+    versioned.setId(java.util.Optional.of("ent-1"));
+    versioned.setEntityType("Doc");
+    versioned.setValues("{}");
+    versioned.setVersion(java.util.Optional.of(3));
+    var plain = new Entity();
+    plain.setId(java.util.Optional.of("ent-2"));
+    plain.setEntityType("Note");
+    plain.setValues("{}");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(versioned, plain)));
+
+    var rows = instanceRows();
+    org.junit.jupiter.api.Assertions.assertEquals(3, rows.get(0).version());
+    org.junit.jupiter.api.Assertions.assertNull(rows.get(1).version());
+
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(versioned));
+    mockMvc
+        .perform(get("/ui/instances/ent-1"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("entityVersion", 3));
+  }
+
+  /**
+   * With entities shown, each recorded version of a versionable entity is a node chained to its
+   * predecessor, and the live entity leads the chain — the same shape the graph gives type
+   * versions. Each version is labelled with the name it had at that version, not the entity's
+   * current one; a version whose values carry no name falls back to the entity's id, as the entity
+   * itself does.
+   */
+  @Test
+  void graphChainsEntityVersionsBehindTheLiveEntity() {
+    var entity = new Entity();
+    entity.setId(java.util.Optional.of("ent-1"));
+    entity.setEntityType("Doc");
+    entity.setValues("{\"name\":\"report\"}");
+    entity.setVersion(java.util.Optional.of(3));
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(entity)));
+    given(api.listAllEntityVersions())
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    entityVersion("v-1", "ent-1", 1, "{\"name\":\"draft\"}", "t", null),
+                    entityVersion("v-2", "ent-1", 2, "{}", "t", "v-1"),
+                    entityVersion("v-3", "ent-1", 3, "{\"name\":\"report\"}", "t", "v-2"))));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, true);
+
+    var versionNodes =
+        graph.nodes().stream().filter(n -> "entityVersion".equals(n.kind())).toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("draft (v1)", "#ent-1 (v2)", "report (v3)"),
+        versionNodes.stream().map(GraphModel.Node::label).toList());
+    var successorEdges =
+        graph.edges().stream()
+            .filter(e -> "successor-of".equals(e.kind()))
+            .map(e -> e.source() + "->" + e.target())
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(
+            "entity-version:v-2->entity-version:v-1",
+            "entity-version:v-3->entity-version:v-2",
+            "entity:ent-1->entity-version:v-3"),
+        successorEdges);
   }
 }

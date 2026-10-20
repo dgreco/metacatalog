@@ -3,11 +3,14 @@ package it.davidgreco.metacatalog.repository;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityType;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -60,6 +63,21 @@ public interface EntityRepository extends JpaRepository<Entity, String> {
       attributePaths = {"entityTypeVersion"},
       type = EntityGraph.EntityGraphType.LOAD)
   Optional<Entity> findById(String id);
+
+  /**
+   * Takes a {@code SELECT ... FOR UPDATE} lock on an entity's row, so concurrent writers to the
+   * same entity are serialised for the rest of the transaction.
+   *
+   * <p>Used by {@code EntityVersionRecorder} before numbering a new snapshot. If the entity is
+   * already managed, the returned instance is that same object and its state is not refreshed: the
+   * caller reads anything it needs to be current from the database after taking the lock.
+   *
+   * @param id the entity id
+   * @return the locked entity
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT e FROM Entity e WHERE e.id = :id")
+  Optional<Entity> findByIdForUpdate(@Param("id") String id);
 
   /**
    * Finds entities by type and JSON path expression.

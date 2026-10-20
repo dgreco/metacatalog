@@ -6,6 +6,11 @@
 # to them, and each records into its own pair of status fields on the resource and on the root.
 # Everything here is handled by the `stdout` task (see application-docker.yaml), which prints what
 # it would do for all four operations instead of touching anything real.
+#
+# The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
+# change to its values adds one. That includes the status write-backs each provision / authorize
+# run makes on the root, so the History link on the Instances page grows as you click through the
+# lifecycle.
 
 Traits:
   - name: WithName
@@ -36,6 +41,7 @@ EntityTypes:
     traits:
       - Provisionable
       - Authorizable
+      - Versionable
       - WithName
 
   - name: OutputPortType

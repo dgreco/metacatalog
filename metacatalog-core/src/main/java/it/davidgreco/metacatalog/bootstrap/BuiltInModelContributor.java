@@ -12,8 +12,8 @@ import org.springframework.stereotype.Component;
  * {@link BuiltInTraits#AGGREGATE_ELEMENT}, the trait pair of every {@link BuiltInCapability} — the
  * provisioning pair {@link BuiltInTraits#PROVISIONABLE} / {@link
  * BuiltInTraits#PROVISIONABLE_RESOURCE} and the authorization pair {@link
- * BuiltInTraits#AUTHORIZABLE} / {@link BuiltInTraits#AUTHORIZABLE_RESOURCE} — and the composition
- * between the first two.
+ * BuiltInTraits#AUTHORIZABLE} / {@link BuiltInTraits#AUTHORIZABLE_RESOURCE} — the composition
+ * between the first two, and the {@link BuiltInTraits#VERSIONABLE} marker.
  *
  * <p>The capabilities are looped over rather than spelled out one by one: each names its own traits
  * and renders its own root and resource schemas, so this class holds no field names and a third
@@ -26,9 +26,9 @@ import org.springframework.stereotype.Component;
  * would have produced.
  *
  * <p>All of it is immutable, which is the whole reason the extension point exists. {@code
- * AggregateService}, {@code AggregateSchemaService} and the provisioning and authorization
- * procedures key off these traits <em>by name</em>, so deleting or re-versioning one would break
- * that wiring with nothing pointing back at the cause.
+ * AggregateService}, {@code AggregateSchemaService}, {@code EntityVersionRecorder} and the
+ * provisioning and authorization procedures key off these traits <em>by name</em>, so deleting or
+ * re-versioning one would break that wiring with nothing pointing back at the cause.
  *
  * <p>Ordered first so a module contributing its own model can inherit from these or mix them in.
  */
@@ -53,5 +53,8 @@ public class BuiltInModelContributor implements ImmutableModelContributor {
     // Composition: what makes a type able to contain another, and what AggregateSchemaService
     // projects onto the types carrying these traits to derive the aggregate model.
     registry.link(BuiltInTraits.AGGREGATE, RelationType.HAS_PART, BuiltInTraits.AGGREGATE_ELEMENT);
+    // A marker with no schema of its own: the entity services check for it by name to decide
+    // whether an update snapshots the entity, so it is frozen like the rest.
+    registry.trait(BuiltInTraits.VERSIONABLE);
   }
 }

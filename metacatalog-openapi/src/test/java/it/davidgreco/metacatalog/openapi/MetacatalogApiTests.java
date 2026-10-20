@@ -160,6 +160,180 @@ class MetacatalogApiTests {
     api.deleteEntityType("ApiMapDst");
   }
 
+  /**
+   * The version history of a Versionable entity is readable through the API, a never-versioned
+   * entity has an empty history rather than a missing one, and unknown entities or versions are
+   * 404s.
+   */
+  @Test
+  void testEntityVersionHistoryEndpoints() throws IOException {
+    var api = getMetaCatalogManagerApi();
+    var json = new com.fasterxml.jackson.databind.ObjectMapper();
+    var schema = "{ \"type\": \"object\", \"properties\": { \"name\": { \"type\": \"string\" } } }";
+
+    var versionedType = new EntityType();
+    versionedType.setName("ApiVersioned");
+    versionedType.setSchema(schema);
+    versionedType.setTraits(List.of("Versionable"));
+    api.createEntityType(versionedType);
+    var plainType = new EntityType();
+    plainType.setName("ApiUnversioned");
+    plainType.setSchema(schema);
+    api.createEntityType(plainType);
+
+    var versioned = new Entity();
+    versioned.setEntityType("ApiVersioned");
+    versioned.setValues("{\"name\":\"one\"}");
+    var id = api.createEntity(versioned);
+    var update = new Entity();
+    update.setEntityType("ApiVersioned");
+    update.setValues("{\"name\":\"two\"}");
+    api.updateEntity(id, update);
+
+    Assertions.assertEquals(2, api.getEntity(id).getVersion());
+    var versions = api.listEntityVersions(id);
+    Assertions.assertEquals(
+        List.of(1, 2), versions.stream().map(EntityVersion::getVersion).toList());
+    Assertions.assertEquals(id, versions.getFirst().getEntityId());
+    Assertions.assertNull(versions.getFirst().getPreviousVersionId());
+    Assertions.assertEquals(versions.getFirst().getId(), versions.getLast().getPreviousVersionId());
+    Assertions.assertNotNull(versions.getFirst().getCreatedAt());
+    Assertions.assertNull(
+        versions.getFirst().getAggregate(), "an entity outside an aggregate records no aggregate");
+    Assertions.assertEquals(
+        json.readTree("{\"name\":\"one\"}"),
+        json.readTree(api.getEntityVersion(id, 1).getValues()));
+    Assertions.assertTrue(
+        api.listAllEntityVersions().stream().anyMatch(v -> id.equals(v.getEntityId())));
+
+    var missingVersion =
+        Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntityVersion(id, 3));
+    Assertions.assertEquals(404, missingVersion.getStatusCode().value());
+    var missingEntity =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.listEntityVersions("no-such-entity"));
+    Assertions.assertEquals(404, missingEntity.getStatusCode().value());
+
+    var plain = new Entity();
+    plain.setEntityType("ApiUnversioned");
+    plain.setValues("{\"name\":\"one\"}");
+    var plainId = api.createEntity(plain);
+    Assertions.assertNull(api.getEntity(plainId).getVersion());
+    Assertions.assertTrue(api.listEntityVersions(plainId).isEmpty());
+
+    api.deleteEntity(id);
+    api.deleteEntity(plainId);
+    api.deleteEntityType("ApiVersioned");
+    api.deleteEntityType("ApiUnversioned");
+  }
+
+  /**
+   * A Versionable aggregate root records its whole aggregate: one version for the creation, holding
+   * the root, its parts and their dependencies. A versionable part type is refused.
+   */
+  @Test
+  void testVersionableAggregateRecordsTheWholeTree() throws IOException {
+    var api = getMetaCatalogManagerApi();
+    var schema = "{ \"type\": \"object\", \"properties\": { \"name\": { \"type\": \"string\" } } }";
+
+    var partTrait = new Trait();
+    partTrait.setName("ApiAvPart");
+    partTrait.setInheritsFrom("AggregateElement");
+    api.createTrait(partTrait);
+    var sanction = new LinkTraitRequest();
+    sanction.sourceTrait("ApiAvPart");
+    sanction.relationshipTypeName("DEPENDS_ON");
+    sanction.targetTrait("ApiAvPart");
+    api.linkTrait(sanction);
+    var rootType = new EntityType();
+    rootType.setName("ApiAvRoot");
+    rootType.setSchema(schema);
+    rootType.setTraits(List.of("Aggregate", "Versionable"));
+    api.createEntityType(rootType);
+    var leafType = new EntityType();
+    leafType.setName("ApiAvLeaf");
+    leafType.setSchema(schema);
+    leafType.setTraits(List.of("ApiAvPart"));
+    api.createEntityType(leafType);
+    var derivedType = new EntityType();
+    derivedType.setName("ApiAvDerived");
+    derivedType.setSchema(
+        "{ \"type\": \"object\", \"properties\": { \"label\": { \"type\": \"string\" } } }");
+    api.createEntityType(derivedType);
+    var mapping = new Mapping();
+    mapping.setSourceEntityType("ApiAvLeaf");
+    mapping.setTargetEntityType("ApiAvDerived");
+    mapping.setMappingValues("{\"label\": \"#source.getValue('$.name').asText() + '-derived'\"}");
+    mapping.setEntityPathReferences("[]");
+    api.createMapping(mapping);
+
+    var badLeaf = new EntityType();
+    badLeaf.setName("ApiAvBadLeaf");
+    badLeaf.setSchema(schema);
+    badLeaf.setTraits(List.of("ApiAvPart", "Versionable"));
+    var refused =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.createEntityType(badLeaf));
+    Assertions.assertEquals(400, refused.getStatusCode().value());
+    Assertions.assertTrue(
+        refused.getResponseBodyAsString().contains("only the root can be versionable"),
+        refused.getResponseBodyAsString());
+
+    var document = Files.createTempFile("aggregate", ".yaml");
+    Files.writeString(
+        document,
+        """
+        entityType: "ApiAvRoot"
+        values:
+          name: "api-root"
+        parts:
+        - ref: "a"
+          entityType: "ApiAvLeaf"
+          values:
+            name: "a"
+        - ref: "b"
+          entityType: "ApiAvLeaf"
+          values:
+            name: "b"
+          dependsOn:
+            - "a"
+        """);
+    api.createAggregateAsYaml(document.toFile());
+
+    var rootId = api.getEntities("ApiAvRoot", null).getFirst().getId();
+    var versions = api.listEntityVersions(rootId);
+    Assertions.assertEquals(1, versions.size(), "the creation is one version");
+    var tree = versions.getFirst().getAggregate();
+    Assertions.assertEquals(rootId, tree.getId());
+    Assertions.assertEquals("ApiAvRoot", tree.getEntityType());
+    var parts = tree.getParts();
+    Assertions.assertEquals(2, parts.size());
+    var a = parts.stream().filter(p -> p.getValues().contains("\"a\"")).findFirst().orElseThrow();
+    var b = parts.stream().filter(p -> p.getValues().contains("\"b\"")).findFirst().orElseThrow();
+    Assertions.assertEquals("ApiAvLeaf", a.getEntityType());
+    Assertions.assertEquals(List.of(a.getId()), b.getDependencies());
+    Assertions.assertTrue(a.getMapped().isEmpty(), "v1 is recorded before anything is derived");
+
+    // The mapping updater derives one entity per part afterwards; each derivation is a version of
+    // the aggregate, and the latest records the derived entities under their sources.
+    await()
+        .atMost(Durations.TEN_SECONDS)
+        .until(
+            () ->
+                api.listEntityVersions(rootId).getLast().getAggregate().getParts().stream()
+                    .allMatch(part -> part.getMapped().size() == 1));
+    var latest = api.listEntityVersions(rootId).getLast();
+    Assertions.assertTrue(latest.getVersion() > 1);
+    var derivedLabels =
+        latest.getAggregate().getParts().stream()
+            .map(part -> part.getMapped().getFirst().getValues())
+            .map(values -> values.replaceAll("\\s", ""))
+            .sorted()
+            .toList();
+    Assertions.assertEquals(
+        List.of("{\"label\":\"a-derived\"}", "{\"label\":\"b-derived\"}"), derivedLabels);
+  }
+
   @Test
   void testListTraits() {
     var api = getMetaCatalogManagerApi();

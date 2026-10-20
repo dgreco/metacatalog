@@ -6,7 +6,7 @@ package it.davidgreco.metacatalog.entity;
  * and procedures that key off them refer to a single source of truth rather than repeating string
  * literals (a typo in which would silently break trait-based behaviour).
  *
- * <p>Because that wiring is by name, all six traits are installed immutable and cannot be deleted
+ * <p>Because that wiring is by name, all seven traits are installed immutable and cannot be deleted
  * or re-versioned through the API.
  */
 public final class BuiltInTraits {
@@ -30,4 +30,10 @@ public final class BuiltInTraits {
 
   /** The authorizable-resource trait (a resource within an authorizable aggregate). */
   public static final String AUTHORIZABLE_RESOURCE = "AuthorizableResource";
+
+  /**
+   * The versionable trait: every instance of a type carrying it, directly or through inheritance,
+   * keeps a snapshot of each state its values have been in.
+   */
+  public static final String VERSIONABLE = "Versionable";
 }

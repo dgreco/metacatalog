@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
+import it.davidgreco.metacatalog.openapi.model.EntityVersion;
 import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +65,8 @@ class UnifiedInstanceController {
       entities = List.of();
       model.addAttribute("error", e.getMessage());
     }
-    model.addAttribute("instances", InstanceRowView.listFrom(entities, typeCapabilities()));
+    model.addAttribute(
+        "instances", InstanceRowView.listFrom(entities, typeCapabilities(), typeVersionNumbers()));
     model.addAttribute("selectedType", type);
     model.addAttribute("query", query);
     model.addAttribute("entityTypes", types);
@@ -260,6 +263,7 @@ class UnifiedInstanceController {
       model.addAttribute("entityTypes", types);
       addInstanceSchemaModel(types, entity, model);
       addValueRenderings(entity.getValues(), model);
+      model.addAttribute("entityVersion", entity.getVersion().orElse(null));
       model.addAttribute("readOnly", true);
       return "instances-form";
     } catch (RuntimeException e) {
@@ -283,6 +287,22 @@ class UnifiedInstanceController {
         Set.copyOf(capabilities.getAggregateRoot()),
         Set.copyOf(capabilities.getProvisionable()),
         Set.copyOf(capabilities.getAuthorizable()));
+  }
+
+  /**
+   * The number of every entity type version, by snapshot id, so a row can show the version its
+   * instance is pinned to as {@code v2} rather than as the id it carries.
+   *
+   * <p>{@code GET /entity-type/versions} is used rather than the per-type list because only it
+   * reports every version under its snapshot id: the per-type list gives the current version under
+   * the live type's id, which is not the id an instance is pinned to.
+   */
+  private Map<String, Integer> typeVersionNumbers() {
+    var numbers = new LinkedHashMap<String, Integer>();
+    for (var v : api.listAllEntityTypeVersions().getBody()) {
+      v.getId().ifPresent(id -> v.getVersion().ifPresent(n -> numbers.put(id, n)));
+    }
+    return numbers;
   }
 
   private Map<String, String> schemaMap(List<EntityType> types) {
@@ -335,6 +355,89 @@ class UnifiedInstanceController {
           "valuesYaml", yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
     } catch (JsonProcessingException e) {
       model.addAttribute("valuesJson", values);
+    }
+  }
+
+  // --- version history -------------------------------------------------------
+
+  /**
+   * The version history of an instance whose type carries the built-in {@code Versionable} trait,
+   * oldest first. Read-only: history is never edited, only appended to by updates.
+   *
+   * <p>Each version is labelled with the number of the type version its values were validated
+   * against (see {@link #typeVersionNumbers}).
+   */
+  @GetMapping("/{id}/versions")
+  @SuppressWarnings("unchecked")
+  public String versions(
+      @PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
+    try {
+      var entity = (Entity) api.getEntity(id).getBody();
+      var history = (List<EntityVersion>) api.listEntityVersions(id).getBody();
+      var typeVersions = typeVersionNumbers();
+      var rows = new java.util.ArrayList<EntityVersionView>();
+      for (var v : history) {
+        rows.add(
+            new EntityVersionView(
+                v.getVersion(),
+                v == history.getLast(),
+                typeVersions.get(v.getEntityTypeVersionId()),
+                prettyJson(v.getValues()),
+                v.getCreatedAt(),
+                v.getAggregate().map(this::aggregateJson).orElse(null)));
+      }
+      model.addAttribute("instanceId", id);
+      model.addAttribute(
+          "instanceName", InstanceRowView.listFrom(List.of(entity)).getFirst().name());
+      model.addAttribute("entityType", entity.getEntityType());
+      model.addAttribute("versions", rows);
+      return "entity-versions";
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+      return "redirect:/ui/instances";
+    }
+  }
+
+  /**
+   * Renders a recorded aggregate for reading: the API carries each node's values as a JSON string,
+   * which printed as-is would show every part's document as one escaped line.
+   */
+  private String aggregateJson(RecordedAggregate aggregate) {
+    try {
+      return jsonMapper
+          .writerWithDefaultPrettyPrinter()
+          .writeValueAsString(aggregateTree(aggregate));
+    } catch (JsonProcessingException e) {
+      return aggregate.toString();
+    }
+  }
+
+  private com.fasterxml.jackson.databind.node.ObjectNode aggregateTree(RecordedAggregate aggregate)
+      throws JsonProcessingException {
+    var node = jsonMapper.createObjectNode();
+    aggregate.getId().ifPresent(id -> node.put("id", id));
+    node.put("entityType", aggregate.getEntityType());
+    node.set("values", jsonMapper.readTree(aggregate.getValues()));
+    if (!aggregate.getDependencies().isEmpty())
+      node.set("dependencies", jsonMapper.valueToTree(aggregate.getDependencies()));
+    if (!aggregate.getParts().isEmpty()) {
+      var parts = node.putArray("parts");
+      for (var part : aggregate.getParts()) parts.add(aggregateTree(part));
+    }
+    if (!aggregate.getMapped().isEmpty()) {
+      var mapped = node.putArray("mapped");
+      for (var derived : aggregate.getMapped()) mapped.add(aggregateTree(derived));
+    }
+    return node;
+  }
+
+  private String prettyJson(String values) {
+    try {
+      return jsonMapper
+          .writerWithDefaultPrettyPrinter()
+          .writeValueAsString(jsonMapper.readTree(values));
+    } catch (JsonProcessingException e) {
+      return values;
     }
   }
 

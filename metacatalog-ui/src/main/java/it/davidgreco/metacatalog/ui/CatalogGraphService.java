@@ -4,11 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
+import it.davidgreco.metacatalog.openapi.model.EntityVersion;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -34,6 +39,9 @@ public class CatalogGraphService {
   private static final String TYPE_PREFIX = "type:";
   private static final String TRAIT_VERSION_PREFIX = "trait-version:";
   private static final String TYPE_VERSION_PREFIX = "type-version:";
+  private static final String ENTITY_PREFIX = "entity:";
+  private static final String ENTITY_VERSION_PREFIX = "entity-version:";
+  private static final String ENTITY_VERSION_PART_PREFIX = "entity-version-part:";
   private static final String SUCCESSOR_OF = "successor-of";
   private static final String EXTENDS = "extends";
   private static final String MAPPING = "mapping";
@@ -50,16 +58,18 @@ public class CatalogGraphService {
   }
 
   /**
-   * A trait or entity-type row reduced to the fields the graph needs. {@link Trait} and {@link
-   * EntityType} are unrelated generated classes, so normalising them here lets the version-chaining
-   * logic be written once.
+   * A trait, entity-type or entity row reduced to the fields the graph needs. {@link Trait}, {@link
+   * EntityType}, {@link Entity} and {@link EntityVersion} are unrelated generated classes, so
+   * normalising them here lets the version-chaining logic be written once.
    *
    * @param id the row id — the snapshot id for a version, the live row's id otherwise
-   * @param name the type/trait name
+   * @param name the type/trait name, or the entity's display label
    * @param version the version number
-   * @param father the parent type/trait name, or null
-   * @param schema the schema as a string, or null
-   * @param versionGroupId groups a live row with every snapshot of the same logical type
+   * @param father the parent type/trait name, or for an entity version the label of the type
+   *     version its values were validated against; null if none
+   * @param schema the schema as a string, or for an entity version its values; null if none
+   * @param versionGroupId groups a live row with every snapshot of the same logical type; for an
+   *     entity, the entity id
    * @param previousVersionId the snapshot this one succeeds, or null
    */
   private record VersionRow(
@@ -91,6 +101,17 @@ public class CatalogGraphService {
           e.getSchema(),
           e.getVersionGroupId().orElse(null),
           e.getPreviousVersionId().orElse(null));
+    }
+
+    static VersionRow of(EntityVersion v, String entityLabel, String typeVersionLabel) {
+      return new VersionRow(
+          v.getId(),
+          entityLabel,
+          v.getVersion(),
+          typeVersionLabel,
+          v.getValues(),
+          v.getEntityId(),
+          v.getPreviousVersionId().orElse(null));
     }
   }
 
@@ -257,7 +278,7 @@ public class CatalogGraphService {
         types.stream().map(VersionRow::of).toList(),
         api.listAllEntityTypeVersions().getBody().stream().map(VersionRow::of).toList(),
         TYPE_VERSION_PREFIX,
-        TYPE_PREFIX,
+        liveRow -> TYPE_PREFIX + liveRow.name(),
         "entityTypeVersion",
         nodes,
         edges);
@@ -265,7 +286,7 @@ public class CatalogGraphService {
         traits.stream().map(VersionRow::of).toList(),
         api.listAllTraitVersions().getBody().stream().map(VersionRow::of).toList(),
         TRAIT_VERSION_PREFIX,
-        TRAIT_PREFIX,
+        liveRow -> TRAIT_PREFIX + liveRow.name(),
         "traitVersion",
         nodes,
         edges);
@@ -300,9 +321,17 @@ public class CatalogGraphService {
             .filter(v -> v.getId().isPresent())
             .collect(Collectors.toMap(v -> v.getId().orElseThrow(), Function.identity()));
 
+    var liveEntities = new ArrayList<VersionRow>();
+    var liveEntityIds = new HashSet<String>();
     for (var entity : api.getEntities(Optional.empty(), Optional.empty()).getBody()) {
       var typeName = entity.getEntityType();
       if (typeName == null) continue;
+      var entityId = entity.getId().orElse("");
+      liveEntityIds.add(entityId);
+      var label = entityLabel(entity);
+      if (entity.getVersion().isPresent())
+        liveEntities.add(
+            new VersionRow(entityId, label, entity.getVersion().get(), null, null, entityId, null));
       var pinnedVersion =
           Optional.ofNullable(entity.getEntityTypeVersionId())
               .map(versionsById::get)
@@ -317,19 +346,43 @@ public class CatalogGraphService {
               .flatMap(EntityType::getVersion)
               .map(v -> typeName + " (v" + v + ")")
               .orElse(typeName);
-      var entityNodeId = "entity:" + entity.getId().orElse("");
+      var entityNodeId = ENTITY_PREFIX + entityId;
       nodes.add(
           new GraphModel.Node(
-              entityNodeId,
-              entityLabel(entity),
-              "entity",
-              instanceOfLabel,
-              null,
-              entity.getValues()));
+              entityNodeId, label, "entity", instanceOfLabel, null, entity.getValues()));
       edges.add(
           new GraphModel.Edge(
               entityNodeId, instanceOfTarget, "instance-of", "instance-of", null, null));
     }
+
+    // Versionable entities get the same treatment as types: one node per recorded version, chained
+    // by successor-of, with the live entity leading the chain.
+    var recordedVersions = api.listAllEntityVersions().getBody();
+    var entityVersions =
+        recordedVersions.stream()
+            .map(
+                v ->
+                    VersionRow.of(
+                        v,
+                        entityLabel(v.getValues(), v.getEntityId()),
+                        Optional.ofNullable(versionsById.get(v.getEntityTypeVersionId()))
+                            .map(t -> t.getName() + " (v" + t.getVersion().orElse(null) + ")")
+                            .orElse(null)))
+            .toList();
+    addVersionNodesAndEdges(
+        liveEntities,
+        entityVersions,
+        ENTITY_VERSION_PREFIX,
+        liveRow -> ENTITY_PREFIX + liveRow.id(),
+        "entityVersion",
+        nodes,
+        edges);
+    for (var version : recordedVersions)
+      version
+          .getAggregate()
+          .ifPresent(
+              tree ->
+                  addRecordedAggregate(version, tree, liveEntityIds, showInverses, nodes, edges));
 
     for (var rel : api.listEntityRelationships().getBody()) {
       var rt = rel.getRelationType().orElse(null);
@@ -337,8 +390,8 @@ public class CatalogGraphService {
       if (!showInverses && !PRIMARY_RELATION_TYPE_NAMES.contains(rt)) continue;
       edges.add(
           new GraphModel.Edge(
-              "entity:" + rel.getSourceEntityId().orElse(""),
-              "entity:" + rel.getTargetEntityId().orElse(""),
+              ENTITY_PREFIX + rel.getSourceEntityId().orElse(""),
+              ENTITY_PREFIX + rel.getTargetEntityId().orElse(""),
               rt,
               rt,
               null,
@@ -351,8 +404,8 @@ public class CatalogGraphService {
       if (!showInverses && !PRIMARY_RELATION_TYPE_NAMES.contains(rt)) continue;
       edges.add(
           new GraphModel.Edge(
-              "entity:" + rel.getSourceEntityId().orElse(""),
-              "entity:" + rel.getTargetEntityId().orElse(""),
+              ENTITY_PREFIX + rel.getSourceEntityId().orElse(""),
+              ENTITY_PREFIX + rel.getTargetEntityId().orElse(""),
               MAPPING,
               rt,
               rel.getMappingValues().orElse(null),
@@ -361,11 +414,110 @@ public class CatalogGraphService {
   }
 
   /**
+   * Draws the aggregate a root version recorded as frozen copies of its members, so a past version
+   * shows the aggregate as it was rather than as it is now: each copy carries the values the member
+   * had, hangs off the version (or off its copied parent) by {@code HAS_PART} — or by {@code
+   * MAPPED_TO} for an entity derived from it — and depends by {@code DEPENDS_ON} on the copies it
+   * depended on then. A dependency outside the aggregate points at that entity's live node, the
+   * only one there is.
+   */
+  private void addRecordedAggregate(
+      EntityVersion version,
+      RecordedAggregate tree,
+      Set<String> liveEntityIds,
+      boolean showInverses,
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges) {
+    var copies = new java.util.LinkedHashMap<String, RecordedAggregate>();
+    addRecordedParts(
+        ENTITY_VERSION_PREFIX + version.getId(), version, tree, copies, showInverses, nodes, edges);
+    var copyIdsByPartId = new java.util.HashMap<String, String>();
+    copies.forEach((copyId, part) -> copyIdsByPartId.put(part.getId().orElse(""), copyId));
+    copies.forEach(
+        (copyId, part) -> {
+          for (var dependencyId : part.getDependencies()) {
+            var target =
+                copyIdsByPartId.containsKey(dependencyId)
+                    ? copyIdsByPartId.get(dependencyId)
+                    : liveEntityIds.contains(dependencyId) ? ENTITY_PREFIX + dependencyId : null;
+            if (target != null) addRelationEdges(copyId, "DEPENDS_ON", target, showInverses, edges);
+          }
+        });
+  }
+
+  private void addRecordedParts(
+      String parentNodeId,
+      EntityVersion version,
+      RecordedAggregate parent,
+      Map<String, RecordedAggregate> copies,
+      boolean showInverses,
+      List<GraphModel.Node> nodes,
+      List<GraphModel.Edge> edges) {
+    for (var part : parent.getParts()) {
+      var copyId = addRecordedCopy(version, part, copies, nodes);
+      if (copyId == null) continue;
+      addRelationEdges(parentNodeId, "HAS_PART", copyId, showInverses, edges);
+      addRecordedParts(copyId, version, part, copies, showInverses, nodes, edges);
+    }
+    for (var derived : parent.getMapped()) {
+      var copyId = addRecordedCopy(version, derived, copies, nodes);
+      if (copyId == null) continue;
+      // Drawn like the live graph draws a mapping instance, so the two read the same.
+      edges.add(new GraphModel.Edge(parentNodeId, copyId, MAPPING, "MAPPED_TO", null, null));
+      if (showInverses)
+        edges.add(new GraphModel.Edge(copyId, parentNodeId, MAPPING, "IS_MAPPED_BY", null, null));
+      addRecordedParts(copyId, version, derived, copies, showInverses, nodes, edges);
+    }
+  }
+
+  /** Adds the frozen copy of one member, or returns null if it was already drawn. */
+  private String addRecordedCopy(
+      EntityVersion version,
+      RecordedAggregate member,
+      Map<String, RecordedAggregate> copies,
+      List<GraphModel.Node> nodes) {
+    var memberId = member.getId().orElse("");
+    var copyId = ENTITY_VERSION_PART_PREFIX + version.getId() + ":" + memberId;
+    if (copies.containsKey(copyId)) return null; // a member reached twice is drawn once
+    copies.put(copyId, member);
+    nodes.add(
+        new GraphModel.Node(
+            copyId,
+            entityLabel(member.getValues(), memberId) + " @v" + version.getVersion(),
+            "entityVersion",
+            member.getEntityType(),
+            null,
+            member.getValues()));
+    return copyId;
+  }
+
+  /** A relationship edge, plus its inverse when inverses are shown, as stored rows would give. */
+  private static void addRelationEdges(
+      String source,
+      String relationType,
+      String target,
+      boolean showInverses,
+      List<GraphModel.Edge> edges) {
+    edges.add(new GraphModel.Edge(source, target, relationType, relationType, null, null));
+    if (showInverses) {
+      var inverse = inverseOf(relationType);
+      edges.add(new GraphModel.Edge(target, source, inverse, inverse, null, null));
+    }
+  }
+
+  /**
    * Picks a readable label for an entity instance: the textual {@code name} field of its {@code
    * values} JSON if present, otherwise a short hash of its id so every node is distinguishable.
    */
   private String entityLabel(Entity entity) {
-    var values = entity.getValues();
+    return entityLabel(entity.getValues(), entity.getId().orElse(null));
+  }
+
+  /**
+   * The same label, from a given set of values. An entity version is labelled from its own values,
+   * so a past version shows the name it had then rather than the entity's current one.
+   */
+  private String entityLabel(String values, String id) {
     if (values != null && !values.isBlank()) {
       try {
         var parsed = jsonMapper.readTree(values);
@@ -375,7 +527,6 @@ public class CatalogGraphService {
         // fall through to the id-derived label
       }
     }
-    var id = entity.getId().orElse(null);
     return "#" + (id == null ? "?" : id.substring(0, Math.min(8, id.length())));
   }
 
@@ -387,7 +538,7 @@ public class CatalogGraphService {
       List<VersionRow> live,
       List<VersionRow> snapshots,
       String snapPrefix,
-      String livePrefix,
+      Function<VersionRow, String> liveNodeId,
       String nodeType,
       List<GraphModel.Node> nodes,
       List<GraphModel.Edge> edges) {
@@ -437,7 +588,7 @@ public class CatalogGraphService {
       if (liveRow == null) continue;
       edges.add(
           new GraphModel.Edge(
-              livePrefix + liveRow.name(),
+              liveNodeId.apply(liveRow),
               snapPrefix + snap.id(),
               SUCCESSOR_OF,
               SUCCESSOR_OF,

@@ -36,6 +36,22 @@ mappingId	MAPPING-ID-TRAIT-VERSION-PREVIOUS
 target		mt:TraitVersion/{id} mt:hasPreviousVersion mt:TraitVersion/{previous_version_id} .
 source		SELECT "id", "previous_version_id" FROM "trait_version" WHERE "previous_version_id" IS NOT NULL
 
+mappingId	MAPPING-ID-ENTITY-CURRENT-VERSION
+target		mt:Entity/{id} mt:version {version}^^xsd:integer .
+source		SELECT "id", "version" FROM "entity" WHERE "version" IS NOT NULL
+
+mappingId	MAPPING-ID-ENTITY-VERSION
+target		mt:EntityVersion/{id} a mt:EntityVersion ; mt:id {id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:values {values}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime ; mt:versionOf mt:Entity/{entity_id} ; mt:pinnedToVersion mt:EntityTypeVersion/{entity_type_version_id} .
+source		SELECT "id", "entity_id", "version", CAST("values" AS TEXT) AS "values", "entity_type_version_id", "created_at" FROM "entity_version"
+
+mappingId	MAPPING-ID-ENTITY-VERSION-AGGREGATE
+target		mt:EntityVersion/{id} mt:aggregate {aggregate}^^xsd:string .
+source		SELECT "id", CAST("aggregate" AS TEXT) AS "aggregate" FROM "entity_version" WHERE "aggregate" IS NOT NULL
+
+mappingId	MAPPING-ID-ENTITY-VERSION-PREVIOUS
+target		mt:EntityVersion/{id} mt:hasPreviousVersion mt:EntityVersion/{previous_version_id} .
+source		SELECT "id", "previous_version_id" FROM "entity_version" WHERE "previous_version_id" IS NOT NULL
+
 mappingId	MAPPING-ID-TYPE-HAS-TRAIT
 target		mt:EntityType/{entity_type_id} mt:hasTrait mt:Trait/{trait_id} .
 source		SELECT "entity_type_id", "trait_id" FROM "type_traits"

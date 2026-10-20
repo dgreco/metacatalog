@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.service;
 
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
+import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import java.util.List;
 
@@ -24,6 +25,9 @@ public interface EntityService extends CommonService<Entity, String> {
   /**
    * Updates the values of an existing entity.
    *
+   * <p>If the entity's type carries the built-in {@code Versionable} trait and the values change, a
+   * new version is recorded.
+   *
    * <p>Entities whose type is the target of a mapping relationship cannot be updated through this
    * method — they are managed exclusively by the mapping/provisioning subsystem.
    *
@@ -34,7 +38,7 @@ public interface EntityService extends CommonService<Entity, String> {
 
   /**
    * Updates the values of an existing entity without enforcing mapping-target restrictions or
-   * emitting lifecycle events.
+   * emitting lifecycle events. Versioning still applies, exactly as for {@link #update}.
    *
    * <p>This is intended for internal system use (e.g. the provisioning task writing back {@code
    * provisioningStatus}/{@code provisioningResult} to a mapped entity). User-facing updates must go
@@ -82,6 +86,35 @@ public interface EntityService extends CommonService<Entity, String> {
    * @return all entity relationships
    */
   List<EntityRelationship> listAllRelationships();
+
+  /**
+   * Lists the version history of an entity, oldest first.
+   *
+   * <p>Only entities whose type carries the built-in {@code Versionable} trait have one. The last
+   * element equals the live entity.
+   *
+   * @param entityId the entity ID
+   * @return the snapshots, empty if the entity has never been versioned
+   * @throws NotFoundException if the entity does not exist
+   */
+  List<EntityVersion> listVersions(String entityId);
+
+  /**
+   * Reads one version of an entity.
+   *
+   * @param entityId the entity ID
+   * @param version the version number
+   * @return the snapshot
+   * @throws NotFoundException if the entity or the version does not exist
+   */
+  EntityVersion readVersion(String entityId, int version);
+
+  /**
+   * Lists every recorded version of every entity, grouped by entity and oldest first within each.
+   *
+   * @return all entity snapshots
+   */
+  List<EntityVersion> listAllVersions();
 
   /**
    * Links two entities with the given relation type.

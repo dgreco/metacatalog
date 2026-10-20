@@ -89,6 +89,92 @@ class SparqlEndpointIntegrationTest {
     assert body.contains("TestTrait") : "Expected 'TestTrait' in SPARQL results, got: " + body;
   }
 
+  /**
+   * Entity history is exposed as {@code mt:EntityVersion}: each version points at its entity
+   * ({@code mt:versionOf}), at the type version it was validated against ({@code
+   * mt:pinnedToVersion}) and at its predecessor ({@code mt:hasPreviousVersion}), and the entity
+   * carries its current version number.
+   */
+  @Test
+  void selectWalksEntityVersionHistory() throws Exception {
+    var typeId = java.util.UUID.randomUUID().toString();
+    var typeVersionId = java.util.UUID.randomUUID().toString();
+    var entityId = java.util.UUID.randomUUID().toString();
+    var firstId = java.util.UUID.randomUUID().toString();
+    var secondId = java.util.UUID.randomUUID().toString();
+    var group = java.util.UUID.randomUUID().toString();
+    jdbcTemplate.update(
+        "INSERT INTO entity_type (id, name, base_schema, version, version_group_id) "
+            + "VALUES (?, 'SparqlVersioned', '{}'::jsonb, 1, ?)",
+        typeId,
+        group);
+    jdbcTemplate.update(
+        "INSERT INTO entity_type_version (id, version_group_id, version, name, base_schema, traits,"
+            + " created_at) VALUES (?, ?, 1, 'SparqlVersioned', '{}'::jsonb, '[]'::jsonb, now())",
+        typeVersionId,
+        group);
+    jdbcTemplate.update(
+        "INSERT INTO entity (id, values, entity_type_id, entity_type_version_id, version) "
+            + "VALUES (?, '{\"name\":\"second\"}'::jsonb, ?, ?, 2)",
+        entityId,
+        typeId,
+        typeVersionId);
+    var insertVersion =
+        "INSERT INTO entity_version (id, entity_id, version, values, entity_type_version_id,"
+            + " previous_version_id, created_at) VALUES (?, ?, ?, ?::jsonb, ?, ?, now())";
+    jdbcTemplate.update(
+        insertVersion, firstId, entityId, 1, "{\"name\":\"first\"}", typeVersionId, null);
+    jdbcTemplate.update(
+        insertVersion, secondId, entityId, 2, "{\"name\":\"second\"}", typeVersionId, firstId);
+    // As recorded for an aggregate root: the whole tree, here with one part.
+    jdbcTemplate.update(
+        "UPDATE entity_version SET aggregate = ?::jsonb WHERE id = ?",
+        "{\"id\":\"" + entityId + "\",\"parts\":[{\"values\":{\"name\":\"part-one\"}}]}",
+        secondId);
+
+    String sparql =
+        "PREFIX mt: <http://metacatalog/> "
+            + "SELECT ?current ?values ?previousValues WHERE { "
+            + "  ?v a mt:EntityVersion ; mt:versionOf ?e ; mt:values ?values ; "
+            + "     mt:pinnedToVersion ?tv ; mt:hasPreviousVersion ?p . "
+            + "  ?p mt:values ?previousValues . "
+            + "  ?e mt:id \""
+            + entityId
+            + "\" ; mt:version ?current . "
+            + "  ?tv a mt:EntityTypeVersion . }";
+
+    String body =
+        mockMvc
+            .perform(
+                get("/sparql/query")
+                    .param("query", sparql)
+                    .accept("application/sparql-results+json"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assert body.contains("second") && body.contains("first") && body.contains("\"2\"")
+        : "Expected the second version, its predecessor and the current version, got: " + body;
+
+    String aggregateQuery =
+        "PREFIX mt: <http://metacatalog/> SELECT ?aggregate WHERE { ?v a mt:EntityVersion ;"
+            + " mt:id \""
+            + secondId
+            + "\" ; mt:aggregate ?aggregate . }";
+    String aggregateBody =
+        mockMvc
+            .perform(
+                get("/sparql/query")
+                    .param("query", aggregateQuery)
+                    .accept("application/sparql-results+json"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assert aggregateBody.contains("part-one")
+        : "Expected the recorded aggregate, got: " + aggregateBody;
+  }
+
   @Test
   void askViaPostSparqlQueryBody() throws Exception {
     jdbcTemplate.update(

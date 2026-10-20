@@ -11,8 +11,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 /**
  * Dashboard and interactive graph pages. The dashboard lists traits, entity types, trait
  * relationships, and mappings via the REST API; the graph page delegates to {@link
- * CatalogGraphService} (which still uses core services directly — TODO: move to REST API once the
- * spec has list-all endpoints).
+ * CatalogGraphService}, which assembles the graph from the same API.
  */
 @Controller
 @RequestMapping("/ui")

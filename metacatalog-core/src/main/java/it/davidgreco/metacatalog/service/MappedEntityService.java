@@ -58,6 +58,8 @@ public class MappedEntityService {
 
   private final JsonUtils jsonUtils;
 
+  private final EntityVersionRecorder entityVersionRecorder;
+
   @Getter(lazy = true)
   private final TransactionTemplate transactionTemplate =
       new TransactionTemplate(transactionManager);
@@ -134,6 +136,7 @@ public class MappedEntityService {
             mappedEntity.setEntityTypeVersion(targetVersion);
             mappedEntity.setValues(mappedValues);
             entityRepository.save(mappedEntity);
+            entityVersionRecorder.recordCreated(mappedEntity);
             entityLifeCycleEventRepository.save(
                 new EntityLifeCycleEvent(
                     mappedEntity.getId(),
@@ -152,6 +155,8 @@ public class MappedEntityService {
             inverseMappingEntityRelationship.setMappingEntityTypeRelationship(mappingRelationship);
             inverseMappingEntityRelationship.setRelationType(IS_MAPPED_BY);
             mappingEntityRelationshipRepository.save(inverseMappingEntityRelationship);
+            // Now that the entity is linked to its source, its aggregate can be found and recorded.
+            entityVersionRecorder.aggregateChanged(mappedEntity);
             createMappedEntities(mappedEntity.getId());
           } else {
             createMappedEntities(existingMappingEntityRels.getFirst().getTarget().getId());
@@ -245,9 +250,12 @@ public class MappedEntityService {
                   additionalEntitiesValues,
                   mappingTypeRelationship.getMappingValues(),
                   jsonUtils.schemaOf(targetVersion.getSchema()));
+          var previousValues = mappedEntity.getValues();
+          var previousPin = mappedEntity.getEntityTypeVersion();
           mappedEntity.setValues(mappedValues);
           mappedEntity.setEntityTypeVersion(targetVersion);
           entityRepository.save(mappedEntity);
+          entityVersionRecorder.recordUpdated(mappedEntity, previousValues, previousPin);
           entityLifeCycleEventRepository.save(
               new EntityLifeCycleEvent(
                   mappedEntity.getId(),

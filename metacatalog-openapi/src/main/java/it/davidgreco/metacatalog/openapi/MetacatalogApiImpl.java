@@ -256,6 +256,24 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity<List<EntityVersion>> listEntityVersions(String id) {
+    var dtos = entityService.listVersions(id).stream().map(dtoMapper::entityVersionToDto).toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
+  }
+
+  @Override
+  public ResponseEntity<EntityVersion> getEntityVersion(String id, Integer version) {
+    var dto = dtoMapper.entityVersionToDto(entityService.readVersion(id, version));
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(dto);
+  }
+
+  @Override
+  public ResponseEntity<List<EntityVersion>> listAllEntityVersions() {
+    var dtos = entityService.listAllVersions().stream().map(dtoMapper::entityVersionToDto).toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);
+  }
+
+  @Override
   public ResponseEntity bulkCreation(Resource body) {
     try {
       bulkLoaderService.bulkModelCreation(body.getInputStream());

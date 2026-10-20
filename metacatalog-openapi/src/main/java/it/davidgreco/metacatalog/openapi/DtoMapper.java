@@ -16,6 +16,7 @@ import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.AggregateAccess;
 import it.davidgreco.metacatalog.openapi.model.EffectiveGrant;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import it.davidgreco.metacatalog.openapi.model.ResourceAccess;
 import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.AggregateService;
@@ -126,7 +127,45 @@ public class DtoMapper {
     dtoEntity.setEntityType(entity.getEntityType().getName());
     dtoEntity.setEntityTypeVersionId(entity.getEntityTypeVersion().getId());
     dtoEntity.setValues(entity.getValues().toPrettyString());
+    dtoEntity.setVersion(Optional.ofNullable(entity.getVersion()));
     return dtoEntity;
+  }
+
+  public it.davidgreco.metacatalog.openapi.model.EntityVersion entityVersionToDto(
+      it.davidgreco.metacatalog.entity.EntityVersion v) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.EntityVersion();
+    dto.setId(v.getId());
+    dto.setEntityId(v.getEntity().getId());
+    dto.setVersion(v.getVersion());
+    dto.setValues(v.getValues().toPrettyString());
+    dto.setEntityTypeVersionId(v.getEntityTypeVersion().getId());
+    dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
+    dto.setCreatedAt(v.getCreatedAt().toString());
+    if (v.getAggregate() != null) dto.aggregate(aggregateTreeToDto(v.getAggregate()));
+    return dto;
+  }
+
+  /**
+   * Turns the aggregate tree an aggregate root's version stores into its DTO: the shape {@code GET
+   * /aggregate/{id}} answers with, so a client reads a past aggregate the way it reads the live
+   * one, plus the derived entities under {@code mapped}.
+   */
+  private RecordedAggregate aggregateTreeToDto(com.fasterxml.jackson.databind.JsonNode node) {
+    var dto = new RecordedAggregate();
+    dto.setId(Optional.of(node.get("id").asText()));
+    dto.setEntityType(node.get("entityType").asText());
+    dto.setValues(node.get("values").toPrettyString());
+    var dependencies = new java.util.ArrayList<String>();
+    if (node.has("dependencies"))
+      node.get("dependencies").forEach(d -> dependencies.add(d.asText()));
+    dto.setDependencies(dependencies);
+    var parts = new java.util.ArrayList<RecordedAggregate>();
+    if (node.has("parts")) node.get("parts").forEach(p -> parts.add(aggregateTreeToDto(p)));
+    dto.setParts(parts);
+    var mapped = new java.util.ArrayList<RecordedAggregate>();
+    if (node.has("mapped")) node.get("mapped").forEach(m -> mapped.add(aggregateTreeToDto(m)));
+    dto.setMapped(mapped);
+    return dto;
   }
 
   public it.davidgreco.metacatalog.openapi.model.EntityRelationship entityRelationshipToDto(
