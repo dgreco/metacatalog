@@ -92,7 +92,7 @@
         <hive.version>4.2.1</hive.version>
 
         <!--   Flyway -->
-        <flyway.version>13.10.0</flyway.version>
+        <flyway.version>13.10.3</flyway.version>
 
         <!--   Ontop & RDF4J (metacatalog-sparql) -->
         <ontop.version>5.5.0</ontop.version>
