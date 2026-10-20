@@ -46,8 +46,12 @@ asked to change, however good the rest is.
 - **Controllers are generated from the OpenAPI spec** at
   `metacatalog-openapi/src/main/resources/static/api/interface-specification.yaml`. Change the
   spec, never the generated sources.
-- **Schema changes go in the Flyway baseline**, `V1__initial_schema.sql`, edited in place. Existing
-  databases are not migrated, so recreate yours afterwards (see *Database Migrations* in the README).
+- **Schema changes are new Flyway migrations** (`V2__…`, `V3__…`) that upgrade an existing
+  database, data included. `V1__initial_schema.sql` is what 1.0.0 shipped and is never edited (see
+  *Database Migrations* in the README).
+- **Breaking changes need a major version.** The project follows semantic versioning: a change
+  that breaks the REST API, the schema or the configuration for existing users is called out in
+  the pull request so it can wait for the next major release.
 - **Comments explain why, not what.** Where a line looks odd, a comment names the failure it
   prevents. Do not add comments that restate the code.
 - **Javadoc on public API**, including record components and enum constants.
@@ -56,6 +60,8 @@ asked to change, however good the rest is.
 - **`README.md` is updated** whenever behaviour, API or configuration changes. Edit the root
   file only and run `./scripts/readme-sync.sh` afterwards: `.github/README.md` is generated from
   it, and CI fails if the two drift.
+- **`CHANGELOG.md` gets a line** under *Unreleased* for anything a user of a release would
+  notice: what was added, changed, deprecated, removed or fixed.
 
 ## Submitting a change
 
@@ -70,6 +76,9 @@ asked to change, however good the rest is.
 
 Continuous integration runs the same build on GitHub Actions and GitLab CI, from the shared
 scripts in `ci/`. A pull request must be green before it is reviewed.
+
+Releases are cut by the maintainers from `release/X.Y` branches; the README's *Releases and
+Versioning* section describes how, and how fixes reach a released line.
 
 ## Reporting bugs and requesting features
 

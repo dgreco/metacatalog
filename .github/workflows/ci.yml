@@ -5,14 +5,16 @@
 #   verify          the README guard — the two host-flavoured READMEs are generated from one body
 #                   and drift is invisible until somebody reads the wrong one (no toolchain needed)
 #   build           ci/build.sh, then the test and coverage totals in the run summary, then
-#                   ci/publish-images.sh on main/master/develop pushes
+#                   ci/publish-images.sh on pushes: a release tag (vX.Y.Z) publishes its version,
+#                   main publishes `edge`, release/* branches build and test only
 #   coverage-pages  publishes the JaCoCo reports to GitHub Pages, so the README's coverage badge
 #                   links to something readable rather than to a zip nobody downloads (main only)
 name: CI
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, "release/**"]
+    tags: ["v*.*.*"]
   pull_request:
   workflow_dispatch:
 
@@ -95,8 +97,8 @@ jobs:
           path: "*/target/surefire-reports/"
           if-no-files-found: ignore
 
-      # Images are published only from main/master/develop pushes, to the GitHub Container
-      # Registry under this repository. GHCR requires a lowercase image path, and
+      # Images are published from pushes, to the GitHub Container Registry under this repository;
+      # ci/publish-images.sh decides which tags each ref gets. GHCR requires a lowercase image path, and
       # github.repository preserves the owner's casing, hence the tr.
       - name: Log in to GHCR
         if: github.event_name == 'push'
@@ -121,7 +123,8 @@ jobs:
       - name: Publish images
         if: github.event_name == 'push'
         env:
-          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
+          GIT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           PLATFORMS: linux/amd64,linux/arm64
         run: |
           IMAGE_BASE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" \
