@@ -15,6 +15,7 @@
     <owl:Class rdf:about="http://metacatalog/Entity"/>
     <owl:Class rdf:about="http://metacatalog/EntityTypeVersion"/>
     <owl:Class rdf:about="http://metacatalog/TraitVersion"/>
+    <owl:Class rdf:about="http://metacatalog/EntityVersion"/>
 
     <!-- ===================== Datatype properties ===================== -->
     <owl:DatatypeProperty rdf:about="http://metacatalog/id">
@@ -54,6 +55,8 @@
     <owl:ObjectProperty rdf:about="http://metacatalog/hasEntityType"/>
     <owl:ObjectProperty rdf:about="http://metacatalog/pinnedToVersion"/>
     <owl:ObjectProperty rdf:about="http://metacatalog/hasPreviousVersion"/>
+    <!-- entity history: an EntityVersion is a recorded state of an Entity -->
+    <owl:ObjectProperty rdf:about="http://metacatalog/versionOf"/>
 
     <!-- inheritance -->
     <owl:ObjectProperty rdf:about="http://metacatalog/inheritsFrom"/>

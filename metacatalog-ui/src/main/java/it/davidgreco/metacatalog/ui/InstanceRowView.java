@@ -14,6 +14,7 @@ import java.util.Set;
  * @param id the unique identifier of the entity
  * @param entityType the name of the entity type
  * @param entityTypeVersionId the id of the entity type version the entity is pinned to
+ * @param version the entity's own version number, or null if it has never been versioned
  * @param name the entity name extracted from the {@code name} property in values, or the entity id
  * @param actions the aggregate actions this row offers, in declaration order
  */
@@ -21,6 +22,7 @@ public record InstanceRowView(
     String id,
     String entityType,
     String entityTypeVersionId,
+    Integer version,
     String name,
     List<AggregateAction> actions) {
 
@@ -70,6 +72,7 @@ public record InstanceRowView(
               id,
               entity.getEntityType(),
               entity.getEntityTypeVersionId(),
+              entity.getVersion().orElse(null),
               name,
               capabilities.actionsFor(entity.getEntityType())));
     }

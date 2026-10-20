@@ -147,6 +147,9 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository, used to refuse a new
    *     version whose carriage change would leave an existing containment violating the
    *     aggregate-model rules
+   * @param jsonUtils the JSON utilities
+   * @param entityVersionRepository the entity version history repository, used to refuse deleting a
+   *     type version that entity history still records
    * @return the entity type service
    */
   // @Primary for the same reason as traitService: immutableEntityTypeWriter re-exposes it.
@@ -159,7 +162,8 @@ public class CoreConfig {
       EntityRepository entityRepository,
       MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
       EntityRelationshipRepository entityRelationshipRepository,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRepository entityVersionRepository) {
     return new EntityTypeServiceImpl(
         entityTypeRepository,
         traitRepository,
@@ -167,7 +171,8 @@ public class CoreConfig {
         entityRepository,
         mappingEntityTypeRelationshipRepository,
         entityRelationshipRepository,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRepository);
   }
 
   /**
@@ -184,6 +189,8 @@ public class CoreConfig {
    * @param entityLifeCycleEventRepository the lifecycle event repository
    * @param entityPathResolver the path resolver, used to re-resolve mapping path references when
    *     checking whether a link about to be removed is traversed by one
+   * @param entityVersionRepository the entity version history repository
+   * @param entityVersionRecorder the recorder of entity version history
    * @return the entity service
    */
   @Bean
@@ -197,7 +204,9 @@ public class CoreConfig {
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
       EntityLifeCycleEventRepository entityLifeCycleEventRepository,
       EntityPathResolver entityPathResolver,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRepository entityVersionRepository,
+      EntityVersionRecorder entityVersionRecorder) {
     return new EntityServiceImpl(
         entityTypeRepository,
         entityTypeVersionRepository,
@@ -208,7 +217,24 @@ public class CoreConfig {
         mappingEntityRelationshipRepository,
         entityLifeCycleEventRepository,
         entityPathResolver,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRepository,
+        entityVersionRecorder);
+  }
+
+  /**
+   * Creates the recorder of entity version history, shared by every path that writes entity values
+   * so that all of them version the same way.
+   *
+   * @param entityRepository the entity repository, used to lock an entity before numbering a
+   *     version
+   * @param entityVersionRepository the entity version history repository
+   * @return the entity version recorder
+   */
+  @Bean
+  public EntityVersionRecorder entityVersionRecorder(
+      EntityRepository entityRepository, EntityVersionRepository entityVersionRepository) {
+    return new EntityVersionRecorder(entityRepository, entityVersionRepository);
   }
 
   /**
@@ -264,6 +290,7 @@ public class CoreConfig {
    * @param transactionManager the transaction manager
    * @param applicationConfigurationProperties the application configuration
    * @param entityPathResolver the entity path resolver
+   * @param entityVersionRecorder the recorder of entity version history
    * @return the mapped entity service
    */
   @Bean
@@ -276,7 +303,8 @@ public class CoreConfig {
       PlatformTransactionManager transactionManager,
       CoreConfigProperties applicationConfigurationProperties,
       EntityPathResolver entityPathResolver,
-      JsonUtils jsonUtils) {
+      JsonUtils jsonUtils,
+      EntityVersionRecorder entityVersionRecorder) {
     return new MappedEntityService(
         entityRepository,
         entityTypeVersionRepository,
@@ -286,7 +314,8 @@ public class CoreConfig {
         transactionManager,
         applicationConfigurationProperties,
         entityPathResolver,
-        jsonUtils);
+        jsonUtils,
+        entityVersionRecorder);
   }
 
   /**

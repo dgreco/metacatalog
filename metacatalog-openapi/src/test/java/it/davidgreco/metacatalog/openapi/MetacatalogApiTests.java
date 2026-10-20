@@ -160,6 +160,71 @@ class MetacatalogApiTests {
     api.deleteEntityType("ApiMapDst");
   }
 
+  /**
+   * The version history of a Versionable entity is readable through the API, a never-versioned
+   * entity has an empty history rather than a missing one, and unknown entities or versions are
+   * 404s.
+   */
+  @Test
+  void testEntityVersionHistoryEndpoints() throws IOException {
+    var api = getMetaCatalogManagerApi();
+    var json = new com.fasterxml.jackson.databind.ObjectMapper();
+    var schema = "{ \"type\": \"object\", \"properties\": { \"name\": { \"type\": \"string\" } } }";
+
+    var versionedType = new EntityType();
+    versionedType.setName("ApiVersioned");
+    versionedType.setSchema(schema);
+    versionedType.setTraits(List.of("Versionable"));
+    api.createEntityType(versionedType);
+    var plainType = new EntityType();
+    plainType.setName("ApiUnversioned");
+    plainType.setSchema(schema);
+    api.createEntityType(plainType);
+
+    var versioned = new Entity();
+    versioned.setEntityType("ApiVersioned");
+    versioned.setValues("{\"name\":\"one\"}");
+    var id = api.createEntity(versioned);
+    var update = new Entity();
+    update.setEntityType("ApiVersioned");
+    update.setValues("{\"name\":\"two\"}");
+    api.updateEntity(id, update);
+
+    Assertions.assertEquals(2, api.getEntity(id).getVersion());
+    var versions = api.listEntityVersions(id);
+    Assertions.assertEquals(
+        List.of(1, 2), versions.stream().map(EntityVersion::getVersion).toList());
+    Assertions.assertEquals(id, versions.getFirst().getEntityId());
+    Assertions.assertNull(versions.getFirst().getPreviousVersionId());
+    Assertions.assertEquals(versions.getFirst().getId(), versions.getLast().getPreviousVersionId());
+    Assertions.assertNotNull(versions.getFirst().getCreatedAt());
+    Assertions.assertEquals(
+        json.readTree("{\"name\":\"one\"}"),
+        json.readTree(api.getEntityVersion(id, 1).getValues()));
+    Assertions.assertTrue(
+        api.listAllEntityVersions().stream().anyMatch(v -> id.equals(v.getEntityId())));
+
+    var missingVersion =
+        Assertions.assertThrows(HttpClientErrorException.class, () -> api.getEntityVersion(id, 3));
+    Assertions.assertEquals(404, missingVersion.getStatusCode().value());
+    var missingEntity =
+        Assertions.assertThrows(
+            HttpClientErrorException.class, () -> api.listEntityVersions("no-such-entity"));
+    Assertions.assertEquals(404, missingEntity.getStatusCode().value());
+
+    var plain = new Entity();
+    plain.setEntityType("ApiUnversioned");
+    plain.setValues("{\"name\":\"one\"}");
+    var plainId = api.createEntity(plain);
+    Assertions.assertNull(api.getEntity(plainId).getVersion());
+    Assertions.assertTrue(api.listEntityVersions(plainId).isEmpty());
+
+    api.deleteEntity(id);
+    api.deleteEntity(plainId);
+    api.deleteEntityType("ApiVersioned");
+    api.deleteEntityType("ApiUnversioned");
+  }
+
   @Test
   void testListTraits() {
     var api = getMetaCatalogManagerApi();

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
+import it.davidgreco.metacatalog.openapi.model.EntityVersion;
 import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -260,6 +261,7 @@ class UnifiedInstanceController {
       model.addAttribute("entityTypes", types);
       addInstanceSchemaModel(types, entity, model);
       addValueRenderings(entity.getValues(), model);
+      model.addAttribute("entityVersion", entity.getVersion().orElse(null));
       model.addAttribute("readOnly", true);
       return "instances-form";
     } catch (RuntimeException e) {
@@ -335,6 +337,64 @@ class UnifiedInstanceController {
           "valuesYaml", yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
     } catch (JsonProcessingException e) {
       model.addAttribute("valuesJson", values);
+    }
+  }
+
+  // --- version history -------------------------------------------------------
+
+  /**
+   * The version history of an instance whose type carries the built-in {@code Versionable} trait,
+   * oldest first. Read-only: history is never edited, only appended to by updates.
+   *
+   * <p>Each version is labelled with the type version its values were validated against, matched by
+   * snapshot id against {@code GET /entity-type/{name}/versions} the same way {@link
+   * #addInstanceSchemaModel} matches the pin. The current type version's snapshot appears in that
+   * list under the live row's id, so a version that matches nothing was validated against the live
+   * version.
+   */
+  @GetMapping("/{id}/versions")
+  @SuppressWarnings("unchecked")
+  public String versions(
+      @PathVariable String id, Model model, RedirectAttributes redirectAttributes) {
+    try {
+      var entity = (Entity) api.getEntity(id).getBody();
+      var history = (List<EntityVersion>) api.listEntityVersions(id).getBody();
+      var typeVersions =
+          (List<EntityType>) api.listEntityTypeVersions(entity.getEntityType()).getBody();
+      var labels = new LinkedHashMap<String, Integer>();
+      typeVersions.forEach(
+          t -> t.getId().ifPresent(tid -> t.getVersion().ifPresent(v -> labels.put(tid, v))));
+      var liveTypeVersion =
+          typeVersions.isEmpty() ? null : typeVersions.getLast().getVersion().orElse(null);
+      var rows = new java.util.ArrayList<EntityVersionView>();
+      for (var v : history) {
+        rows.add(
+            new EntityVersionView(
+                v.getVersion(),
+                v == history.getLast(),
+                labels.getOrDefault(v.getEntityTypeVersionId(), liveTypeVersion),
+                prettyJson(v.getValues()),
+                v.getCreatedAt()));
+      }
+      model.addAttribute("instanceId", id);
+      model.addAttribute(
+          "instanceName", InstanceRowView.listFrom(List.of(entity)).getFirst().name());
+      model.addAttribute("entityType", entity.getEntityType());
+      model.addAttribute("versions", rows);
+      return "entity-versions";
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+      return "redirect:/ui/instances";
+    }
+  }
+
+  private String prettyJson(String values) {
+    try {
+      return jsonMapper
+          .writerWithDefaultPrettyPrinter()
+          .writeValueAsString(jsonMapper.readTree(values));
+    } catch (JsonProcessingException e) {
+      return values;
     }
   }
 

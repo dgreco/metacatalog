@@ -59,6 +59,20 @@ digraph ER {
             <TR><TD></TD><TD ALIGN="LEFT">values</TD><TD ALIGN="LEFT">jsonb</TD></TR>
             <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
             <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+        </TABLE>
+    >];
+
+    entity_version [label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4" BGCOLOR="white">
+            <TR><TD BGCOLOR="#17becf" COLSPAN="3"><FONT COLOR="white"><B>entity_version</B></FONT></TD></TR>
+            <TR><TD ALIGN="LEFT"><B>PK</B></TD><TD ALIGN="LEFT">id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">values</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">previous_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
         </TABLE>
     >];
 
@@ -182,4 +196,7 @@ digraph ER {
     entity_type_version -> entity            [arrowhead=crow,  label="pins (entity_type_version_id)"];
     entity_type_version -> entity_type_version [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
     trait_version      -> trait_version      [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
+    entity             -> entity_version     [arrowhead=crow,  label="history"];
+    entity_type_version -> entity_version    [arrowhead=crow,  label="validated against"];
+    entity_version     -> entity_version     [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
 }

@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-370-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-390-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -29,6 +29,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Entity Types**: Define and manage entity type hierarchies
 - **Traits**: Reusable characteristics applicable to entities
 - **Type Versioning**: Immutable version history for entity types and traits — every update creates a new version, old versions stay readable and deletable, and the version chain is shown on the graph
+- **Entity Versioning**: Every instance of a type carrying the built-in `Versionable` trait keeps a read-only history — each change to its values is recorded as a numbered version, readable through the API, the UI, the graph and SPARQL (see [Entity versioning](#entity-versioning))
 - **Relationship Management**: Complex relationship mapping between entities
 - **Mappings**: Rule-based transformation of source entities into target entity types, evaluated automatically on source create/update (see [Mappings](#mappings))
 - **JSON Schema Validation**: Validate entity attributes against schemas
@@ -304,13 +305,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 189 · ui 69 · security 23 · hive-metastore 22 · openapi 20 · iceberg-catalog 14 · functions 11 · sparql 8 · provisioning-tasks 5 · application 9 = **370, 0 failures**.
+for the Testcontainers PostgreSQL): core 203 · ui 73 · security 23 · hive-metastore 22 · openapi 21 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 9 = **390, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**55.2% of instructions, 38.0% of branches, 57.5% of lines**.
+**56.0% of instructions, 38.4% of branches, 58.2% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -798,10 +799,96 @@ history — so there is always a row to pin to, and both creation paths (`Entity
 and the mapped-entity generator) fail loudly rather than persisting an unpinned entity.
 
 Because entities now reference snapshots, deleting a version that is still referenced by
-an entity is refused with a `400` and a message reporting the number of referencing
-entities. The current (live) version's snapshot is preserved by `deleteAllVersions` for
+an entity — or by a recorded [entity version](#entity-versioning) — is refused with a `400` and a
+message reporting the number of references. The current (live) version's snapshot is preserved by `deleteAllVersions` for
 the same reason. Deleting the live type entirely with `DELETE /entity-type/{name}` still
 cascades to all snapshots and will fail if any entity still references the type.
+
+## Entity Versioning
+
+Type versioning records how a **schema** changes. Entity versioning records how an **instance's
+values** change: every entity whose type carries the built-in `Versionable` trait keeps a numbered,
+read-only history of the states its values have been in.
+
+### Making a type versionable
+
+`Versionable` is a built-in marker trait with no schema, installed immutable at startup like the
+other built-ins (see [Immutable model](#immutable-model)). Add it to a type's traits:
+
+```bash
+curl -X POST http://localhost:8080/metacatalog/v1/entity-type \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "Contract", "traits": ["Versionable"],
+        "schema": "{\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\"}}}" }'
+```
+
+It is honoured however the type comes to carry it: directly, through a trait that inherits from
+`Versionable`, or through a father type that carries it.
+
+### What gets recorded
+
+- **On create**, a versionable entity gets version 1.
+- **On every change to its values**, the new state is recorded as the next version. Every write path
+  versions in the same way: `PUT /entity/{id}`, the internal writes the system makes (provisioning and
+  authorization status write-backs, the Iceberg and Hive registries), and the regeneration of a
+  mapped entity when its source changes.
+- **A write that changes nothing records nothing.** Values are compared by value, so re-sending
+  `1.0` where `1` is stored is not a change. For a mapped entity, being re-pinned to a different type
+  version is a change even if the values are equal.
+- **Every version has a snapshot, the current one included**, so the latest version always equals
+  the live entity. Each snapshot holds the values, the type version they were validated against, a
+  link to the previous version and the time it was recorded.
+- **The live type decides.** A type that gains `Versionable` through a new version starts
+  versioning its existing instances: on the first update, the state before the update is recorded as
+  version 1 and the update as version 2. A type that loses it stops recording; the history already
+  recorded stays readable, and the entity keeps its last version number.
+- **Concurrent writers are serialised per entity** with a `SELECT ... FOR UPDATE` row lock, so two
+  updates of the same entity always get consecutive version numbers.
+
+History is **append-only**: no endpoint edits, deletes or restores a single version. It is deleted
+together with its entity, by `DELETE /entity/{id}` or by deleting the aggregate the entity belongs
+to.
+
+### Reading the history
+
+- `GET /metacatalog/v1/entity/{id}` reports the current number as `version`. The field is absent
+  for an entity that has never been versioned.
+- `GET /metacatalog/v1/entity/{id}/versions` returns every version, oldest first. It returns an
+  empty list for an entity that has never been versioned, and a `404` for an unknown entity.
+- `GET /metacatalog/v1/entity/{id}/versions/{version}` returns one version, or a `404`.
+- `GET /metacatalog/v1/entity/versions` returns every version of every entity, for clients that need
+  the whole history at once, such as the graph.
+
+```bash
+curl -X PUT http://localhost:8080/metacatalog/v1/entity/$ID \
+  -H 'Content-Type: application/json' \
+  -d '{ "entityType": "Contract", "values": "{\"status\":\"signed\"}" }'
+curl http://localhost:8080/metacatalog/v1/entity/$ID/versions
+# [ { "id": "…", "entityId": "…", "version": 1, "values": "{ \"status\" : \"draft\" }",
+#     "entityTypeVersionId": "…", "previousVersionId": null, "createdAt": "2026-10-20T09:12:03.120Z" },
+#   { "id": "…", "entityId": "…", "version": 2, "values": "{ \"status\" : \"signed\" }",
+#     "entityTypeVersionId": "…", "previousVersionId": "…", "createdAt": "2026-10-20T09:14:41.907Z" } ]
+```
+
+The same history is visible in three other places:
+
+- **UI:** a versioned instance gets a **History** link on the Instances list and on its view page.
+  The history page lists each version with its values, the time it was recorded and the type
+  version it was validated against.
+- **Graph:** with *Show entities* on, each version is an *Entity version* node labelled
+  `Name (vN)`. Versions are chained by `successor-of` edges, with the live entity at the head of the
+  chain, just as for type versions.
+- **SPARQL:** each version is an `mt:EntityVersion` with `mt:version`, `mt:values` and
+  `mt:createdAt`. It links to its entity through `mt:versionOf`, to the type version through
+  `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself
+  carries `mt:version`.
+
+### Interaction with type versions
+
+A type version that entity history still references cannot be deleted, just like one a live entity
+is pinned to. The refusal is a `400` that counts the entity versions referencing it. Only mapped
+entities can trigger it: they are re-pinned when regenerated, so their older versions can be the last
+references to a type version.
 
 ## Mappings
 
@@ -1361,7 +1448,7 @@ dangling link, a stranded entity, or a mapping that can no longer derive its tar
 
 | Call | Rule |
 | --- | --- |
-| `DELETE /entity/{id}` | Refuses any entity that still has links. It is never a way to dismantle an aggregate piecemeal. |
+| `DELETE /entity/{id}` | Refuses any entity that still has links. It is never a way to dismantle an aggregate piecemeal. An entity's [version history](#entity-versioning), if it has one, is deleted with it. |
 | `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction. Refused when a member is linked to an entity outside the aggregate, or is itself a mapping target. |
 | `DELETE /entity/link/...` | Refused for a `HAS_PART` / `IS_PART_OF` link whose containing side implements the `Aggregate` trait — containment is what makes a part reachable from its root, so detaching one strands it. Also refused when an existing mapping resolves an entity path reference *through* the link. `DEPENDS_ON` links, and containment between entities that are not aggregates, stay removable. |
 | `DELETE /trait/link/...` | Refused when an existing link between entity instances relies on the trait relationship. A link is only admitted because a trait relationship sanctions it, so removing the last one that does would leave the link with nothing justifying it. |
@@ -1429,8 +1516,10 @@ class GovernanceModel implements ImmutableModelContributor {
   never converts live catalog data.
 
 The built-in traits are installed this way, by `BuiltInModelContributor` (ordered first, so other
-modules can build on them): `Aggregate`, `AggregateElement`, `Provisionable`, `ProvisionableResource`
-and the `Aggregate HAS_PART AggregateElement` composition. They are deliberately **not** seeded by
+modules can build on them): `Aggregate`, `AggregateElement`, the provisioning pair `Provisionable` /
+`ProvisionableResource`, the authorization pair `Authorizable` / `AuthorizableResource`, the
+`Versionable` marker (see [Entity versioning](#entity-versioning)) and the
+`Aggregate HAS_PART AggregateElement` composition. They are deliberately **not** seeded by
 the Flyway baseline, which keeps one source of truth expressed against the services rather than the
 tables — derived schemas, version groups and the inverse `IS_PART_OF` row are computed exactly as
 they are for a user-declared trait.
@@ -1542,9 +1631,10 @@ The build will fail if:
 ## Database Schema
 
 The schema is owned by Flyway (see [Database Migrations](#database-migrations)
-below) and consists of 12 tables covering entity types, traits, entities, their
+below) and consists of 13 tables covering entity types, traits, entities, their
 relationships, the mapping system, the entity lifecycle audit log, the async
-procedure-run registry, and the append-only version history for types.
+procedure-run registry, and the append-only version history for types and for
+versionable entities.
 
 ![E/R diagram of the Meta Catalog database schema](docs/er-diagram.png)
 
@@ -1558,18 +1648,27 @@ Notes:
   linked **logically** by `version_group_id` + `version`, not by a foreign key.
   The live row is the current version; the `*_version` tables hold the immutable
   history snapshots (see [Type Versioning](#type-versioning)).
+- `entity_version` holds the history of entities whose type carries `Versionable`
+  (see [Entity versioning](#entity-versioning)). Unlike the type history, it is
+  linked to its entity by a real foreign key (`entity_id`), since history is only
+  ever deleted together with its entity. It also references the type version each
+  state was validated against (`entity_type_version_id`), and chains its
+  snapshots through `previous_version_id`. The entity's current number is
+  mirrored on `entity.version`, which is `NULL` for an entity never versioned.
 - `entity_lifecycle_event.entity_id` is a logical (non-FK-enforced) reference to
   `entity` — the migration does not create a foreign-key constraint for it.
 - Self-references model inheritance (`entity_type.father_id`, `trait.father_id`)
-  and the version chain (`entity_type_version.previous_version_id`,
-  `trait_version.previous_version_id`).
+  and the version chains (`entity_type_version.previous_version_id`,
+  `trait_version.previous_version_id`, `entity_version.previous_version_id`).
 - Relationship tables (`*_relationship`) carry a `relation_type` column holding a
   value of the `RelationType` vocabulary (`DEPENDS_ON`/`IS_REQUIRED_BY`,
   `HAS_PART`/`IS_PART_OF`, `MAPPED_TO`/`IS_MAPPED_BY`).
 - `trait`, `entity_type` and `trait_relationship` carry an `immutable` flag
   (default `false`) making the row neither deletable nor updatable — see
-  [Immutable model](#immutable-model). The `*_version` snapshot tables do not
+  [Immutable model](#immutable-model). The type snapshot tables do not
   carry it: an immutable type can never be versioned, so it never accrues one.
+  (`entity_version` does not need it either. Instances of an immutable type are
+  updated as usual, so a `Versionable` immutable type still versions them.)
 
 ## Database Migrations
 
@@ -1585,7 +1684,7 @@ It runs automatically on application startup and creates everything in one shot:
 | --- | --- |
 | Types | `entity_type`, `trait` (each with `version` / `version_group_id`) and the `type_traits` join table |
 | Version history | Append-only `entity_type_version` / `trait_version` snapshot tables (see [Type Versioning](#type-versioning)) |
-| Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)) |
+| Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)), and `entity_version`, the append-only history of versionable entities (see [Entity versioning](#entity-versioning)) |
 | Relationships | `trait_relationship`, `entity_relationship`, `mapping_type_relationship`, `mapping_entity_relationship` |
 | Lifecycle | `entity_lifecycle_event` + its sequence |
 | Procedures | `procedure_run` — the durable registry of async procedure runs (state, error, timestamps), so any replica can answer a poll and outcomes survive restarts |

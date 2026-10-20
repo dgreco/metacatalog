@@ -1321,6 +1321,120 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/{id}/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List all versions of an entity
+      description: >
+        Returns the version history of an entity whose type carries the built-in Versionable
+        trait, oldest first. Every version has a snapshot, the current one included, so the last
+        element always equals the live entity. An entity that has never been versioned returns an
+        empty list. History is read-only and is deleted together with the entity.
+      operationId: listEntityVersions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Entity Id
+          schema:
+            type: string
+      responses:
+        200:
+          description: If successful, return the entity's versions (oldest first, current last)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityVersion'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/{id}/versions/{version}:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: Get a specific version of an entity
+      operationId: getEntityVersion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Entity Id
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          description: Version number
+          schema:
+            type: integer
+      responses:
+        200:
+          description: If successful, return the entity's values as they were at the requested version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityVersion'
+        400:
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity or version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/entity/versions:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List every entity version
+      description: >
+        Returns the version snapshots of every versioned entity, grouped by entity and oldest first
+        within each. Intended for clients that need the whole history at once, such as the catalog
+        graph.
+      operationId: listAllEntityVersions
+      responses:
+        200:
+          description: If successful, return every entity version snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityVersion'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/entity/relationships:
     get:
       tags:
@@ -2263,6 +2377,56 @@ components:
         values:
           type: string
           description: JSON string containing the entity's values, validated against the entity type's schema.
+        version:
+          type: integer
+          readOnly: true
+          description: >
+            The entity's current version number, present only once the entity has been versioned
+            because its type carries the built-in Versionable trait. Starts at 1 and is bumped on
+            every change to the values; see GET /entity/{id}/versions for the history.
+    EntityVersion:
+      type: object
+      description: >
+        A read-only snapshot of a Versionable entity's values at one version, together with the
+        entity type version they were validated against.
+      required:
+        - id
+        - entityId
+        - version
+        - values
+        - entityTypeVersionId
+        - createdAt
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Server-generated unique identifier of this snapshot.
+        entityId:
+          type: string
+          readOnly: true
+          description: The id of the entity this snapshot belongs to.
+        version:
+          type: integer
+          readOnly: true
+          description: The version number, starting at 1.
+        values:
+          type: string
+          readOnly: true
+          description: JSON string containing the entity's values at this version.
+        entityTypeVersionId:
+          type: string
+          readOnly: true
+          description: >
+            The id of the EntityTypeVersion snapshot these values were validated against. It can
+            differ between versions of a mapped entity, which is re-pinned when regenerated.
+        previousVersionId:
+          type: string
+          readOnly: true
+          description: The id of the snapshot this one succeeds, or null for the first version.
+        createdAt:
+          type: string
+          readOnly: true
+          description: When this version was recorded, as an ISO-8601 instant.
     Mapping:
       type: object
       description: >

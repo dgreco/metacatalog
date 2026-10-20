@@ -127,6 +127,9 @@ ALTER TABLE trait_version
 -- to the exact snapshot it was created and validated against. Both are NOT NULL: EntityTypeService
 -- creates a snapshot for every live version, so there is always a row to pin to, and an unpinned
 -- entity would have no record of which schema validated it.
+--
+-- version is the entity's own version number when its type carries the built-in Versionable trait,
+-- and NULL for an entity that has never been versioned.
 -- ---------------------------------------------------------------------------------------------
 
 CREATE TABLE entity
@@ -135,6 +138,7 @@ CREATE TABLE entity
     values                 JSONB        NOT NULL,
     entity_type_id         VARCHAR(255) NOT NULL,
     entity_type_version_id VARCHAR(255) NOT NULL,
+    version                INT,
     CONSTRAINT pk_entity PRIMARY KEY (id)
 );
 
@@ -147,6 +151,43 @@ ALTER TABLE entity
 
 ALTER TABLE entity
     ADD CONSTRAINT FK_ENTITY_ON_ENTITY_TYPE_VERSION FOREIGN KEY (entity_type_version_id) REFERENCES entity_type_version (id);
+
+-- ---------------------------------------------------------------------------------------------
+-- Entity version history: append-only snapshots of Versionable entities
+--
+-- Same "live row + append-only history" model as the type tables, except that every version, the
+-- current one included, has a row: the latest snapshot always equals the live entity, so history
+-- reads never have to splice the live row in. entity_type_version_id records the type version each
+-- state was validated against, which can move on regeneration for a mapped entity. Rows are only
+-- ever removed together with their entity.
+-- ---------------------------------------------------------------------------------------------
+
+CREATE TABLE entity_version
+(
+    id                     VARCHAR(255)                NOT NULL,
+    entity_id              VARCHAR(255)                NOT NULL,
+    version                INT                         NOT NULL,
+    values                 JSONB                       NOT NULL,
+    entity_type_version_id VARCHAR(255)                NOT NULL,
+    previous_version_id    VARCHAR(255),
+    created_at             TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT pk_entity_version PRIMARY KEY (id)
+);
+
+CREATE UNIQUE INDEX idx_entity_version_entity_version_unq ON entity_version (entity_id, version);
+
+CREATE INDEX idx_entity_version_previous ON entity_version (previous_version_id);
+
+CREATE INDEX idx_entity_version_entity_type_version_id ON entity_version (entity_type_version_id);
+
+ALTER TABLE entity_version
+    ADD CONSTRAINT FK_ENTITY_VERSION_ON_ENTITY FOREIGN KEY (entity_id) REFERENCES entity (id);
+
+ALTER TABLE entity_version
+    ADD CONSTRAINT FK_ENTITY_VERSION_ON_ENTITY_TYPE_VERSION FOREIGN KEY (entity_type_version_id) REFERENCES entity_type_version (id);
+
+ALTER TABLE entity_version
+    ADD CONSTRAINT FK_ENTITY_VERSION_ON_PREVIOUS FOREIGN KEY (previous_version_id) REFERENCES entity_version (id);
 
 -- ---------------------------------------------------------------------------------------------
 -- Relationships
@@ -286,10 +327,10 @@ CREATE INDEX idx_procedurerun_updated_at ON procedure_run (updated_at);
 -- ---------------------------------------------------------------------------------------------
 -- Built-in traits
 --
--- Deliberately NOT seeded here. Aggregate, AggregateElement, Provisionable and
--- ProvisionableResource — and the Aggregate HAS_PART AggregateElement relationship between them —
--- are declared by it.davidgreco.metacatalog.bootstrap.BuiltInModelContributor and installed at
--- startup, immutably, through the same extension point any other module uses.
+-- Deliberately NOT seeded here. Aggregate, AggregateElement, Provisionable, ProvisionableResource,
+-- Authorizable, AuthorizableResource and Versionable — and the Aggregate HAS_PART AggregateElement
+-- relationship — are declared by it.davidgreco.metacatalog.bootstrap.BuiltInModelContributor and
+-- installed at startup, immutably, through the same extension point any other module uses.
 --
 -- Keeping them out of the migration leaves one source of truth for the built-in model, expressed
 -- against the services rather than against the tables, so derived schemas, version groups and the

@@ -79,7 +79,7 @@
         <tr>
             <th>Name</th>
             <th>Type</th>
-            <th>Version</th>
+            <th>Type version</th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -99,6 +99,9 @@
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
+                <a class="btn-sm" th:if="${inst.version != null}"
+                   th:href="@{/ui/instances/{id}/versions(id=${inst.id})}"
+                   th:text="|History (v${inst.version})|" title="Version history">History</a>
                 <!-- The aggregate actions this row's type qualifies for: label, tooltip, confirm
                      text and target are all carried by the AggregateAction, so a new capability
                      adds an enum constant rather than another block here. Procedures post under

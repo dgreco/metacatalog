@@ -46,7 +46,8 @@ asked to change, however good the rest is.
 - **Controllers are generated from the OpenAPI spec** at
   `metacatalog-openapi/src/main/resources/static/api/interface-specification.yaml`. Change the
   spec, never the generated sources.
-- **Schema changes are new Flyway migrations.** Never edit an applied migration.
+- **Schema changes go in the Flyway baseline**, `V1__initial_schema.sql`, edited in place. Existing
+  databases are not migrated, so recreate yours afterwards (see *Database Migrations* in the README).
 - **Comments explain why, not what.** Where a line looks odd, a comment names the failure it
   prevents. Do not add comments that restate the code.
 - **Javadoc on public API**, including record components and enum constants.

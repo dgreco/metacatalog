@@ -62,6 +62,18 @@ public class Entity {
   private EntityTypeVersion entityTypeVersion;
 
   /**
+   * The number of this entity's latest {@link EntityVersion}, or {@code null} if it has never been
+   * versioned.
+   *
+   * <p>Written only by {@code EntityVersionRecorder}, and only for entities whose type carries the
+   * built-in {@link BuiltInTraits#VERSIONABLE} trait. It stays at its last value if the type later
+   * stops carrying the trait. Deliberately not a JPA {@code @Version}: that would add optimistic
+   * locking to every entity, versionable or not.
+   */
+  @Column(name = "version")
+  private Integer version;
+
+  /**
    * Creates a new entity with the specified type and values.
    *
    * @param entityType the type of the entity

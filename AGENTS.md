@@ -72,8 +72,11 @@ something, expose it as an endpoint first. Never "fix" this by deleting the excl
 client. Change the spec, not the generated code — edits to generated sources are lost on the next
 build. Hand-written code implements the generated delegate interfaces.
 
-**Schema changes are Flyway migrations.** `metacatalog-core/src/main/resources/db/migration/`. Never
-edit an applied migration; add a new one. Hibernate does not own the schema.
+**Schema changes go in the Flyway baseline.** The whole schema is one script,
+`metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql`, and existing databases
+are not migrated. Edit the baseline in place and recreate the database; do not add `V2`, `V3`, …
+until the project needs real migrations again (`README.md` § *Database Migrations*). Hibernate does
+not own the schema.
 
 **The immutable model is code, applied at startup.** A module declares the traits, entity types and
 trait relationships it depends on through `ImmutableModelContributor`, and `ImmutableModelInstaller`

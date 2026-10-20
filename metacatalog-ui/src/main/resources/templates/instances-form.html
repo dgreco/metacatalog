@@ -14,6 +14,9 @@
     <nav>
         <a class="btn" th:href="@{/ui/instances}">Back</a>
         <a class="btn" th:if="${readOnly == true and instanceId != null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
+        <a class="btn" th:if="${readOnly == true and entityVersion != null}"
+           th:href="@{/ui/instances/{id}/versions(id=${instanceId})}"
+           th:text="|History (v${entityVersion})|">History</a>
     </nav>
 </header>
 

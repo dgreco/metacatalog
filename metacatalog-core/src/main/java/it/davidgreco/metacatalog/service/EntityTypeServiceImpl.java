@@ -13,6 +13,7 @@ import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.EntityTypeVersionRepository;
+import it.davidgreco.metacatalog.repository.EntityVersionRepository;
 import it.davidgreco.metacatalog.repository.MappingEntityTypeRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRepository;
 import java.time.Instant;
@@ -48,6 +49,8 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
   private final EntityRelationshipRepository entityRelationshipRepository;
 
   private final JsonUtils jsonUtils;
+
+  private final EntityVersionRepository entityVersionRepository;
 
   /**
    * Creates a new EntityType with the specified name, traits, optional father, and schema.
@@ -417,19 +420,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
                   () ->
                       new ServiceError(
                           "Version " + version + " of " + ENTITYTYPE + name + " does not exist"));
-      var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-      if (referencedCount > 0)
-        throw new ServiceError(
-            "Version "
-                + version
-                + " of "
-                + ENTITYTYPE
-                + name
-                + " is referenced by "
-                + referencedCount
-                + " entit"
-                + (referencedCount == 1 ? "y" : "ies")
-                + "; delete or migrate them first");
+      checkIsUnreferenced(snapshot, name);
       unlinkAndDeleteSnapshot(snapshot, name);
       entityTypeVersionRepository.flush();
       log.info("Deleted EntityType: {} version: {}", name, version);
@@ -467,19 +458,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               .filter(s -> s.getVersion() != live.getVersion())
               .toList();
       for (var snapshot : history) {
-        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-        if (referencedCount > 0)
-          throw new ServiceError(
-              "Version "
-                  + snapshot.getVersion()
-                  + " of "
-                  + ENTITYTYPE
-                  + name
-                  + " is referenced by "
-                  + referencedCount
-                  + " entit"
-                  + (referencedCount == 1 ? "y" : "ies")
-                  + "; delete or migrate them first");
+        checkIsUnreferenced(snapshot, name);
       }
       for (var snapshot : history) {
         unlinkAndDeleteSnapshot(snapshot, name);
@@ -535,19 +514,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               .sorted(java.util.Comparator.comparingInt(EntityTypeVersion::getVersion).reversed())
               .toList();
       for (var snapshot : snapshots) {
-        var referencedCount = entityRepository.countByEntityTypeVersion(snapshot);
-        if (referencedCount > 0)
-          throw new ServiceError(
-              "Version "
-                  + snapshot.getVersion()
-                  + " of "
-                  + ENTITYTYPE
-                  + name
-                  + " is referenced by "
-                  + referencedCount
-                  + " entit"
-                  + (referencedCount == 1 ? "y" : "ies")
-                  + "; delete or migrate them first");
+        checkIsUnreferenced(snapshot, name);
       }
       for (var snapshot : snapshots) {
         entityTypeVersionRepository.delete(snapshot);
@@ -562,11 +529,43 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
   }
 
   /**
-   * Checks if an entity type with the given name exists.
+   * Refuses to delete a type version snapshot that is still referenced, with a message saying by
+   * what, instead of letting the foreign key surface as a generic data-integrity error.
    *
-   * @param name the name of the entity type to check
-   * @return true if an entity type with the given name exists, false otherwise
+   * <p>Entity history counts as well as live entities. A plain entity never changes the version it
+   * is pinned to, so its history only references versions that the entity itself still references.
+   * A mapped entity is re-pinned when it is regenerated, so its older snapshots can be the only
+   * remaining references to a version.
    */
+  private void checkIsUnreferenced(EntityTypeVersion snapshot, String name) {
+    var entities = entityRepository.countByEntityTypeVersion(snapshot);
+    if (entities > 0)
+      throw new ServiceError(
+          "Version "
+              + snapshot.getVersion()
+              + " of "
+              + ENTITYTYPE
+              + name
+              + " is referenced by "
+              + entities
+              + " entit"
+              + (entities == 1 ? "y" : "ies")
+              + "; delete or migrate them first");
+    var history = entityVersionRepository.countByEntityTypeVersion(snapshot);
+    if (history > 0)
+      throw new ServiceError(
+          "Version "
+              + snapshot.getVersion()
+              + " of "
+              + ENTITYTYPE
+              + name
+              + " is referenced by "
+              + history
+              + " entity version"
+              + (history == 1 ? "" : "s")
+              + "; delete the entities whose history records it first");
+  }
+
   /**
    * Rejects an operation that would delete or rewrite an immutable entity type.
    *
@@ -583,6 +582,12 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
         ENTITYTYPE + entityType.getName() + " is immutable and cannot be " + operation + ".");
   }
 
+  /**
+   * Checks if an entity type with the given name exists.
+   *
+   * @param name the name of the entity type to check
+   * @return true if an entity type with the given name exists, false otherwise
+   */
   @Transactional(propagation = Propagation.REQUIRED)
   public boolean exists(String name) {
     log.info("Checking if EntityType exists: {}", name);

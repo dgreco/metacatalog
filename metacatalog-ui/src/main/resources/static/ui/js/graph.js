@@ -104,8 +104,8 @@
   function showNodePopup(n, ev) {
     var p = ensurePopup();
     p.textContent = "";
-    if (n.kind === "entity") {
-      p.appendChild(hel("div", "sv-popup-title", "Entity"));
+    if (n.kind === "entity" || n.kind === "entityVersion") {
+      p.appendChild(hel("div", "sv-popup-title", n.kind === "entity" ? "Entity" : "Entity version"));
       p.appendChild(hel("div", "graph-popup-name", n.label));
       if (n.father) {
         var f = hel("div", "graph-popup-row");

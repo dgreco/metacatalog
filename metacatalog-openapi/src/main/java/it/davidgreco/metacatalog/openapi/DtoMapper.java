@@ -126,7 +126,21 @@ public class DtoMapper {
     dtoEntity.setEntityType(entity.getEntityType().getName());
     dtoEntity.setEntityTypeVersionId(entity.getEntityTypeVersion().getId());
     dtoEntity.setValues(entity.getValues().toPrettyString());
+    dtoEntity.setVersion(Optional.ofNullable(entity.getVersion()));
     return dtoEntity;
+  }
+
+  public it.davidgreco.metacatalog.openapi.model.EntityVersion entityVersionToDto(
+      it.davidgreco.metacatalog.entity.EntityVersion v) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.EntityVersion();
+    dto.setId(v.getId());
+    dto.setEntityId(v.getEntity().getId());
+    dto.setVersion(v.getVersion());
+    dto.setValues(v.getValues().toPrettyString());
+    dto.setEntityTypeVersionId(v.getEntityTypeVersion().getId());
+    dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
+    dto.setCreatedAt(v.getCreatedAt().toString());
+    return dto;
   }
 
   public it.davidgreco.metacatalog.openapi.model.EntityRelationship entityRelationshipToDto(

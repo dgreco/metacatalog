@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Instance history — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/flash.js}" defer></script>
+</head>
+<body>
+<header class="topbar">
+    <h1>Instance history — <span th:text="${instanceName}">name</span>
+        <span class="tag" th:text="${entityType}">type</span></h1>
+    <nav>
+        <a class="btn" th:href="@{/ui/instances/{id}(id=${instanceId})}">← Back</a>
+        <a class="btn" th:href="@{/ui/instances}">Instances</a>
+    </nav>
+    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+        <span class="user" th:text="${username}">user</span>
+        <button type="submit" class="btn">Logout</button>
+    </form>
+</header>
+
+<main>
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+
+    <div class="section-head">
+        <h2>Version history <span class="empty">(oldest first)</span></h2>
+    </div>
+
+    <table th:if="${!versions.isEmpty()}">
+        <thead>
+        <tr>
+            <th>Version</th>
+            <th>Recorded</th>
+            <th>Type version</th>
+            <th>Values</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="v : ${versions}">
+            <td>
+                <span class="tag" th:text="'v' + ${v.version}">v1</span>
+                <span class="tag" th:if="${v.current}">current</span>
+            </td>
+            <td th:text="${v.createdAt}">timestamp</td>
+            <td>
+                <span class="tag muted" th:if="${v.typeVersion != null}" th:text="'v' + ${v.typeVersion}">v1</span>
+                <span th:if="${v.typeVersion == null}" class="empty">—</span>
+            </td>
+            <td>
+                <pre class="schema document-pane" th:text="${v.values}">{}</pre>
+            </td>
+        </tr>
+        </tbody>
+    </table>
+    <p class="empty" th:if="${versions.isEmpty()}">
+        No versions recorded. Only instances of a type carrying the Versionable trait keep a history.
+    </p>
+</main>
+</body>
+</html>

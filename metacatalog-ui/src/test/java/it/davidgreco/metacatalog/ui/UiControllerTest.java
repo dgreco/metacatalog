@@ -58,6 +58,8 @@ class UiControllerTest {
     given(api.getTypeCapabilities())
         .willReturn(ResponseEntity.ok(capabilities(List.of(), List.of(), List.of())));
     given(api.listEntityTypeVersions(any())).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listEntityVersions(any())).willReturn(ResponseEntity.ok(List.of()));
+    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of()));
     var catalogGraphService =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
@@ -1007,5 +1009,146 @@ class UiControllerTest {
         .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
 
     verify(api).unlinkEntity("ent-1", "HAS_PART", "ent-2");
+  }
+
+  private static it.davidgreco.metacatalog.openapi.model.EntityVersion entityVersion(
+      String id,
+      String entityId,
+      int version,
+      String values,
+      String typeVersionId,
+      String previous) {
+    var v = new it.davidgreco.metacatalog.openapi.model.EntityVersion();
+    v.setId(id);
+    v.setEntityId(entityId);
+    v.setVersion(version);
+    v.setValues(values);
+    v.setEntityTypeVersionId(typeVersionId);
+    v.setPreviousVersionId(java.util.Optional.ofNullable(previous));
+    v.setCreatedAt("2026-10-20T10:00:0" + version + "Z");
+    return v;
+  }
+
+  /**
+   * The history page lists every version oldest first, marks the last one current and labels each
+   * with the type version it was validated against: an older type snapshot matches by id, while the
+   * live type version's snapshot does not appear in the list under its own id, so an unmatched pin
+   * is the live version.
+   */
+  @Test
+  void instanceHistoryListsVersionsWithTheirTypeVersions() throws Exception {
+    var entity = new Entity();
+    entity.setId(java.util.Optional.of("ent-1"));
+    entity.setEntityType("Person");
+    entity.setValues("{\"name\":\"Alice\"}");
+    entity.setVersion(java.util.Optional.of(2));
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
+    var oldType = new EntityType();
+    oldType.setId(java.util.Optional.of("type-snap-1"));
+    oldType.setVersion(java.util.Optional.of(1));
+    var liveType = new EntityType();
+    liveType.setId(java.util.Optional.of("type-live"));
+    liveType.setVersion(java.util.Optional.of(2));
+    given(api.listEntityTypeVersions("Person"))
+        .willReturn(ResponseEntity.ok(List.of(oldType, liveType)));
+    given(api.listEntityVersions("ent-1"))
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    entityVersion("v-1", "ent-1", 1, "{\"name\":\"Al\"}", "type-snap-1", null),
+                    entityVersion(
+                        "v-2", "ent-1", 2, "{\"name\":\"Alice\"}", "type-snap-2", "v-1"))));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/instances/ent-1/versions"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("entity-versions"))
+            .andExpect(model().attribute("instanceName", "Alice"))
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<EntityVersionView>) result.getModelAndView().getModel().get("versions");
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(1, 2), rows.stream().map(EntityVersionView::version).toList());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(false, true), rows.stream().map(EntityVersionView::current).toList());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(1, 2), rows.stream().map(EntityVersionView::typeVersion).toList());
+    org.junit.jupiter.api.Assertions.assertTrue(rows.getFirst().values().contains("\"Al\""));
+  }
+
+  @Test
+  void instanceHistoryOfAMissingInstanceRedirectsWithTheError() throws Exception {
+    given(api.getEntity("gone")).willThrow(apiError("Entity with id gone not found"));
+
+    mockMvc
+        .perform(get("/ui/instances/gone/versions"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(flash().attribute("error", "Entity with id gone not found"));
+  }
+
+  @Test
+  void onlyVersionedInstancesOfferTheirHistory() throws Exception {
+    var versioned = new Entity();
+    versioned.setId(java.util.Optional.of("ent-1"));
+    versioned.setEntityType("Doc");
+    versioned.setValues("{}");
+    versioned.setVersion(java.util.Optional.of(3));
+    var plain = new Entity();
+    plain.setId(java.util.Optional.of("ent-2"));
+    plain.setEntityType("Note");
+    plain.setValues("{}");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(versioned, plain)));
+
+    var rows = instanceRows();
+    org.junit.jupiter.api.Assertions.assertEquals(3, rows.get(0).version());
+    org.junit.jupiter.api.Assertions.assertNull(rows.get(1).version());
+
+    given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(versioned));
+    mockMvc
+        .perform(get("/ui/instances/ent-1"))
+        .andExpect(status().isOk())
+        .andExpect(model().attribute("entityVersion", 3));
+  }
+
+  /**
+   * With entities shown, each recorded version of a versionable entity is a node chained to its
+   * predecessor, and the live entity leads the chain — the same shape the graph gives type
+   * versions.
+   */
+  @Test
+  void graphChainsEntityVersionsBehindTheLiveEntity() {
+    var entity = new Entity();
+    entity.setId(java.util.Optional.of("ent-1"));
+    entity.setEntityType("Doc");
+    entity.setValues("{\"name\":\"report\"}");
+    entity.setVersion(java.util.Optional.of(2));
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(entity)));
+    given(api.listAllEntityVersions())
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    entityVersion("v-1", "ent-1", 1, "{\"name\":\"draft\"}", "t", null),
+                    entityVersion("v-2", "ent-1", 2, "{\"name\":\"report\"}", "t", "v-1"))));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, true);
+
+    var versionNodes =
+        graph.nodes().stream().filter(n -> "entityVersion".equals(n.kind())).toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("report (v1)", "report (v2)"),
+        versionNodes.stream().map(GraphModel.Node::label).toList());
+    var successorEdges =
+        graph.edges().stream()
+            .filter(e -> "successor-of".equals(e.kind()))
+            .map(e -> e.source() + "->" + e.target())
+            .toList();
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("entity-version:v-2->entity-version:v-1", "entity:ent-1->entity-version:v-2"),
+        successorEdges);
   }
 }
