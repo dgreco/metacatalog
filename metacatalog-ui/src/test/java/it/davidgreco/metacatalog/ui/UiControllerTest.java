@@ -1161,7 +1161,9 @@ class UiControllerTest {
   /**
    * With entities shown, each recorded version of a versionable entity is a node chained to its
    * predecessor, and the live entity leads the chain — the same shape the graph gives type
-   * versions.
+   * versions. Each version is labelled with the name it had at that version, not the entity's
+   * current one; a version whose values carry no name falls back to the entity's id, as the entity
+   * itself does.
    */
   @Test
   void graphChainsEntityVersionsBehindTheLiveEntity() {
@@ -1169,14 +1171,15 @@ class UiControllerTest {
     entity.setId(java.util.Optional.of("ent-1"));
     entity.setEntityType("Doc");
     entity.setValues("{\"name\":\"report\"}");
-    entity.setVersion(java.util.Optional.of(2));
+    entity.setVersion(java.util.Optional.of(3));
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(entity)));
     given(api.listAllEntityVersions())
         .willReturn(
             ResponseEntity.ok(
                 List.of(
                     entityVersion("v-1", "ent-1", 1, "{\"name\":\"draft\"}", "t", null),
-                    entityVersion("v-2", "ent-1", 2, "{\"name\":\"report\"}", "t", "v-1"))));
+                    entityVersion("v-2", "ent-1", 2, "{}", "t", "v-1"),
+                    entityVersion("v-3", "ent-1", 3, "{\"name\":\"report\"}", "t", "v-2"))));
 
     var graph =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
@@ -1185,7 +1188,7 @@ class UiControllerTest {
     var versionNodes =
         graph.nodes().stream().filter(n -> "entityVersion".equals(n.kind())).toList();
     org.junit.jupiter.api.Assertions.assertEquals(
-        List.of("report (v1)", "report (v2)"),
+        List.of("draft (v1)", "#ent-1 (v2)", "report (v3)"),
         versionNodes.stream().map(GraphModel.Node::label).toList());
     var successorEdges =
         graph.edges().stream()
@@ -1193,7 +1196,10 @@ class UiControllerTest {
             .map(e -> e.source() + "->" + e.target())
             .toList();
     org.junit.jupiter.api.Assertions.assertEquals(
-        List.of("entity-version:v-2->entity-version:v-1", "entity:ent-1->entity-version:v-2"),
+        List.of(
+            "entity-version:v-2->entity-version:v-1",
+            "entity-version:v-3->entity-version:v-2",
+            "entity:ent-1->entity-version:v-3"),
         successorEdges);
   }
 }

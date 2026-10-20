@@ -876,8 +876,8 @@ The same history is visible in three other places:
   The history page lists each version with its values, the time it was recorded and the type
   version it was validated against.
 - **Graph:** with *Show entities* on, each version is an *Entity version* node labelled
-  `Name (vN)`. Versions are chained by `successor-of` edges, with the live entity at the head of the
-  chain, just as for type versions.
+  `Name (vN)`, with the name the entity had at that version. Versions are chained by
+  `successor-of` edges, with the live entity at the head of the chain, just as for type versions.
 - **SPARQL:** each version is an `mt:EntityVersion` with `mt:version`, `mt:values` and
   `mt:createdAt`. It links to its entity through `mt:versionOf`, to the type version through
   `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself

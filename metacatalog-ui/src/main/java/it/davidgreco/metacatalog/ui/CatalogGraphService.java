@@ -317,22 +317,14 @@ public class CatalogGraphService {
             .collect(Collectors.toMap(v -> v.getId().orElseThrow(), Function.identity()));
 
     var liveEntities = new ArrayList<VersionRow>();
-    var labelsById = new java.util.HashMap<String, String>();
     for (var entity : api.getEntities(Optional.empty(), Optional.empty()).getBody()) {
       var typeName = entity.getEntityType();
       if (typeName == null) continue;
       var entityId = entity.getId().orElse("");
-      labelsById.put(entityId, entityLabel(entity));
+      var label = entityLabel(entity);
       if (entity.getVersion().isPresent())
         liveEntities.add(
-            new VersionRow(
-                entityId,
-                labelsById.get(entityId),
-                entity.getVersion().get(),
-                null,
-                null,
-                entityId,
-                null));
+            new VersionRow(entityId, label, entity.getVersion().get(), null, null, entityId, null));
       var pinnedVersion =
           Optional.ofNullable(entity.getEntityTypeVersionId())
               .map(versionsById::get)
@@ -350,12 +342,7 @@ public class CatalogGraphService {
       var entityNodeId = ENTITY_PREFIX + entityId;
       nodes.add(
           new GraphModel.Node(
-              entityNodeId,
-              labelsById.get(entityId),
-              "entity",
-              instanceOfLabel,
-              null,
-              entity.getValues()));
+              entityNodeId, label, "entity", instanceOfLabel, null, entity.getValues()));
       edges.add(
           new GraphModel.Edge(
               entityNodeId, instanceOfTarget, "instance-of", "instance-of", null, null));
@@ -369,7 +356,7 @@ public class CatalogGraphService {
                 v ->
                     VersionRow.of(
                         v,
-                        labelsById.getOrDefault(v.getEntityId(), v.getEntityId()),
+                        entityLabel(v.getValues(), v.getEntityId()),
                         Optional.ofNullable(versionsById.get(v.getEntityTypeVersionId()))
                             .map(t -> t.getName() + " (v" + t.getVersion().orElse(null) + ")")
                             .orElse(null)))
@@ -417,7 +404,14 @@ public class CatalogGraphService {
    * values} JSON if present, otherwise a short hash of its id so every node is distinguishable.
    */
   private String entityLabel(Entity entity) {
-    var values = entity.getValues();
+    return entityLabel(entity.getValues(), entity.getId().orElse(null));
+  }
+
+  /**
+   * The same label, from a given set of values. An entity version is labelled from its own values,
+   * so a past version shows the name it had then rather than the entity's current one.
+   */
+  private String entityLabel(String values, String id) {
     if (values != null && !values.isBlank()) {
       try {
         var parsed = jsonMapper.readTree(values);
@@ -427,7 +421,6 @@ public class CatalogGraphService {
         // fall through to the id-derived label
       }
     }
-    var id = entity.getId().orElse(null);
     return "#" + (id == null ? "?" : id.substring(0, Math.min(8, id.length())));
   }
 
