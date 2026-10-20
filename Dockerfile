@@ -16,7 +16,9 @@
 #   * Requires BuildKit (default on Docker 23.0+ / buildx).
 
 # --- Build stage: compile the reactor and package the application jar ---
-FROM maven:3-eclipse-temurin-27 AS build
+# JDK 25, like CI: the build runs the Spotless format check, and its formatter fails on JDK 27's
+# javac internals, so this image moves to a newer JDK only once the build's tooling supports it.
+FROM maven:3-eclipse-temurin-25 AS build
 
 # Which deployable module this image runs: metacatalog-application (default) or
 # metacatalog-iceberg-catalog. docker-compose.yml passes it per service.
