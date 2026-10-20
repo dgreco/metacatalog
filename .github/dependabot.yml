@@ -5,6 +5,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # Two lines of jsqlparser are pinned by hand and must not move together: the root pom's
+      # jsqlparser.version (5.x, what Spring Data JPA calls) and metacatalog-sparql's 4.6 (what Ontop
+      # 5.5.0 links against; 4.7 and later break it — see that dependency's comment). Dependabot
+      # cannot tell the two apart and bumped the Ontop one, which broke the SPARQL endpoint.
+      - dependency-name: "com.github.jsqlparser:jsqlparser"
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -17,3 +23,7 @@ updates:
       - /metacatalog-hive-metastore
     schedule:
       interval: weekly
+    ignore:
+      # The build stage's JDK moves by hand, with the build's tooling (see the Dockerfile): the
+      # bump to maven:3-eclipse-temurin-27 broke the image build.
+      - dependency-name: "maven"
