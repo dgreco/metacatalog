@@ -72,11 +72,16 @@ something, expose it as an endpoint first. Never "fix" this by deleting the excl
 client. Change the spec, not the generated code — edits to generated sources are lost on the next
 build. Hand-written code implements the generated delegate interfaces.
 
-**Schema changes go in the Flyway baseline.** The whole schema is one script,
-`metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql`, and existing databases
-are not migrated. Edit the baseline in place and recreate the database; do not add `V2`, `V3`, …
-until the project needs real migrations again (`README.md` § *Database Migrations*). Hibernate does
-not own the schema.
+**Schema changes are new Flyway migrations.** `V1__initial_schema.sql` in
+`metacatalog-core/src/main/resources/db/migration/` is the schema 1.0.0 shipped, and released
+databases must upgrade in place. Every change is a new `V2__…`, `V3__…` script that migrates
+existing data too; never edit an applied migration (`README.md` § *Database Migrations*). Hibernate
+does not own the schema.
+
+**Versions are semantic and released from branches.** `main` carries the next minor as a
+`-SNAPSHOT`; releases are tagged `vX.Y.Z` on `release/X.Y` branches (`README.md` § *Releases and
+Versioning*). A breaking change to the REST API, the schema or the configuration needs a major
+version. Change the version only with `scripts/set-version.sh`, which moves every POM together.
 
 **The immutable model is code, applied at startup.** A module declares the traits, entity types and
 trait relationships it depends on through `ImmutableModelContributor`, and `ImmutableModelInstaller`
@@ -133,9 +138,10 @@ Conventions that matter:
 
 Two pipelines, one logic. GitHub Actions (`.github/workflows/ci.yml`) and GitLab CI
 (`.gitlab-ci.yml`) both call `ci/build.sh` — `mvn clean install spotless:check test -B` — and then
-`ci/publish-images.sh`, which on `main` / `master` / `develop` builds and pushes the application,
-Iceberg catalog and Hive Metastore images (GitHub to GHCR for amd64 and arm64, through buildx when
-the pipeline sets `PLATFORMS`; GitLab to its own registry for its arm64 runner only). Change
+`ci/publish-images.sh`, which builds and pushes the application, Iceberg catalog and Hive Metastore
+images: a `vX.Y.Z` tag as its version (and `latest` when newest), `main` as `edge`, `release/*`
+branches not at all (GitHub to GHCR for amd64 and arm64, through buildx when the pipeline sets
+`PLATFORMS`; GitLab to its own registry for its arm64 runner only). Change
 pipeline behaviour in the scripts, not in the platform files, so the two cannot drift. GitLab needs
 a Docker-in-Docker service for Testcontainers; the GitHub runner has a daemon. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.
@@ -156,3 +162,4 @@ public-facing contributor documents; keep them consistent with this file when co
 1. `mvn spotless:apply`
 2. `mvn clean install` (or `mvn verify` if you touched anything integration-level)
 3. Update `README.md` if behaviour, API or configuration changed — it is the user-facing contract.
+4. Add a line under *Unreleased* in `CHANGELOG.md` for anything a user of a release would notice.

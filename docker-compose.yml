@@ -24,7 +24,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: metacatalog:0.0.1-SNAPSHOT
+    image: metacatalog:local
     container_name: metacatalog-app
     depends_on:
       postgres:

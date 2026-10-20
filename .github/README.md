@@ -171,7 +171,7 @@ Once up, the app is available at:
 > on the host for the full test suite.
 
 **Always pass `--build` to run the latest code.** Plain `docker compose up` reuses the
-existing `metacatalog:0.0.1-SNAPSHOT` image and can therefore run a stale application.
+existing `metacatalog:local` image and can therefore run a stale application.
 The build context includes `.git`, so any commit invalidates the image layer and forces
 a rebuild; `--build` also rebuilds whenever any source file changes. A `Makefile` wraps
 the common flows so this is hard to get wrong:
@@ -201,7 +201,7 @@ The application stamps the build with its version, git commit and build time. Af
 startup it logs a line such as:
 
 ```
-Meta Catalog 0.0.1-SNAPSHOT started (git a1b2c3d, built 2026-07-16T10:51:00Z)
+Meta Catalog 1.0.0 started (git a1b2c3d, built 2026-07-16T10:51:00Z)
 ```
 
 and the same information is served by the info actuator endpoint:
@@ -209,7 +209,7 @@ and the same information is served by the info actuator endpoint:
 ```bash
 curl http://localhost:8080/actuator/info   # or: make info
 # { "git": { "commit": { "id": { "abbrev": "a1b2c3d" }, ... }, "branch": "..." },
-#   "build": { "version": "0.0.1-SNAPSHOT", "time": "..." }, ... }
+#   "build": { "version": "1.0.0", "time": "..." }, ... }
 ```
 
 Compare `git.commit.id.abbrev` with `git rev-parse --short HEAD` (and check `git.dirty`)
@@ -354,21 +354,73 @@ pipelines cannot drift apart.
   request must pass. Integration tests need a Docker daemon (GitHub's runner has one; GitLab uses a
   Docker-in-Docker service).
 - `ci/publish-images.sh` builds and pushes the three images — the application, the Iceberg REST
-  catalog and the Hive Metastore — tagged with the short commit SHA and `latest`, plus the Maven
-  project version on `main`/`master`. It runs only on pushes to `main`, `master` or `develop`;
-  GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}` for both
-  `linux/amd64` and `linux/arm64` (the arm64 half built under QEMU), GitLab to the project's
-  container registry for its runner's architecture (arm64) only.
+  catalog and the Hive Metastore. What each ref publishes:
+
+  | Ref | Image tags |
+  |---|---|
+  | release tag `vX.Y.Z` | `X.Y.Z`, `X.Y` and the short SHA, plus `latest` when it is the newest release |
+  | `main` (or `master`) | the short SHA and `edge` |
+  | `develop` | the short SHA |
+  | `release/*` branches, merge requests | nothing: they build and test only |
+
+  `X.Y` follows the newest patch of its own line only, so a late patch to an older line never
+  moves `latest` or a newer line's tag back. A tag whose number differs from the POM version is
+  refused. GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}`
+  for both `linux/amd64` and `linux/arm64` (the arm64 half built under QEMU), GitLab to the
+  project's container registry for its runner's architecture (arm64) only.
 - After the build, both pipelines print the test totals and the `scripts/coverage.sh` line and
   publish the coverage report to their own host, as described under [Coverage](#coverage).
 
-To run the images from GHCR instead of building locally:
+To run the images from GHCR instead of building locally (`latest` is the newest release; use
+`edge` for the tip of `main`, or a version such as `1.0.0` to pin one):
 
 ```bash
 docker pull ghcr.io/dgreco/metacatalog:latest
 docker pull ghcr.io/dgreco/metacatalog/iceberg-catalog:latest
 docker pull ghcr.io/dgreco/metacatalog/hive-metastore:latest
 ```
+
+### Releases and Versioning
+
+Releases follow [Semantic Versioning](https://semver.org/): from 1.0.0 on, a breaking change to the
+REST API, the database schema or the configuration takes a new **major** version, new
+functionality a **minor** one, and a fix a **patch**. Every release is listed, with what changed, in
+[CHANGELOG.md](../CHANGELOG.md).
+
+**Branches and tags.**
+- `main` is where development happens. Its POMs always carry the next minor version as a
+  `-SNAPSHOT` (`1.1.0-SNAPSHOT` after 1.0.0).
+- A minor release is cut onto its own branch, `release/X.Y`, which from then on takes fixes only.
+- Each release is an annotated tag `vX.Y.Z` on its release branch. The tag pipeline is what builds
+  and publishes the release's images (see the table above); the GitLab and GitHub Releases carry
+  the changelog entry as notes.
+
+**Cutting a minor release** (`1.1.0` here):
+
+```bash
+git switch -c release/1.1 main                 # once main holds everything 1.1 is meant to have
+scripts/set-version.sh 1.1.0                    # every POM at once
+# CHANGELOG.md: rename "Unreleased" to "[1.1.0] - <date>" and open an empty "Unreleased" above it
+git commit -am "chore(release): 1.1.0"
+git push gitlab release/1.1 && git push origin release/1.1   # wait for both pipelines to pass
+git tag -a v1.1.0 -m "Meta Catalog 1.1.0"
+git push gitlab v1.1.0 && git push origin v1.1.0             # publishes the images
+scripts/release-notes.sh 1.1.0 > notes.md                    # notes for both Releases
+glab release create v1.1.0 --name "Meta Catalog 1.1.0" --notes-file notes.md
+gh release create v1.1.0 --title "Meta Catalog 1.1.0" --notes-file notes.md
+```
+
+Then open the next cycle on `main` through a merge request: `scripts/set-version.sh 1.2.0-SNAPSHOT`,
+with the dated changelog entry brought over from the release branch.
+
+**Patch releases.** A fix lands on `main` first, through a merge request as usual, and is then
+cherry-picked onto `release/X.Y`, which is bumped to `X.Y.Z+1` and tagged as above. A fix that only
+the old line needs goes straight to its release branch, then forward to `main` if it applies there.
+
+**What a version covers.** The three applications ship together under one number. The OpenAPI
+document carries its own `info.version`, the version of the REST contract, which moves only when
+the contract does. The schema is migrated forward by Flyway from one release to the next (see
+[Database Migrations](#database-migrations)).
 
 ### Stress Test (on demand)
 
@@ -1890,12 +1942,16 @@ It runs automatically on application startup and creates everything in one shot:
 | Procedures | `procedure_run` — the durable registry of async procedure runs (state, error, timestamps), so any replica can answer a poll and outcomes survive restarts |
 | Seed data | **None.** The baseline creates tables only — the built-in traits are installed at startup, not by SQL (see [Immutable model](#immutable-model)) |
 
-**This project does not support migrating an existing database.** The schema is always created from
-scratch, which is why there is one baseline instead of an incremental chain. When the model changes,
-edit `V1__initial_schema.sql` in place and recreate the database — do not add `V2`, `V3`, … files
-unless the project starts needing real migrations again. Editing the baseline changes its checksum,
-so any database that already ran the previous version will fail validation on startup until it is
-dropped and recreated.
+**From 1.0.0 on, the schema is migrated, never recreated.** `V1__initial_schema.sql` is the schema
+1.0.0 shipped, and it is frozen: a database created by any release must start on every later one.
+Every schema change is therefore a new versioned migration next to it — `V2__…`, `V3__…` — that
+upgrades a database in place, data included. An applied migration is never edited: Flyway checks
+each one's checksum on startup and refuses to start against a database that ran a different
+version of it.
+
+Before 1.0.0 the project had no released databases to upgrade, so the baseline was edited in place
+and databases were recreated. A database created from a pre-release build of `main` must still be
+recreated once (`make down ARGS=-v`).
 
 ## Monitoring & Management
 

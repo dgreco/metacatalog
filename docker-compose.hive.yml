@@ -14,7 +14,7 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: metacatalog-hive-metastore
-    image: metacatalog-hive-metastore:0.0.1-SNAPSHOT
+    image: metacatalog-hive-metastore:local
     container_name: metacatalog-hive-metastore
     depends_on:
       postgres:

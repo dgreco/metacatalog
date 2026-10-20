@@ -80,7 +80,7 @@ services:
       dockerfile: Dockerfile
       args:
         MODULE: metacatalog-iceberg-catalog
-    image: metacatalog-iceberg-catalog:0.0.1-SNAPSHOT
+    image: metacatalog-iceberg-catalog:local
     container_name: metacatalog-iceberg-catalog
     depends_on:
       postgres:

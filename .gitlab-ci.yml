@@ -3,7 +3,8 @@
 #
 # Stages
 #   verify   the README guard — no toolchain needed, fails in seconds
-#   build    ci/build.sh with coverage, then ci/publish-images.sh on main/master/develop
+#   build    ci/build.sh with coverage, then ci/publish-images.sh, which publishes a release tag
+#            (vX.Y.Z) as its version and main as `edge`; release/* branches build and test only
 #   deploy   publishes coverage: the report as a wiki page (where the README badge points) and,
 #            on an instance that has Pages, the browsable HTML site
 variables:
@@ -32,8 +33,10 @@ readme-sync:
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
+    - if: $CI_COMMIT_BRANCH =~ /^release\//
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 
-# Build, test, and (on main/master/develop) push the images to the GitLab registry.
+# Build, test, and push the images to the GitLab registry when the ref publishes any.
 build:
   stage: build
   image: maven:3-eclipse-temurin-25
@@ -56,9 +59,9 @@ build:
     - docker login -u "${CI_REGISTRY_USER}" -p "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
   script:
     - ci/build.sh
-    # The script itself skips branches that do not publish, and CI_COMMIT_BRANCH is empty
-    # on merge-request pipelines, so pass a harmless value there.
-    - IMAGE_BASE="$CI_REGISTRY_IMAGE" GIT_BRANCH="${CI_COMMIT_BRANCH:-merge-request}" GIT_SHA="$CI_COMMIT_SHORT_SHA" ci/publish-images.sh
+    # The script decides what each ref publishes: a release tag its version, main `edge`, a
+    # merge request (no branch, no tag) nothing.
+    - IMAGE_BASE="$CI_REGISTRY_IMAGE" GIT_BRANCH="${CI_COMMIT_BRANCH:-}" GIT_TAG="${CI_COMMIT_TAG:-}" GIT_SHA="$CI_COMMIT_SHORT_SHA" RELEASE_REMOTE="$CI_REPOSITORY_URL" ci/publish-images.sh
   # Scraped from the job log by the `coverage` keyword, which is what puts the number on the MR
   # widget, the pipeline page and the project badge. The line comes from scripts/coverage.sh so
   # that the two pipelines cannot disagree about what the project's coverage is.
@@ -91,6 +94,8 @@ build:
     - if: $CI_COMMIT_BRANCH == 'master'
     - if: $CI_COMMIT_BRANCH == 'main'
     - if: $CI_COMMIT_BRANCH == 'develop'
+    - if: $CI_COMMIT_BRANCH =~ /^release\//
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
 
 # Coverage on the merge request diff itself: GitLab colours covered and uncovered lines from a
 # Cobertura report, and reads no other format. JaCoCo does not emit one, so scripts/ converts —

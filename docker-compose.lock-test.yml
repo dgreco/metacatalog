@@ -61,7 +61,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: metacatalog:0.0.1-SNAPSHOT
+    image: metacatalog:local
     container_name: app-1
     depends_on:
       postgres:
@@ -86,7 +86,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: metacatalog:0.0.1-SNAPSHOT
+    image: metacatalog:local
     container_name: app-2
     depends_on:
       postgres:
