@@ -12,7 +12,7 @@
 
     <groupId>it.davidgreco</groupId>
     <artifactId>metacatalog</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>Meta Catalog</name>
     <description>Metadata management system: entities, entity types, traits, relationships, mappings and
@@ -51,7 +51,7 @@
 
     <properties>
         <!-- Project Properties -->
-        <project.version>0.0.1-SNAPSHOT</project.version>
+        <project.version>1.0.0</project.version>
         <java.version>25</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
