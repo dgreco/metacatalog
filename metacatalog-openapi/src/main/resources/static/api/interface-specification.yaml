@@ -1131,7 +1131,9 @@ paths:
       summary: Get a list of entities
       description: >
         Lists entities, optionally narrowed to a single entity type and filtered by a JSON path
-        expression. Omit entityTypeName to list entities of every type.
+        expression. Omit entityTypeName to list entities of every type. The entities of frozen
+        copies of past aggregate versions are left out; reach them through the frozenRootId of
+        their version.
       operationId: getEntities
       parameters:
         - in: query
@@ -1222,7 +1224,8 @@ paths:
       description: >
         Replaces the values of an existing entity. The entity type cannot be changed.
         Entities whose type is the target of a mapping relationship cannot be updated
-        through this endpoint.
+        through this endpoint, and neither can the entities of a frozen copy of a past
+        aggregate version.
       operationId: updateEntity
       parameters:
         - in: path
@@ -1330,7 +1333,10 @@ paths:
         Returns the version history of an entity whose type carries the built-in Versionable
         trait, oldest first. Every version has a snapshot, the current one included, so the last
         element always equals the live entity. An entity that has never been versioned returns an
-        empty list. History is read-only and is deleted together with the entity.
+        empty list. Snapshots cannot be changed. Past versions can be deleted, one at a time or
+        all at once, and the whole history is deleted together with the entity. Every past
+        version of an aggregate root also has a frozen copy, a runnable aggregate whose root is
+        frozenRootId.
       operationId: listEntityVersions
       parameters:
         - in: path
@@ -1350,6 +1356,45 @@ paths:
                   $ref: '#/components/schemas/EntityVersion'
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete every past version of an entity
+      description: >
+        Deletes every version but the current one, together with the frozen copies of the past
+        versions of an aggregate root. Version numbers are not reused. Refused while an entity of
+        one of those copies is still PROVISIONED or AUTHORIZED - a copy's resources are named by
+        its values, so unless those changed they are the live aggregate's own, and the refusal
+        says so.
+      operationId: deleteAllEntityVersions
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Entity Id
+          schema:
+            type: string
+      responses:
+        204:
+          description: Past versions deleted
+        400:
+          description: A frozen copy is still provisioned or authorized
           content:
             application/json:
               schema:
@@ -1394,6 +1439,51 @@ paths:
                 $ref: '#/components/schemas/EntityVersion'
         400:
           description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Entity or version not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+    delete:
+      tags:
+        - Meta Catalog Manager
+      summary: Delete a past version of an entity
+      description: >
+        Deletes one past version and relinks the version chain around it; version numbers are not
+        reused. The current version cannot be deleted. The version's frozen copy is deleted with
+        it, unless a remaining version shares that copy (consecutive versions that differ only in
+        run results share one). Refused while an entity of the copy is still PROVISIONED or
+        AUTHORIZED.
+      operationId: deleteEntityVersion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Entity Id
+          schema:
+            type: string
+        - in: path
+          name: version
+          required: true
+          description: Version number
+          schema:
+            type: integer
+      responses:
+        204:
+          description: Version deleted
+        400:
+          description: The version is the current one, or its frozen copy is still applied
           content:
             application/json:
               schema:
@@ -1989,7 +2079,10 @@ paths:
         fails if any resource did. With async=true the plan is still built and validated
         synchronously (a missing aggregate or an illegitimate root fails immediately), but the
         call returns 202 with a schedule id to poll via GET /procedure/{scheduleId}. Each
-        resource is left PROVISIONED, or FAILED with the error in provisioningResult.
+        resource is left PROVISIONED, or FAILED with the error in provisioningResult. The id may be
+        the frozenRootId of a past version: the run then acts on that version's frozen copy and
+        records its results there, leaving the live aggregate alone. Its resources are named by
+        its values, though, so unless those changed they are the live aggregate's own.
       operationId: provisionAggregate
       parameters:
         - in: path
@@ -2045,7 +2138,10 @@ paths:
         the reverse of the order they were provisioned, so nothing is removed while another
         resource still depends on it. Synchronous by default, like provisioning; async=true
         behaves exactly as it does there. Each resource is left UNPROVISIONED, or FAILED with the
-        error in provisioningResult.
+        error in provisioningResult. The id may be
+        the frozenRootId of a past version: the run then acts on that version's frozen copy and
+        records its results there, leaving the live aggregate alone. Its resources are named by
+        its values, though, so unless those changed they are the live aggregate's own.
       operationId: unprovisionAggregate
       parameters:
         - in: path
@@ -2106,7 +2202,10 @@ paths:
         is still built and validated synchronously (a missing aggregate or an illegitimate root
         fails immediately), but the call returns 202 with a schedule id to poll via GET
         /procedure/{scheduleId}. Each resource is left AUTHORIZED, or FAILED with the error in
-        authorizationResult; the root records the whole run's outcome in the same fields.
+        authorizationResult; the root records the whole run's outcome in the same fields. The id may be
+        the frozenRootId of a past version: the run then acts on that version's frozen copy and
+        records its results there, leaving the live aggregate alone. Its resources are named by
+        its values, though, so unless those changed they are the live aggregate's own.
       operationId: authorizeAggregate
       parameters:
         - in: path
@@ -2162,7 +2261,10 @@ paths:
         aggregate, in the reverse of the order they were authorized, so nothing is left holding a
         grant on something it can no longer reach. Synchronous by default, like authorization;
         async=true behaves exactly as it does there. Each resource is left REJECTED, or FAILED
-        with the error in authorizationResult.
+        with the error in authorizationResult. The id may be
+        the frozenRootId of a past version: the run then acts on that version's frozen copy and
+        records its results there, leaving the live aggregate alone. Its resources are named by
+        its values, though, so unless those changed they are the live aggregate's own.
       operationId: rejectAggregate
       parameters:
         - in: path
@@ -2419,6 +2521,18 @@ components:
             The entity's current version number, present only once the entity has been versioned
             because its type carries the built-in Versionable trait. Starts at 1 and is bumped on
             every change to the values; see GET /entity/{id}/versions for the history.
+        frozenVersionOf:
+          type: string
+          readOnly: true
+          description: >
+            Present only on an entity of a frozen copy - the runnable copy of a past version of an
+            aggregate root: the id of the live root it is a version of. A frozen copy accepts
+            nothing but the results of function runs, and is left out of entity listings.
+        frozenVersion:
+          type: integer
+          readOnly: true
+          description: >
+            Present only on an entity of a frozen copy: the version of the live root it captures.
     EntityVersion:
       type: object
       description: >
@@ -2469,6 +2583,15 @@ components:
             root, every part reachable through HAS_PART with its values, the DEPENDS_ON links
             between them, and the entities derived from any of them by mappings. Absent for an
             entity outside an aggregate.
+        frozenRootId:
+          type: string
+          readOnly: true
+          description: >
+            Only on a past version of an aggregate root - the id of the root of its frozen copy: a
+            real aggregate cloned from this version, its mapped entities derived afresh, on which
+            provision, unprovision, authorize and reject can still run (POST
+            /aggregate/{frozenRootId}/provision and so on). Absent for the current version, which is
+            the live aggregate itself. Versions that differ only in run results share one copy.
     Mapping:
       type: object
       description: >

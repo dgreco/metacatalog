@@ -268,6 +268,18 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity deleteEntityVersion(String id, Integer version) {
+    entityService.deleteVersion(id, version);
+    return status(204).build();
+  }
+
+  @Override
+  public ResponseEntity deleteAllEntityVersions(String id) {
+    entityService.deleteAllVersions(id);
+    return status(204).build();
+  }
+
+  @Override
   public ResponseEntity<List<EntityVersion>> listAllEntityVersions() {
     var dtos = entityService.listAllVersions().stream().map(dtoMapper::entityVersionToDto).toList();
     return status(200).contentType(MediaType.APPLICATION_JSON).body(dtos);

@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-410-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-431-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -29,7 +29,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Entity Types**: Define and manage entity type hierarchies
 - **Traits**: Reusable characteristics applicable to entities
 - **Type Versioning**: Immutable version history for entity types and traits — every update creates a new version, old versions stay readable and deletable, and the version chain is shown on the graph
-- **Entity Versioning**: Every instance of a type carrying the built-in `Versionable` trait keeps a read-only history — each change to its values is recorded as a numbered version, readable through the API, the UI, the graph and SPARQL (see [Entity versioning](#entity-versioning))
+- **Entity Versioning**: Every instance of a type carrying the built-in `Versionable` trait keeps a read-only history — each change to its values is recorded as a numbered version, readable through the API, the UI, the graph and SPARQL (see [Entity versioning](#entity-versioning)). Each past version of an aggregate root is also a frozen, runnable copy that can still be provisioned or authorized but never changed (see [Running functions on past versions](#running-functions-on-past-versions))
 - **Relationship Management**: Complex relationship mapping between entities
 - **Mappings**: Rule-based transformation of source entities into target entity types, evaluated automatically on source create/update (see [Mappings](#mappings))
 - **JSON Schema Validation**: Validate entity attributes against schemas
@@ -305,13 +305,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 217 · ui 77 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **410, 0 failures**.
+for the Testcontainers PostgreSQL): core 229 · ui 82 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 14 · sparql 10 · provisioning-tasks 5 · application 10 = **431, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**56.4% of instructions, 39.4% of branches, 58.6% of lines**.
+**58.2% of instructions, 41.1% of branches, 60.3% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -858,9 +858,9 @@ once per transaction (see [Versionable aggregates](#versionable-aggregates)).
 - **Concurrent writers are serialised per entity** with a `SELECT ... FOR UPDATE` row lock, so two
   updates of the same entity always get consecutive version numbers.
 
-History is **append-only**: no endpoint edits, deletes or restores a single version. It is deleted
-together with its entity, by `DELETE /entity/{id}` or by deleting the aggregate the entity belongs
-to.
+A version is never edited or restored. **Past versions can be deleted**, one at a time or all at
+once (see [Deleting versions](#deleting-versions)), and the whole history is deleted together with
+its entity, by `DELETE /entity/{id}` or by deleting the aggregate the entity belongs to.
 
 ### Reading the history
 
@@ -896,6 +896,22 @@ The same history is visible in three other places:
   `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself
   carries `mt:version`.
 
+### Deleting versions
+
+- `DELETE /metacatalog/v1/entity/{id}/versions/{version}` deletes one **past** version. The version
+  after it is relinked to the one before it.
+- `DELETE /metacatalog/v1/entity/{id}/versions` deletes every past version and keeps the current
+  one, which then has no predecessor.
+- **The current version cannot be deleted** (`400`): it is the live entity.
+- **Numbers are never reused.** The next version recorded still follows the current one, so a
+  history can have gaps (`v1, v3`).
+- **For an aggregate root, a version's frozen copy goes with it** (see
+  [Running functions on past versions](#running-functions-on-past-versions)), unless another
+  remaining version shares that copy. The delete is refused (`400`) while an entity of a copy it
+  would remove is still `PROVISIONED` or `AUTHORIZED`; the refusal names the version and the entity.
+- **UI:** the history page has a **×** on each past version and a **Delete all versions** button,
+  as the type versions page does.
+
 ### Versionable aggregates
 
 When the versionable type is an **aggregate root** (it carries `Aggregate` but not
@@ -927,7 +943,9 @@ When the versionable type is an **aggregate root** (it carries `Aggregate` but n
 - **Concurrent writers.** The root is locked and re-read when the version is taken. Concurrent
   changes to the same aggregate therefore get consecutive numbers, and recording one writer's part
   edit never writes back a stale copy of the root over another writer's root edit.
-- **Deleting.** Deleting the aggregate (`DELETE /aggregate/{id}`) deletes the root's history with it.
+- **Deleting.** Deleting the aggregate (`DELETE /aggregate/{id}`) deletes the root's history and
+  its frozen copies with it. It is refused while an entity of a copy is still `PROVISIONED` or
+  `AUTHORIZED` (see [Running functions on past versions](#running-functions-on-past-versions)).
 
 There is one difference from an entity outside an aggregate. A root type that gains `Versionable`
 later gets **no backfill**: its first version is the aggregate as it stands when its first change
@@ -954,6 +972,90 @@ copy shows:
 So a past version shows the aggregate it recorded, not today's. SPARQL exposes the tree as
 `mt:aggregate` on the `mt:EntityVersion`.
 
+### Running functions on past versions
+
+Every past version of a versionable aggregate root is also a **frozen copy**: a real aggregate,
+cloned from the tree that version recorded, that functions such as provisioning and authorization
+can still run on, and that nothing else can change.
+
+**What a copy holds.**
+- **The root and every part,** with the values and the type version they had at that version. Every
+  entity of the copy carries `frozenVersionOf` (the live root's id) and `frozenVersion` (the version
+  number).
+- **No run results.** Every status, result and grants field (`provisioningStatus`,
+  `authorizationResult`, `effectiveGrants`, …) is left behind, so a copy's statuses only ever
+  record runs made on the copy. The history JSON still shows what the live aggregate had.
+- **Its own links.** `HAS_PART` and `DEPENDS_ON` are replicated inside the copy. A dependency on an
+  entity outside the aggregate is dropped, so a copy never links to a live entity.
+- **Its derived entities, derived afresh** from the cloned parts with the **current** mapping
+  rules, not cloned from the recorded ones. That is what makes the copy complete and runnable: the
+  resources a provisioning run acts on are derived entities.
+
+**When a copy is made.** Right after the transaction that records a new version commits, the
+version it supersedes is frozen. The cloning runs in a transaction of its own, under the live
+root's row lock, and each part's derivation in another one; a past version that cannot be
+derived is logged and never fails the change that superseded it. Each freeze also catches up any
+past version still without a copy. **The current version never has one**: it is the live
+aggregate itself.
+
+**Versions that differ only in run results share one copy.** Since run results are not copied,
+their copies would be identical. A provisioning run records versions as statuses change, but makes
+no new copy; a copy is made only when a version changes the parts, their values or their links.
+
+**Finding a copy.**
+- **API:** `EntityVersion.frozenRootId` is the copy's root, absent on the current version.
+  `GET /entity/{frozenRootId}` and `GET /aggregate/{frozenRootId}` read it.
+- **Hidden everywhere else:** copies are left out of `GET /entity`, `GET /entity/relationships`,
+  the mapping instances, the Instances page, the graph and SPARQL.
+- **UI:** on the history page, each past version with a copy has **Open** (the copy as an
+  aggregate), the statuses its runs left, and the run buttons its root's type qualifies for
+  (Provision, Unprovision, Authorize, Reject). A run comes back to the history page with the usual
+  progress popup. The instance page of a copy's entity says which version it belongs to and offers
+  no Edit.
+
+**Running a function.** The endpoints are the ones for a live aggregate, given the copy's root:
+
+```bash
+COPY=$(curl -s http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1 | jq -r .frozenRootId)
+curl -X POST http://localhost:8080/metacatalog/v1/aggregate/$COPY/provision
+```
+
+The run acts on the copy's resources and writes its results onto the copy. The live aggregate does
+not move, and no version of either is recorded.
+
+> **A copy's resources are the live aggregate's resources** unless the values that name them have
+> changed. Resources are identified by their values (an S3 path, a table name), so provisioning a
+> past version whose port is still called `op1` creates, or finds, the same S3 folder the live
+> aggregate uses, and **unprovisioning it tears that folder down under the live aggregate too.**
+> The demo's script tasks look entities up by name through the API, so they also find the live
+> entities rather than the copy's. Run functions on a past version only when you mean to act on
+> what it describes.
+
+**Frozen means unmodifiable.** On a copy's entities, `PUT /entity/{id}`, `DELETE /entity/{id}`,
+linking, unlinking and `DELETE /aggregate/{id}` are all refused (`400`), naming the version. The
+only write a copy accepts is a run's own status write-back, and only to the status, result and
+grants fields. The mapping updater never re-derives a copy, so a later change to a mapping rule
+leaves existing copies as they were.
+
+**Deleting.** A copy goes with its version (see [Deleting versions](#deleting-versions)) or with
+the live aggregate. Both are refused while any entity of the copy, the root or a resource, is
+still `PROVISIONED` or `AUTHORIZED`: a failed run can leave a resource provisioned under a root
+that is not, and deleting the copy would lose the only record of it. Unprovision or reject that
+version first.
+
+**What history costs.**
+- **Size:** a copy is made only when parts or links change. In the demo that is about five entities
+  and ten relationship and mapping rows per copy, derived resources included.
+- **The model:** copies count like any entity. A mapping rule a copy derives through cannot be
+  deleted, and neither can a type version a copy is pinned to. Removing a trait relationship a
+  copy's link relies on is refused as for any link. Each refusal names the version; delete the
+  version, or all of them, first.
+- **Unlinking slows down:** the check that a link is not a mapping path re-resolves every mapping
+  instance, copies included.
+- **Every version is followed by a freeze,** a status write included, and each freeze reads every
+  recorded version of the root to find the ones still without a copy. That is cheap at the demo's
+  scale and grows with the length of the history; deleting old versions keeps it short.
+
 ### In the demo
 
 The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`. It is an aggregate
@@ -967,13 +1069,17 @@ and Athena table derived from them.
   of the two resources records its own status, then the run's outcome is written onto the root.
 - **Graph:** tick *Show entities* to see the chain grow behind `dp1`, each past version with its
   own copy of the data product.
+- **Past versions:** after an edit, the version before it has a frozen copy. On `dp1`'s history
+  page, **Provision** on that version runs the demo's tasks on the copy; a lifecycle run on the
+  live `dp1` adds versions but no new copy.
 
 ### Interaction with type versions
 
 A type version that entity history still references cannot be deleted, just like one a live entity
 is pinned to. The refusal is a `400` that counts the entity versions referencing it. Only mapped
 entities can trigger it: they are re-pinned when regenerated, so their older versions can be the last
-references to a type version.
+references to a type version. The entities of frozen copies pin their type versions too, and the
+refusal says how many of the entities it counts are in copies.
 
 ## Mappings
 
@@ -1534,7 +1640,8 @@ dangling link, a stranded entity, or a mapping that can no longer derive its tar
 | Call | Rule |
 | --- | --- |
 | `DELETE /entity/{id}` | Refuses any entity that still has links. It is never a way to dismantle an aggregate piecemeal. An entity's [version history](#entity-versioning), if it has one, is deleted with it. |
-| `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction. Refused when a member is linked to an entity outside the aggregate, or is itself a mapping target. |
+| `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction, with the root's history and the [frozen copies](#running-functions-on-past-versions) of its past versions. Refused when a member is linked to an entity outside the aggregate, or is itself a mapping target, or while an entity of a frozen copy is still `PROVISIONED` or `AUTHORIZED`. |
+| `DELETE /entity/{id}/versions[/{n}]` | Deletes one past version, or all of them, with their frozen copies. The current version stays; see [Deleting versions](#deleting-versions). |
 | `DELETE /entity/link/...` | Refused for a `HAS_PART` / `IS_PART_OF` link whose containing side implements the `Aggregate` trait — containment is what makes a part reachable from its root, so detaching one strands it. Also refused when an existing mapping resolves an entity path reference *through* the link. `DEPENDS_ON` links, and containment between entities that are not aggregates, stay removable. |
 | `DELETE /trait/link/...` | Refused when an existing link between entity instances relies on the trait relationship. A link is only admitted because a trait relationship sanctions it, so removing the last one that does would leave the link with nothing justifying it. |
 
@@ -1718,7 +1825,7 @@ The build will fail if:
 The schema is owned by Flyway (see [Database Migrations](#database-migrations)
 below) and consists of 13 tables covering entity types, traits, entities, their
 relationships, the mapping system, the entity lifecycle audit log, the async
-procedure-run registry, and the append-only version history for types and for
+procedure-run registry, and the version history for types and for
 versionable entities.
 
 ![E/R diagram of the Meta Catalog database schema](docs/er-diagram.png)
@@ -1741,6 +1848,12 @@ Notes:
   state was validated against (`entity_type_version_id`), and chains its
   snapshots through `previous_version_id`. The entity's current number is
   mirrored on `entity.version`, which is `NULL` for an entity never versioned.
+- A frozen copy of a past aggregate version is made of ordinary `entity`,
+  `entity_relationship` and `mapping_entity_relationship` rows. Its entities carry
+  `entity.frozen_version_of` (a foreign key to the live root) and
+  `entity.frozen_version`, both `NULL` on every live entity, and the version points
+  at the copy's root through `entity_version.frozen_root_id` (see
+  [Running functions on past versions](#running-functions-on-past-versions)).
 - `entity_lifecycle_event.entity_id` is a logical (non-FK-enforced) reference to
   `entity` — the migration does not create a foreign-key constraint for it.
 - Self-references model inheritance (`entity_type.father_id`, `trait.father_id`)
@@ -1770,7 +1883,7 @@ It runs automatically on application startup and creates everything in one shot:
 | --- | --- |
 | Types | `entity_type`, `trait` (each with `version` / `version_group_id`) and the `type_traits` join table |
 | Version history | Append-only `entity_type_version` / `trait_version` snapshot tables (see [Type Versioning](#type-versioning)) |
-| Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)), and `entity_version`, the append-only history of versionable entities (see [Entity versioning](#entity-versioning)) |
+| Entities | `entity`, pinned to the exact `EntityTypeVersion` it was created against (see [Entity pinning](#entity-pinning)), and `entity_version`, the history of versionable entities (see [Entity versioning](#entity-versioning)); frozen copies of past aggregate versions are `entity` rows marked by `frozen_version_of` |
 | Relationships | `trait_relationship`, `entity_relationship`, `mapping_type_relationship`, `mapping_entity_relationship` |
 | Lifecycle | `entity_lifecycle_event` + its sequence |
 | Procedures | `procedure_run` — the durable registry of async procedure runs (state, error, timestamps), so any replica can answer a poll and outcomes survive restarts |

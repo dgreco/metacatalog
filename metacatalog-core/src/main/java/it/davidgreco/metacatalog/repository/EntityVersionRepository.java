@@ -56,6 +56,15 @@ public interface EntityVersionRepository extends JpaRepository<EntityVersion, St
   long countByEntityTypeVersion(EntityTypeVersion entityTypeVersion);
 
   /**
+   * Finds the versions whose frozen copy is the one rooted at the given entity: one, or several
+   * when consecutive versions differ only in run results and share it.
+   *
+   * @param frozenRootId the id of the frozen copy's root
+   * @return the versions using that copy
+   */
+  List<EntityVersion> findByFrozenRootId(String frozenRootId);
+
+  /**
    * Deletes every snapshot of an entity.
    *
    * <p>One bulk statement rather than a derived delete: removing the rows one at a time would
@@ -67,4 +76,15 @@ public interface EntityVersionRepository extends JpaRepository<EntityVersion, St
   @Modifying
   @Query("DELETE FROM EntityVersion v WHERE v.entity = :entity")
   void deleteByEntity(@Param("entity") Entity entity);
+
+  /**
+   * Deletes every snapshot of an entity but one, in one statement for the reason {@link
+   * #deleteByEntity} gives.
+   *
+   * @param entity the entity whose history is removed
+   * @param keepId the id of the snapshot to keep
+   */
+  @Modifying
+  @Query("DELETE FROM EntityVersion v WHERE v.entity = :entity AND v.id <> :keepId")
+  void deleteByEntityExcept(@Param("entity") Entity entity, @Param("keepId") String keepId);
 }

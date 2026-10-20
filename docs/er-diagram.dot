@@ -60,6 +60,8 @@ digraph ER {
             <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
             <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">entity_type_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
             <TR><TD></TD><TD ALIGN="LEFT">version</TD><TD ALIGN="LEFT">int</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">frozen_version_of</TD><TD ALIGN="LEFT">varchar</TD></TR>
+            <TR><TD></TD><TD ALIGN="LEFT">frozen_version</TD><TD ALIGN="LEFT">int</TD></TR>
         </TABLE>
     >];
 
@@ -74,6 +76,7 @@ digraph ER {
             <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">previous_version_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
             <TR><TD></TD><TD ALIGN="LEFT">created_at</TD><TD ALIGN="LEFT">timestamp</TD></TR>
             <TR><TD></TD><TD ALIGN="LEFT">aggregate</TD><TD ALIGN="LEFT">jsonb</TD></TR>
+            <TR><TD ALIGN="LEFT"><B>FK</B></TD><TD ALIGN="LEFT">frozen_root_id</TD><TD ALIGN="LEFT">varchar</TD></TR>
         </TABLE>
     >];
 
@@ -200,4 +203,6 @@ digraph ER {
     entity             -> entity_version     [arrowhead=crow,  label="history"];
     entity_type_version -> entity_version    [arrowhead=crow,  label="validated against"];
     entity_version     -> entity_version     [taillabel="previous_version", labeldistance=2, dir=back, arrowtail=crow];
+    entity             -> entity             [taillabel="frozen_version_of", labeldistance=2, dir=back, arrowtail=crow];
+    entity             -> entity_version     [arrowhead=crow,  label="frozen copy (frozen_root_id)"];
 }

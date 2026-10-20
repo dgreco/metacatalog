@@ -82,6 +82,10 @@ public class MappedEntityService {
   /**
    * Creates mapped entities for the given source entity ID.
    *
+   * <p>A source belonging to a frozen copy of a past aggregate version (see {@link
+   * FrozenVersionService}) derives entities that belong to the same copy, chained ones included:
+   * they carry its frozen markers, record no version and emit no lifecycle event.
+   *
    * @param sourceEntityId the ID of the source entity to process
    */
   public void createMappedEntities(String sourceEntityId) {
@@ -135,14 +139,18 @@ public class MappedEntityService {
             mappedEntity.setEntityType(targetEntityType);
             mappedEntity.setEntityTypeVersion(targetVersion);
             mappedEntity.setValues(mappedValues);
+            // Derived inside a frozen copy of a past aggregate version, it belongs to that copy.
+            mappedEntity.setFrozenVersionOf(sourceEntity.getFrozenVersionOf());
+            mappedEntity.setFrozenVersion(sourceEntity.getFrozenVersion());
             entityRepository.save(mappedEntity);
             entityVersionRecorder.recordCreated(mappedEntity);
-            entityLifeCycleEventRepository.save(
-                new EntityLifeCycleEvent(
-                    mappedEntity.getId(),
-                    mappedEntity.getEntityType().getName(),
-                    EntityLifeCycleEvent.ENTITY_CREATED,
-                    EntityLifeCycleEvent.STATUS_NO_PROCESSING));
+            if (!mappedEntity.isFrozen())
+              entityLifeCycleEventRepository.save(
+                  new EntityLifeCycleEvent(
+                      mappedEntity.getId(),
+                      mappedEntity.getEntityType().getName(),
+                      EntityLifeCycleEvent.ENTITY_CREATED,
+                      EntityLifeCycleEvent.STATUS_NO_PROCESSING));
             var mappingEntityRelationship = new MappingEntityRelationship();
             mappingEntityRelationship.setSource(sourceEntity);
             mappingEntityRelationship.setTarget(mappedEntity);
@@ -281,6 +289,12 @@ public class MappedEntityService {
                     "Source entity type "
                         + sourceEntityType.getName()
                         + " is a target entity type");
+              // A frozen copy keeps the entities it was derived with: re-deriving them would change
+              // a past version. Nothing emits events for a copy, so this is only a backstop.
+              if (sourceEntity.isFrozen()) {
+                log.info("Not re-deriving entity {}: it belongs to a frozen copy", sourceEntityId);
+                return;
+              }
               new UpdateMappedEntities().updateMappedEntities(sourceEntityId);
             });
     log.info("Updated mapped entities for source entity with ID: {}", sourceEntityId);

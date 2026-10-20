@@ -89,4 +89,13 @@ public class EntityVersion {
   @Type(JsonBinaryType.class)
   @Column(name = "aggregate", columnDefinition = "jsonb")
   private JsonNode aggregate;
+
+  /**
+   * For a past version of an aggregate root, the id of the root of its frozen copy: the runnable
+   * aggregate functions such as provisioning can still be run on. {@code null} for the current
+   * version and for entities outside the aggregate model. Versions that differ only in run results
+   * share one copy.
+   */
+  @Column(name = "frozen_root_id")
+  private String frozenRootId;
 }

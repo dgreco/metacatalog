@@ -545,7 +545,9 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
    */
   private void checkIsUnreferenced(EntityTypeVersion snapshot, String name) {
     var entities = entityRepository.countByEntityTypeVersion(snapshot);
-    if (entities > 0)
+    if (entities > 0) {
+      // Past aggregate versions pin the model too; their copies cannot be migrated, only deleted.
+      var frozen = entityRepository.countByEntityTypeVersionAndFrozenVersionOfIsNotNull(snapshot);
       throw new ServiceError(
           "Version "
               + snapshot.getVersion()
@@ -556,7 +558,14 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               + entities
               + " entit"
               + (entities == 1 ? "y" : "ies")
+              + (frozen == 0
+                  ? ""
+                  : ", "
+                      + frozen
+                      + " of them in frozen copies of past aggregate versions, which go only with"
+                      + " their version")
               + "; delete or migrate them first");
+    }
     var history = entityVersionRepository.countByEntityTypeVersion(snapshot);
     if (history > 0)
       throw new ServiceError(
@@ -569,7 +578,7 @@ public class EntityTypeServiceImpl implements EntityTypeService, ImmutableEntity
               + history
               + " entity version"
               + (history == 1 ? "" : "s")
-              + "; delete the entities whose history records it first");
+              + "; delete those versions, or the entities whose history records it, first");
   }
 
   /**

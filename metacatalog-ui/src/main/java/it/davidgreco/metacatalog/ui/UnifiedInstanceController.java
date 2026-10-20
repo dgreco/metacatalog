@@ -264,6 +264,8 @@ class UnifiedInstanceController {
       addInstanceSchemaModel(types, entity, model);
       addValueRenderings(entity.getValues(), model);
       model.addAttribute("entityVersion", entity.getVersion().orElse(null));
+      model.addAttribute("frozenVersionOf", entity.getFrozenVersionOf().orElse(null));
+      model.addAttribute("frozenVersion", entity.getFrozenVersion().orElse(null));
       model.addAttribute("readOnly", true);
       return "instances-form";
     } catch (RuntimeException e) {
@@ -362,10 +364,12 @@ class UnifiedInstanceController {
 
   /**
    * The version history of an instance whose type carries the built-in {@code Versionable} trait,
-   * oldest first. Read-only: history is never edited, only appended to by updates.
+   * oldest first. Snapshots are never edited; past versions can be deleted, one or all at once.
    *
    * <p>Each version is labelled with the number of the type version its values were validated
-   * against (see {@link #typeVersionNumbers}).
+   * against (see {@link #typeVersionNumbers}). A past version of an aggregate root offers its
+   * frozen copy: open it as an aggregate, see the statuses runs left on it, and run the procedures
+   * its root's type qualifies for.
    */
   @GetMapping("/{id}/versions")
   @SuppressWarnings("unchecked")
@@ -375,8 +379,15 @@ class UnifiedInstanceController {
       var entity = (Entity) api.getEntity(id).getBody();
       var history = (List<EntityVersion>) api.listEntityVersions(id).getBody();
       var typeVersions = typeVersionNumbers();
+      var procedures =
+          typeCapabilities().actionsFor(entity.getEntityType()).stream()
+              .filter(AggregateAction::isProcedure)
+              .toList();
+      // Consecutive versions can share one copy; ask for each copy's statuses once.
+      var copyStatuses = new java.util.HashMap<String, List<String>>();
       var rows = new java.util.ArrayList<EntityVersionView>();
       for (var v : history) {
+        var copy = v.getFrozenRootId().orElse(null);
         rows.add(
             new EntityVersionView(
                 v.getVersion(),
@@ -384,7 +395,10 @@ class UnifiedInstanceController {
                 typeVersions.get(v.getEntityTypeVersionId()),
                 prettyJson(v.getValues()),
                 v.getCreatedAt(),
-                v.getAggregate().map(this::aggregateJson).orElse(null)));
+                v.getAggregate().map(this::aggregateJson).orElse(null),
+                copy,
+                copy == null ? List.of() : copyStatuses.computeIfAbsent(copy, this::runStatuses),
+                copy == null ? List.of() : procedures));
       }
       model.addAttribute("instanceId", id);
       model.addAttribute(
@@ -396,6 +410,93 @@ class UnifiedInstanceController {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
       return "redirect:/ui/instances";
     }
+  }
+
+  /**
+   * The statuses runs left on an entity, as {@code field: status}: every top-level field named
+   * {@code ...Status}. The field names are the capabilities' own, which this module cannot import,
+   * and matching the suffix keeps a new capability from needing a change here.
+   */
+  private List<String> runStatuses(String entityId) {
+    try {
+      var entity = (Entity) api.getEntity(entityId).getBody();
+      var values = jsonMapper.readTree(entity.getValues());
+      var statuses = new java.util.ArrayList<String>();
+      values
+          .properties()
+          .forEach(
+              field -> {
+                if (field.getKey().endsWith("Status") && field.getValue().isTextual())
+                  statuses.add(field.getKey() + ": " + field.getValue().asText());
+              });
+      return statuses;
+    } catch (RuntimeException | JsonProcessingException e) {
+      return List.of();
+    }
+  }
+
+  /**
+   * Runs a procedure on the frozen copy of a past version and comes back to the history page. The
+   * copy is looked up from the version rather than taken from the form, so the route only ever runs
+   * on a copy the history actually lists.
+   */
+  @PostMapping("/{id}/versions/{version}/procedure/{action}")
+  public String runProcedureOnVersion(
+      @PathVariable String id,
+      @PathVariable int version,
+      @PathVariable String action,
+      RedirectAttributes redirectAttributes) {
+    var procedure =
+        java.util.Arrays.stream(AggregateAction.values())
+            .filter(a -> a.isProcedure() && a.getPath().equals(action))
+            .findFirst();
+    try {
+      var copy =
+          ((EntityVersion) api.getEntityVersion(id, version).getBody())
+              .getFrozenRootId()
+              .orElse(null);
+      if (procedure.isEmpty())
+        redirectAttributes.addFlashAttribute("error", "Unknown aggregate procedure: " + action);
+      else if (copy == null)
+        redirectAttributes.addFlashAttribute(
+            "error", "Version " + version + " has no frozen copy to run " + action + " on.");
+      else launchProcedure(redirectAttributes, procedure.get(), copy);
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return historyOf(id);
+  }
+
+  /** Deletes one past version, with its frozen copy unless another version shares it. */
+  @PostMapping("/{id}/versions/{version}/delete")
+  public String deleteVersion(
+      @PathVariable String id, @PathVariable int version, RedirectAttributes redirectAttributes) {
+    try {
+      api.deleteEntityVersion(id, version);
+      redirectAttributes.addFlashAttribute("message", "Version " + version + " deleted.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return historyOf(id);
+  }
+
+  /** Deletes every past version and their frozen copies, keeping the current version. */
+  @PostMapping("/{id}/versions/delete-all")
+  public String deleteAllVersions(@PathVariable String id, RedirectAttributes redirectAttributes) {
+    try {
+      api.deleteAllEntityVersions(id);
+      redirectAttributes.addFlashAttribute("message", "Past versions deleted.");
+    } catch (RuntimeException e) {
+      redirectAttributes.addFlashAttribute("error", e.getMessage());
+    }
+    return historyOf(id);
+  }
+
+  private static String historyOf(String id) {
+    return "redirect:/ui/instances/"
+        + org.springframework.web.util.UriUtils.encodePathSegment(
+            id, java.nio.charset.StandardCharsets.UTF_8)
+        + "/versions";
   }
 
   /**

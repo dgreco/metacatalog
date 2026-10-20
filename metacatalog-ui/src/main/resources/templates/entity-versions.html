@@ -7,6 +7,7 @@
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
     <script th:src="@{/ui/js/flash.js}" defer></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
 <header class="topbar">
@@ -25,9 +26,20 @@
 <main>
     <div class="flash" th:if="${message}" th:text="${message}"></div>
     <div class="error" th:if="${error}" th:text="${error}"></div>
+    <!-- Seed for a run launched on a past version's frozen copy; see instances-list.html. -->
+    <div class="procedure-banner" id="procedure-banner"
+         th:if="${procedureScheduleId}"
+         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel},data-entity-id=${procedureEntityId},data-entity-type=${procedureEntityType}"
+         th:text="${procedureLabel} + ' in progress…'"></div>
 
     <div class="section-head">
         <h2>Version history <span class="empty">(oldest first)</span></h2>
+        <form method="post" th:if="${versions.size() > 1}"
+              th:action="@{/ui/instances/{id}/versions/delete-all(id=${instanceId})}"
+              class="inline-form"
+              data-confirm="Delete every past version, and its frozen copy? The current version is kept.">
+            <button type="submit" class="btn">Delete all versions</button>
+        </form>
     </div>
 
     <table th:if="${!versions.isEmpty()}">
@@ -37,6 +49,8 @@
             <th>Recorded</th>
             <th>Type version</th>
             <th>Values</th>
+            <th>Frozen copy</th>
+            <th></th>
         </tr>
         </thead>
         <tbody>
@@ -57,6 +71,32 @@
                     <pre class="schema document-pane" th:text="${v.aggregate}">{}</pre>
                 </details>
             </td>
+            <!-- A past version of an aggregate root is a runnable copy: open it, see what runs left
+                 on it, run the procedures its type offers. Nothing else can change it. -->
+            <td>
+                <th:block th:if="${v.frozenRootId != null}">
+                    <a class="btn-sm" th:href="@{/ui/aggregates/{id}(id=${v.frozenRootId})}"
+                       title="Open this version as an aggregate">Open</a>
+                    <span class="tag muted" th:each="status : ${v.copyStatuses}" th:text="${status}">status</span>
+                    <form th:each="action : ${v.actions}" method="post"
+                          th:action="@{/ui/instances/{id}/versions/{n}/procedure/{a}(id=${instanceId}, n=${v.version}, a=${action.path})}"
+                          class="inline-form"
+                          th:attr="data-confirm=|Run ${action.label} on version ${v.version}? Its resources are named by its values: unless those changed, they are the same resources the live aggregate uses.|">
+                        <button type="submit" class="btn-sm"
+                                th:title="|${action.title}, as it was at version ${v.version}|"
+                                th:text="${action.label}">Action</button>
+                    </form>
+                </th:block>
+                <span th:if="${v.frozenRootId == null and v.current and v.aggregate != null}" class="empty">the live aggregate</span>
+            </td>
+            <td>
+                <form method="post" th:if="${!v.current}"
+                      th:action="@{/ui/instances/{id}/versions/{n}/delete(id=${instanceId}, n=${v.version})}"
+                      class="inline-form"
+                      th:attr="data-confirm=|Delete version ${v.version}? This cannot be undone.|">
+                    <button type="submit" class="link-remove" title="Delete version">×</button>
+                </form>
+            </td>
         </tr>
         </tbody>
     </table>
@@ -64,5 +104,15 @@
         No versions recorded. Only instances of a type carrying the Versionable trait keep a history.
     </p>
 </main>
+<script>
+    // Confirm destructive submits (forms carrying a data-confirm message).
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm(form.getAttribute('data-confirm'))) {
+                e.preventDefault();
+            }
+        });
+    });
+</script>
 </body>
 </html>

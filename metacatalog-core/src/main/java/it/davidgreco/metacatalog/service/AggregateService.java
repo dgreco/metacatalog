@@ -201,11 +201,16 @@ public class AggregateService {
    * member is itself derived from a mapping source, in which case it belongs to the mapping engine
    * rather than to this aggregate.
    *
+   * <p>The frozen copies of the root's past versions go with it, unless one of them is still
+   * provisioned or authorized; a frozen copy itself cannot be deleted this way.
+   *
    * @param aggregateId the ID of the aggregate root entity to delete
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public void delete(String aggregateId) {
     log.info("Deleting aggregate: {}", aggregateId);
+    // A past version goes with its version (EntityService.deleteVersion) or its live root.
+    ServiceUtils.checkNotFrozen(entityService.read(aggregateId));
     var members = collectMembers(aggregateId);
     checkMembersAreSelfContained(members);
     // Children before parents: the reverse of the breadth-first order they were discovered in.

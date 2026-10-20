@@ -677,8 +677,12 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
                 + row.getSource().getName()
                 + " and trait "
                 + row.getTarget().getName()
-                + " and by no other; removing it would leave that link unjustified. Remove the link"
-                + " first.");
+                + " and by no other; removing it would leave that link unjustified. "
+                + (link.getSource().isFrozen()
+                    ? "The link belongs to "
+                        + ServiceUtils.describeFrozenCopy(link.getSource())
+                        + ", which cannot change; delete that version first."
+                    : "Remove the link first."));
       }
     }
   }

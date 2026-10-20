@@ -4,7 +4,9 @@ import static it.davidgreco.metacatalog.service.ServiceUtils.ENTITY_WITH_ID;
 import static it.davidgreco.metacatalog.service.ServiceUtils.NOT_FOUND;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import it.davidgreco.metacatalog.common.JsonUtils;
+import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityLifeCycleEvent;
@@ -14,8 +16,12 @@ import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class EntityServiceImpl implements EntityService {
 
   private static final String NO_PROCESSING = EntityLifeCycleEvent.STATUS_NO_PROCESSING;
+
+  private static final Set<String> RUN_FIELDS = BuiltInCapability.runFields();
 
   private final EntityTypeRepository entityTypeRepository;
 
@@ -163,6 +171,7 @@ public class EntityServiceImpl implements EntityService {
           entityRepository
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+      ServiceUtils.checkNotFrozen(entity);
 
       if (ServiceUtils.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
@@ -206,6 +215,10 @@ public class EntityServiceImpl implements EntityService {
    * <p>Intended for internal system use (e.g. the provisioning task writing back provisioning
    * status to a mapped entity). Validation still uses the entity's pinned schema.
    *
+   * <p>This is the one write a frozen copy of a past aggregate version accepts, and only for the
+   * fields a function run writes ({@link BuiltInCapability#runFields()}): running provisioning or
+   * authorization on a past version records its outcome on the copy.
+   *
    * @param entityId the ID of the entity to update
    * @param values a JSON string containing the new values for the entity
    */
@@ -219,6 +232,7 @@ public class EntityServiceImpl implements EntityService {
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
       var valuesJsonNode = jsonUtils.jsonMapper().readTree(values);
+      if (entity.isFrozen()) checkOnlyRunFieldsChange(entity, valuesJsonNode);
       var schema = entity.getEntityTypeVersion().getSchema();
       SchemaValidationError.validateOrThrow(jsonUtils.schemaOf(schema), valuesJsonNode);
       var previousValues = entity.getValues();
@@ -229,6 +243,33 @@ public class EntityServiceImpl implements EntityService {
     } catch (JsonProcessingException e) {
       throw new ServiceError(e.getMessage());
     }
+  }
+
+  private static void checkOnlyRunFieldsChange(Entity entity, JsonNode values) {
+    var previous = entity.getValues();
+    var fields = new TreeSet<String>();
+    previous.fieldNames().forEachRemaining(fields::add);
+    values.fieldNames().forEachRemaining(fields::add);
+    var changed =
+        previous.isObject() && values.isObject()
+            ? fields.stream()
+                .filter(field -> !RUN_FIELDS.contains(field))
+                .filter(
+                    field ->
+                        !previous
+                            .path(field)
+                            .equals(EntityVersionRecorder.BY_VALUE, values.path(field)))
+                .findFirst()
+            : Optional.of("values");
+    if (changed.isPresent())
+      throw new ServiceError(
+          ENTITY_WITH_ID
+              + entity.getId()
+              + " belongs to "
+              + ServiceUtils.describeFrozenCopy(entity)
+              + ", which accepts nothing but the results of function runs; "
+              + changed.get()
+              + " cannot change");
   }
 
   /**
@@ -247,6 +288,7 @@ public class EntityServiceImpl implements EntityService {
           entityRepository
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+      ServiceUtils.checkNotFrozen(entity);
 
       if (ServiceUtils.isMappingTargetEntityType(
           mappingEntityTypeRelationshipRepository, entity.getEntityType()))
@@ -287,6 +329,8 @@ public class EntityServiceImpl implements EntityService {
           entityRepository
               .findById(entityId)
               .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+      // Not even internally: a copy goes only with its version or its live root.
+      ServiceUtils.checkNotFrozen(entity);
       deleteAndRecord(entity);
       log.info("Deleted entity with id {} without checks", entityId);
     } catch (DataIntegrityViolationException e) {
@@ -294,9 +338,16 @@ public class EntityServiceImpl implements EntityService {
     }
   }
 
+  /**
+   * Deletes an entity with its history and, for an aggregate root, the frozen copies of its past
+   * versions — refused while one of them is still provisioned or authorized.
+   */
   private void deleteAndRecord(Entity entity) {
-    // History goes with the entity: the snapshots hold a foreign key onto it.
+    var copies = entityRepository.findByFrozenVersionOf(entity.getId());
+    checkNoneApplied(copies, "Cannot delete entity with id " + entity.getId());
+    // History goes with the entity, before its copies: the snapshots hold foreign keys onto both.
     entityVersionRepository.deleteByEntity(entity);
+    deleteCopies(copies);
     entityRepository.delete(entity);
     entityLifeCycleEventRepository.save(
         new EntityLifeCycleEvent(
@@ -304,6 +355,42 @@ public class EntityServiceImpl implements EntityService {
             entity.getEntityType().getName(),
             EntityLifeCycleEvent.ENTITY_DELETED,
             NO_PROCESSING));
+  }
+
+  /**
+   * Refuses to delete frozen copies while any of their entities — the root or a resource, since a
+   * failed run can leave resources provisioned under a root that is not — still holds what a run
+   * built up. Deleting the copy would lose the only record that it did.
+   */
+  private static void checkNoneApplied(Collection<Entity> copies, String refusal) {
+    for (var copy : copies)
+      for (var capability : BuiltInCapability.values()) {
+        var applied = capability.appliedStatusIn(copy.getValues());
+        if (applied.isEmpty()) continue;
+        throw new ServiceError(
+            refusal
+                + ": entity with id "
+                + copy.getId()
+                + " of "
+                + ServiceUtils.describeFrozenCopy(copy)
+                + " is "
+                + applied.get()
+                + ". Run the opposite function on that version first. A past version's resources"
+                + " are named by its values, as the live aggregate's are: unless those changed,"
+                + " they are the same real resources, and tearing them down tears down the live"
+                + " aggregate's too.");
+      }
+  }
+
+  /** Deletes the entities of frozen copies with every link and mapping instance they have. */
+  private void deleteCopies(Collection<Entity> copies) {
+    if (copies.isEmpty()) return;
+    // The bulk statements below run at once; anything still pending must reach the database first.
+    entityRepository.flush();
+    mappingEntityRelationshipRepository.deleteTouching(copies);
+    entityRelationshipRepository.deleteTouching(copies);
+    entityRepository.deleteAllInBatch(copies);
+    log.info("Deleted {} entities of frozen copies", copies.size());
   }
 
   /**
@@ -338,7 +425,7 @@ public class EntityServiceImpl implements EntityService {
               .orElseThrow(() -> new NotFoundException("Entity type " + typeName + NOT_FOUND));
       var qp = queryPath.trim();
       if (qp.isEmpty()) {
-        var result = entityRepository.findByEntityType(entityType);
+        var result = entityRepository.findByEntityTypeAndFrozenVersionOfIsNull(entityType);
         log.info("Listed entities with query path {}", queryPath);
         return result;
       } else {
@@ -355,14 +442,14 @@ public class EntityServiceImpl implements EntityService {
   @Transactional(propagation = Propagation.REQUIRED)
   public List<Entity> listAll() {
     log.info("Listing all entities");
-    return entityRepository.findAll();
+    return entityRepository.findByFrozenVersionOfIsNull();
   }
 
   @Override
   @Transactional(propagation = Propagation.REQUIRED)
   public List<EntityRelationship> listAllRelationships() {
     log.info("Listing all entity relationships");
-    return entityRelationshipRepository.findAll();
+    return entityRelationshipRepository.findAllBetweenLiveEntities();
   }
 
   @Override
@@ -395,6 +482,79 @@ public class EntityServiceImpl implements EntityService {
     return entityVersionRepository.findAllByOrderByEntityIdAscVersionAsc();
   }
 
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void deleteVersion(String entityId, int version) {
+    log.info("Deleting version {} of entity with id {}", version, entityId);
+    // The lock orders this against a recording or a freezing of the same entity.
+    var entity =
+        entityRepository
+            .findByIdForUpdate(entityId)
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    var versions = entityVersionRepository.findByEntityIdOrderByVersionAsc(entityId);
+    var doomed =
+        versions.stream()
+            .filter(v -> v.getVersion() == version)
+            .findFirst()
+            .orElseThrow(
+                () ->
+                    new NotFoundException(
+                        "Version " + version + " of " + ENTITY_WITH_ID + entityId + NOT_FOUND));
+    if (doomed == versions.getLast())
+      throw new ServiceError(
+          "Version "
+              + version
+              + " is the current version of entity with id "
+              + entityId
+              + "; only past versions can be deleted");
+    var remaining = versions.stream().filter(v -> v != doomed).toList();
+    var copyRootId = doomed.getFrozenRootId();
+    var copyRoot = Optional.ofNullable(copyRootId).flatMap(entityRepository::findById);
+    var sharers =
+        copyRootId == null
+            ? List.<EntityVersion>of()
+            : remaining.stream().filter(v -> copyRootId.equals(v.getFrozenRootId())).toList();
+    var copies =
+        copyRoot.isPresent() && sharers.isEmpty()
+            ? entityRepository.findByFrozenVersionOfAndFrozenVersion(
+                entityId, copyRoot.get().getFrozenVersion())
+            : List.<Entity>of();
+    checkNoneApplied(copies, "Cannot delete version " + version + " of entity with id " + entityId);
+
+    for (var next : remaining)
+      if (doomed.getId().equals(next.getPreviousVersionId()))
+        next.setPreviousVersionId(doomed.getPreviousVersionId());
+    // The successor must point past the doomed row before it goes: the key is checked per row.
+    entityVersionRepository.flush();
+    entityVersionRepository.delete(doomed);
+    entityVersionRepository.flush();
+    deleteCopies(copies);
+    // A shared copy outlives the version it was made for; name it after the first one still using
+    // it, so that what it says about itself stays true.
+    if (copyRoot.isPresent() && !sharers.isEmpty() && copyRoot.get().getFrozenVersion() == version)
+      entityRepository.renumberFrozenCopy(entityId, version, sharers.getFirst().getVersion());
+    log.info("Deleted version {} of entity with id {}", version, entity.getId());
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void deleteAllVersions(String entityId) {
+    log.info("Deleting the past versions of entity with id {}", entityId);
+    var entity =
+        entityRepository
+            .findByIdForUpdate(entityId)
+            .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + entityId + NOT_FOUND));
+    var current = entityVersionRepository.findFirstByEntityIdOrderByVersionDesc(entityId);
+    if (current.isEmpty()) return;
+    var copies = entityRepository.findByFrozenVersionOf(entityId);
+    checkNoneApplied(copies, "Cannot delete the past versions of entity with id " + entityId);
+    current.get().setPreviousVersionId(null);
+    entityVersionRepository.flush();
+    entityVersionRepository.deleteByEntityExcept(entity, current.get().getId());
+    deleteCopies(copies);
+    log.info("Deleted the past versions of entity with id {}", entityId);
+  }
+
   /**
    * Links two entities with a given relation type.
    *
@@ -405,6 +565,9 @@ public class EntityServiceImpl implements EntityService {
   @Transactional(propagation = Propagation.REQUIRED)
   public void link(String sourceId, RelationType relType, String targetId) {
     log.info("Linking entity with id {} with entity with id {}", sourceId, targetId);
+    // Before the loop and legitimacy checks, so a copy is refused as a copy whatever else is wrong.
+    entityRepository.findById(sourceId).ifPresent(ServiceUtils::checkNotFrozen);
+    entityRepository.findById(targetId).ifPresent(ServiceUtils::checkNotFrozen);
     // Check loops. The reachability walk below starts from the target's neighbours, so the
     // degenerate self-link would slip through it — and a self HAS_PART would make the aggregate
     // read recursion non-terminating. A trait may compose itself (type-level recursion is how a
@@ -521,6 +684,8 @@ public class EntityServiceImpl implements EntityService {
         entityRepository
             .findById(targetId)
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
+    ServiceUtils.checkNotFrozen(source);
+    ServiceUtils.checkNotFrozen(target);
     checkIsNotAggregateContainment(source, relType, target);
     var directRel =
         entityRelationshipRepository

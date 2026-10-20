@@ -11,6 +11,7 @@ import it.davidgreco.metacatalog.repository.*;
 import it.davidgreco.metacatalog.service.*;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -239,6 +240,7 @@ public class CoreConfig {
    *     for the entities derived from an aggregate's members
    * @param entityManager the shared entity manager, used to re-read an aggregate under a row lock
    *     when it is recorded at commit
+   * @param frozenVersionService the service that freezes superseded versions, looked up lazily
    * @return the entity version recorder
    */
   @Bean
@@ -247,13 +249,49 @@ public class CoreConfig {
       EntityVersionRepository entityVersionRepository,
       EntityRelationshipRepository entityRelationshipRepository,
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
-      jakarta.persistence.EntityManager entityManager) {
+      jakarta.persistence.EntityManager entityManager,
+      ObjectProvider<FrozenVersionService> frozenVersionService) {
     return new EntityVersionRecorder(
         entityRepository,
         entityVersionRepository,
         entityRelationshipRepository,
         mappingEntityRelationshipRepository,
-        entityManager);
+        entityManager,
+        frozenVersionService);
+  }
+
+  /**
+   * Creates the service that freezes the past versions of aggregate roots into runnable copies.
+   *
+   * @param entityRepository the entity repository
+   * @param entityTypeRepository the entity type repository
+   * @param entityTypeVersionRepository the entity type version repository
+   * @param entityVersionRepository the entity version history repository
+   * @param entityRelationshipRepository the entity relationship repository
+   * @param mappingEntityTypeRelationshipRepository the mapping type relationship repository
+   * @param mappedEntityService the mapped entity service, which derives a copy's entities
+   * @param transactionManager the transaction manager
+   * @return the frozen version service
+   */
+  @Bean
+  public FrozenVersionService frozenVersionService(
+      EntityRepository entityRepository,
+      EntityTypeRepository entityTypeRepository,
+      EntityTypeVersionRepository entityTypeVersionRepository,
+      EntityVersionRepository entityVersionRepository,
+      EntityRelationshipRepository entityRelationshipRepository,
+      MappingEntityTypeRelationshipRepository mappingEntityTypeRelationshipRepository,
+      MappedEntityService mappedEntityService,
+      PlatformTransactionManager transactionManager) {
+    return new FrozenVersionService(
+        entityRepository,
+        entityTypeRepository,
+        entityTypeVersionRepository,
+        entityVersionRepository,
+        entityRelationshipRepository,
+        mappingEntityTypeRelationshipRepository,
+        mappedEntityService,
+        transactionManager);
   }
 
   /**

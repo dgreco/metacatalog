@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -64,6 +65,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *       ServiceUtils#checkVersionableOnlyOnAggregateRoots}): their changes are versions of the
  *       root, and so are writes to their derived entities — a resource's status, say — except the
  *       mapping updater's own deriving and re-deriving ({@link #recordDerived}).
+ *   <li>Once a version of an aggregate root is committed, the versions it superseded are frozen
+ *       into runnable copies by {@link FrozenVersionService}. Nothing about a frozen copy is ever
+ *       recorded: the run results it accepts are not versions of anything.
  * </ul>
  */
 @Slf4j
@@ -75,7 +79,7 @@ public class EntityVersionRecorder {
    * integer node), as it does in {@code jsonb}. Without it, re-writing a number in a different
    * notation would record a version although the stored value is unchanged.
    */
-  private static final Comparator<JsonNode> BY_VALUE =
+  static final Comparator<JsonNode> BY_VALUE =
       (a, b) -> {
         if (a.equals(b)) return 0;
         if (a.isNumber() && b.isNumber()) return a.decimalValue().compareTo(b.decimalValue());
@@ -93,6 +97,12 @@ public class EntityVersionRecorder {
   private final EntityManager entityManager;
 
   /**
+   * Freezes the versions a newly recorded one supersedes. Looked up lazily: the freezing derives
+   * entities through {@link MappedEntityService}, which records through this class.
+   */
+  private final ObjectProvider<FrozenVersionService> frozenVersionService;
+
+  /**
    * Records version 1 of a newly saved entity, if its type is versionable. A versionable aggregate
    * root is recorded when the transaction commits instead, once its parts are in place.
    *
@@ -100,6 +110,7 @@ public class EntityVersionRecorder {
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public void recordCreated(Entity entity) {
+    if (entity.isFrozen()) return;
     if (isAggregateRoot(entity)) {
       if (isVersionable(entity)) recordAtCommit(entity.getId());
       return;
@@ -124,6 +135,8 @@ public class EntityVersionRecorder {
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public void recordUpdated(Entity entity, JsonNode previousValues, EntityTypeVersion previousPin) {
+    // A frozen copy is a past version: the run results it accepts are not a new one.
+    if (entity.isFrozen()) return;
     aggregateChanged(entity);
     recordOwnVersion(entity, previousValues, previousPin);
   }
@@ -143,6 +156,7 @@ public class EntityVersionRecorder {
    */
   @Transactional(propagation = Propagation.MANDATORY)
   public void recordDerived(Entity entity, JsonNode previousValues, EntityTypeVersion previousPin) {
+    if (entity.isFrozen()) return;
     if (isAggregateRoot(entity)) {
       if (isVersionable(entity)) recordAtCommit(entity.getId());
       return;
@@ -195,7 +209,8 @@ public class EntityVersionRecorder {
     var pending = new ArrayDeque<>(List.of(member));
     while (!pending.isEmpty()) {
       var current = pending.poll();
-      if (!seen.add(current.getId())) continue;
+      // A frozen copy's root is a versionable root too, and must never be versioned.
+      if (!seen.add(current.getId()) || current.isFrozen()) continue;
       var traits = ServiceUtils.traitNamesOf(current.getEntityType());
       if (traits.contains(BuiltInTraits.AGGREGATE)
           && !traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)) {
@@ -232,16 +247,36 @@ public class EntityVersionRecorder {
         pending.rootIds().add(rootId);
         return;
       }
-    var pending = new AggregatesToRecord(this, new LinkedHashSet<>(List.of(rootId)));
+    var pending =
+        new AggregatesToRecord(this, new LinkedHashSet<>(List.of(rootId)), new LinkedHashSet<>());
     TransactionSynchronizationManager.registerSynchronization(pending);
   }
 
-  /** The aggregates one transaction changed, recorded just before it commits. */
-  private record AggregatesToRecord(EntityVersionRecorder owner, Set<String> rootIds)
+  /**
+   * The aggregates one transaction changed, recorded just before it commits; and those that got a
+   * new version, whose superseded versions are frozen once it has.
+   */
+  private record AggregatesToRecord(
+      EntityVersionRecorder owner, Set<String> rootIds, Set<String> superseding)
       implements TransactionSynchronization {
     @Override
     public void beforeCommit(boolean readOnly) {
-      for (var rootId : List.copyOf(rootIds)) owner.recordAggregate(rootId);
+      for (var rootId : List.copyOf(rootIds))
+        if (owner.recordAggregate(rootId)) superseding.add(rootId);
+    }
+
+    /**
+     * Freezes in transactions of its own, after the commit: a copy is derived through path
+     * resolution, which is transactional and fails by marking the transaction it joins for
+     * rollback, and a past version that cannot be derived must not undo the change that superseded
+     * it. After completion rather than after commit because Spring logs what fails here instead of
+     * handing it to a caller whose change is already committed.
+     */
+    @Override
+    public void afterCompletion(int status) {
+      if (status != STATUS_COMMITTED) return;
+      for (var rootId : superseding)
+        owner.frozenVersionService.ifAvailable(service -> service.freezePastVersions(rootId));
     }
   }
 
@@ -253,18 +288,20 @@ public class EntityVersionRecorder {
    * row lock, which orders concurrent recordings of the same aggregate and gives a fresh root: the
    * managed copy may predate another writer's commit, and saving it with the new version number
    * would write its stale values back over that commit.
+   *
+   * @return whether a version was recorded that supersedes an earlier one
    */
-  private void recordAggregate(String rootId) {
+  private boolean recordAggregate(String rootId) {
     entityManager.flush();
     var root = entityManager.find(Entity.class, rootId);
-    if (root == null) return; // deleted in this same transaction, history and all
+    if (root == null) return false; // deleted in this same transaction, history and all
     entityManager.refresh(root, LockModeType.PESSIMISTIC_WRITE);
-    if (!isAggregateRoot(root) || !isVersionable(root)) return;
+    if (root.isFrozen() || !isAggregateRoot(root) || !isVersionable(root)) return false;
     var tree = treeOf(root, new HashSet<>(), true);
     var latest = entityVersionRepository.findFirstByEntityIdOrderByVersionDesc(rootId);
     if (latest.isPresent()
         && latest.get().getAggregate() != null
-        && latest.get().getAggregate().equals(BY_VALUE, tree)) return;
+        && latest.get().getAggregate().equals(BY_VALUE, tree)) return false;
     append(
         root,
         latest.map(EntityVersion::getId).orElse(null),
@@ -273,6 +310,7 @@ public class EntityVersionRecorder {
         root.getEntityTypeVersion(),
         tree);
     log.info("Recorded version {} of aggregate with root id {}", root.getVersion(), rootId);
+    return latest.isPresent();
   }
 
   /**

@@ -1222,6 +1222,107 @@ class UiControllerTest {
   }
 
   /**
+   * A past version of an aggregate root offers its frozen copy: the statuses runs left on it, and
+   * the procedures its root's type qualifies for. The current version is the live aggregate and
+   * offers neither.
+   */
+  @Test
+  void instanceHistoryOffersAPastVersionsFrozenCopyAndItsProcedures() throws Exception {
+    var root = new Entity();
+    root.setId(java.util.Optional.of("root-1"));
+    root.setEntityType("Product");
+    root.setValues("{\"name\":\"dp1\"}");
+    given(api.getEntity("root-1")).willReturn(ResponseEntity.ok(root));
+    var copy = new Entity();
+    copy.setId(java.util.Optional.of("copy-1"));
+    copy.setEntityType("Product");
+    copy.setValues("{\"name\":\"dp1\",\"provisioningStatus\":\"PROVISIONED\"}");
+    given(api.getEntity("copy-1")).willReturn(ResponseEntity.ok(copy));
+    given(api.getTypeCapabilities())
+        .willReturn(
+            ResponseEntity.ok(capabilities(List.of("Product"), List.of("Product"), List.of())));
+    var past = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    past.setFrozenRootId(java.util.Optional.of("copy-1"));
+    var current = entityVersion("v-2", "root-1", 2, "{\"name\":\"dp1\"}", "t", "v-1");
+    given(api.listEntityVersions("root-1")).willReturn(ResponseEntity.ok(List.of(past, current)));
+
+    var result =
+        mockMvc
+            .perform(get("/ui/instances/root-1/versions"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    @SuppressWarnings("unchecked")
+    var rows = (List<EntityVersionView>) result.getModelAndView().getModel().get("versions");
+    org.junit.jupiter.api.Assertions.assertEquals("copy-1", rows.get(0).frozenRootId());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("provisioningStatus: PROVISIONED"), rows.get(0).copyStatuses());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of(AggregateAction.PROVISION, AggregateAction.UNPROVISION), rows.get(0).actions());
+    org.junit.jupiter.api.Assertions.assertNull(rows.get(1).frozenRootId());
+    org.junit.jupiter.api.Assertions.assertTrue(rows.get(1).actions().isEmpty());
+  }
+
+  /**
+   * A procedure launched from the history page runs on the version's frozen copy, looked up from
+   * the version rather than taken from the form, and comes back to the history page. A version
+   * without a copy runs nothing.
+   */
+  @Test
+  void aProcedureOnAPastVersionRunsOnItsFrozenCopy() throws Exception {
+    var past = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
+    past.setFrozenRootId(java.util.Optional.of("copy-1"));
+    given(api.getEntityVersion("root-1", 1)).willReturn(ResponseEntity.ok(past));
+    given(api.getEntityVersion("root-1", 2))
+        .willReturn(
+            ResponseEntity.ok(entityVersion("v-2", "root-1", 2, "{\"name\":\"dp1\"}", "t", "v-1")));
+    org.mockito.Mockito.when(api.provisionAggregate("copy-1", ASYNC))
+        .thenReturn(accepted("sched-9"));
+    var copy = new Entity();
+    copy.setId(java.util.Optional.of("copy-1"));
+    copy.setEntityType("Product");
+    given(api.getEntity("copy-1")).willReturn(ResponseEntity.ok(copy));
+
+    mockMvc
+        .perform(post("/ui/instances/root-1/versions/1/procedure/provision"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(flash().attribute("procedureScheduleId", "sched-9"))
+        .andExpect(flash().attribute("procedureEntityId", "copy-1"));
+    verify(api).provisionAggregate("copy-1", ASYNC);
+
+    mockMvc
+        .perform(post("/ui/instances/root-1/versions/2/procedure/provision"))
+        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(flash().attribute("error", "Version 2 has no frozen copy to run provision on."));
+    verify(api, org.mockito.Mockito.never()).provisionAggregate("root-1", ASYNC);
+  }
+
+  /** Past versions can be deleted from the history page, one at a time or all at once. */
+  @Test
+  void pastVersionsCanBeDeletedFromTheHistoryPage() throws Exception {
+    mockMvc
+        .perform(post("/ui/instances/root-1/versions/1/delete"))
+        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(flash().attribute("message", "Version 1 deleted."));
+    verify(api).deleteEntityVersion("root-1", 1);
+
+    mockMvc
+        .perform(post("/ui/instances/root-1/versions/delete-all"))
+        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(flash().attribute("message", "Past versions deleted."));
+    verify(api).deleteAllEntityVersions("root-1");
+
+    doThrow(apiError("Cannot delete version 2: it is PROVISIONED"))
+        .when(api)
+        .deleteEntityVersion("root-1", 2);
+    mockMvc
+        .perform(post("/ui/instances/root-1/versions/2/delete"))
+        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(flash().attribute("error", "Cannot delete version 2: it is PROVISIONED"));
+  }
+
+  /**
    * The list shows the type version an instance is pinned to as its number, resolved from the
    * snapshot id the instance carries. The current version's snapshot counts too: it is listed by
    * {@code GET /entity-type/versions} under its own id, unlike in the per-type list.

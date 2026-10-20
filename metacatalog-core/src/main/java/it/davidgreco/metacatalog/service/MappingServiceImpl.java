@@ -160,9 +160,27 @@ public class MappingServiceImpl implements MappingService {
   @Transactional(propagation = Propagation.REQUIRED)
   public void delete(String mappingId) {
     log.info("Deleting MappingEntityTypeRelationship with id: {}", mappingId);
-    mappingEntityTypeRelationshipRepository
-        .findById(mappingId)
-        .orElseThrow(() -> new NotFoundException("Mapping " + mappingId + DOES_NOT_EXIST));
+    var mapping =
+        mappingEntityTypeRelationshipRepository
+            .findById(mappingId)
+            .orElseThrow(() -> new NotFoundException("Mapping " + mappingId + DOES_NOT_EXIST));
+    // A past version still described by the rule would otherwise surface as a raw foreign-key
+    // error.
+    mappingEntityRelationshipRepository
+        .findFirstByMappingEntityTypeRelationshipIdAndSourceFrozenVersionOfIsNotNull(mappingId)
+        .ifPresent(
+            instance -> {
+              throw new ServiceError(
+                  "Cannot delete the mapping "
+                      + mapping.getSource().getName()
+                      + " MAPPED_TO "
+                      + mapping.getTarget().getName()
+                      + ": "
+                      + ServiceUtils.describeFrozenCopy(instance.getSource())
+                      + " derives entity with id "
+                      + instance.getTarget().getId()
+                      + " through it. Delete that version first.");
+            });
     mappingEntityTypeRelationshipRepository.deleteById(mappingId);
     log.info("Deleted MappingEntityTypeRelationship with id: {}", mappingId);
   }
@@ -215,7 +233,7 @@ public class MappingServiceImpl implements MappingService {
   @Transactional(propagation = Propagation.REQUIRED)
   public List<MappingEntityRelationship> listAllEntityRelationships() {
     log.info("Listing all MappingEntityRelationships");
-    return mappingEntityRelationshipRepository.findAll();
+    return mappingEntityRelationshipRepository.findAllBetweenLiveEntities();
   }
 
   /**

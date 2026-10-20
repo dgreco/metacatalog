@@ -1,7 +1,10 @@
 package it.davidgreco.metacatalog.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -152,6 +155,38 @@ public enum BuiltInCapability {
    */
   public Optional<String> grantsField() {
     return grantsField;
+  }
+
+  /**
+   * Every field a run of any capability writes: each capability's status and result, and its grants
+   * where it has them. These are the only values a frozen copy of a past aggregate version accepts,
+   * and the ones stripped from a past version when it is frozen, so a copy's run results are always
+   * its own.
+   *
+   * @return the names of the fields written by runs
+   */
+  public static Set<String> runFields() {
+    var fields = new LinkedHashSet<String>();
+    for (var capability : values()) {
+      fields.add(capability.statusField);
+      fields.add(capability.resultField);
+      capability.grantsField.ifPresent(fields::add);
+    }
+    return Set.copyOf(fields);
+  }
+
+  /**
+   * The status this capability leaves on an entity while what it built up is still in place —
+   * {@code PROVISIONED}, {@code AUTHORIZED} — or empty if the entity holds any other status.
+   *
+   * @param values the entity's values
+   * @return the applied status the values hold, if any
+   */
+  public Optional<String> appliedStatusIn(JsonNode values) {
+    var applied = successStatus(false);
+    return applied.equals(values.path(statusField).asText(null))
+        ? Optional.of(applied)
+        : Optional.empty();
   }
 
   /**

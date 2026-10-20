@@ -26,6 +26,39 @@ public final class ServiceUtils {
   private ServiceUtils() {}
 
   /**
+   * Refuses a change to an entity of a frozen copy of a past aggregate version, naming the version.
+   * A copy accepts nothing but the results of function runs ({@link
+   * it.davidgreco.metacatalog.entity.BuiltInCapability#runFields()}), which {@code updateValues}
+   * checks for itself.
+   *
+   * @param entity the entity about to be changed
+   * @throws ServiceError if the entity belongs to a frozen copy
+   */
+  public static void checkNotFrozen(Entity entity) {
+    if (entity.isFrozen())
+      throw new ServiceError(
+          ENTITY_WITH_ID
+              + entity.getId()
+              + " belongs to "
+              + describeFrozenCopy(entity)
+              + ", which accepts nothing but the results of function runs");
+  }
+
+  /**
+   * Describes the frozen copy an entity belongs to, for messages: {@code the frozen copy of version
+   * 3 of aggregate <rootId>}.
+   *
+   * @param entity an entity of a frozen copy
+   * @return the description
+   */
+  public static String describeFrozenCopy(Entity entity) {
+    return "the frozen copy of version "
+        + entity.getFrozenVersion()
+        + " of aggregate "
+        + entity.getFrozenVersionOf();
+  }
+
+  /**
    * Checks if an entity type implements a trait (directly or through inheritance).
    *
    * @param entityType the entity type to check
@@ -128,15 +161,29 @@ public final class ServiceUtils {
                 + part.getEntityType().getName()
                 + " of entity with id "
                 + part.getId()
-                + " does not.");
+                + " does not."
+                + frozenRemedy(whole));
     } else if (implementsTrait(wholeType, BuiltInTraits.AGGREGATE_ELEMENT)) {
       throw new ServiceError(
           ENTITY_WITH_ID
               + whole.getId()
               + " (type "
               + wholeType.getName()
-              + ") carries only AggregateElement; an aggregate element cannot have parts.");
+              + ") carries only AggregateElement; an aggregate element cannot have parts."
+              + frozenRemedy(whole));
     }
+  }
+
+  /**
+   * A copy's links cannot be removed or updated, so a refusal over one must say what can be done:
+   * the copy goes only with its version.
+   */
+  private static String frozenRemedy(Entity entity) {
+    return entity.isFrozen()
+        ? " That link belongs to "
+            + describeFrozenCopy(entity)
+            + ", which goes only with that version."
+        : "";
   }
 
   /**
