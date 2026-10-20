@@ -20,10 +20,15 @@ public class SchemaValidationError extends ServiceError {
   /**
    * Creates a new schema validation error with the specified validation errors.
    *
+   * <p>The message lists them too. The REST API answers with {@link #getErrors()}, but some callers
+   * only ever see the message — the UI, which may not depend on this module, and the recorded error
+   * of a failed lifecycle event or procedure run — and a bare "Schema validation failed" leaves
+   * them nothing to act on.
+   *
    * @param errors the list of validation error messages
    */
   public SchemaValidationError(List<String> errors) {
-    super("Schema validation failed");
+    super("Schema validation failed: " + String.join("; ", errors));
     this.errors = errors;
   }
 

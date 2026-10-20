@@ -246,6 +246,76 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * Saving an instance from the values builder must send back what the user sees, not what the
+   * builder happens to have rendered. An access policy is the case that broke it: a grant with no
+   * {@code resources} still gets a rendered (empty) {@code resources} group, which used to be
+   * submitted as {@code "resources": {"entityTypes": []}} and refused by the schema's {@code
+   * minItems: 1}; and the free-form {@code resources.values} map, rendered as a text input, came
+   * back as the string {@code "[object Object]"}. Either made a mere rename fail with "Schema
+   * validation failed".
+   */
+  @Test
+  void instanceEditorSavesAnAccessPolicyUnchangedExceptForTheEditedField() throws Exception {
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    var entityService = context.getBean(EntityService.class);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    entityTypeService.create(
+        "PolicyUiType",
+        List.of("Authorizable"),
+        Optional.empty(),
+        """
+        { "type": "object", "properties": { "name": { "type": "string" } } }""");
+    var policy =
+        """
+        {
+          "name": "before",
+          "principals": [ { "id": "analysts", "type": "GROUP" } ],
+          "permissions": [ { "name": "READ" } ],
+          "grants": [
+            { "principals": ["analysts"], "permissions": ["READ"] },
+            { "principals": ["analysts"], "permissions": ["READ"],
+              "resources": { "values": { "table": "orders" } } }
+          ]
+        }""";
+    var instance = entityService.create("PolicyUiType", policy);
+
+    driver.get(baseUrl + "/ui/instances/" + instance.getId() + "/edit");
+    await()
+        .until(
+            ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector("#instance-values-editor > .mv-leaf .mv-input")));
+    var nameInput =
+        driver
+            .findElements(By.cssSelector("#instance-values-editor > .mv-leaf .mv-leaf-label"))
+            .stream()
+            .filter(l -> l.getText().trim().startsWith("name"))
+            .findFirst()
+            .orElseThrow()
+            .findElement(By.cssSelector("input"));
+    nameInput.clear();
+    nameInput.sendKeys("after");
+    driver.findElement(By.cssSelector("#instance-form .form-actions button[type=submit]")).click();
+
+    await()
+        .until(
+            d ->
+                !d.findElements(By.cssSelector(".flash")).isEmpty()
+                    || !d.findElements(By.cssSelector(".error")).isEmpty());
+    var errors = driver.findElements(By.cssSelector(".error"));
+    Assertions.assertTrue(
+        errors.isEmpty(),
+        "saving must succeed, got: " + errors.stream().map(e -> e.getText()).toList());
+
+    var expected = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(policy);
+    expected.put("name", "after");
+    Assertions.assertEquals(
+        expected,
+        entityService.read(instance.getId()).getValues(),
+        "only the edited field may change");
+  }
+
+  /**
    * Success flashes confirm an action that already happened, so they dismiss themselves: a few
    * seconds after the page loads, {@code flash.js} fades the banner out and removes it from the DOM
    * with no user interaction. (Error banners carry information the user still has to act on and are

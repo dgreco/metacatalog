@@ -70,10 +70,24 @@
       validation.className = "validation" + (ok ? " ok" : " err");
     }
 
+    // A schema with no fixed properties (a free-form map such as an access grant's
+    // `resources.values`) is edited as JSON text, so it must be parsed back rather than sent as a
+    // string — and shown as JSON rather than as "[object Object]".
+    function isFreeFormJson(type) {
+      return type === "object" || type === "array";
+    }
+
     function parseLeaf(input, type) {
       if (type === "boolean") return input.checked;
       var v = input.value;
       if (v === null || v.trim() === "") return undefined;
+      if (isFreeFormJson(type)) {
+        try {
+          return JSON.parse(v);
+        } catch (e) {
+          return v; // left as typed, so the server's validation names the field
+        }
+      }
       if (type === "integer") {
         var n = parseInt(v, 10);
         return isNaN(n) ? v : n;
@@ -144,7 +158,7 @@
           body.className = "mv-children";
           row.appendChild(body);
 
-          children.push({ key: key, model: renderObject(childSchema, body) });
+          children.push({ key: key, required: isRequired, model: renderObject(childSchema, body) });
           parentEl.appendChild(row);
         } else if (childSchema.type === "array") {
           row.className = "mv-group";
@@ -158,7 +172,7 @@
           abody.className = "mv-children";
           row.appendChild(abody);
 
-          children.push({ key: key, model: renderArray(childSchema, abody) });
+          children.push({ key: key, required: isRequired, model: renderArray(childSchema, abody) });
           parentEl.appendChild(row);
         } else {
           row.className = "mv-leaf";
@@ -172,7 +186,7 @@
           label.appendChild(leafModel.input);
           row.appendChild(label);
 
-          children.push({ key: key, model: leafModel });
+          children.push({ key: key, required: isRequired, model: leafModel });
           parentEl.appendChild(row);
         }
       });
@@ -238,7 +252,18 @@
       return { kind: "array", items: itemNodes, addItem: addItem };
     }
 
+    function isEmptyContainer(value) {
+      if (Array.isArray(value)) return value.length === 0;
+      return value !== null && typeof value === "object" && Object.keys(value).length === 0;
+    }
+
     // Serializes a model node into a plain JS value, dropping blank optional leaves.
+    //
+    // Optional objects and arrays left empty are dropped too. The builder renders every property
+    // the schema declares, so an absent optional object still has a group on screen; sending it
+    // back as {} or [] would add a value the user never entered, and one the schema may refuse —
+    // an access grant without `resources` came back as `resources: {entityTypes: []}`, which
+    // `minItems: 1` rejects. Required ones are kept, so the server reports them as incomplete.
     function serialize(node) {
       if (node.kind === "leaf") {
         return parseLeaf(node.input, node.type);
@@ -256,7 +281,9 @@
       var obj = {};
       node.children.forEach(function (child) {
         var sv = serialize(child.model);
-        if (sv !== undefined) obj[child.key] = sv;
+        if (sv === undefined) return;
+        if (!child.required && isEmptyContainer(sv)) return;
+        obj[child.key] = sv;
       });
       return obj;
     }
@@ -267,6 +294,7 @@
       if (value === null || value === undefined) return;
       if (node.kind === "leaf") {
         if (node.type === "boolean") node.input.checked = !!value;
+        else if (typeof value === "object") node.input.value = JSON.stringify(value);
         else node.input.value = String(value);
       } else if (node.kind === "object") {
         node.children.forEach(function (child) {

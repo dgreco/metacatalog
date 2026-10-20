@@ -132,6 +132,27 @@ class ValidationMessageFormatTests extends CommonServiceTestingSupport {
     }
   }
 
+  /**
+   * The message carries the failures, not just the fact that there were some: callers that only see
+   * {@code getMessage()} — the UI, which cannot reach this class, a failed lifecycle event, a
+   * procedure run's recorded error — would otherwise show a bare "Schema validation failed" with
+   * nothing to say which field to fix.
+   */
+  @Test
+  void theMessageNamesEveryFailure() {
+    var schema = jsonUtils().stringToJsonSchema(SCHEMA).get();
+
+    var error =
+        assertThrows(
+            SchemaValidationError.class,
+            () ->
+                SchemaValidationError.validateOrThrow(
+                    schema, json("{\"a\": {\"b\": \"x\"}, \"items\": [{}]}")));
+
+    assertEquals(
+        "Schema validation failed: " + String.join("; ", error.getErrors()), error.getMessage());
+  }
+
   @Test
   void mappedValuesAreCheckedForFormats() {
     var schema =
