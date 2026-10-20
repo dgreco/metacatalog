@@ -11,6 +11,8 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-20
+
 The first release. Meta Catalog manages metadata as entities, entity types, traits,
 relationships, mappings and aggregates, and serves the same model through a REST API, a web UI, a
 SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
@@ -47,4 +49,5 @@ SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
 - **Operations.** Container images for the three applications (amd64 and arm64), Docker Compose
   stacks for local and demo use, Kubernetes manifests, and identical CI on GitLab and GitHub.
 
-[Unreleased]: https://github.com/dgreco/metacatalog/commits/main
+[Unreleased]: https://github.com/dgreco/metacatalog/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/dgreco/metacatalog/releases/tag/v1.0.0
