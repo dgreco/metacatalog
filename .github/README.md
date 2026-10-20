@@ -14,7 +14,7 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-56.3%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![coverage](https://img.shields.io/badge/coverage-56.4%25-brightgreen)](https://dgreco.github.io/metacatalog/)
 [![tests](https://img.shields.io/badge/tests-410-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
@@ -312,7 +312,7 @@ for the Testcontainers PostgreSQL): core 217 · ui 77 · security 23 · hive-met
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**56.3% of instructions, 39.3% of branches, 58.4% of lines**.
+**56.4% of instructions, 39.4% of branches, 58.6% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -909,14 +909,19 @@ When the versionable type is an **aggregate root** (it carries `Aggregate` but n
 - **When a version is recorded.** A version is recorded whenever anything in the aggregate changes:
   - the root's values or any part's values change;
   - a `HAS_PART` or `DEPENDS_ON` link inside it is added or removed;
-  - a derived entity is created or regenerated, or has its own values written, such as a resource's
-    provisioning or authorization status.
+  - a derived entity has its own values written, such as a resource's provisioning or
+    authorization status.
+
+  The mapping updater deriving or re-deriving an entity is **not** a version. It only follows from
+  a change that was already recorded, and counting it would add a version per derived entity after
+  every change. The derived entity is still part of the aggregate, and the next version taken for
+  any other reason records it as it then is.
 - **One version per transaction.** Building or changing an aggregate takes many operations, so the
   version is taken when the transaction commits, not after each one. Creating an aggregate with
   `POST /aggregate/yaml` (or through the bulk loader) records exactly v1, with every part in it.
-  Derived entities are generated afterwards, in transactions of their own, so they arrive as the
-  versions that follow. The same holds for a change to a part: its version is recorded with the
-  derived entities as they were, and their regeneration a moment later is the next version.
+  The entities derived from the parts are generated a moment later, so they first appear in v2,
+  whenever that is taken. Likewise, a change to a part is recorded with its derived entities as
+  they were, and their re-derivation shows up in the version after that.
 - **No-op changes.** A change that leaves the aggregate as last recorded records nothing.
 - **Concurrent writers.** The root is locked and re-read when the version is taken. Concurrent
   changes to the same aggregate therefore get consecutive numbers, and recording one writer's part
@@ -952,10 +957,9 @@ The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`. I
 root, so each version of `dp1` records the whole data product: its output ports, and the S3 folder
 and Athena table derived from them.
 
-- **Loading:** `dp1` starts at v1 with its two ports. v2 and v3 follow within a second, as the
-  mapping updater derives the S3 folder and then the Athena table.
-- **Editing:** editing `dp1` in the UI adds one version. Renaming an output port adds two: the
-  rename, then the regeneration of its derived resource.
+- **Loading:** `dp1` starts at v1 with its two ports. The S3 folder and Athena table are derived a
+  moment later without adding versions, and appear from the next version on.
+- **Editing:** editing `dp1` or one of its output ports in the UI adds one version.
 - **Lifecycle runs:** each provision, unprovision, authorize or reject run adds three versions. Each
   of the two resources records its own status, then the run's outcome is written onto the root.
 - **Graph:** tick *Show entities* to see the chain grow behind `dp1`, each version with its own

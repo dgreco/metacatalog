@@ -214,7 +214,8 @@ class AggregateVersioningTests extends CommonServiceTestingSupport {
               List.of());
     }
     var root = new Entity(entityTypeService().read("AvRoot"), json("{\"name\":\"" + name + "\"}"));
-    var part = new Entity(entityTypeService().read("AvMappedLeaf"), json("{\"name\":\"m\"}"));
+    var part =
+        new Entity(entityTypeService().read("AvMappedLeaf"), json("{\"name\":\"" + name + "\"}"));
     return (AggregateService.Aggregate)
         aggregateService()
             .create(
@@ -230,58 +231,50 @@ class AggregateVersioningTests extends CommonServiceTestingSupport {
         : null;
   }
 
-  private EntityVersion awaitLatest(
-      AggregateService.Aggregate aggregate,
-      int version,
-      java.util.function.Predicate<EntityVersion> holds) {
+  /**
+   * Waits for the mapping updater to have derived an entity with the given label, and returns it.
+   * Its transaction has committed by then, so any version it were to record would already exist.
+   */
+  private Entity awaitDerived(String label) {
+    var query = "$ ? (@.label == \"" + label + "\")";
     org.awaitility.Awaitility.await()
         .atMost(org.awaitility.Durations.TEN_SECONDS)
-        .until(() -> versions(aggregate).size() >= version);
-    var latest = versions(aggregate).getLast();
-    assertEquals(version, latest.getVersion(), "no version beyond the expected one");
-    assertTrue(holds.test(latest), "v" + version + " recorded: " + latest.getAggregate());
-    return latest;
+        .until(() -> entityService().list("AvDerived", query).size() == 1);
+    return entityService().list("AvDerived", query).getFirst();
   }
 
   /**
-   * Entities derived from the parts are part of every version, and their own changes are versions:
-   * the rename of a part is recorded at once with the derived entity not yet caught up, and its
-   * regeneration a moment later is the next version.
+   * The mapping updater's writes are not versions of their own: deriving an entity from a part, or
+   * re-deriving it after the part changed, records nothing. The derived entity is still part of the
+   * aggregate, and the next version taken for any other reason records it as it then is.
    */
   @Test
-  void derivedResourcesAreRecordedAndTheirRegenerationIsAVersion() {
-    var aggregate = aggregateWithDerivedResource("derived");
-
+  void theMappingUpdaterRecordsNoVersionButItsResultIsInTheNextOne() {
+    var aggregate = aggregateWithDerivedResource("updater");
+    awaitDerived("updater-derived");
+    assertEquals(1, versions(aggregate).size(), "deriving the entity records no version");
     assertNull(derivedLabel(versions(aggregate).getFirst()), "v1 precedes the derivation");
-    awaitLatest(aggregate, 2, v -> "m-derived".equals(derivedLabel(v)));
 
-    entityService().update(partId(aggregate, 0), "{\"name\":\"n\"}");
-    var renamed = versions(aggregate).get(2);
-    assertEquals(
-        "n", renamed.getAggregate().get("parts").get(0).get("values").get("name").asText());
-    assertEquals("m-derived", derivedLabel(renamed), "v3 is the rename, before regeneration");
-    awaitLatest(aggregate, 4, v -> "n-derived".equals(derivedLabel(v)));
+    entityService().update(partId(aggregate, 0), "{\"name\":\"updater-2\"}");
+    awaitDerived("updater-2-derived");
+    var afterRename = versions(aggregate);
+    assertEquals(2, afterRename.size(), "the rename is a version, its re-derivation is not");
+    assertEquals("updater-derived", derivedLabel(afterRename.getLast()));
+
+    entityService().update(aggregate.entity().getId(), "{\"name\":\"updater-root\"}");
+    assertEquals("updater-2-derived", derivedLabel(versions(aggregate).getLast()));
   }
 
   @Test
   void aStatusWriteOnADerivedResourceIsAVersion() {
-    var aggregate = aggregateWithDerivedResource("status-derived");
-    awaitLatest(aggregate, 2, v -> "m-derived".equals(derivedLabel(v)));
-    var derivedId =
-        versions(aggregate)
-            .getLast()
-            .getAggregate()
-            .get("parts")
-            .get(0)
-            .get("mapped")
-            .get(0)
-            .get("id")
-            .asText();
+    var aggregate = aggregateWithDerivedResource("status");
+    var derived = awaitDerived("status-derived");
 
-    entityService().updateValues(derivedId, "{\"label\":\"m-derived\",\"status\":\"DONE\"}");
+    entityService()
+        .updateValues(derived.getId(), "{\"label\":\"status-derived\",\"status\":\"DONE\"}");
 
     var latest = versions(aggregate).getLast();
-    assertEquals(3, latest.getVersion());
+    assertEquals(2, latest.getVersion());
     assertEquals(
         "DONE",
         latest
