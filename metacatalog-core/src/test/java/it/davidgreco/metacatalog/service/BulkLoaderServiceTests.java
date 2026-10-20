@@ -214,8 +214,12 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
         java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-instances.yaml"))) {
       ids = bulkLoaderService.bulkAggregateCreation(instances);
     }
-    // The demo's data product is Versionable, so the History link is there from the first load.
-    assertEquals(1, entityService.read(ids.getFirst()).getVersion());
+    // The demo's data product is Versionable: the load is its v1, holding both output ports. Later
+    // versions follow asynchronously as the mapping updater derives the resources, so only the
+    // first one is pinned here.
+    var first = entityService.listVersions(ids.getFirst()).getFirst();
+    assertEquals(1, first.getVersion());
+    assertEquals(2, first.getAggregate().get("parts").size());
 
     // The scheduled mapping engine derives the S3 folder and the Athena table asynchronously;
     // the aggregate delete below must see them to remove them with the tree. Counted as deltas:

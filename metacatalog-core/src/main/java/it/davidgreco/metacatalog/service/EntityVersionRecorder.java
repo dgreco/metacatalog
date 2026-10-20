@@ -2,7 +2,9 @@ package it.davidgreco.metacatalog.service;
 
 import static it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON;
 import static it.davidgreco.metacatalog.entity.RelationType.HAS_PART;
+import static it.davidgreco.metacatalog.entity.RelationType.IS_MAPPED_BY;
 import static it.davidgreco.metacatalog.entity.RelationType.IS_PART_OF;
+import static it.davidgreco.metacatalog.entity.RelationType.MAPPED_TO;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -12,10 +14,12 @@ import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityRelationship;
 import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.EntityVersion;
+import it.davidgreco.metacatalog.entity.MappingEntityRelationship;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.EntityVersionRepository;
+import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
@@ -52,12 +56,14 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *   <li>An entity outside the aggregate model is versioned on each write. The first versioned write
  *       to one with no history yet, because its type gained the trait after it was created, first
  *       records the state before the write.
- *   <li>An aggregate root is versioned as a whole — itself, its {@code HAS_PART} tree and the
- *       {@code DEPENDS_ON} links — once per transaction, when the transaction commits. Building or
- *       changing an aggregate takes many operations, and a version per operation would record each
- *       half-built state in between. Its parts are never versionable themselves ({@link
- *       ServiceUtils#checkVersionableOnlyOnAggregateRoots}): their changes are versions of the
- *       root.
+ *   <li>An aggregate root is versioned as a whole — itself, its {@code HAS_PART} tree, the {@code
+ *       DEPENDS_ON} links and the entities derived from any of them through {@code MAPPED_TO} —
+ *       once per transaction, when the transaction commits. Building or changing an aggregate takes
+ *       many operations, and a version per operation would record each half-built state in between.
+ *       Its parts are never versionable themselves ({@link
+ *       ServiceUtils#checkVersionableOnlyOnAggregateRoots}): their changes, and their derived
+ *       entities' changes, are versions of the root. A derived entity is regenerated in a
+ *       transaction of its own after its source changes, so that is a version of its own too.
  * </ul>
  */
 @Slf4j
@@ -81,6 +87,8 @@ public class EntityVersionRecorder {
   private final EntityVersionRepository entityVersionRepository;
 
   private final EntityRelationshipRepository entityRelationshipRepository;
+
+  private final MappingEntityRelationshipRepository mappingEntityRelationshipRepository;
 
   private final EntityManager entityManager;
 
@@ -167,7 +175,11 @@ public class EntityVersionRecorder {
         if (traits.contains(BuiltInTraits.VERSIONABLE)) roots.add(current);
         continue;
       }
-      // Only an AggregateElement carrier can be a part, so anything else has no root above it.
+      // A derived entity belongs to the aggregate of the entity it was derived from.
+      for (var rel :
+          mappingEntityRelationshipRepository.findBySourceAndRelationType(current, IS_MAPPED_BY))
+        pending.add(rel.getTarget());
+      // Only an AggregateElement carrier can be a part, so anything else has no parent to climb to.
       if (!traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)) continue;
       for (var rel : entityRelationshipRepository.findBySourceAndRelationType(current, IS_PART_OF))
         pending.add(rel.getTarget());
@@ -237,9 +249,11 @@ public class EntityVersionRecorder {
   }
 
   /**
-   * The authored aggregate below {@code member}: its values and pinned type version, the ids it
-   * depends on, and its parts. Parts and dependencies are sorted by id so that an unchanged
-   * aggregate always produces the same tree and compares equal to its last version.
+   * The aggregate below {@code member}: its values and pinned type version, the ids it depends on,
+   * its parts, and the entities derived from it under {@code mapped} — kept apart from the parts
+   * because they are not authored, and a reader of a past version needs to tell the two apart.
+   * Everything is sorted by id so that an unchanged aggregate always produces the same tree and
+   * compares equal to its last version.
    *
    * <p>Each part is refreshed before it is read, for the same reason the root is: an entity loaded
    * earlier in the transaction may predate another writer's commit.
@@ -260,9 +274,22 @@ public class EntityVersionRecorder {
       // A part already on the path would be a containment cycle; link() refuses those, and the
       // guard keeps a corrupt one from recursing forever.
       if (!path.contains(part.getId())) parts.add(treeOf(part, path, false));
+    var mapped = node.arrayNode();
+    for (var derived : derivedFrom(member))
+      if (!path.contains(derived.getId())) mapped.add(treeOf(derived, path, false));
     path.remove(member.getId());
     if (!parts.isEmpty()) node.set("parts", parts);
+    if (!mapped.isEmpty()) node.set("mapped", mapped);
     return node;
+  }
+
+  private List<Entity> derivedFrom(Entity source) {
+    return mappingEntityRelationshipRepository
+        .findBySourceAndRelationType(source, MAPPED_TO)
+        .stream()
+        .map(MappingEntityRelationship::getTarget)
+        .sorted(Comparator.comparing(Entity::getId))
+        .toList();
   }
 
   private List<Entity> targetsOf(Entity source, RelationType type) {

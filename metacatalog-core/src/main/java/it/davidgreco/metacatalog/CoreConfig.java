@@ -235,6 +235,8 @@ public class CoreConfig {
    * @param entityVersionRepository the entity version history repository
    * @param entityRelationshipRepository the entity relationship repository, used to find the
    *     aggregate root above a changed part and to read an aggregate's tree
+   * @param mappingEntityRelationshipRepository the mapping relationship repository, used likewise
+   *     for the entities derived from an aggregate's members
    * @param entityManager the shared entity manager, used to re-read an aggregate under a row lock
    *     when it is recorded at commit
    * @return the entity version recorder
@@ -244,9 +246,14 @@ public class CoreConfig {
       EntityRepository entityRepository,
       EntityVersionRepository entityVersionRepository,
       EntityRelationshipRepository entityRelationshipRepository,
+      MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
       jakarta.persistence.EntityManager entityManager) {
     return new EntityVersionRecorder(
-        entityRepository, entityVersionRepository, entityRelationshipRepository, entityManager);
+        entityRepository,
+        entityVersionRepository,
+        entityRelationshipRepository,
+        mappingEntityRelationshipRepository,
+        entityManager);
   }
 
   /**

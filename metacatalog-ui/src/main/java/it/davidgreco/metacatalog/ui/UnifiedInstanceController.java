@@ -3,11 +3,11 @@ package it.davidgreco.metacatalog.ui;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
-import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.EntityVersion;
 import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -402,7 +402,7 @@ class UnifiedInstanceController {
    * Renders a recorded aggregate for reading: the API carries each node's values as a JSON string,
    * which printed as-is would show every part's document as one escaped line.
    */
-  private String aggregateJson(Aggregate aggregate) {
+  private String aggregateJson(RecordedAggregate aggregate) {
     try {
       return jsonMapper
           .writerWithDefaultPrettyPrinter()
@@ -412,7 +412,7 @@ class UnifiedInstanceController {
     }
   }
 
-  private com.fasterxml.jackson.databind.node.ObjectNode aggregateTree(Aggregate aggregate)
+  private com.fasterxml.jackson.databind.node.ObjectNode aggregateTree(RecordedAggregate aggregate)
       throws JsonProcessingException {
     var node = jsonMapper.createObjectNode();
     aggregate.getId().ifPresent(id -> node.put("id", id));
@@ -423,6 +423,10 @@ class UnifiedInstanceController {
     if (!aggregate.getParts().isEmpty()) {
       var parts = node.putArray("parts");
       for (var part : aggregate.getParts()) parts.add(aggregateTree(part));
+    }
+    if (!aggregate.getMapped().isEmpty()) {
+      var mapped = node.putArray("mapped");
+      for (var derived : aggregate.getMapped()) mapped.add(aggregateTree(derived));
     }
     return node;
   }

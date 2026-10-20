@@ -188,6 +188,113 @@ class AggregateVersioningTests extends CommonServiceTestingSupport {
     assertEquals("leaf-renamed", nestedLeaf.get("values").get("name").asText());
   }
 
+  /**
+   * A versionable root whose only part is a mapping source: the part derives one AvDerived entity
+   * asynchronously, through the scheduled mapping updater.
+   */
+  private AggregateService.Aggregate aggregateWithDerivedResource(String name) {
+    model();
+    if (!entityTypeService().exists("AvMappedLeaf")) {
+      entityTypeService()
+          .create("AvMappedLeaf", List.of("AvPartTrait"), Optional.empty(), NAME_SCHEMA);
+      entityTypeService()
+          .create(
+              "AvDerived",
+              List.of(),
+              Optional.empty(),
+              """
+              { "type": "object",
+                "properties": { "label": { "type": "string" }, "status": { "type": "string" } } }""");
+      getApplicationContext()
+          .getBean(MappingService.class)
+          .create(
+              "AvMappedLeaf",
+              "AvDerived",
+              "{\"label\": \"#source.getValue('$.name').asText() + '-derived'\"}",
+              List.of());
+    }
+    var root = new Entity(entityTypeService().read("AvRoot"), json("{\"name\":\"" + name + "\"}"));
+    var part = new Entity(entityTypeService().read("AvMappedLeaf"), json("{\"name\":\"m\"}"));
+    return (AggregateService.Aggregate)
+        aggregateService()
+            .create(
+                new AggregateService.Aggregate(
+                    root, List.of(new AggregateService.AggregateElement(part))));
+  }
+
+  /** The label of the entity the version recorded as derived from the root's only part, if any. */
+  private static String derivedLabel(EntityVersion version) {
+    var part = version.getAggregate().get("parts").get(0);
+    return part.has("mapped")
+        ? part.get("mapped").get(0).get("values").get("label").asText()
+        : null;
+  }
+
+  private EntityVersion awaitLatest(
+      AggregateService.Aggregate aggregate,
+      int version,
+      java.util.function.Predicate<EntityVersion> holds) {
+    org.awaitility.Awaitility.await()
+        .atMost(org.awaitility.Durations.TEN_SECONDS)
+        .until(() -> versions(aggregate).size() >= version);
+    var latest = versions(aggregate).getLast();
+    assertEquals(version, latest.getVersion(), "no version beyond the expected one");
+    assertTrue(holds.test(latest), "v" + version + " recorded: " + latest.getAggregate());
+    return latest;
+  }
+
+  /**
+   * Entities derived from the parts are part of every version, and their own changes are versions:
+   * the rename of a part is recorded at once with the derived entity not yet caught up, and its
+   * regeneration a moment later is the next version.
+   */
+  @Test
+  void derivedResourcesAreRecordedAndTheirRegenerationIsAVersion() {
+    var aggregate = aggregateWithDerivedResource("derived");
+
+    assertNull(derivedLabel(versions(aggregate).getFirst()), "v1 precedes the derivation");
+    awaitLatest(aggregate, 2, v -> "m-derived".equals(derivedLabel(v)));
+
+    entityService().update(partId(aggregate, 0), "{\"name\":\"n\"}");
+    var renamed = versions(aggregate).get(2);
+    assertEquals(
+        "n", renamed.getAggregate().get("parts").get(0).get("values").get("name").asText());
+    assertEquals("m-derived", derivedLabel(renamed), "v3 is the rename, before regeneration");
+    awaitLatest(aggregate, 4, v -> "n-derived".equals(derivedLabel(v)));
+  }
+
+  @Test
+  void aStatusWriteOnADerivedResourceIsAVersion() {
+    var aggregate = aggregateWithDerivedResource("status-derived");
+    awaitLatest(aggregate, 2, v -> "m-derived".equals(derivedLabel(v)));
+    var derivedId =
+        versions(aggregate)
+            .getLast()
+            .getAggregate()
+            .get("parts")
+            .get(0)
+            .get("mapped")
+            .get(0)
+            .get("id")
+            .asText();
+
+    entityService().updateValues(derivedId, "{\"label\":\"m-derived\",\"status\":\"DONE\"}");
+
+    var latest = versions(aggregate).getLast();
+    assertEquals(3, latest.getVersion());
+    assertEquals(
+        "DONE",
+        latest
+            .getAggregate()
+            .get("parts")
+            .get(0)
+            .get("mapped")
+            .get(0)
+            .get("values")
+            .get("status")
+            .asText());
+  }
+
   @Test
   void linkingAndUnlinkingInsideTheAggregateRecordVersions() {
     var aggregate = aggregate("relinked");

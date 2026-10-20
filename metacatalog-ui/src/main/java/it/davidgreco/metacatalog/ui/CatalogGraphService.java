@@ -2,10 +2,10 @@ package it.davidgreco.metacatalog.ui;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
-import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.EntityVersion;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import it.davidgreco.metacatalog.openapi.model.Trait;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -414,20 +414,21 @@ public class CatalogGraphService {
   }
 
   /**
-   * Draws the aggregate a root version recorded as frozen copies of its parts, so a past version
-   * shows the aggregate as it was rather than as it is now: each copy carries the values the part
-   * had, hangs off the version (or off its copied parent) by {@code HAS_PART}, and depends by
-   * {@code DEPENDS_ON} on the copies it depended on then. A dependency outside the aggregate points
-   * at that entity's live node, the only one there is.
+   * Draws the aggregate a root version recorded as frozen copies of its members, so a past version
+   * shows the aggregate as it was rather than as it is now: each copy carries the values the member
+   * had, hangs off the version (or off its copied parent) by {@code HAS_PART} — or by {@code
+   * MAPPED_TO} for an entity derived from it — and depends by {@code DEPENDS_ON} on the copies it
+   * depended on then. A dependency outside the aggregate points at that entity's live node, the
+   * only one there is.
    */
   private void addRecordedAggregate(
       EntityVersion version,
-      Aggregate tree,
+      RecordedAggregate tree,
       Set<String> liveEntityIds,
       boolean showInverses,
       List<GraphModel.Node> nodes,
       List<GraphModel.Edge> edges) {
-    var copies = new java.util.LinkedHashMap<String, Aggregate>();
+    var copies = new java.util.LinkedHashMap<String, RecordedAggregate>();
     addRecordedParts(
         ENTITY_VERSION_PREFIX + version.getId(), version, tree, copies, showInverses, nodes, edges);
     var copyIdsByPartId = new java.util.HashMap<String, String>();
@@ -447,27 +448,47 @@ public class CatalogGraphService {
   private void addRecordedParts(
       String parentNodeId,
       EntityVersion version,
-      Aggregate parent,
-      Map<String, Aggregate> copies,
+      RecordedAggregate parent,
+      Map<String, RecordedAggregate> copies,
       boolean showInverses,
       List<GraphModel.Node> nodes,
       List<GraphModel.Edge> edges) {
     for (var part : parent.getParts()) {
-      var partId = part.getId().orElse("");
-      var copyId = ENTITY_VERSION_PART_PREFIX + version.getId() + ":" + partId;
-      if (copies.containsKey(copyId)) continue; // a part reached twice is drawn once
-      copies.put(copyId, part);
-      nodes.add(
-          new GraphModel.Node(
-              copyId,
-              entityLabel(part.getValues(), partId) + " @v" + version.getVersion(),
-              "entityVersion",
-              part.getEntityType(),
-              null,
-              part.getValues()));
+      var copyId = addRecordedCopy(version, part, copies, nodes);
+      if (copyId == null) continue;
       addRelationEdges(parentNodeId, "HAS_PART", copyId, showInverses, edges);
       addRecordedParts(copyId, version, part, copies, showInverses, nodes, edges);
     }
+    for (var derived : parent.getMapped()) {
+      var copyId = addRecordedCopy(version, derived, copies, nodes);
+      if (copyId == null) continue;
+      // Drawn like the live graph draws a mapping instance, so the two read the same.
+      edges.add(new GraphModel.Edge(parentNodeId, copyId, MAPPING, "MAPPED_TO", null, null));
+      if (showInverses)
+        edges.add(new GraphModel.Edge(copyId, parentNodeId, MAPPING, "IS_MAPPED_BY", null, null));
+      addRecordedParts(copyId, version, derived, copies, showInverses, nodes, edges);
+    }
+  }
+
+  /** Adds the frozen copy of one member, or returns null if it was already drawn. */
+  private String addRecordedCopy(
+      EntityVersion version,
+      RecordedAggregate member,
+      Map<String, RecordedAggregate> copies,
+      List<GraphModel.Node> nodes) {
+    var memberId = member.getId().orElse("");
+    var copyId = ENTITY_VERSION_PART_PREFIX + version.getId() + ":" + memberId;
+    if (copies.containsKey(copyId)) return null; // a member reached twice is drawn once
+    copies.put(copyId, member);
+    nodes.add(
+        new GraphModel.Node(
+            copyId,
+            entityLabel(member.getValues(), memberId) + " @v" + version.getVersion(),
+            "entityVersion",
+            member.getEntityType(),
+            null,
+            member.getValues()));
+    return copyId;
   }
 
   /** A relationship edge, plus its inverse when inverses are shown, as stored rows would give. */

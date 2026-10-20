@@ -16,6 +16,7 @@ import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.AggregateAccess;
 import it.davidgreco.metacatalog.openapi.model.EffectiveGrant;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
+import it.davidgreco.metacatalog.openapi.model.RecordedAggregate;
 import it.davidgreco.metacatalog.openapi.model.ResourceAccess;
 import it.davidgreco.metacatalog.service.AccessPolicy;
 import it.davidgreco.metacatalog.service.AggregateService;
@@ -145,12 +146,12 @@ public class DtoMapper {
   }
 
   /**
-   * Turns the aggregate tree an aggregate root's version stores into the same {@code Aggregate}
-   * shape {@code GET /aggregate/{id}} answers with, so a client reads a past aggregate the way it
-   * reads the live one.
+   * Turns the aggregate tree an aggregate root's version stores into its DTO: the shape {@code GET
+   * /aggregate/{id}} answers with, so a client reads a past aggregate the way it reads the live
+   * one, plus the derived entities under {@code mapped}.
    */
-  private Aggregate aggregateTreeToDto(com.fasterxml.jackson.databind.JsonNode node) {
-    var dto = new Aggregate();
+  private RecordedAggregate aggregateTreeToDto(com.fasterxml.jackson.databind.JsonNode node) {
+    var dto = new RecordedAggregate();
     dto.setId(Optional.of(node.get("id").asText()));
     dto.setEntityType(node.get("entityType").asText());
     dto.setValues(node.get("values").toPrettyString());
@@ -158,9 +159,12 @@ public class DtoMapper {
     if (node.has("dependencies"))
       node.get("dependencies").forEach(d -> dependencies.add(d.asText()));
     dto.setDependencies(dependencies);
-    var parts = new java.util.ArrayList<Aggregate>();
+    var parts = new java.util.ArrayList<RecordedAggregate>();
     if (node.has("parts")) node.get("parts").forEach(p -> parts.add(aggregateTreeToDto(p)));
     dto.setParts(parts);
+    var mapped = new java.util.ArrayList<RecordedAggregate>();
+    if (node.has("mapped")) node.get("mapped").forEach(m -> mapped.add(aggregateTreeToDto(m)));
+    dto.setMapped(mapped);
     return dto;
   }
 

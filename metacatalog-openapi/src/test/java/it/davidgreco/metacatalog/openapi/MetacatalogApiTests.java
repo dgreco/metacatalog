@@ -255,6 +255,17 @@ class MetacatalogApiTests {
     leafType.setSchema(schema);
     leafType.setTraits(List.of("ApiAvPart"));
     api.createEntityType(leafType);
+    var derivedType = new EntityType();
+    derivedType.setName("ApiAvDerived");
+    derivedType.setSchema(
+        "{ \"type\": \"object\", \"properties\": { \"label\": { \"type\": \"string\" } } }");
+    api.createEntityType(derivedType);
+    var mapping = new Mapping();
+    mapping.setSourceEntityType("ApiAvLeaf");
+    mapping.setTargetEntityType("ApiAvDerived");
+    mapping.setMappingValues("{\"label\": \"#source.getValue('$.name').asText() + '-derived'\"}");
+    mapping.setEntityPathReferences("[]");
+    api.createMapping(mapping);
 
     var badLeaf = new EntityType();
     badLeaf.setName("ApiAvBadLeaf");
@@ -301,6 +312,26 @@ class MetacatalogApiTests {
     var b = parts.stream().filter(p -> p.getValues().contains("\"b\"")).findFirst().orElseThrow();
     Assertions.assertEquals("ApiAvLeaf", a.getEntityType());
     Assertions.assertEquals(List.of(a.getId()), b.getDependencies());
+    Assertions.assertTrue(a.getMapped().isEmpty(), "v1 is recorded before anything is derived");
+
+    // The mapping updater derives one entity per part afterwards; each derivation is a version of
+    // the aggregate, and the latest records the derived entities under their sources.
+    await()
+        .atMost(Durations.TEN_SECONDS)
+        .until(
+            () ->
+                api.listEntityVersions(rootId).getLast().getAggregate().getParts().stream()
+                    .allMatch(part -> part.getMapped().size() == 1));
+    var latest = api.listEntityVersions(rootId).getLast();
+    Assertions.assertTrue(latest.getVersion() > 1);
+    var derivedLabels =
+        latest.getAggregate().getParts().stream()
+            .map(part -> part.getMapped().getFirst().getValues())
+            .map(values -> values.replaceAll("\\s", ""))
+            .sorted()
+            .toList();
+    Assertions.assertEquals(
+        List.of("{\"label\":\"a-derived\"}", "{\"label\":\"b-derived\"}"), derivedLabels);
   }
 
   @Test

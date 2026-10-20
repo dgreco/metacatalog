@@ -1103,11 +1103,16 @@ class UiControllerTest {
     root.setEntityType("Product");
     root.setValues("{\"name\":\"dp1\"}");
     given(api.getEntity("root-1")).willReturn(ResponseEntity.ok(root));
-    var part = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    var part = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     part.setId(java.util.Optional.of("part-1"));
     part.setEntityType("Port");
     part.setValues("{\"name\":\"op1\"}");
-    var tree = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    var derived = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    derived.setId(java.util.Optional.of("d-1"));
+    derived.setEntityType("S3Folder");
+    derived.setValues("{\"path\":\"/root/dp1/op1\"}");
+    part.setMapped(List.of(derived));
+    var tree = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     tree.setId(java.util.Optional.of("root-1"));
     tree.setEntityType("Product");
     tree.setValues("{\"name\":\"dp1\"}");
@@ -1129,6 +1134,9 @@ class UiControllerTest {
         "op1", aggregate.get("parts").get(0).get("values").get("name").asText());
     org.junit.jupiter.api.Assertions.assertEquals(
         "Port", aggregate.get("parts").get(0).get("entityType").asText());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "/root/dp1/op1",
+        aggregate.get("parts").get(0).get("mapped").get(0).get("values").get("path").asText());
   }
 
   /**
@@ -1144,16 +1152,21 @@ class UiControllerTest {
     root.setValues("{\"name\":\"dp1\"}");
     root.setVersion(java.util.Optional.of(1));
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root)));
-    var op1 = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    var op1 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     op1.setId(java.util.Optional.of("p-1"));
     op1.setEntityType("Port");
     op1.setValues("{\"name\":\"op1\"}");
-    var op2 = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    var s3 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
+    s3.setId(java.util.Optional.of("d-1"));
+    s3.setEntityType("S3Folder");
+    s3.setValues("{\"name\":\"s3-op1\"}");
+    op1.setMapped(List.of(s3));
+    var op2 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     op2.setId(java.util.Optional.of("p-2"));
     op2.setEntityType("Port");
     op2.setValues("{\"name\":\"op2\"}");
     op2.setDependencies(List.of("p-1"));
-    var tree = new it.davidgreco.metacatalog.openapi.model.Aggregate();
+    var tree = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     tree.setId(java.util.Optional.of("root-1"));
     tree.setEntityType("Product");
     tree.setValues("{\"name\":\"dp1\"}");
@@ -1173,7 +1186,11 @@ class UiControllerTest {
             .sorted()
             .toList();
     org.junit.jupiter.api.Assertions.assertEquals(
-        List.of("op1 @v1 [entityVersion, Port]", "op2 @v1 [entityVersion, Port]"), partCopies);
+        List.of(
+            "op1 @v1 [entityVersion, Port]",
+            "op2 @v1 [entityVersion, Port]",
+            "s3-op1 @v1 [entityVersion, S3Folder]"),
+        partCopies);
     var copyEdges =
         graph.edges().stream()
             .filter(e -> e.target().startsWith("entity-version-part:"))
@@ -1182,6 +1199,7 @@ class UiControllerTest {
             .toList();
     org.junit.jupiter.api.Assertions.assertEquals(
         List.of(
+            "entity-version-part:v-1:p-1 -mapping-> entity-version-part:v-1:d-1",
             "entity-version-part:v-1:p-2 -DEPENDS_ON-> entity-version-part:v-1:p-1",
             "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-1",
             "entity-version:v-1 -HAS_PART-> entity-version-part:v-1:p-2"),

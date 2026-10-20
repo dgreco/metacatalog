@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-408-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-410-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -305,13 +305,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 215 · ui 77 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **408, 0 failures**.
+for the Testcontainers PostgreSQL): core 217 · ui 77 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 11 · sparql 9 · provisioning-tasks 5 · application 10 = **410, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**56.7% of instructions, 39.6% of branches, 58.9% of lines**.
+**56.3% of instructions, 39.3% of branches, 58.4% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
 Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
@@ -900,18 +900,22 @@ When the versionable type is an **aggregate root** (it carries `Aggregate` but n
 `AggregateElement`), each version records the **whole aggregate**, not just the root's values:
 
 - **What a version holds.** The root's own values stay in `values`, as for any entity. Alongside
-  them, `aggregate` holds the tree as it stood at that version, in the same shape
-  `GET /aggregate/{id}` returns: the root and every part reachable through `HAS_PART`, each with its
-  values, and the `DEPENDS_ON` links between them. Entities derived from the parts by mappings (the
-  provisioned resources) are not included. They are recomputed from the parts, and recording their
-  asynchronous regeneration would add versions nobody authored. Status written back onto the root
-  (`provisioningStatus`, `authorizationStatus`) is included, because it is part of the root's values.
-- **When a version is recorded.** A version is recorded whenever the aggregate changes:
+  them, `aggregate` holds the tree as it stood at that version: the root, every part reachable
+  through `HAS_PART`, and the `DEPENDS_ON` links between them, each node with its values. The
+  entities derived from any of them by mappings (the provisioned resources) are recorded too, under
+  their source's `mapped`, kept apart from the authored `parts`. The shape is `RecordedAggregate`:
+  `GET /aggregate/{id}`'s shape plus `mapped`.
+- **When a version is recorded.** A version is recorded whenever anything in the aggregate changes:
   - the root's values or any part's values change;
-  - a `HAS_PART` or `DEPENDS_ON` link inside it is added or removed.
+  - a `HAS_PART` or `DEPENDS_ON` link inside it is added or removed;
+  - a derived entity is created or regenerated, or has its own values written, such as a resource's
+    provisioning or authorization status.
 - **One version per transaction.** Building or changing an aggregate takes many operations, so the
   version is taken when the transaction commits, not after each one. Creating an aggregate with
   `POST /aggregate/yaml` (or through the bulk loader) records exactly v1, with every part in it.
+  Derived entities are generated afterwards, in transactions of their own, so they arrive as the
+  versions that follow. The same holds for a change to a part: its version is recorded with the
+  derived entities as they were, and their regeneration a moment later is the next version.
 - **No-op changes.** A change that leaves the aggregate as last recorded records nothing.
 - **Concurrent writers.** The root is locked and re-read when the version is taken. Concurrent
   changes to the same aggregate therefore get consecutive numbers, and recording one writer's part
@@ -933,9 +937,10 @@ curl -s http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1
 
 The UI's history page shows the recorded tree under **Whole aggregate**. On the graph, with *Show
 entities* on, each root version carries its own frozen copy of the aggregate:
-- every part as it was then, labelled `op1 @v2`, with that version's values in its popup;
-- `HAS_PART` edges from the version node to those copies, and `DEPENDS_ON` edges between them as
-  they were then.
+- every part and derived entity as it was then, labelled `op1 @v2`, with that version's values in
+  its popup;
+- `HAS_PART` edges from the version node to the part copies, `MAPPED_TO` edges from each copy to
+  its derived copies, and `DEPENDS_ON` edges between them as they were then.
 
 So a past version shows the aggregate it recorded, not today's. SPARQL exposes the tree as
 `mt:aggregate` on the `mt:EntityVersion`.
@@ -943,14 +948,17 @@ So a past version shows the aggregate it recorded, not today's. SPARQL exposes t
 ### In the demo
 
 The base stack (`make up-d`) marks the demo's `DataProductType` `Versionable`. It is an aggregate
-root, so each version of `dp1` records the whole data product, its output ports included.
+root, so each version of `dp1` records the whole data product: its output ports, and the S3 folder
+and Athena table derived from them.
 
-- `dp1` starts at v1 with a **History** link on the Instances page.
-- Each provision, unprovision, authorize or reject run adds one version, because the run's outcome is
-  written back onto the root: provisioning takes it to v2 (`provisioningStatus: PROVISIONED`) and
-  authorizing to v3.
-- Editing `dp1`, or one of its output ports `op1` and `op2`, in the UI adds one more.
-- Tick *Show entities* on the graph to see the chain grow behind it.
+- **Loading:** `dp1` starts at v1 with its two ports. v2 and v3 follow within a second, as the
+  mapping updater derives the S3 folder and then the Athena table.
+- **Editing:** editing `dp1` in the UI adds one version. Renaming an output port adds two: the
+  rename, then the regeneration of its derived resource.
+- **Lifecycle runs:** each provision, unprovision, authorize or reject run adds three versions. Each
+  of the two resources records its own status, then the run's outcome is written onto the root.
+- **Graph:** tick *Show entities* to see the chain grow behind `dp1`, each version with its own
+  copy of the data product.
 
 ### Interaction with type versions
 

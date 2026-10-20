@@ -2351,6 +2351,41 @@ components:
           items:
             $ref: '#/components/schemas/Aggregate'
           description: Sub-aggregates that compose this aggregate.
+    RecordedAggregate:
+      type: object
+      description: >
+        An aggregate as a version of its root recorded it. The same shape as Aggregate, plus the
+        entities derived from each node by mappings, kept apart from the authored parts under
+        `mapped`. Read-only - it only ever appears in an EntityVersion.
+      required:
+        - entityType
+        - values
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: Identifier of the entity this node recorded.
+        entityType:
+          type: string
+          description: Name of the entity's type.
+        values:
+          type: string
+          description: JSON string of the entity's values at this version.
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: Ids of the entities this one depended on at this version.
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedAggregate'
+          description: The parts it contained at this version (HAS_PART).
+        mapped:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedAggregate'
+          description: The entities derived from it by mappings at this version (MAPPED_TO).
     Entity:
       type: object
       description: A concrete instance of an entity type, with JSON values validated against the type's schema.
@@ -2428,12 +2463,12 @@ components:
           readOnly: true
           description: When this version was recorded, as an ISO-8601 instant.
         aggregate:
-          $ref: '#/components/schemas/Aggregate'
+          $ref: '#/components/schemas/RecordedAggregate'
           description: >
-            Only on a version of an aggregate root - the whole authored aggregate at this
-            version - the root, every part reachable through HAS_PART with its values, and the
-            DEPENDS_ON links between them. Entities derived from the parts by mappings are not
-            included. Absent for an entity outside an aggregate.
+            Only on a version of an aggregate root - the whole aggregate at this version - the
+            root, every part reachable through HAS_PART with its values, the DEPENDS_ON links
+            between them, and the entities derived from any of them by mappings. Absent for an
+            entity outside an aggregate.
     Mapping:
       type: object
       description: >
