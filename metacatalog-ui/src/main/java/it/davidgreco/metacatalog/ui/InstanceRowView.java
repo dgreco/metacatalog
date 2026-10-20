@@ -6,6 +6,7 @@ import it.davidgreco.metacatalog.openapi.model.Entity;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -14,6 +15,7 @@ import java.util.Set;
  * @param id the unique identifier of the entity
  * @param entityType the name of the entity type
  * @param entityTypeVersionId the id of the entity type version the entity is pinned to
+ * @param entityTypeVersion that type version's number, or null if it could not be resolved
  * @param version the entity's own version number, or null if it has never been versioned
  * @param name the entity name extracted from the {@code name} property in values, or the entity id
  * @param actions the aggregate actions this row offers, in declaration order
@@ -22,6 +24,7 @@ public record InstanceRowView(
     String id,
     String entityType,
     String entityTypeVersionId,
+    Integer entityTypeVersion,
     Integer version,
     String name,
     List<AggregateAction> actions) {
@@ -35,7 +38,7 @@ public record InstanceRowView(
    * @param entities the entities to render
    */
   public static List<InstanceRowView> listFrom(List<Entity> entities) {
-    return listFrom(entities, TypeCapabilities.NONE);
+    return listFrom(entities, TypeCapabilities.NONE, Map.of());
   }
 
   /**
@@ -51,9 +54,12 @@ public record InstanceRowView(
    *
    * @param entities the entities to render
    * @param capabilities which type names hold which capabilities
+   * @param typeVersionNumbers the number of each entity type version, by snapshot id
    */
   public static List<InstanceRowView> listFrom(
-      List<Entity> entities, TypeCapabilities capabilities) {
+      List<Entity> entities,
+      TypeCapabilities capabilities,
+      Map<String, Integer> typeVersionNumbers) {
     var views = new ArrayList<InstanceRowView>();
     for (var entity : entities) {
       String id = entity.getId().orElse(null);
@@ -72,6 +78,9 @@ public record InstanceRowView(
               id,
               entity.getEntityType(),
               entity.getEntityTypeVersionId(),
+              entity.getEntityTypeVersionId() == null
+                  ? null
+                  : typeVersionNumbers.get(entity.getEntityTypeVersionId()),
               entity.getVersion().orElse(null),
               name,
               capabilities.actionsFor(entity.getEntityType())));

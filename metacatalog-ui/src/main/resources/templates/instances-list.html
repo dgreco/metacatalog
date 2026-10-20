@@ -93,7 +93,8 @@
                 <span class="tag" th:text="${inst.entityType}">entityType</span>
             </td>
             <td>
-                <span class="tag muted" th:text="${inst.entityTypeVersionId}">version</span>
+                <span class="tag muted" th:title="${inst.entityTypeVersionId}"
+                      th:text="${inst.entityTypeVersion != null} ? 'v' + ${inst.entityTypeVersion} : ${inst.entityTypeVersionId}">v1</span>
             </td>
             <td>
                 <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>

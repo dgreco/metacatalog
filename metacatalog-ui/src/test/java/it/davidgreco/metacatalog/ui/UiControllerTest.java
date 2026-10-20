@@ -64,6 +64,7 @@ class UiControllerTest {
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper);
     mockMvc =
         MockMvcBuilders.standaloneSetup(
+                new RootController(),
                 new GraphUiController(api, catalogGraphService),
                 new TraitUiController(api, catalogGraphService),
                 new EntityTypeUiController(api),
@@ -81,6 +82,19 @@ class UiControllerTest {
 
   private static RuntimeException apiError(String message) {
     return new RuntimeException(message);
+  }
+
+  /**
+   * The bare root must reach the dashboard through its controller. Unmapped, Spring Boot's
+   * welcome-page support renders the {@code index} template at {@code /} with none of the model the
+   * dashboard fills, and the page fails with a 500.
+   */
+  @Test
+  void rootRedirectsToTheDashboard() throws Exception {
+    mockMvc
+        .perform(get("/"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui"));
   }
 
   @Test
@@ -1031,9 +1045,7 @@ class UiControllerTest {
 
   /**
    * The history page lists every version oldest first, marks the last one current and labels each
-   * with the type version it was validated against: an older type snapshot matches by id, while the
-   * live type version's snapshot does not appear in the list under its own id, so an unmatched pin
-   * is the live version.
+   * with the number of the type version it was validated against.
    */
   @Test
   void instanceHistoryListsVersionsWithTheirTypeVersions() throws Exception {
@@ -1046,11 +1058,11 @@ class UiControllerTest {
     var oldType = new EntityType();
     oldType.setId(java.util.Optional.of("type-snap-1"));
     oldType.setVersion(java.util.Optional.of(1));
-    var liveType = new EntityType();
-    liveType.setId(java.util.Optional.of("type-live"));
-    liveType.setVersion(java.util.Optional.of(2));
-    given(api.listEntityTypeVersions("Person"))
-        .willReturn(ResponseEntity.ok(List.of(oldType, liveType)));
+    var currentType = new EntityType();
+    currentType.setId(java.util.Optional.of("type-snap-2"));
+    currentType.setVersion(java.util.Optional.of(2));
+    given(api.listAllEntityTypeVersions())
+        .willReturn(ResponseEntity.ok(List.of(oldType, currentType)));
     given(api.listEntityVersions("ent-1"))
         .willReturn(
             ResponseEntity.ok(
@@ -1087,6 +1099,39 @@ class UiControllerTest {
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/instances"))
         .andExpect(flash().attribute("error", "Entity with id gone not found"));
+  }
+
+  /**
+   * The list shows the type version an instance is pinned to as its number, resolved from the
+   * snapshot id the instance carries. The current version's snapshot counts too: it is listed by
+   * {@code GET /entity-type/versions} under its own id, unlike in the per-type list.
+   */
+  @Test
+  void instancesListShowsThePinnedTypeVersionNumber() throws Exception {
+    var pinned = new Entity();
+    pinned.setId(java.util.Optional.of("ent-1"));
+    pinned.setEntityType("Doc");
+    pinned.setValues("{}");
+    pinned.setEntityTypeVersionId("snap-2");
+    var unresolved = new Entity();
+    unresolved.setId(java.util.Optional.of("ent-2"));
+    unresolved.setEntityType("Doc");
+    unresolved.setValues("{}");
+    unresolved.setEntityTypeVersionId("snap-unknown");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(pinned, unresolved)));
+    var v1 = new EntityType();
+    v1.setId(java.util.Optional.of("snap-1"));
+    v1.setVersion(java.util.Optional.of(1));
+    var v2 = new EntityType();
+    v2.setId(java.util.Optional.of("snap-2"));
+    v2.setVersion(java.util.Optional.of(2));
+    given(api.listAllEntityTypeVersions()).willReturn(ResponseEntity.ok(List.of(v1, v2)));
+
+    var rows = instanceRows();
+
+    org.junit.jupiter.api.Assertions.assertEquals(2, rows.get(0).entityTypeVersion());
+    org.junit.jupiter.api.Assertions.assertEquals("snap-2", rows.get(0).entityTypeVersionId());
+    org.junit.jupiter.api.Assertions.assertNull(rows.get(1).entityTypeVersion());
   }
 
   @Test

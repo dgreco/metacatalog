@@ -64,7 +64,8 @@ class UnifiedInstanceController {
       entities = List.of();
       model.addAttribute("error", e.getMessage());
     }
-    model.addAttribute("instances", InstanceRowView.listFrom(entities, typeCapabilities()));
+    model.addAttribute(
+        "instances", InstanceRowView.listFrom(entities, typeCapabilities(), typeVersionNumbers()));
     model.addAttribute("selectedType", type);
     model.addAttribute("query", query);
     model.addAttribute("entityTypes", types);
@@ -287,6 +288,22 @@ class UnifiedInstanceController {
         Set.copyOf(capabilities.getAuthorizable()));
   }
 
+  /**
+   * The number of every entity type version, by snapshot id, so a row can show the version its
+   * instance is pinned to as {@code v2} rather than as the id it carries.
+   *
+   * <p>{@code GET /entity-type/versions} is used rather than the per-type list because only it
+   * reports every version under its snapshot id: the per-type list gives the current version under
+   * the live type's id, which is not the id an instance is pinned to.
+   */
+  private Map<String, Integer> typeVersionNumbers() {
+    var numbers = new LinkedHashMap<String, Integer>();
+    for (var v : api.listAllEntityTypeVersions().getBody()) {
+      v.getId().ifPresent(id -> v.getVersion().ifPresent(n -> numbers.put(id, n)));
+    }
+    return numbers;
+  }
+
   private Map<String, String> schemaMap(List<EntityType> types) {
     var map = new LinkedHashMap<String, String>();
     for (var t : types) {
@@ -346,11 +363,8 @@ class UnifiedInstanceController {
    * The version history of an instance whose type carries the built-in {@code Versionable} trait,
    * oldest first. Read-only: history is never edited, only appended to by updates.
    *
-   * <p>Each version is labelled with the type version its values were validated against, matched by
-   * snapshot id against {@code GET /entity-type/{name}/versions} the same way {@link
-   * #addInstanceSchemaModel} matches the pin. The current type version's snapshot appears in that
-   * list under the live row's id, so a version that matches nothing was validated against the live
-   * version.
+   * <p>Each version is labelled with the number of the type version its values were validated
+   * against (see {@link #typeVersionNumbers}).
    */
   @GetMapping("/{id}/versions")
   @SuppressWarnings("unchecked")
@@ -359,20 +373,14 @@ class UnifiedInstanceController {
     try {
       var entity = (Entity) api.getEntity(id).getBody();
       var history = (List<EntityVersion>) api.listEntityVersions(id).getBody();
-      var typeVersions =
-          (List<EntityType>) api.listEntityTypeVersions(entity.getEntityType()).getBody();
-      var labels = new LinkedHashMap<String, Integer>();
-      typeVersions.forEach(
-          t -> t.getId().ifPresent(tid -> t.getVersion().ifPresent(v -> labels.put(tid, v))));
-      var liveTypeVersion =
-          typeVersions.isEmpty() ? null : typeVersions.getLast().getVersion().orElse(null);
+      var typeVersions = typeVersionNumbers();
       var rows = new java.util.ArrayList<EntityVersionView>();
       for (var v : history) {
         rows.add(
             new EntityVersionView(
                 v.getVersion(),
                 v == history.getLast(),
-                labels.getOrDefault(v.getEntityTypeVersionId(), liveTypeVersion),
+                typeVersions.get(v.getEntityTypeVersionId()),
                 prettyJson(v.getValues()),
                 v.getCreatedAt()));
       }
