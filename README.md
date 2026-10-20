@@ -747,11 +747,13 @@ version; to remove the type entirely, use the existing `DELETE /trait/{name}` /
 
 ### Graph view
 
-The interactive graph at `/ui/graph` renders one node per historical snapshot (labelled
-`Name (vN)`, kind `entityTypeVersion` / `traitVersion`) and a `successor-of` edge from each
-node to its predecessor in the version chain. The live type node is the head of the chain;
-the oldest snapshot is the tail. This makes the evolution of a type visible alongside its
-inheritance, trait membership, and mapping edges.
+The interactive graph at `/ui/graph` draws the current version once, as the live type node. Once
+the type has history, that node is labelled with its version, `Name (vN)`. Each older version is a
+node of its own (kind `entityTypeVersion` / `traitVersion`), with a `successor-of` edge to its
+predecessor, so the live node heads the chain and the oldest version is its tail. The current
+version's snapshot, kept so entities have a row to pin to, gets no node of its own: it is the same
+state as the live type. This makes the evolution of a type visible alongside its inheritance, trait
+membership, and mapping edges.
 
 ### Constraints and behaviour
 
@@ -790,8 +792,8 @@ with.
   always present on read, and never sent by clients on create (the generator emits
   `requiredMode = REQUIRED` for the docs but no `@NotNull`, so `POST /entity` still accepts
   a body that omits it).
-- In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the
-  `Name (vN)` version node it is pinned to, rather than the live type node.
+- In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the version it is
+  pinned to: the live type node for the current version, the `Name (vN)` node for an older one.
 
 `entity_type_version_id` is `NOT NULL`: every entity is pinned. `EntityTypeService` creates
 an `EntityTypeVersion` snapshot for every live version — including the current one, not just
@@ -886,9 +888,9 @@ The same history is visible in three other places:
 - **UI:** a versioned instance gets a **History** link on the Instances list and on its view page.
   The history page lists each version with its values, the time it was recorded and the type
   version it was validated against.
-- **Graph:** with *Show entities* on, each version is an *Entity version* node labelled
-  `Name (vN)`, with the name the entity had at that version. Versions are chained by
-  `successor-of` edges, with the live entity at the head of the chain, just as for type versions.
+- **Graph:** with *Show entities* on, the current version is the live entity node, labelled
+  `Name (vN)` once it has history. Each older version is an *Entity version* node, labelled with
+  the name the entity had then and chained behind it by `successor-of` edges, as for type versions.
 - **SPARQL:** each version is an `mt:EntityVersion` with `mt:version`, `mt:values` and
   `mt:createdAt`. It links to its entity through `mt:versionOf`, to the type version through
   `mt:pinnedToVersion`, and to its predecessor through `mt:hasPreviousVersion`. The entity itself
@@ -941,7 +943,9 @@ curl -s http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1
 ```
 
 The UI's history page shows the recorded tree under **Whole aggregate**. On the graph, with *Show
-entities* on, each root version carries its own frozen copy of the aggregate:
+entities* on, each past root version carries its own frozen copy of the aggregate. The current
+version draws none, because it is the live root, with the live aggregate already on the graph. A
+copy shows:
 - every part and derived entity as it was then, labelled `op1 @v2`, with that version's values in
   its popup;
 - `HAS_PART` edges from the version node to the part copies, `MAPPED_TO` edges from each copy to
@@ -961,8 +965,8 @@ and Athena table derived from them.
 - **Editing:** editing `dp1` or one of its output ports in the UI adds one version.
 - **Lifecycle runs:** each provision, unprovision, authorize or reject run adds three versions. Each
   of the two resources records its own status, then the run's outcome is written onto the root.
-- **Graph:** tick *Show entities* to see the chain grow behind `dp1`, each version with its own
-  copy of the data product.
+- **Graph:** tick *Show entities* to see the chain grow behind `dp1`, each past version with its
+  own copy of the data product.
 
 ### Interaction with type versions
 

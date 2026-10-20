@@ -1140,9 +1140,11 @@ class UiControllerTest {
   }
 
   /**
-   * A version of an aggregate root brings its recorded aggregate onto the graph as frozen copies of
-   * the parts — labelled with the name they had and the root version they belong to, hanging off
-   * that version by HAS_PART, and depending on each other by DEPENDS_ON as they did then.
+   * A past version of an aggregate root brings its recorded aggregate onto the graph as frozen
+   * copies of the parts — labelled with the name they had and the root version they belong to,
+   * hanging off that version by HAS_PART, and depending on each other by DEPENDS_ON as they did
+   * then. The current version draws none: it is the live root, whose live aggregate is already on
+   * the graph.
    */
   @Test
   void graphDuplicatesTheRecordedAggregateUnderEachRootVersion() {
@@ -1150,7 +1152,7 @@ class UiControllerTest {
     root.setId(java.util.Optional.of("root-1"));
     root.setEntityType("Product");
     root.setValues("{\"name\":\"dp1\"}");
-    root.setVersion(java.util.Optional.of(1));
+    root.setVersion(java.util.Optional.of(2));
     given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(root)));
     var op1 = new it.davidgreco.metacatalog.openapi.model.RecordedAggregate();
     op1.setId(java.util.Optional.of("p-1"));
@@ -1173,7 +1175,9 @@ class UiControllerTest {
     tree.setParts(List.of(op1, op2));
     var version = entityVersion("v-1", "root-1", 1, "{\"name\":\"dp1\"}", "t", null);
     version.aggregate(tree);
-    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of(version)));
+    var current = entityVersion("v-2", "root-1", 2, "{\"name\":\"dp1\"}", "t", "v-1");
+    current.aggregate(tree);
+    given(api.listAllEntityVersions()).willReturn(ResponseEntity.ok(List.of(version, current)));
 
     var graph =
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
@@ -1301,21 +1305,123 @@ class UiControllerTest {
         new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
             .buildGraphModel(false, true);
 
+    // The current version, v3, is the live entity itself: no node of its own, and the live node
+    // carries its number.
     var versionNodes =
         graph.nodes().stream().filter(n -> "entityVersion".equals(n.kind())).toList();
     org.junit.jupiter.api.Assertions.assertEquals(
-        List.of("draft (v1)", "#ent-1 (v2)", "report (v3)"),
+        List.of("draft (v1)", "#ent-1 (v2)"),
         versionNodes.stream().map(GraphModel.Node::label).toList());
-    var successorEdges =
+    org.junit.jupiter.api.Assertions.assertEquals("report (v3)", label(graph, "entity:ent-1"));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("entity-version:v-2->entity-version:v-1", "entity:ent-1->entity-version:v-2"),
+        successorEdges(graph));
+  }
+
+  private static String label(GraphModel graph, String nodeId) {
+    return graph.nodes().stream()
+        .filter(n -> n.id().equals(nodeId))
+        .findFirst()
+        .orElseThrow()
+        .label();
+  }
+
+  private static List<String> successorEdges(GraphModel graph) {
+    return graph.edges().stream()
+        .filter(e -> "successor-of".equals(e.kind()))
+        .map(e -> e.source() + "->" + e.target())
+        .toList();
+  }
+
+  private static EntityType typeRow(String id, String name, int version, String previous) {
+    var type = new EntityType();
+    type.setId(java.util.Optional.of(id));
+    type.setName(name);
+    type.setSchema("{}");
+    type.setVersion(java.util.Optional.of(version));
+    type.setVersionGroupId(java.util.Optional.of("group-" + name));
+    type.setPreviousVersionId(java.util.Optional.ofNullable(previous));
+    return type;
+  }
+
+  /**
+   * A type's current version is drawn once, as the live type labelled with its number; only older
+   * versions are nodes of their own, chained behind it. An entity pinned to the current version is
+   * an instance of the live type, one pinned to an older version of that version's node. A type
+   * with no history keeps its plain name.
+   */
+  @Test
+  void graphDrawsATypesCurrentVersionOnceAsTheLiveType() {
+    var live = typeRow("type-doc", "Doc", 2, null);
+    var plain = typeRow("type-note", "Note", 1, null);
+    given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(live, plain)));
+    given(api.listAllEntityTypeVersions())
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    typeRow("snap-doc-1", "Doc", 1, null),
+                    typeRow("snap-doc-2", "Doc", 2, "snap-doc-1"),
+                    typeRow("snap-note-1", "Note", 1, null))));
+    var onCurrent = new Entity();
+    onCurrent.setId(java.util.Optional.of("ent-new"));
+    onCurrent.setEntityType("Doc");
+    onCurrent.setValues("{\"name\":\"new\"}");
+    onCurrent.setEntityTypeVersionId("snap-doc-2");
+    var onOlder = new Entity();
+    onOlder.setId(java.util.Optional.of("ent-old"));
+    onOlder.setEntityType("Doc");
+    onOlder.setValues("{\"name\":\"old\"}");
+    onOlder.setEntityTypeVersionId("snap-doc-1");
+    given(api.getEntities(any(), any())).willReturn(ResponseEntity.ok(List.of(onCurrent, onOlder)));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, true);
+
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("Doc (v1)"),
+        graph.nodes().stream()
+            .filter(n -> "entityTypeVersion".equals(n.kind()))
+            .map(GraphModel.Node::label)
+            .toList());
+    org.junit.jupiter.api.Assertions.assertEquals("Doc (v2)", label(graph, "type:Doc"));
+    org.junit.jupiter.api.Assertions.assertEquals("Note", label(graph, "type:Note"));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("type:Doc->type-version:snap-doc-1"), successorEdges(graph));
+    var instanceOf =
         graph.edges().stream()
-            .filter(e -> "successor-of".equals(e.kind()))
+            .filter(e -> "instance-of".equals(e.kind()))
             .map(e -> e.source() + "->" + e.target())
+            .sorted()
             .toList();
     org.junit.jupiter.api.Assertions.assertEquals(
-        List.of(
-            "entity-version:v-2->entity-version:v-1",
-            "entity-version:v-3->entity-version:v-2",
-            "entity:ent-1->entity-version:v-3"),
-        successorEdges);
+        List.of("entity:ent-new->type:Doc", "entity:ent-old->type-version:snap-doc-1"), instanceOf);
+  }
+
+  /**
+   * A trait keeps snapshots of its past versions only, so its chain is unchanged: the live trait,
+   * labelled with its number, leads to the newest snapshot.
+   */
+  @Test
+  void graphLabelsAVersionedTraitWithItsCurrentNumber() {
+    var trait = new Trait();
+    trait.setName("Owned");
+    trait.setVersion(java.util.Optional.of(2));
+    trait.setVersionGroupId(java.util.Optional.of("group-owned"));
+    var snapshot = new Trait();
+    snapshot.setId(java.util.Optional.of("snap-owned-1"));
+    snapshot.setName("Owned");
+    snapshot.setVersion(java.util.Optional.of(1));
+    snapshot.setVersionGroupId(java.util.Optional.of("group-owned"));
+    given(api.listTraits()).willReturn(ResponseEntity.ok(List.of(trait)));
+    given(api.listAllTraitVersions()).willReturn(ResponseEntity.ok(List.of(snapshot)));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, false);
+
+    org.junit.jupiter.api.Assertions.assertEquals("Owned (v2)", label(graph, "trait:Owned"));
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("trait:Owned->trait-version:snap-owned-1"), successorEdges(graph));
   }
 }
