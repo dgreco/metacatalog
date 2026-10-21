@@ -11,6 +11,13 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies.** Flyway 13.11.1, the PostgreSQL JDBC driver 42.7.14, Tomcat 11.0.27 (the
+  embedded server and its connection pool) and Jackson 2.21.8; Selenium 4.51.0 for the tests.
+- **Build plugins.** maven-compiler-plugin 3.16.0, maven-dependency-plugin 3.11.0 and
+  maven-install-plugin 3.2.0.
+
 ## [1.0.0] - 2026-10-20
 
 The first release. Meta Catalog manages metadata as entities, entity types, traits,
