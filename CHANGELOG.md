@@ -11,6 +11,11 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-21
+
+A maintenance release: dependency and build-plugin upgrades, with no change in behaviour, API,
+schema or configuration. A 1.0.0 database runs on it as it is.
+
 ### Changed
 
 - **Dependencies.** Flyway 13.11.1, the PostgreSQL JDBC driver 42.7.14, Tomcat 11.0.27 (the
@@ -58,5 +63,6 @@ SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
 - **Operations.** Container images for the three applications (amd64 and arm64), Docker Compose
   stacks for local and demo use, Kubernetes manifests, and identical CI on GitLab and GitHub.
 
-[Unreleased]: https://github.com/dgreco/metacatalog/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dgreco/metacatalog/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/dgreco/metacatalog/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dgreco/metacatalog/releases/tag/v1.0.0
