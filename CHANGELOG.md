@@ -14,7 +14,9 @@ renames that section to the new version.
 ### Changed
 
 - **Dependencies.** Flyway 13.11.1, the PostgreSQL JDBC driver 42.7.14, Tomcat 11.0.27 (the
-  embedded server and its connection pool) and Jackson 2.21.8; Selenium 4.51.0 for the tests.
+  embedded server and its connection pool), Hibernate ORM 7.4.13, Hibernate Validator 9.1.5,
+  Jackson 2.21.8 and 3.1.8, Netty 4.2.19, SLF4J 2.0.20, Byte Buddy 1.18.15, Apache HttpClient 5.6.5
+  and HttpCore 5.4.4, webjars-locator-lite 1.1.5; Selenium 4.51.0 for the tests.
 - **Build plugins.** maven-compiler-plugin 3.16.0, maven-dependency-plugin 3.11.0 and
   maven-install-plugin 3.2.0.
 
