@@ -52,7 +52,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 - **Java 25**
 - **Spring Boot 4.1.0**
-- **PostgreSQL** (JDBC driver 42.7.13, server 18+)
+- **PostgreSQL** (JDBC driver 42.7.14, server 18+)
 - **Maven 3.9.9+**
 - **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 6.1.0** (SPARQL protocol + result serialisation)
 
