@@ -59,6 +59,15 @@
         <!-- Dependencies Versions -->
         <!--   SpringBoot -->
         <spring-boot.version>4.1.1</spring-boot.version>
+        <!-- Patch releases newer than the ones Spring Boot 4.1.1 manages, overriding its own
+             properties. Patches only: a minor jump would leave the lines Boot is tested on. Drop
+             each override once a Boot release manages that version or a newer one. -->
+        <postgresql.version>42.7.14</postgresql.version>
+        <tomcat.version>11.0.27</tomcat.version>
+        <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
+        <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
+        <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
+        <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
 
         <!--   Hypersistence -->
         <hypersistence.version>3.16.0</hypersistence.version>
@@ -92,15 +101,14 @@
         <hive.version>4.2.1</hive.version>
 
         <!--   Flyway -->
-        <flyway.version>13.10.0</flyway.version>
+        <flyway.version>13.11.1</flyway.version>
 
         <!--   Ontop & RDF4J (metacatalog-sparql) -->
         <ontop.version>5.5.0</ontop.version>
         <rdf4j.version>6.1.0</rdf4j.version>
 
         <!--   Testing & Checking -->
-        <selenium.version>4.50.0</selenium.version>
-        <spotbugs-annotations.version>4.9.0</spotbugs-annotations.version>
+        <selenium.version>4.51.0</selenium.version>
 
         <!-- JUnit tag filtering: tests tagged "stress" are excluded from normal builds
              and run on demand via the stress-tests profile. Kept as properties (rather
