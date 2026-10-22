@@ -55,8 +55,8 @@ import org.springframework.transaction.annotation.Transactional;
  * the rolling-restart case, where queueing every replica behind one transaction would be pure
  * delay. Something missing means the opposite: the holder declares a <em>different</em> model
  * against the same database and is never going to create these. The lock id is shared by every
- * application built on this module — the Iceberg REST catalog boots against the same tables as the
- * main application, each with its own contributors — so losing the race must not cost an instance
+ * instance built on this module — during a rolling upgrade, replicas of two releases boot against
+ * the same tables, each with its own contributors — so losing the race must not cost an instance
  * its own model. It waits, then re-applies. Waiting only when there is something to wait for is
  * what keeps both properties.
  */

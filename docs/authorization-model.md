@@ -19,10 +19,9 @@ and one result string, both `readOnly` and both written by the machinery:
 `reject` direction. The run answers **whether** access was decided. It carries no statement of
 *who* gets *what*.
 
-The mixed data-product demo fills that vacuum ad hoc: each output port's own entity type declares
-an optional `grantee` string, and `docker/provisioning/access-decision.sh` stamps
-`access.status` + `access.granted-to` onto the real table. That works for a demo and has three
-problems as a model:
+The only way to say who gets access is ad hoc: an output port's own entity type declares an
+optional `grantee` string, and the provisioning script stamps `access.status` +
+`access.granted-to` onto the real table. That works for a demo and has three problems as a model:
 
 - **The information lives on the resource, not the root.** Four ports of one data product each
   restate their audience, and nothing makes them consistent or lets you ask the product-level
@@ -45,7 +44,7 @@ structure. Stripped to what matters here:
 
 | | shape |
 | --- | --- |
-| **Ranger** | a *policy* = resource spec + `policyItems[]`, each `{users, groups, roles, accesses[]}`. The *access types* come from a per-service definition (hive: select/update/create/drop/alter…), not from the policy. |
+| **Ranger** | a *policy* = resource spec + `policyItems[]`, each `{users, groups, roles, accesses[]}`. The *access types* come from a per-service definition (for a SQL service: select/update/create/drop/alter…), not from the policy. |
 | **Lake Formation** | `(principal, resource, permissions[], grantable[])`. Tag-based access control selects resources by LF-Tag rather than by name. |
 | **Unity Catalog** | `GRANT <privilege> ON <securable> TO <principal>`; principals are account-level users / groups / service principals, federated in from the IdP. |
 | **Snowflake / SQL standard** | privileges granted to *roles*, roles granted to users. The role is the indirection. |
@@ -83,7 +82,7 @@ grants:                           # the policy: who gets what, over which resour
   - principals:  [crm-pipeline]
     permissions: [READ, WRITE]
     resources:                    # optional; absent means every resource in the aggregate
-      entityTypes: [IcebergTableOutputPortType]
+      entityTypes: [TableOutputPortType]
 ```
 
 Why three properties rather than one flat list of grants:
@@ -113,7 +112,7 @@ drift check exists to catch. Be generous once rather than sorry later.
 `{name, description?}` rather than a bare string, for the same reason.
 
 The vocabulary is **abstract and portable**, and that is a deliberate choice rather than laziness
-about writing out Iceberg's privilege names. §5 argues it.
+about writing out any one system's privilege names. §5 argues it.
 
 ## 4. How a root's grant reaches a resource
 
@@ -125,7 +124,7 @@ The optional `resources` selector narrows it, with two orthogonal filters:
 
 ```yaml
 resources:
-  entityTypes: [IcebergTableOutputPortType]      # by type — always available, entities have no name column
+  entityTypes: [TableOutputPortType]             # by type — always available, entities have no name column
   values: { namespace: sales }                   # exact match on the resource's own values
 ```
 
@@ -134,7 +133,7 @@ means all; both present means the intersection.
 
 **This is where the implementation departed from the proposal**, which called for a jsonpath `where`
 on the grounds that it "reuses machinery the codebase already has". It does not. The machinery it
-was pointing at — `EntityService.list(typeName, queryPath)`, `RegistrySupport.jsonPathString` — is
+was pointing at — `EntityService.list(typeName, queryPath)` — is
 *Postgres-side* jsonpath, pushed into the database. Selector evaluation happens in memory, against
 an aggregate the procedure has already read, so the only in-process option is Jayway, whose syntax
 is a different dialect (`$[?(@.namespace == 'sales')]` against Postgres's `$ ? (@.namespace ==
@@ -150,18 +149,18 @@ answerable by reading one entity. Expressiveness goes into the selector, not int
 
 ## 5. Abstract permissions, translated per resource type
 
-`READ` is not an Iceberg privilege, a Hive privilege or a Ranger access type. That is the point.
+`READ` is not a table catalog's privilege, an object store's ACL or a Ranger access type. That is
+the point.
 
-The mixed demo already publishes **one data product through two catalogs**, and
-`access-decision.sh` exists specifically because the Iceberg side and the Hive side had to be
-stopped from drifting into two different vocabularies for the same decision. Native permission
-names on the root would reintroduce that at the model layer: a product whose ports live in Iceberg
-and Hive would have to name `SELECT` for one and something else for the other, and a consumer
-reading the product-level policy could not tell whether the two meant the same thing.
+One data product can publish **through two systems at once** — tables in a catalog, files in an
+object store — and native permission names on the root would put two vocabularies into the model
+for one decision: a product whose ports live in both would have to name `SELECT` for one and
+something else for the other, and a consumer reading the product-level policy could not tell
+whether the two meant the same thing.
 
-So: **the root states an abstract decision, and the task translates it.** The Iceberg task knows
-what `READ` means to Iceberg; the Hive CLI knows what it means to a metastore table's parameters;
-a future Ranger task knows it maps to `select`. That is exactly the Ranger service-def split —
+So: **the root states an abstract decision, and the task translates it.** A table-catalog task
+knows what `READ` means to its catalog; an object-store task knows what it means to a bucket
+policy; a future Ranger task knows it maps to `select`. That is exactly the Ranger service-def split —
 the policy names accesses, the service definition says what they are — arrived at for the same
 reason.
 
@@ -184,8 +183,8 @@ the version of this bug that ships to production and is discovered by an auditor
 
 This is arguably the largest single win of the feature and is worth not cutting: it makes access a
 **queryable catalog fact**. "Which tables can `sales-analysts` read?" becomes a jsonb query, a
-SPARQL query, and a column in the UI's instances page — across both catalogs, over resources
-created by different provisioning scripts, without asking either catalog. Nothing in the current
+SPARQL query, and a column in the UI's instances page — across every target system, over
+resources created by different provisioning tasks, without asking any of them. Nothing in the current
 design can answer it.
 
 An authorized resource that no grant reaches records `effectiveGrants: []` explicitly rather than
@@ -203,7 +202,7 @@ capability into a mutable grant set, and it should not.
 
 `AUTHORIZE` / `REJECT` remain two directions of one lifecycle, exactly like `PROVISION` /
 `UNPROVISION`. Changing who has access means **editing the root's policy and re-running
-`authorize`** — an idempotent re-apply that converges the real catalogs on the declared state.
+`authorize`** — an idempotent re-apply that converges the real systems on the declared state.
 That is §2's invariant 4, and it is how every declarative policy engine in the list works.
 
 This also settles a question that otherwise has no good answer: *if the operator empties `grants`
@@ -237,21 +236,14 @@ grant 7 of 9 named a group that does not exist.
 | `metacatalog-functions-provisioning-tasks` | `stdout` prints the grants it would apply. `script` exports the decision as a `METACATALOG_ACCESS` environment variable — JSON, read with `jq` — rather than changing the stdin contract, which is the entity's values for all four operations and stays that way. (argv would work too but puts grants in `ps` output.) |
 | `metacatalog-openapi` | `GET /aggregate/{id}/access` — the effective grants per resource, the product-level "who can see what". Authoring needs no new endpoint: the policy is entity values. |
 | `metacatalog-ui` | An editor for the policy on the root (it is schema-driven already, so `instance-values-form.js` renders it for free); an effective-grants column on the instances page. |
-| demo | Ports drop `grantee`; `IcebergDataProductType`'s root instance gains the policy; `provision-iceberg-table.sh` / `provision-hive-table.sh` / `hive-cli` read `METACATALOG_ACCESS` and write one property/parameter per permission. `access-decision.sh` keeps its job — one vocabulary, both catalogs — with more to say. |
+| demo | Ports drop `grantee`; the demo's root instance gains the policy, and its provisioning tasks print or apply the grants each resource receives. |
 
 Staging: core schema + policy resolution first (with tests, no behavioural change), then the
 procedure wiring, then the tasks, then the demo, then UI/API. The demo is the acceptance test:
-one data product, two catalogs, one policy, and the same answer readable from PyIceberg and from a
-Hive client.
+one data product, one policy, and the effective grants readable on every resource it provisions.
 
-Two notes on what actually landed:
+One note on what actually landed:
 
-- **The demo writes three value keys, not one per permission.** `access.granted-to` (who at all),
-  `access.permissions` (which permissions at all) and `access.grants` (`id=PERM|PERM,…`, the precise
-  mapping the first two flatten), plus `access.status`. A key per permission would put the policy's
-  vocabulary into the catalogs' key space, where renaming a permission strands the old key on every
-  table already stamped with it. A fixed key set also means `reject` removes exactly what
-  `authorize` writes, from one shared list.
 - **The UI got no dedicated access view, and needs none for the data to be visible.** Both the root's
   policy and each resource's `effectiveGrants` are ordinary entity values, so the existing
   schema-driven forms, the catalog graph and SPARQL already show them; `effectiveGrants` is
@@ -262,9 +254,10 @@ Two notes on what actually landed:
 
 `Authorizable` and `AuthorizableResource` are **immutable** traits. Changing their base schema
 changes what `BuiltInModelContributor` declares, and `ImmutableModelInstaller`'s drift check will
-abort startup on any existing database, with the only remedy being to recreate it. That is the
-project's accepted posture (the Flyway baseline is edited in place for the same reason), but it
-means this lands as a breaking change for every deployed instance and should land **once** —
+abort startup on any existing database, with the only remedy being to recreate it. Before 1.0.0
+that was the project's accepted posture — the Flyway baseline was edited in place for the same
+reason — but it still means this lands as a breaking change for every deployed instance and should
+land **once** —
 which is the argument in §3 for making the principal-type enum and the permission shape generous
 now rather than iterating.
 
@@ -272,7 +265,7 @@ now rather than iterating.
 
 | Decision | Recommendation |
 | --- | --- |
-| Deny rules (Ranger has allow + deny + exceptions) | **Allow-only.** Deny needs a documented precedence order *and* a guarantee that the two catalogs a product publishes through evaluate it identically — which metacatalog cannot give, since it is not the decision point (§12). Allow-only means the pushed-down state is unambiguous everywhere. |
+| Deny rules (Ranger has allow + deny + exceptions) | **Allow-only.** Deny needs a documented precedence order *and* a guarantee that every system a product publishes through evaluates it identically — which metacatalog cannot give, since it is not the decision point (§12). Allow-only means the pushed-down state is unambiguous everywhere. |
 | Vocabulary on the root, or per resource type (Ranger's service-def) | **Root**, as asked. The abstract-permission argument (§5) is what makes it work: the root's vocabulary is portable, and translation — the thing that really is per-type — lives in the task. A per-type *declaration* of which abstract permissions a type can honour is a clean later addition; the procedure would intersect. |
 | Nested `additionalProperties: false` on principals/grants | **Yes.** Extending means restating the whole property on the concrete entity type, which linearization makes win (most-specific-first, reversed before merge — the type's declaration overwrites the trait's). Verbose, but a typo'd nested key is refused rather than stored. |
 | Column/row-level grants, masking | **Defer.** They are per-resource detail (`columns`, `rowFilter`, `masks`) and every system that has them treats them as separate policy kinds. Adding the field shapes later is the DB-recreation cost again, so if column-level access is on the roadmap at all it is cheaper to reserve the shape now. Worth a decision, not a default. |

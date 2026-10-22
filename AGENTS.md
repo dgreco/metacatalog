@@ -10,14 +10,14 @@ conventions the code is written to.
 ## What this is
 
 Meta Catalog is a metadata management system: entities, entity types, traits, relationships,
-mappings and aggregates, with a REST API, a server-rendered UI, a SPARQL endpoint, an Iceberg REST
-catalog and a Hive Metastore over the same model.
+mappings and aggregates, with a REST API, a server-rendered UI and a SPARQL endpoint over the same
+model.
 
 Java 25, Spring Boot 4.1.0, PostgreSQL 18+, Maven 3.9.9+. A JDK 25+ builds it.
 
 ## Layout
 
-Ten Maven modules. `README.md` § *Project Structure* has the annotated tree; what matters when
+Eight Maven modules. `README.md` § *Project Structure* has the annotated tree; what matters when
 changing code:
 
 | Module | Role |
@@ -30,8 +30,6 @@ changing code:
 | `metacatalog-security` | Pluggable auth: `none` / basic / oauth2 / ldap. |
 | `metacatalog-sparql` | Embedded Ontop SPARQL 1.1 endpoint + Yasgui. |
 | `metacatalog-application` | The Spring Boot app that assembles the rest. |
-| `metacatalog-iceberg-catalog` | Independent app: Iceberg REST catalog. Own port and image. |
-| `metacatalog-hive-metastore` | Independent app: Hive Metastore Thrift server. Own port and image. |
 
 ## Commands
 
@@ -55,8 +53,8 @@ mvn test -Pstress-tests -pl metacatalog-functions -Dstress.aggregates=1000
 ```
 
 Running the stack locally is `make` — see the `Makefile`, which is commented and is the source of
-truth: `make up-d` (base), `run-keycloak`, `run-iceberg`, `run-hive`, `run-hive-demo`, `down`,
-`logs`, `ps`, `info`. Always build from source (`--build`); the targets already do.
+truth: `make up-d` (base), `run-keycloak`, `down`, `logs`, `ps`, `info`. Always build from source
+(`--build`); the targets already do.
 
 ## Boundaries — do not cross these
 
@@ -78,7 +76,7 @@ databases must upgrade in place. Every change is a new `V2__…`, `V3__…` scri
 existing data too; never edit an applied migration (`README.md` § *Database Migrations*). Hibernate
 does not own the schema.
 
-**Versions are semantic and released from branches.** `main` carries the next minor as a
+**Versions are semantic and released from branches.** `main` carries the next release as a
 `-SNAPSHOT`; releases are tagged `vX.Y.Z` on `release/X.Y` branches (`README.md` § *Releases and
 Versioning*). A breaking change to the REST API, the schema or the configuration needs a major
 version. Change the version only with `scripts/set-version.sh`, which moves every POM together.
@@ -87,10 +85,6 @@ version. Change the version only with `scripts/set-version.sh`, which moves ever
 trait relationships it depends on through `ImmutableModelContributor`, and `ImmutableModelInstaller`
 applies them idempotently. Frozen items cannot be deleted or versioned. Add to the contributor
 rather than seeding data by hand.
-
-**The two independent applications stay independent.** `metacatalog-iceberg-catalog` and
-`metacatalog-hive-metastore` have their own ports, images and lifecycles. They read the catalog;
-they are not part of the main app.
 
 ## Conventions
 
@@ -138,11 +132,11 @@ Conventions that matter:
 
 Two pipelines, one logic. GitHub Actions (`.github/workflows/ci.yml`) and GitLab CI
 (`.gitlab-ci.yml`) both call `ci/build.sh` — `mvn clean install spotless:check test -B` — and then
-`ci/publish-images.sh`, which builds and pushes the application, Iceberg catalog and Hive Metastore
-images: a `vX.Y.Z` tag as its version (and `latest` when newest), `main` as `edge`, `release/*`
-branches not at all (GitHub to GHCR for amd64 and arm64, through buildx when the pipeline sets
-`PLATFORMS`; GitLab to its own registry for its arm64 runner only). Change
-pipeline behaviour in the scripts, not in the platform files, so the two cannot drift. GitLab needs
+`ci/publish-images.sh`, which builds and pushes the application image: a `vX.Y.Z` tag as its version
+(and `latest` when newest), `main` as `edge`, `release/*` branches not at all (GitHub to GHCR for
+amd64 and arm64, through buildx when the pipeline sets `PLATFORMS`; GitLab to its own registry for
+its arm64 runner only). Change pipeline behaviour in the scripts, not in the platform files, so the
+two cannot drift. GitLab needs
 a Docker-in-Docker service for Testcontainers; the GitHub runner has a daemon. Keep the build green
 without Docker-daemon assumptions beyond Testcontainers.
 

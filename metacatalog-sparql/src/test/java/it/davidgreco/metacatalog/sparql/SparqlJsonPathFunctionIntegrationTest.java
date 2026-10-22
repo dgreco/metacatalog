@@ -26,10 +26,10 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * MetacatalogFunctionSymbolFactory} substituted by {@code OntopRepositoryConfig}) against a
  * Testcontainers Postgres running the metacatalog Flyway baseline.
  *
- * <p>The data models the Iceberg registry shape: table entities containing schema entities via
- * {@code HAS_PART}, the schema's {@code values} holding a {@code columns} array. One schema has a
- * {@code vendor} column, the other does not — so a correct answer requires the path predicate to
- * actually discriminate.
+ * <p>The data models a table catalog's shape: table entities containing schema entities via {@code
+ * HAS_PART}, the schema's {@code values} holding a {@code columns} array. One schema has a {@code
+ * vendor} column, the other does not — so a correct answer requires the path predicate to actually
+ * discriminate.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -75,10 +75,10 @@ class SparqlJsonPathFunctionIntegrationTest {
     if (tripsTableId != null) {
       return; // the class's tests share one database
     }
-    var tableTypeId = insertEntityType("IcebergTable");
-    var schemaTypeId = insertEntityType("IcebergTableSchema");
-    var tableVersionId = insertEntityTypeVersion(tableTypeId, "IcebergTable");
-    var schemaVersionId = insertEntityTypeVersion(schemaTypeId, "IcebergTableSchema");
+    var tableTypeId = insertEntityType("Table");
+    var schemaTypeId = insertEntityType("TableSchema");
+    var tableVersionId = insertEntityTypeVersion(tableTypeId, "Table");
+    var schemaVersionId = insertEntityTypeVersion(schemaTypeId, "TableSchema");
 
     tripsTableId =
         insertEntity(
@@ -162,10 +162,10 @@ class SparqlJsonPathFunctionIntegrationTest {
         PREFIX mtfn: <http://metacatalog/fn#>
         SELECT ?table WHERE {
           ?table mt:hasEntityType ?tableType .
-          ?tableType mt:name "IcebergTable" .
+          ?tableType mt:name "Table" .
           ?table mt:hasPart ?schema .
           ?schema mt:hasEntityType ?schemaType .
-          ?schemaType mt:name "IcebergTableSchema" .
+          ?schemaType mt:name "TableSchema" .
           ?schema mt:values ?v .
           FILTER(mtfn:jsonPathExists(?v, '%s'))
         }
