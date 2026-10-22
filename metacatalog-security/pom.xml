@@ -12,7 +12,6 @@
 
     <groupId>it.davidgreco.metacatalog</groupId>
     <artifactId>metacatalog-security</artifactId>
-    <version>${project.version}</version>
     <name>Meta Catalog Security</name>
 
     <dependencies>
