@@ -11,6 +11,16 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+### Removed
+
+- **The Iceberg REST catalog and the Hive Metastore.** Both independent applications
+  (`metacatalog-iceberg-catalog`, `metacatalog-hive-metastore`) are gone, with their container
+  images, their Docker Compose overlays and `make` targets, and the data-product demo that published
+  through them, provisioning scripts included. The main application, its REST API and its schema
+  are unchanged. This is a breaking change for anyone running either application. On a database
+  they ran against, the registries' immutable traits and entity types remain, inert, and cannot be
+  deleted through the API; the entities they recorded remain as ordinary entities.
+
 ## [1.0.1] - 2026-10-21
 
 A maintenance release: dependency and build-plugin upgrades, with no change in behaviour, API,

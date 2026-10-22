@@ -2,17 +2,16 @@
 # Prints one line of coverage totals from the per-module JaCoCo CSVs, in a shape both pipelines
 # can read:
 #
-#   TOTAL coverage: 61.2% instructions (61234/100000), 48.9% branches, 63.0% lines [10 modules]
+#   TOTAL coverage: 61.2% instructions (61234/100000), 48.9% branches, 63.0% lines [8 modules]
 #
 # GitLab's `coverage:` keyword scrapes the first number out of the job log; the GitHub job appends
 # the same line to the run summary. One script, so the two cannot disagree about what the
 # project's coverage is — which is the whole reason the number is computed here rather than by a
 # regex in each pipeline.
 #
-# Per-module rather than an aggregate report: the Iceberg catalog and the Hive Metastore are
-# independent applications that nothing else depends on, so no single module's `report-aggregate`
-# could fold them in. Summing the module CSVs credits a class to the module that owns it, wherever
-# the test that exercised it lives.
+# Per-module CSVs summed rather than a `report-aggregate`: that needs no extra aggregator module,
+# and summing credits each class to the module that owns it, wherever the test that exercised it
+# lives.
 set -eu
 
 # The C locale, or awk formats 73.3 as "73,3" wherever the developer's locale says so — and the

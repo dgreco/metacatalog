@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Builds and pushes the three container images (application, Iceberg REST catalog, Hive
-# Metastore), shared by GitLab CI and GitHub Actions. The caller has already run
-# ci/build.sh and logged Docker in to the registry; this script only decides tags.
+# Builds and pushes the application's container image, shared by GitLab CI and GitHub Actions.
+# The caller has already run ci/build.sh and logged Docker in to the registry; this script only
+# decides tags.
 #
 # What gets published (see README § Releases and Versioning):
 #   tag vX.Y.Z          X.Y.Z, X.Y and the SHA; plus `latest` when it is the newest release.
@@ -13,8 +13,7 @@
 #
 # Inputs (environment):
 #   IMAGE_BASE  registry path of the application image, e.g. ghcr.io/dgreco/metacatalog
-#               or $CI_REGISTRY_IMAGE. The other two images hang off it as
-#               $IMAGE_BASE/iceberg-catalog and $IMAGE_BASE/hive-metastore.
+#               or $CI_REGISTRY_IMAGE.
 #   GIT_SHA     short commit SHA, used as the immutable tag.
 #   GIT_TAG     the tag being built, on a tag pipeline; empty otherwise.
 #   GIT_BRANCH  the branch being built, on a branch pipeline; empty otherwise (merge requests).
@@ -108,6 +107,4 @@ publish() {
   done
 }
 
-publish metacatalog-application    "${IMAGE_BASE}"
-publish metacatalog-iceberg-catalog "${IMAGE_BASE}/iceberg-catalog"
-publish metacatalog-hive-metastore  "${IMAGE_BASE}/hive-metastore"
+publish metacatalog-application "${IMAGE_BASE}"

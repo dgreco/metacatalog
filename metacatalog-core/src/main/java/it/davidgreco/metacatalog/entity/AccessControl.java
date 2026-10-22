@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  * JsonUtils.mergeSchemas} emits a fresh node carrying only {@code type}, {@code properties}, {@code
  * required} and {@code additionalProperties}, so {@code $defs} does not survive into the derived
  * schema and every reference would dangle — and {@code $ref} is a rejected keyword besides. Shared
- * shapes are composed from constants instead, exactly as {@code HiveModel} does.
+ * shapes are composed from constants instead.
  *
  * <p><b>The model.</b> An aggregate root declares three things and the resources declare nothing:
  *
@@ -31,9 +31,9 @@ import java.util.stream.Collectors;
  *       owns, which is the conclusion Ranger, Lake Formation and Unity Catalog all reached.
  *   <li>{@link #PERMISSIONS} — the vocabulary this aggregate can grant, and it is deliberately
  *       <em>abstract</em> ({@code READ}, {@code WRITE}) rather than any one catalog's native
- *       privilege names. One data product can publish output ports through two catalogs at once —
- *       the mixed demo does — and native names on the root would leave a consumer reading the
- *       product-level policy unable to tell whether the Iceberg half and the Hive half meant the
+ *       privilege names. One data product can publish output ports through two systems at once — an
+ *       object store and a table catalog, say — and native names on the root would leave a consumer
+ *       reading the product-level policy unable to tell whether the grants on each half meant the
  *       same thing. Translating an abstract permission into what a given system actually
  *       understands is the task's job, which is the same split Ranger draws between a policy's
  *       accesses and a service definition's access types.

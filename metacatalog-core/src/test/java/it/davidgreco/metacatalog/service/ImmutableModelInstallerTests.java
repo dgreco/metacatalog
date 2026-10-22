@@ -285,8 +285,8 @@ class ImmutableModelInstallerTests extends CommonServiceTestingSupport {
 
   /**
    * An instance with something still missing is in the opposite situation: the holder declares a
-   * different model against the same database — the Iceberg REST catalog and the main application
-   * share this lock id — and is never going to create it. Skipping would cost this instance its own
+   * different model against the same database — replicas of two releases share this lock id during
+   * a rolling upgrade — and is never going to create it. Skipping would cost this instance its own
    * model with nothing reporting why, so it waits for the lock and creates it.
    */
   @Test

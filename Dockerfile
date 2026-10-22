@@ -20,15 +20,11 @@
 # javac internals, so this image moves to a newer JDK only once the build's tooling supports it.
 FROM maven:3-eclipse-temurin-25 AS build
 
-# Which deployable module this image runs: metacatalog-application (default) or
-# metacatalog-iceberg-catalog. docker-compose.yml passes it per service.
-ARG MODULE=metacatalog-application
 WORKDIR /workspace
 
 # Copy every module POM (and the root POM) first so dependency resolution can be
-# cached independently of sources. The reactor has 10 modules — copying all of them
-# (not just the app's upstream) lets `go-offline` resolve the full project graph
-# in the cache layer below.
+# cached independently of sources. The reactor has 8 modules — copying all of them
+# lets `go-offline` resolve the full project graph in the cache layer below.
 COPY pom.xml ./
 COPY metacatalog-core/pom.xml          metacatalog-core/
 COPY metacatalog-functions/pom.xml     metacatalog-functions/
@@ -38,8 +34,6 @@ COPY metacatalog-ui/pom.xml            metacatalog-ui/
 COPY metacatalog-security/pom.xml     metacatalog-security/
 COPY metacatalog-sparql/pom.xml        metacatalog-sparql/
 COPY metacatalog-application/pom.xml    metacatalog-application/
-COPY metacatalog-iceberg-catalog/pom.xml metacatalog-iceberg-catalog/
-COPY metacatalog-hive-metastore/pom.xml metacatalog-hive-metastore/
 # Pre-populate the Maven repo for the full reactor. --mount=type=cache keeps the
 # repo across builds (outside any image layer); a fresh build reuses whatever the
 # previous build already downloaded. `dependency:go-offline` can't fully resolve
@@ -52,8 +46,8 @@ RUN --mount=type=cache,target=/root/.m2 \
 # so they are skipped here; run `mvn verify` on the host for the full test suite).
 COPY . .
 RUN --mount=type=cache,target=/root/.m2 \
-    mvn -B -pl ${MODULE} -am -DskipTests -Djacoco.skip=true clean package \
-    && cp ${MODULE}/target/*.jar /workspace/app.jar
+    mvn -B -pl metacatalog-application -am -DskipTests -Djacoco.skip=true clean package \
+    && cp metacatalog-application/target/*.jar /workspace/app.jar
 
 # --- AOT stage: extract the jar and produce an ahead-of-time cache (Project Leyden) ---
 # Must run on the SAME image as the runtime stage and at the SAME path (/app): the AOT
@@ -87,14 +81,12 @@ RUN JDK_AOT_VM_OPTIONS="-XX:-AOTClassLinking" \
 
 # --- Runtime stage: slim JRE running the extracted jar as a non-root user ---
 FROM eclipse-temurin:25-jre-alpine
-# bash + curl + jq for the `script` provisioning task (ScriptProvisioningTask runs
-# `bash <path>`; the Iceberg demo script drives the REST catalog with curl/jq).
+# bash + curl + jq for the `script` provisioning task: ScriptProvisioningTask runs
+# `bash <path>`, and a script typically calls back into the REST API with curl and jq.
 RUN apk add --no-cache bash curl jq \
     && addgroup -S -g 1000 appgroup && adduser -S -u 1000 -G appgroup appuser
 USER 1000:1000
 WORKDIR /app
 COPY --from=aot /app/ ./
-# 8080 = metacatalog-application, 8181 = metacatalog-iceberg-catalog,
-# 8282 + 9083 (Thrift) = metacatalog-hive-metastore
-EXPOSE 8080 8181 8282 9083
+EXPOSE 8080
 ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]
