@@ -17,8 +17,8 @@ import org.springframework.context.ApplicationContext;
  * The aggregate-model containment rules, enforced wherever a {@code HAS_PART} can come into
  * existence or change meaning: a trait/type carrying {@code Aggregate} may only have parts carrying
  * {@code AggregateElement}; a trait/type carrying only {@code AggregateElement} may have no parts
- * at all; a carrier of neither stays free — containment outside the aggregate model (an Iceberg
- * namespace containing tables) is not the model's business. An intermediate node carries both, its
+ * at all; a carrier of neither stays free — containment outside the aggregate model (a namespace
+ * containing tables, say) is not the model's business. An intermediate node carries both, its
  * Aggregate role being what grants it parts.
  *
  * <p>Enforcement points under test: {@code TraitServiceImpl.doLink} (trait relationships, including
@@ -94,7 +94,7 @@ class AggregateModelRuleTests extends CommonServiceTestingSupport {
   /**
    * What rule 4 deliberately leaves open: a trait carrying neither built-in is outside the
    * aggregate model and may contain anything — including an Aggregate-only carrier. This is the
-   * Iceberg pattern (a namespace trait containing the table trait) and must keep working, since a
+   * namespace pattern (a namespace trait containing the table trait) and must keep working, since a
    * root does not stop being a root by being contained from outside the model.
    */
   @Test
@@ -282,9 +282,9 @@ class AggregateModelRuleTests extends CommonServiceTestingSupport {
   }
 
   /**
-   * The entity-level counterpart of the Iceberg pattern: an entity of a neutral type (a namespace)
-   * may contain an entity whose type is an aggregate root (a table). Rule 4 restricts only sources
-   * inside the model, and the root does not stop being a root for it.
+   * The entity-level counterpart of the namespace pattern: an entity of a neutral type (a
+   * namespace) may contain an entity whose type is an aggregate root (a table). Rule 4 restricts
+   * only sources inside the model, and the root does not stop being a root for it.
    */
   @Test
   void neutralTypedWholeMayContainAggregateRoot() {

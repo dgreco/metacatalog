@@ -12,9 +12,8 @@
 # The model probe checks every trait, entity type and trait relationship the file
 # declares, not one name standing in for the file. A single sentinel silently
 # skipped the load whenever the model gained something while keeping its first
-# declaration: that is what left `IcebergTableOutputPort DEPENDS_ON
-# IcebergTableTrait` uncreated on any volume predating it, so provisioning got as
-# far as creating real Iceberg tables and then failed linking the port to them.
+# declaration: a trait relationship added to the model later then stayed uncreated
+# on any volume predating it, and the first run that needed it failed halfway.
 # For the same reason it also checks the *traits each entity type carries*, not
 # just that the type exists: a model change can leave every name exactly as it
 # was and still be a change, which is what adding `Authorizable` /

@@ -63,7 +63,7 @@ public record AccessPolicy(
 
   /**
    * A permission the aggregate can grant. Abstract by design — see {@link AccessControl} for why
-   * this is not an Iceberg or a Hive privilege name.
+   * this is not any one target system's privilege name.
    *
    * @param name the permission name grants reference
    * @param description free text, or empty
