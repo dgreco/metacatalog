@@ -11,6 +11,12 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-22
+
+A major release: the Iceberg REST catalog and the Hive Metastore are removed, which breaks anyone
+running them. Nothing else changes: the main application, its REST API, its configuration
+properties and its schema are the same as in 1.0.1, so a 1.0.x database runs on 2.0.0 as it is.
+
 ### Removed
 
 - **The Iceberg REST catalog and the Hive Metastore.** Both independent applications
@@ -73,6 +79,7 @@ SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
 - **Operations.** Container images for the three applications (amd64 and arm64), Docker Compose
   stacks for local and demo use, Kubernetes manifests, and identical CI on GitLab and GitHub.
 
-[Unreleased]: https://github.com/dgreco/metacatalog/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/dgreco/metacatalog/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dgreco/metacatalog/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/dgreco/metacatalog/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dgreco/metacatalog/releases/tag/v1.0.0
