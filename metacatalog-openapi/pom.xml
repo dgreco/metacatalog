@@ -12,7 +12,6 @@
 
     <groupId>it.davidgreco.metacatalog</groupId>
     <artifactId>metacatalog-openapi</artifactId>
-    <version>${project.version}</version>
     <name>Meta Catalog OpenApi</name>
 
     <dependencies>

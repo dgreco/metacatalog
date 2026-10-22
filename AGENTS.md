@@ -79,7 +79,8 @@ does not own the schema.
 **Versions are semantic and released from branches.** `main` carries the next release as a
 `-SNAPSHOT`; releases are tagged `vX.Y.Z` on `release/X.Y` branches (`README.md` § *Releases and
 Versioning*). A breaking change to the REST API, the schema or the configuration needs a major
-version. Change the version only with `scripts/set-version.sh`, which moves every POM together.
+version. Change the version only with `mvn versions:set -DnewVersion=…`, which moves every POM
+together; modules inherit the version from the root POM and never declare their own.
 
 **The immutable model is code, applied at startup.** A module declares the traits, entity types and
 trait relationships it depends on through `ImmutableModelContributor`, and `ImmutableModelInstaller`
