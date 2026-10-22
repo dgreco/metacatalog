@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-431-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-395-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -43,8 +43,6 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Bulk Operations**: Efficient bulk loading and updates
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
-- **Iceberg REST Catalog**: an independent application implementing the standard Apache Iceberg REST catalog API over the metacatalog — Spark / Trino / PyIceberg can use it as their table catalog, and every namespace, table and schema version becomes a first-class, linkable catalog entity (see [Iceberg REST Catalog](#iceberg-rest-catalog))
-- **Hive Metastore**: an independent application implementing the Apache Hive Metastore Thrift protocol over the metacatalog — Hive / Spark / Trino can use it as their metastore, and every database, table and partition becomes a first-class, linkable catalog entity (see [Hive Metastore](#hive-metastore))
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
 - **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, instance search by type and JSONPath, and provision / unprovision / authorize / reject actions with a site-wide progress popup
 
@@ -260,13 +258,7 @@ metacatalog/
 ├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for the whole catalog
 ├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
 ├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
-├── metacatalog-application/    # Spring Boot application (aggregates all modules)
-├── metacatalog-iceberg-catalog/  # Independent app: Apache Iceberg REST catalog over the
-                                #   metacatalog (own port/image; + pyiceberg-test, a
-                                #   uv-managed Python smoke-test project)
-└── metacatalog-hive-metastore/  # Independent app: Apache Hive Metastore Thrift server
-                                #   over the metacatalog (own port/image; + hive-test, a
-                                #   Maven smoke-test project outside the reactor)
+└── metacatalog-application/    # Spring Boot application (aggregates all modules)
 ```
 
 The UI module is a library that is served by `metacatalog-application` on the same
@@ -305,18 +297,17 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 229 · ui 82 · security 23 · hive-metastore 22 · openapi 22 · iceberg-catalog 14 · functions 14 · sparql 10 · provisioning-tasks 5 · application 10 = **431, 0 failures**.
+for the Testcontainers PostgreSQL): core 229 · ui 82 · security 23 · openapi 22 · functions 14 · sparql 10 · provisioning-tasks 5 · application 10 = **395, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.2% of instructions, 41.1% of branches, 60.3% of lines**.
+**56.0% of instructions, 39.3% of branches, 58.3% of lines**.
 
-The figure is a sum over the per-module reports rather than a JaCoCo aggregate, because the
-Iceberg catalog and the Hive Metastore are independent applications nothing else depends on, so no
-single module's `report-aggregate` could fold them in. A module's figure counts only its own
-classes, wherever the test that ran them lives.
+The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
+extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
+them lives.
 
 Each remote publishes the report its own pipeline computed, and the coverage badge at the top of
 this page opens the one belonging to the host you are reading it on:
@@ -352,8 +343,7 @@ pipelines cannot drift apart.
 - `ci/build.sh` runs `mvn clean install spotless:check test -B` — the build every push and pull
   request must pass. Integration tests need a Docker daemon (GitHub's runner has one; GitLab uses a
   Docker-in-Docker service).
-- `ci/publish-images.sh` builds and pushes the three images — the application, the Iceberg REST
-  catalog and the Hive Metastore. What each ref publishes:
+- `ci/publish-images.sh` builds and pushes the application image. What each ref publishes:
 
   | Ref | Image tags |
   |---|---|
@@ -364,19 +354,17 @@ pipelines cannot drift apart.
 
   `X.Y` follows the newest patch of its own line only, so a late patch to an older line never
   moves `latest` or a newer line's tag back. A tag whose number differs from the POM version is
-  refused. GitHub publishes to `ghcr.io/dgreco/metacatalog{,/iceberg-catalog,/hive-metastore}`
-  for both `linux/amd64` and `linux/arm64` (the arm64 half built under QEMU), GitLab to the
-  project's container registry for its runner's architecture (arm64) only.
+  refused. GitHub publishes to `ghcr.io/dgreco/metacatalog` for both `linux/amd64` and
+  `linux/arm64` (the arm64 half built under QEMU), GitLab to the project's container registry for
+  its runner's architecture (arm64) only.
 - After the build, both pipelines print the test totals and the `scripts/coverage.sh` line and
   publish the coverage report to their own host, as described under [Coverage](#coverage).
 
-To run the images from GHCR instead of building locally (`latest` is the newest release; use
+To run the image from GHCR instead of building locally (`latest` is the newest release; use
 `edge` for the tip of `main`, or a version such as `1.0.0` to pin one):
 
 ```bash
 docker pull ghcr.io/dgreco/metacatalog:latest
-docker pull ghcr.io/dgreco/metacatalog/iceberg-catalog:latest
-docker pull ghcr.io/dgreco/metacatalog/hive-metastore:latest
 ```
 
 ### Releases and Versioning
@@ -387,11 +375,12 @@ functionality a **minor** one, and a fix a **patch**. Every release is listed, w
 [CHANGELOG.md](CHANGELOG.md).
 
 **Branches and tags.**
-- `main` is where development happens. Its POMs always carry the next minor version as a
-  `-SNAPSHOT` (`1.1.0-SNAPSHOT` after 1.0.0).
+- `main` is where development happens. Its POMs carry the next release's version as a
+  `-SNAPSHOT`: the next minor (`1.1.0-SNAPSHOT` after 1.0.0), or the next major once `main` holds a
+  breaking change.
 - A minor release is cut onto its own branch, `release/X.Y`, which from then on takes fixes only.
 - Each release is an annotated tag `vX.Y.Z` on its release branch. The tag pipeline is what builds
-  and publishes the release's images (see the table above); the GitLab and GitHub Releases carry
+  and publishes the release's image (see the table above); the GitLab and GitHub Releases carry
   the changelog entry as notes.
 
 **Cutting a minor release** (`1.1.0` here):
@@ -403,7 +392,7 @@ scripts/set-version.sh 1.1.0                    # every POM at once
 git commit -am "chore(release): 1.1.0"
 git push gitlab release/1.1 && git push origin release/1.1   # wait for both pipelines to pass
 git tag -a v1.1.0 -m "Meta Catalog 1.1.0"
-git push gitlab v1.1.0 && git push origin v1.1.0             # publishes the images
+git push gitlab v1.1.0 && git push origin v1.1.0             # publishes the image
 scripts/release-notes.sh 1.1.0 > notes.md                    # notes for both Releases
 glab release create v1.1.0 --name "Meta Catalog 1.1.0" --notes-file notes.md
 gh release create v1.1.0 --title "Meta Catalog 1.1.0" --notes-file notes.md
@@ -416,7 +405,7 @@ with the dated changelog entry brought over from the release branch.
 cherry-picked onto `release/X.Y`, which is bumped to `X.Y.Z+1` and tagged as above. A fix that only
 the old line needs goes straight to its release branch, then forward to `main` if it applies there.
 
-**What a version covers.** The three applications ship together under one number. The OpenAPI
+**What a version covers.** Every module ships under the same number. The OpenAPI
 document carries its own `info.version`, the version of the REST contract, which moves only when
 the contract does. The schema is migrated forward by Flyway from one release to the next (see
 [Database Migrations](#database-migrations)).
@@ -514,9 +503,9 @@ PREFIX mt:   <http://metacatalog/>
 PREFIX mtfn: <http://metacatalog/fn#>
 
 SELECT ?table WHERE {
-  ?table mt:hasEntityType/mt:name "IcebergTable" ;
+  ?table mt:hasEntityType/mt:name "Table" ;
          mt:hasPart ?schema .
-  ?schema mt:hasEntityType/mt:name "IcebergTableSchema" ;
+  ?schema mt:hasEntityType/mt:name "TableSchema" ;
           mt:values ?v .
   FILTER(mtfn:jsonPathExists(?v, '$.columns[*] ? (@.name == "vendor")'))
 }
@@ -571,118 +560,6 @@ startup. `metacatalog-application` excludes `it.unibz.inf.ontop:*` from its
 `mvn install`) ignore the shade plugin's dependency-reduced POM and would
 otherwise package Ontop's unshaded jars, old JGraphT included, next to the
 shaded one.
-
-## Iceberg REST Catalog
-
-`metacatalog-iceberg-catalog` is a **second, independent application** (own port, own
-Docker image) that implements the standard [Apache Iceberg REST catalog
-API](https://iceberg.apache.org/rest-catalog-spec/), so Spark, Trino, PyIceberg or any
-other Iceberg client can use the metacatalog as its table catalog. It shares the main
-application's database and goes through the same core service layer — every Iceberg
-namespace, table and schema version is stored as a regular catalog entity, visible in
-the Web UI, the graph and SPARQL.
-
-### Running it
-
-```bash
-make run-iceberg        # base stack + RustFS S3 warehouse + the catalog on :8181
-```
-
-This starts, on top of the base stack: a [RustFS](https://rustfs.com) S3-compatible
-warehouse (S3 API on `:9000`, console on `:9001`, credentials
-`rustfsadmin`/`rustfsadmin`) and the catalog on `http://localhost:8181`. Stop with
-`make down-iceberg` (add `ARGS=-v` to also drop the database and warehouse volumes).
-
-Point a client at it, e.g. PyIceberg:
-
-```python
-from pyiceberg.catalog import load_catalog
-
-catalog = load_catalog("metacatalog", **{
-    "type": "rest", "uri": "http://localhost:8181",
-    "s3.endpoint": "http://localhost:9000",
-    "s3.access-key-id": "rustfsadmin", "s3.secret-access-key": "rustfsadmin",
-    "s3.region": "us-east-1",
-})
-catalog.create_namespace("demo")
-```
-
-Tables created through the protocol appear as entities at
-http://localhost:8080/ui/instances, and the graph shows the
-`namespace → table → schema` containment chain.
-
-### How it stores things
-
-- **Registry = metacatalog entities.** Immutable traits (`IcebergNamespaceTrait`,
-  `IcebergTableTrait`, `IcebergTableSchemaTrait`) and entity types (`IcebergNamespace`,
-  `IcebergTable`, `IcebergTableSchema`) are declared at startup through the
-  [immutable model](#immutable-model) extension point. Namespace → table and
-  table → schema containment are real `HAS_PART` links.
-- **Standard Iceberg metadata storage.** On every commit the server writes the
-  table-metadata JSON file to the warehouse via an Iceberg `FileIO` (the built-in
-  Hadoop-free `LocalFileIO` for `file://`, `S3FileIO` for S3/MinIO/RustFS) and the
-  table entity keeps the metadata-location pointer plus a cached copy of the current
-  metadata (schema list stripped — schemas live as linked entities).
-- **Schemas are first-class.** Each schema version becomes an `IcebergTableSchema`
-  entity with its columns explicitly enumerated (`id`, `name`, `type`, `required`,
-  optional `doc`), so schema history is linkable and queryable like any other entity.
-- **Commit safety without table locks.** Commits are a compare-and-swap on the
-  metadata-location pointer inside one transaction under a per-table advisory lock;
-  concurrent commits from the same base produce exactly one winner, losers get the
-  protocol's `409` and retry.
-
-### Endpoints
-
-`GET /v1/config` plus the namespace and table groups (list/create/load/update/drop,
-HEAD exists, rename, register, metrics no-op). Views and multi-table transactions are
-not implemented and are excluded from the advertised endpoint list, so well-behaved
-clients never call them. The REST layer reuses iceberg-core's `CatalogHandlers`, which
-owns the protocol semantics (update-requirement validation, server-side commit retry).
-
-### Testing
-
-The Java build covers the protocol end-to-end (`IcebergRestCatalogEndToEndTest` boots
-the app against Testcontainers PostgreSQL and drives it with Iceberg's own
-`RESTCatalog` client). For hands-on testing the way a Python user would,
-`metacatalog-iceberg-catalog/pyiceberg-test` is a [uv](https://docs.astral.sh/uv/)-managed
-project:
-
-```bash
-make run-iceberg                                  # if the stack is not already up
-cd metacatalog-iceberg-catalog/pyiceberg-test
-uv run pytest
-```
-
-## Hive Metastore
-
-`metacatalog-hive-metastore` is a **third, independent deployable application** (own port,
-own Docker image) that implements the standard [Apache Hive Metastore Thrift protocol](https://hive.apache.org/)
-over the core service layer — Hive, Spark, Trino or any Hive-aware client can use the
-metacatalog as its metastore, and every database, table and partition becomes a first-class,
-linkable catalog entity.
-
-Run it on top of the base stack:
-
-```bash
-make up-hive-d        # base stack + the Hive Metastore Thrift server on :9083
-make down-hive-d      # stop the Hive stack (ARGS=-v drops the DB and warehouse volumes)
-make hive-cli         # run a small shaded Thrift client built out of the reactor
-```
-
-For a full end-to-end demo of the authorization flow through both catalogs, see
-`make run-hive-demo` (base + Iceberg + Hive stacks) in [Authorization](#authorization).
-
-### Endpoints
-
-`metacatalog-hive-metastore` exposes the standard Hive Metastore Thrift API on port 9083
-(`thrift://localhost:9083`). It does **not** expose a REST layer — the metastore protocol
-is Thrift-only.
-
-### Testing
-
-`metacatalog-hive-metastore/hive-test` is a Maven project **outside the reactor** that drives
-a *running* stack with the real `HiveMetaStoreClient` on JDK 21, in a container, exactly as
-`pyiceberg-test` does for the Iceberg catalog.
 
 ## API Documentation
 
@@ -895,8 +772,8 @@ once per transaction (see [Versionable aggregates](#versionable-aggregates)).
 - **On create**, a versionable entity gets version 1.
 - **On every change to its values**, the new state is recorded as the next version. Every write path
   versions in the same way: `PUT /entity/{id}`, the internal writes the system makes (provisioning and
-  authorization status write-backs, the Iceberg and Hive registries), and the regeneration of a
-  mapped entity when its source changes.
+  authorization status write-backs), and the regeneration of a mapped entity when its source
+  changes.
 - **A write that changes nothing records nothing.** Values are compared by value, so re-sending
   `1.0` where `1` is stored is not a change. For a mapped entity, being re-pinned to a different type
   version is a change even if the values are equal.
@@ -1411,11 +1288,11 @@ entities, with `DEPENDS_ON` links expressing ordering between parts. The provisi
 resources are not parts: the mapping engine derives them, and the procedure works out their
 ordering from the mappings that connect them (a resource is created after what it depends on
 and destroyed before it). A type outside the model may still contain a root from the outside —
-an Iceberg namespace containing a table — without the root ceasing to be one:
+a namespace containing a data product, say — without the root ceasing to be one:
 
 ```mermaid
 flowchart TD
-    NS["namespace : IcebergNamespace<br/>(outside the model)"] --"HAS_PART<br/>(allowed: neutral container)"--> DP
+    NS["namespace : Namespace<br/>(outside the model)"] --"HAS_PART<br/>(allowed: neutral container)"--> DP
     DP["dp1 : DataProductType<br/>root"] --"HAS_PART"--> OP1["op1 : FileBasedOutputPortType<br/>intermediate"]
     DP --"HAS_PART"--> OP2["op2 : TableBasedOutputPortType<br/>intermediate"]
     OP2 -."DEPENDS_ON".-> OP1
@@ -1609,8 +1486,8 @@ Three deliberate choices:
 - **Principals are references into an external identity provider** (`USER` / `GROUP` / `ROLE` /
   `SERVICE`), not entities in the catalog. A directory is something a catalog federates from, not
   something it owns — the same conclusion Ranger, Lake Formation and Unity Catalog reached.
-- **Permissions are abstract.** `READ` is not an Iceberg privilege or a Hive one, and that is the
-  point: a data product can publish through two catalogs at once, and a consumer reading the
+- **Permissions are abstract.** `READ` is not any one system's privilege, and that is the point:
+  a data product can publish through two systems at once, and a consumer reading the
   product-level policy has to be able to tell that both halves mean the same thing. Turning `READ`
   into what a given system understands is the *task's* job — the split Ranger draws between a
   policy's accesses and a service definition's access types.
@@ -1651,38 +1528,9 @@ one.
 
 ### In the demo
 
-Both Docker Compose demos exercise it:
-
-- The **base stack** (`make up-d`) marks `DataProductType` `Authorizable` and its two resources
-  `AuthorizableResource`, and gives `dp1` a small policy; the `stdout` task prints `[authorizing]` /
-  `[rejecting]` lines the same way it prints the provisioning ones, naming the grants it applied.
-- The **data-product demo** (`make run-hive-demo`) goes all the way to the catalogs. The data
-  product declares four principals and two permissions, and its four grants use all three ways of
-  reaching a port — everything, one table by value, one port type by type. Authorizing stamps what
-  each port ends up holding onto the real table it produced: Iceberg table **properties** for the
-  three REST-catalog ports, Hive table **parameters** for the Parquet one, under the same names
-  either side.
-
-```bash
-# after provisioning the data product
-curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$DP/authorize
-
-# the grant is on the table itself, not in a side channel
-curl -s http://localhost:8181/v1/metacatalog/namespaces/sales_analytics/tables/customers \
-  | jq '.metadata.properties | with_entries(select(.key | startswith("access.")))'
-# {
-#   "access.status": "AUTHORIZED",
-#   "access.granted-to": "crm-analysts,sales-analysts,sales-etl",
-#   "access.permissions": "READ,WRITE",
-#   "access.grants": "crm-analysts=READ,sales-analysts=READ,sales-etl=READ|WRITE"
-# }
-```
-
-The `orders` table, which the CRM grant does not reach, carries the same keys with `crm-analysts`
-absent — one policy, different answers per port, and no port declaring an audience of its own.
-
-Authorizing a data product that was never provisioned fails naming the table that does not exist —
-a grant on nothing is not a grant. Rejecting one is a no-op, exactly as unprovisioning is.
+The base stack (`make up-d`) marks `DataProductType` `Authorizable` and its two resources
+`AuthorizableResource`, and gives `dp1` a small policy; the `stdout` task prints `[authorizing]` /
+`[rejecting]` lines the same way it prints the provisioning ones, naming the grants it applied.
 
 ## Deleting entities and links
 
@@ -1989,4 +1837,4 @@ reported privately as described in [SECURITY.md](SECURITY.md).
 - [docs/er-diagram.png](docs/er-diagram.png) — the database entity-relationship diagram.
 - [examples/medallion](examples/medallion) — a bronze / silver / gold lakehouse modelled on the
   public API: per-layer table contracts, mapping-derived zones and tables, and an access policy
-  that grants by layer. It runs on top of the data-product demo.
+  that grants by layer. It runs on the base stack, through its own compose overlay.

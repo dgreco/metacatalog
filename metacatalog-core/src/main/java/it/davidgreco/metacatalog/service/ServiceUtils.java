@@ -110,8 +110,8 @@ public final class ServiceUtils {
    * Enforces the aggregate-model containment rules on a trait-level {@code HAS_PART}: a trait
    * carrying {@code Aggregate} may only declare parts carrying {@code AggregateElement}, and a
    * trait carrying only {@code AggregateElement} may not declare parts at all. A trait carrying
-   * neither stays free — containment outside the aggregate model (an Iceberg namespace containing
-   * tables) is not the model's business.
+   * neither stays free — containment outside the aggregate model (a namespace containing tables,
+   * say) is not the model's business.
    *
    * <p>A single trait can never carry both built-ins (single inheritance, both father-less), so
    * "carries both" only exists at the type level; the entity-level twin below handles it.

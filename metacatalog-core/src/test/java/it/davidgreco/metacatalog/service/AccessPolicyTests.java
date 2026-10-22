@@ -233,7 +233,7 @@ class AccessPolicyTests {
                     .formatted(TWO_PRINCIPALS_TWO_PERMISSIONS)));
     var resolved =
         policy.resolve(
-            List.of(resource("r1", "IcebergPort", "{}"), resource("r2", "HivePort", "{}")));
+            List.of(resource("r1", "TablePort", "{}"), resource("r2", "FilePort", "{}")));
     assertEquals(List.of("READ"), resolved.get("r1").getFirst().permissions());
     assertEquals(List.of("READ"), resolved.get("r2").getFirst().permissions());
   }
@@ -248,16 +248,16 @@ class AccessPolicyTests {
                   %s,
                   "grants": [
                     {"principals": ["sales-analysts"], "permissions": ["READ"],
-                     "resources": {"entityTypes": ["IcebergPort"]}},
+                     "resources": {"entityTypes": ["TablePort"]}},
                     {"principals": ["crm-pipeline"], "permissions": ["WRITE"],
                      "resources": {"values": {"namespace": "sales"}}}
                   ]
                 }
                 """
                     .formatted(TWO_PRINCIPALS_TWO_PERMISSIONS)));
-    var iceberg = resource("r1", "IcebergPort", "{\"namespace\": \"sales\"}");
-    var hive = resource("r2", "HivePort", "{\"namespace\": \"crm\"}");
-    var resolved = policy.resolve(List.of(iceberg, hive));
+    var table = resource("r1", "TablePort", "{\"namespace\": \"sales\"}");
+    var file = resource("r2", "FilePort", "{\"namespace\": \"crm\"}");
+    var resolved = policy.resolve(List.of(table, file));
     assertEquals(
         List.of("crm-pipeline", "sales-analysts"),
         resolved.get("r1").stream().map(g -> g.principal().id()).toList());
@@ -310,13 +310,13 @@ class AccessPolicyTests {
                 {
                   %s,
                   "grants": [{"principals": ["sales-analysts"], "permissions": ["READ"],
-                              "resources": {"entityTypes": ["IcebergPort"]}}]
+                              "resources": {"entityTypes": ["TablePort"]}}]
                 }
                 """
                     .formatted(TWO_PRINCIPALS_TWO_PERMISSIONS)));
     var resolved =
         policy.resolve(
-            List.of(resource("r1", "IcebergPort", "{}"), resource("r2", "HivePort", "{}")));
+            List.of(resource("r1", "TablePort", "{}"), resource("r2", "FilePort", "{}")));
     assertTrue(resolved.containsKey("r2"));
     assertEquals(List.of(), resolved.get("r2"));
   }

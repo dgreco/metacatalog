@@ -16,8 +16,7 @@
     <packaging>pom</packaging>
     <name>Meta Catalog</name>
     <description>Metadata management system: entities, entity types, traits, relationships, mappings and
-        aggregates behind a REST API, a server-rendered UI, a SPARQL endpoint, an Iceberg REST catalog and a
-        Hive Metastore over the same model.</description>
+        aggregates behind a REST API, a server-rendered UI and a SPARQL endpoint over the same model.</description>
     <url>https://github.com/dgreco/metacatalog</url>
     <inceptionYear>2024</inceptionYear>
 
@@ -103,12 +102,6 @@
         <!-- JGraphT -->
         <jgrapht.version>1.5.3</jgrapht.version>
 
-        <!--   Apache Iceberg (metacatalog-iceberg-catalog) -->
-        <iceberg.version>1.12.0</iceberg.version>
-        <!-- Hive Metastore Thrift API types, used by metacatalog-hive-metastore. Only the
-             generated protocol classes are wanted; see that module's exclusions. -->
-        <hive.version>4.2.1</hive.version>
-
         <!--   Flyway -->
         <flyway.version>13.11.1</flyway.version>
 
@@ -170,16 +163,6 @@
             <dependency>
                 <groupId>it.davidgreco.metacatalog</groupId>
                 <artifactId>metacatalog-sparql</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>it.davidgreco.metacatalog</groupId>
-                <artifactId>metacatalog-iceberg-catalog</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>it.davidgreco.metacatalog</groupId>
-                <artifactId>metacatalog-hive-metastore</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -311,23 +294,6 @@
                 <groupId>org.jgrapht</groupId>
                 <artifactId>jgrapht-core</artifactId>
                 <version>${jgrapht.version}</version>
-            </dependency>
-
-            <!-- Apache Iceberg (metacatalog-iceberg-catalog) -->
-            <dependency>
-                <groupId>org.apache.iceberg</groupId>
-                <artifactId>iceberg-core</artifactId>
-                <version>${iceberg.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.iceberg</groupId>
-                <artifactId>iceberg-aws</artifactId>
-                <version>${iceberg.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.iceberg</groupId>
-                <artifactId>iceberg-aws-bundle</artifactId>
-                <version>${iceberg.version}</version>
             </dependency>
 
             <!-- Postgresql -->
@@ -729,8 +695,6 @@
         <module>metacatalog-security</module>
         <module>metacatalog-sparql</module>
         <module>metacatalog-application</module>
-        <module>metacatalog-iceberg-catalog</module>
-        <module>metacatalog-hive-metastore</module>
     </modules>
 
     <profiles>

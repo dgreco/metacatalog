@@ -19,8 +19,6 @@ updates:
     directories:
       - /
       - /metacatalog-application
-      - /metacatalog-iceberg-catalog
-      - /metacatalog-hive-metastore
     schedule:
       interval: weekly
     ignore:
