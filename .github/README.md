@@ -388,7 +388,7 @@ functionality a **minor** one, and a fix a **patch**. Every release is listed, w
 
 ```bash
 git switch -c release/1.1 main                 # once main holds everything 1.1 is meant to have
-scripts/set-version.sh 1.1.0                    # every POM at once
+mvn versions:set -DnewVersion=1.1.0             # every POM at once
 # CHANGELOG.md: rename "Unreleased" to "[1.1.0] - <date>" and open an empty "Unreleased" above it
 git commit -am "chore(release): 1.1.0"
 git push gitlab release/1.1 && git push origin release/1.1   # wait for both pipelines to pass
@@ -399,7 +399,7 @@ glab release create v1.1.0 --name "Meta Catalog 1.1.0" --notes-file notes.md
 gh release create v1.1.0 --title "Meta Catalog 1.1.0" --notes-file notes.md
 ```
 
-Then open the next cycle on `main` through a merge request: `scripts/set-version.sh 1.2.0-SNAPSHOT`,
+Then open the next cycle on `main` through a merge request: `mvn versions:set -DnewVersion=1.2.0-SNAPSHOT`,
 with the dated changelog entry brought over from the release branch.
 
 **Patch releases.** A fix lands on `main` first, through a merge request as usual, and is then

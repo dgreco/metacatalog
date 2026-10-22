@@ -50,7 +50,6 @@
 
     <properties>
         <!-- Project Properties -->
-        <project.version>2.1.0-SNAPSHOT</project.version>
         <java.version>25</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -76,6 +75,7 @@
         <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
         <maven-dependency-plugin.version>3.11.0</maven-dependency-plugin.version>
         <maven-install-plugin.version>3.2.0</maven-install-plugin.version>
+        <versions-maven-plugin.version>2.23.0</versions-maven-plugin.version>
 
         <!--   Hypersistence -->
         <hypersistence.version>3.16.0</hypersistence.version>
@@ -490,6 +490,21 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!-- Versions Plugin: how the project version moves, for a release and for the next
+                     development cycle alike (README § Releases and Versioning):
+                       mvn versions:set -DnewVersion=2.1.0
+                     Every module inherits its version from this POM, so the plugin edits only this
+                     POM's version and each module's <parent> block. No backup POMs: git is the
+                     undo. -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>versions-maven-plugin</artifactId>
+                    <version>${versions-maven-plugin.version}</version>
+                    <configuration>
+                        <generateBackupPoms>false</generateBackupPoms>
+                        <processAllModules>true</processAllModules>
+                    </configuration>
+                </plugin>
                 <!-- Enforcer Plugin -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
