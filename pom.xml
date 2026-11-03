@@ -103,7 +103,7 @@
         <jgrapht.version>1.5.3</jgrapht.version>
 
         <!--   Flyway -->
-        <flyway.version>13.11.1</flyway.version>
+        <flyway.version>13.12.0</flyway.version>
 
         <!--   Ontop & RDF4J (metacatalog-sparql) -->
         <ontop.version>5.5.0</ontop.version>
