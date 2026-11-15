@@ -396,6 +396,53 @@ class AssetUiControllerTest {
     verify(api, org.mockito.Mockito.times(1)).createEntity(any());
   }
 
+  /**
+   * Deleting a node of the graph deletes what the node is: an asset as the aggregate it is, a plain
+   * entity as an entity. A part is not a node of its own — it is content of its asset — so it is
+   * refused, with the asset to edit instead, and nothing is deleted.
+   */
+  @Test
+  void aNodeIsDeletedAsWhatItIsAndAPartIsNotDeletedFromTheBoard() throws Exception {
+    mockMvc
+        .perform(post("/ui/assets/entities/delete").param("id", "table-2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.catalog.assets").isArray());
+    verify(api).deleteAggregate("table-2");
+
+    mockMvc
+        .perform(post("/ui/assets/entities/delete").param("id", "domain-1"))
+        .andExpect(status().isOk());
+    verify(api).deleteEntity("domain-1");
+
+    for (var inside : List.of("col-1", "res-1")) {
+      mockMvc
+          .perform(post("/ui/assets/entities/delete").param("id", inside))
+          .andExpect(status().isBadRequest())
+          .andExpect(
+              jsonPath("$.error")
+                  .value(org.hamcrest.Matchers.containsString("belongs to the asset «orders»")));
+    }
+    mockMvc
+        .perform(post("/ui/assets/entities/delete").param("id", "nowhere"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").value("nowhere is not on the board."));
+    verify(api, org.mockito.Mockito.times(1)).deleteAggregate(any());
+    verify(api, org.mockito.Mockito.times(1)).deleteEntity(any());
+  }
+
+  /** What the API refuses to delete — something still depended on — is reported as it says it. */
+  @Test
+  void aDeletionTheApiRefusesIsReported() throws Exception {
+    doThrow(new RuntimeException("Entity domain-1 is still required by table-1"))
+        .when(api)
+        .deleteEntity("domain-1");
+
+    mockMvc
+        .perform(post("/ui/assets/entities/delete").param("id", "domain-1"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error").value("Entity domain-1 is still required by table-1"));
+  }
+
   /** What the API refuses — a cycle, say — is reported as it says it. */
   @Test
   void aLinkTheApiRefusesIsReported() throws Exception {

@@ -45,7 +45,7 @@ still answer.
   that also draws the aggregates and entities assets may depend on; drag and drop to make an asset
   depend on any of them — accepted only where the model allows it, with the reason shown where it
   does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
-  in place; each asset's mapped entities, named in the list and drawn below it in the graph with
+  in place, and on a node to open, edit or delete it; each asset's mapped entities, named in the list and drawn below it in the graph with
   the status a run left on them; each asset's inside in the graph — its parts and the
   dependencies between them; an asset's page with its structure, lifecycle actions, mappings
   and access; the schema-driven editor on an existing asset; and YAML download and upload.

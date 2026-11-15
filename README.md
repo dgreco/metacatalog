@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-455-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-458-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -303,13 +303,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 255 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 16 = **455, 0 failures**.
+for the Testcontainers PostgreSQL): core 255 · ui 110 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 17 = **458, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.2% of instructions, 40.8% of branches, 60.3% of lines**.
+**58.3% of instructions, 41.0% of branches, 60.3% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -603,8 +603,15 @@ has a picker and a remove button for the same thing without a pointer.
 **A right-click on the graph's board creates a new node** without leaving it: the menu lists the
 asset types, and the aggregate and plain types some asset may depend on, and the dialog asks for
 the scalar values the chosen type declares. Only the root is created; the parts of a new asset or
-aggregate, and anything structured such as an access policy, are added from its own page. A
-right-click on a node opens it.
+aggregate, and anything structured such as an access policy, are added from its own page.
+
+**A right-click on a node** opens it, edits it when it is an asset, or **deletes it**. An asset or
+an aggregate is deleted as one, its parts and the entities derived from them with it; a plain
+entity is deleted alone. Something an asset still depends on is refused there and then, naming
+the asset; the rest is the server's decision (see
+[Deleting entities and links](#deleting-entities-and-links)) and what it refuses is shown. A part
+and a mapped entity have no Delete: a part is removed by editing its asset, and a mapped entity
+goes when what it was derived from does.
 
 **Administration** (`/ui/admin`) is for defining what assets are assembled from, and for the
 type-agnostic tooling:

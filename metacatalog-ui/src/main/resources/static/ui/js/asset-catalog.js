@@ -37,6 +37,11 @@
  * A right-click on the graph's board offers to create a new node there and then: an asset, or
  * something for assets to depend on. The dialog asks for the scalar values the type declares and
  * creates the root alone; an asset's parts are added from its own page.
+ *
+ * A right-click on a node offers to open it and, for what stands on the board in its own right —
+ * an asset, an aggregate, an entity — to delete it. An asset or an aggregate goes with everything
+ * inside it. What something still depends on is refused here, with what depends on it; the server
+ * is asked for the rest, and decides.
  */
 (function () {
   "use strict";
@@ -284,6 +289,31 @@
       if (!window.confirm("Remove the dependency of «" + source.name + "» on «" + target.name + "»?")) return;
       post("/ui/assets/dependencies/delete", source, target, function () {
         notify("«" + source.name + "» no longer depends on «" + target.name + "».", true);
+      });
+    }
+
+    // Why `node` may not be deleted, or null when the server may be asked.
+    function deletionRefusal(node) {
+      var needing = isAsset(node) ? node.requiredBy : dependents(node);
+      if (!needing.length) return null;
+      return "«" + node.name + "» cannot be deleted: " +
+        needing.map(function (a) { return "«" + a.name + "»"; }).join(", ") +
+        (needing.length === 1 ? " depends" : " depend") + " on it. Remove the " +
+        (needing.length === 1 ? "dependency" : "dependencies") + " first";
+    }
+
+    function remove(node) {
+      var why = deletionRefusal(node);
+      if (why) {
+        notify(why + ".", false);
+        return;
+      }
+      var inside = node.kind === "entity" ? "" :
+        " Everything inside it is deleted with it" +
+        (isAsset(node) && node.mapped.length ? ", and so are the " + node.mapped.length + " entities derived from it" : "") + ".";
+      if (!window.confirm("Delete the " + node.kind + " «" + node.name + "»?" + inside + " This cannot be undone.")) return;
+      send("/ui/assets/entities/delete", { id: node.id }, function () {
+        notify("«" + node.name + "» was deleted.", true);
       });
     }
 
@@ -886,6 +916,11 @@
         menu.appendChild(el("div", "board-menu-head", node.name));
         menuItem("Open", function () { window.location.href = node.href; });
         if (isAsset(node)) menuItem("Edit", function () { window.location.href = node.href + "/edit"; });
+        // Not for a part or a mapped entity: neither is on the board in its own right, and
+        // deleting one would change its asset without the asset knowing.
+        if (isAsset(node) || node.kind === "aggregate" || node.kind === "entity") {
+          menuItem("Delete", function () { remove(node); }).className = "danger";
+        }
       } else {
         var groups = [["asset", "New asset"], ["aggregate", "New aggregate"], ["entity", "New entity"]];
         groups.forEach(function (group) {

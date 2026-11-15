@@ -645,6 +645,101 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * A right-click on a node deletes it, after asking: an asset as the whole aggregate it is, an
+   * entity alone. What an asset still depends on is refused before anything is asked, with the
+   * asset that depends on it.
+   */
+  @Test
+  void aRightClickOnANodeDeletesIt() {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+    var domain = entityService.create("SmDomainType", "{\"name\": \"sm-doomed-domain\"}");
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-doomed-table }
+                    parts:
+                      - entityType: SmColumnType
+                        values: { name: sm-doomed-column }
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    var columnId =
+        entityService
+            .linked(tableId, it.davidgreco.metacatalog.entity.RelationType.HAS_PART)
+            .getFirst()
+            .getId();
+    entityService.link(
+        tableId, it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON, domain.getId());
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    java.util.function.Consumer<String> deleteFromMenu =
+        id -> {
+          var node =
+              await()
+                  .until(
+                      ExpectedConditions.presenceOfElementLocated(
+                          By.cssSelector("#asset-graph .gc-node[data-node-id='" + id + "']")));
+          new org.openqa.selenium.interactions.Actions(driver).contextClick(node).perform();
+          await()
+              .until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")))
+              .findElements(By.cssSelector("button"))
+              .stream()
+              .filter(item -> item.getText().equals("Delete"))
+              .findFirst()
+              .orElseThrow()
+              .click();
+        };
+
+    // The table depends on the domain: nothing is asked, and the reason names the table.
+    deleteFromMenu.accept(domain.getId());
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .error")).stream()
+                    .anyMatch(e -> e.getText().contains("«sm-doomed-table» depends on it")));
+    Assertions.assertTrue(entityService.exists(domain.getId()));
+
+    // A part is content of its asset: its menu has no Delete.
+    new org.openqa.selenium.interactions.Actions(driver)
+        .contextClick(graphNode(columnId))
+        .perform();
+    var partMenu =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    Assertions.assertFalse(partMenu.getText().contains("Delete"), partMenu.getText());
+    new org.openqa.selenium.interactions.Actions(driver)
+        .sendKeys(org.openqa.selenium.Keys.ESCAPE)
+        .perform();
+
+    // The asset goes as a whole, its part with it; then nothing depends on the domain any more.
+    deleteFromMenu.accept(tableId);
+    await().until(ExpectedConditions.alertIsPresent()).accept();
+    await()
+        .until(
+            d ->
+                d.findElements(
+                        By.cssSelector("#asset-graph .gc-node[data-node-id='" + tableId + "']"))
+                    .isEmpty());
+    Assertions.assertFalse(entityService.exists(tableId));
+    Assertions.assertFalse(entityService.exists(columnId));
+
+    deleteFromMenu.accept(domain.getId());
+    await().until(ExpectedConditions.alertIsPresent()).accept();
+    await()
+        .until(
+            d ->
+                d.findElements(
+                        By.cssSelector(
+                            "#asset-graph .gc-node[data-node-id='" + domain.getId() + "']"))
+                    .isEmpty());
+    Assertions.assertFalse(entityService.exists(domain.getId()));
+  }
+
+  /**
    * The catalog shows what an asset materialises as: the entities mappings derived from its members
    * hang below it in the graph, which can leave them out, and are named in the list.
    */

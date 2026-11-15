@@ -202,6 +202,42 @@ public class AssetUiController {
         });
   }
 
+  /**
+   * Deletes a node of the dependency graph — what Delete in a node's menu asks for. Answers with
+   * the refreshed catalog, or with the reason the deletion was refused.
+   *
+   * <p>An asset or an aggregate is deleted as one: its parts and the entities derived from them go
+   * with it. A plain entity is deleted alone. The API decides whether either may go — something
+   * still depending on it is the usual reason it may not — and what it refuses is reported.
+   *
+   * <p>Only what stands on the board in its own right can be deleted from it. A part is content of
+   * its asset and a mapped entity follows what it was derived from: deleting one here would change
+   * an asset behind its back, without the change becoming a version of it.
+   *
+   * @param id the id of the node: an asset, an aggregate or a plain entity
+   */
+  @PostMapping("/entities/delete")
+  @ResponseBody
+  public ResponseEntity<Map<String, Object>> deleteNode(@RequestParam String id) {
+    return dependencyAnswer(
+        () -> {
+          var catalog = readCatalog();
+          var node = catalog.node(id);
+          if (node == null) {
+            var owner = catalog.owner(id);
+            throw new IllegalArgumentException(
+                owner == null
+                    ? id + " is not on the board."
+                    : "It belongs to the asset «"
+                        + owner.name()
+                        + "»: a part is removed by editing the asset, and a mapped entity goes"
+                        + " when what it was derived from does.");
+          }
+          if (AssetCatalogView.ENTITY.equals(node.kind())) api.deleteEntity(id);
+          else api.deleteAggregate(id);
+        });
+  }
+
   // --- creating ----------------------------------------------------------------------------------
 
   /** The builder for a new asset: pick an asset type, fill in the tree its schema describes. */

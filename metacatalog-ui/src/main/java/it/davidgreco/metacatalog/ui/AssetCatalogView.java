@@ -314,6 +314,20 @@ public record AssetCatalogView(
     return targets.stream().filter(target -> target.id().equals(id)).findFirst().orElse(null);
   }
 
+  /**
+   * The asset holding the part or the mapped entity with the given id, or {@code null} when no
+   * asset holds it.
+   */
+  public Row owner(String id) {
+    return assets.stream()
+        .filter(
+            row ->
+                row.parts().stream().anyMatch(part -> part.id().equals(id))
+                    || row.mapped().stream().anyMatch(mapped -> mapped.id().equals(id)))
+        .findFirst()
+        .orElse(null);
+  }
+
   /** Whether a new node of the graph may be created from the given type. */
   public boolean canCreate(String type) {
     return creatable.stream().anyMatch(candidate -> candidate.type().equals(type));
