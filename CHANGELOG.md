@@ -11,6 +11,8 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-15
+
 The catalog becomes a place to manage data platform assets. Nothing is taken away, which is what
 makes this a minor release: the REST API gains endpoints and fields and loses none, the
 configuration is unchanged, and the one schema change is a migration that needs no data moved, so
@@ -181,7 +183,8 @@ SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
 - **Operations.** Container images for the three applications (amd64 and arm64), Docker Compose
   stacks for local and demo use, Kubernetes manifests, and identical CI on GitLab and GitHub.
 
-[Unreleased]: https://github.com/dgreco/metacatalog/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/dgreco/metacatalog/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/dgreco/metacatalog/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/dgreco/metacatalog/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/dgreco/metacatalog/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dgreco/metacatalog/releases/tag/v1.0.0
