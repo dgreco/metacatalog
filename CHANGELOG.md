@@ -11,14 +11,18 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-15
+
+A maintenance release: dependency and build-plugin upgrades, with no change in behaviour, API,
+schema or configuration. A 2.1.0 database runs on it as it is.
+
 ### Changed
 
 - **Dependencies.** Spring Boot 4.1.2 (with Spring Framework 7.0.10 and Spring Security 7.1.2),
   which now manages most of the patch releases this build used to pin by hand; on top of it,
   Hibernate ORM 7.4.16, Hibernate Validator 9.1.6, Netty 4.2.20, Tomcat 11.0.29 and Byte Buddy
   1.18.17. Flyway 13.12.2, springdoc-openapi 3.2.0, Vavr 1.1.0, json-schema-validator 3.0.9,
-  Guava 33.8.0 and jackson-databind-nullable 0.2.13; Selenium 4.52.0 for the tests. No change in
-  behaviour, API, schema or configuration.
+  Guava 33.8.0 and jackson-databind-nullable 0.2.13; Selenium 4.52.0 for the tests.
 - **Build plugins.** maven-surefire-plugin 3.6.1, maven-enforcer-plugin 3.7.0,
   jacoco-maven-plugin 0.8.16, spotless-maven-plugin 3.11.0, openapi-generator-maven-plugin 7.27.0
   and versions-maven-plugin 2.25.2.
@@ -195,7 +199,8 @@ SPARQL endpoint, an Iceberg REST catalog and a Hive Metastore.
 - **Operations.** Container images for the three applications (amd64 and arm64), Docker Compose
   stacks for local and demo use, Kubernetes manifests, and identical CI on GitLab and GitHub.
 
-[Unreleased]: https://github.com/dgreco/metacatalog/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/dgreco/metacatalog/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/dgreco/metacatalog/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/dgreco/metacatalog/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/dgreco/metacatalog/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/dgreco/metacatalog/compare/v1.0.0...v1.0.1
