@@ -164,6 +164,23 @@ public interface EntityService extends CommonService<Entity, String> {
   void unlink(String sourceId, RelationType relType, String targetId);
 
   /**
+   * Removes a link between two entities without the refusal {@link #unlink} applies to a
+   * containment link inside an aggregate.
+   *
+   * <p>That refusal exists because detaching a part strands it. It does not apply to a caller that
+   * removes the part in the same transaction — {@link AggregateService#update} dropping a part the
+   * new document no longer lists. Every other guard still holds, in particular the one protecting a
+   * link some mapping resolves a path reference through.
+   *
+   * <p>User-facing unlinks must go through {@link #unlink}.
+   *
+   * @param sourceId the source entity ID
+   * @param relType the relation type
+   * @param targetId the target entity ID
+   */
+  void unlinkInternal(String sourceId, RelationType relType, String targetId);
+
+  /**
    * Retrieves entities linked to the given source entity with the specified relation type.
    *
    * @param sourceId the source entity ID

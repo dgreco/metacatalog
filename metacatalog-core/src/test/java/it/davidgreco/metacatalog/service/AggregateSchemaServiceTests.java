@@ -322,11 +322,109 @@ class AggregateSchemaServiceTests extends CommonServiceTestingSupport {
     Assertions.assertEquals(
         schemaService.authorizableTypes().stream().map(EntityType::getName).toList(),
         capabilities.authorizable());
+    Assertions.assertEquals(
+        schemaService.assetTypes().stream().map(EntityType::getName).toList(),
+        capabilities.asset());
 
     // And the crossed-over case is genuinely crossed over, not two copies of one answer.
     Assertions.assertTrue(capabilities.provisionable().contains("PalletType"));
     Assertions.assertFalse(capabilities.authorizable().contains("PalletType"));
     Assertions.assertTrue(capabilities.authorizable().contains("ParcelType"));
     Assertions.assertFalse(capabilities.provisionable().contains("ParcelType"));
+  }
+
+  /**
+   * The built-in {@code Asset} trait is a provisionable, authorizable aggregate, and says each of
+   * those once: it inherits {@code Provisionable}, mixes in {@code Authorizable}, and reaches
+   * {@code Aggregate} through both without naming it.
+   */
+  @Test
+  void theBuiltInAssetTraitCombinesBothCapabilitiesWithoutRepetition() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+
+    var asset = traitService.read("Asset");
+    Assertions.assertTrue(asset.isImmutable());
+    Assertions.assertEquals("Provisionable", asset.getFather().getName());
+    Assertions.assertEquals(
+        List.of("Authorizable"),
+        asset.getTraits().stream().map(it.davidgreco.metacatalog.entity.Trait::getName).toList());
+
+    var ancestry =
+        new org.springframework.transaction.support.TransactionTemplate(
+                getApplicationContext()
+                    .getBean(org.springframework.transaction.PlatformTransactionManager.class))
+            .execute(
+                status ->
+                    ServiceUtils.traitAncestry(traitService.read("Asset")).stream()
+                        .map(it.davidgreco.metacatalog.entity.Trait::getName)
+                        .toList());
+    Assertions.assertEquals(
+        List.of("Asset", "Authorizable", "Provisionable", "Aggregate"), ancestry);
+
+    // Every field of both capabilities, and nothing else: Asset adds none of its own.
+    var properties = new java.util.TreeSet<String>();
+    asset.getSchema().get("properties").fieldNames().forEachRemaining(properties::add);
+    Assertions.assertEquals(
+        java.util.Set.of(
+            "provisioningStatus",
+            "provisioningResult",
+            "authorizationStatus",
+            "authorizationResult",
+            "principals",
+            "permissions",
+            "grants"),
+        properties);
+  }
+
+  /**
+   * Mixing in {@code Asset} alone makes a type an aggregate root offering both capabilities — the
+   * point of the trait. An intermediate node carrying it is not an asset: it is part of somebody
+   * else's aggregate.
+   */
+  @Test
+  void aTypeCarryingOnlyAssetIsAnAggregateRootOfferingBothCapabilities() {
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var schemaService = getApplicationContext().getBean(AggregateSchemaService.class);
+
+    traitService.create("AstPartTrait", Optional.of(EMPTY_SCHEMA), Optional.of("AggregateElement"));
+    entityTypeService.create(
+        "AstPartType", List.of("AstPartTrait"), Optional.empty(), EMPTY_SCHEMA);
+    entityTypeService.create("AstTableType", List.of("Asset"), Optional.empty(), NAMED_SCHEMA);
+    entityTypeService.create(
+        "AstNestedType", List.of("Asset", "AggregateElement"), Optional.empty(), EMPTY_SCHEMA);
+    entityTypeService.create(
+        "AstPlainRootType", List.of("Aggregate"), Optional.empty(), EMPTY_SCHEMA);
+
+    var assets = schemaService.assetTypes().stream().map(EntityType::getName).toList();
+    Assertions.assertTrue(assets.contains("AstTableType"), assets.toString());
+    Assertions.assertFalse(assets.contains("AstNestedType"), assets.toString());
+    Assertions.assertFalse(assets.contains("AstPlainRootType"), assets.toString());
+
+    for (var listing :
+        List.of(
+            schemaService.aggregateRootTypes(),
+            schemaService.provisionableTypes(),
+            schemaService.authorizableTypes())) {
+      Assertions.assertTrue(
+          listing.stream().map(EntityType::getName).toList().contains("AstTableType"));
+    }
+    Assertions.assertEquals(assets, schemaService.typeCapabilities().asset());
+
+    // The derived schema is usable as it stands: an asset can be created with a policy, which only
+    // validates if the authorization fields arrived through the mix-in.
+    var table =
+        entityService.create(
+            "AstTableType",
+            """
+            {
+              "name": "orders",
+              "principals": [ { "id": "analysts", "type": "GROUP" } ],
+              "permissions": [ { "name": "READ" } ],
+              "grants": [ { "principals": ["analysts"], "permissions": ["READ"] } ]
+            }
+            """);
+    Assertions.assertNotNull(table.getId());
   }
 }

@@ -16,21 +16,23 @@ import org.springframework.stereotype.Repository;
 public interface TraitRepository extends JpaRepository<Trait, String> {
 
   /**
-   * Finds a trait by its unique name, fetching its (now lazy) immediate father so callers that read
-   * it after the transaction closes do not lazy-load it.
+   * Finds a trait by its unique name, fetching its (now lazy) immediate father and mixed-in traits
+   * so callers that read them after the transaction closes do not lazy-load them.
    *
    * @param name the name of the trait
    * @return an Optional containing the trait if found
    */
   @EntityGraph(
-      attributePaths = {"father"},
+      attributePaths = {"father", "traits"},
       type = EntityGraph.EntityGraphType.LOAD)
   Optional<Trait> findByName(String name);
 
-  /** {@inheritDoc} Fetches the (now lazy) immediate father in the same query. */
+  /**
+   * {@inheritDoc} Fetches the (now lazy) immediate father and mixed-in traits in the same query.
+   */
   @Override
   @EntityGraph(
-      attributePaths = {"father"},
+      attributePaths = {"father", "traits"},
       type = EntityGraph.EntityGraphType.LOAD)
   List<Trait> findAll();
 

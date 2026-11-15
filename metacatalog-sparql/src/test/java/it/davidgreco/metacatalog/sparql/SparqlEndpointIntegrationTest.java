@@ -236,6 +236,45 @@ class SparqlEndpointIntegrationTest {
     assert !links.contains(copyRootId) : "Expected no link inside the copy, got: " + links;
   }
 
+  /**
+   * A trait's parents are queryable in both forms: the father as {@code mt:inheritsFrom}, the
+   * traits it mixes in as {@code mt:hasTrait} — the property an entity type's traits already use.
+   */
+  @Test
+  void traitMixinsAreExposedAsHasTrait() throws Exception {
+    var father = java.util.UUID.randomUUID().toString();
+    var mixin = java.util.UUID.randomUUID().toString();
+    var child = java.util.UUID.randomUUID().toString();
+    for (var row :
+        java.util.List.of(
+            new String[] {father, "MixFather"},
+            new String[] {mixin, "MixMixin"},
+            new String[] {child, "MixChild"})) {
+      jdbcTemplate.update(
+          "INSERT INTO trait (id, name, base_schema, derived_schema, version, version_group_id) "
+              + "VALUES (?, ?, '{}'::jsonb, '{}'::jsonb, 1, ?)",
+          row[0],
+          row[1],
+          java.util.UUID.randomUUID().toString());
+    }
+    jdbcTemplate.update("UPDATE trait SET father_id = ? WHERE id = ?", father, child);
+    jdbcTemplate.update(
+        "INSERT INTO trait_traits (trait_id, mixin_id, position) VALUES (?, ?, 0)", child, mixin);
+
+    var mixedIn =
+        query(
+            "PREFIX mt: <http://metacatalog/> SELECT ?name WHERE { ?t mt:name \"MixChild\" ;"
+                + " mt:hasTrait ?m . ?m mt:name ?name . }");
+    assert mixedIn.contains("MixMixin") : "Expected the mixed-in trait, got: " + mixedIn;
+    assert !mixedIn.contains("MixFather") : "The father is not a mix-in, got: " + mixedIn;
+
+    var inherited =
+        query(
+            "PREFIX mt: <http://metacatalog/> SELECT ?name WHERE { ?t mt:name \"MixChild\" ;"
+                + " mt:inheritsFrom ?f . ?f mt:name ?name . }");
+    assert inherited.contains("MixFather") : "Expected the father, got: " + inherited;
+  }
+
   private String query(String sparql) throws Exception {
     return mockMvc
         .perform(

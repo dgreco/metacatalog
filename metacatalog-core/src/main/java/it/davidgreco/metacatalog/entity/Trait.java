@@ -13,8 +13,8 @@ import lombok.ToString;
  * Represents a reusable characteristic that can be applied to entity types.
  *
  * <p>Traits define additional schema properties that can be shared across multiple entity types.
- * They support inheritance through a parent trait (father) and contribute to the derived schema of
- * entity types they are associated with.
+ * They support inheritance through a parent trait (father) and any number of mixed-in traits, and
+ * contribute to the derived schema of entity types they are associated with.
  */
 @Getter
 @Setter
@@ -59,6 +59,31 @@ public class Trait implements Type<Trait> {
    */
   @ManyToOne(fetch = FetchType.LAZY)
   private Trait father;
+
+  /**
+   * The traits mixed into this trait, in declaration order — the last one has the highest
+   * precedence, as for an entity type's traits.
+   *
+   * <p>A father alone cannot express a trait that <em>is</em> two unrelated things: {@code
+   * Provisionable} and {@code Authorizable} are siblings under {@code Aggregate}, so with single
+   * inheritance nothing could carry both, and every type that wanted both had to mix each in
+   * itself. The father keeps the role a Scala superclass has and these keep the role of its {@code
+   * with} clauses; {@link TypeLinearization} already folds both, so an ancestor reached twice (a
+   * diamond) contributes once.
+   *
+   * <p>Ordered by a column rather than left to insertion order, because the order decides which
+   * declaration of a property wins and must survive a reload.
+   *
+   * <p>Fetched lazily, like the father; the finders whose callers read the names outside a
+   * transaction fetch one hop.
+   */
+  @ManyToMany(fetch = FetchType.LAZY)
+  @JoinTable(
+      name = "trait_traits",
+      joinColumns = @JoinColumn(name = "trait_id"),
+      inverseJoinColumns = @JoinColumn(name = "mixin_id"))
+  @OrderColumn(name = "position")
+  private List<Trait> traits = new ArrayList<>();
 
   /**
    * The monotonically increasing version number of this live trait. Starts at 1 on creation and is

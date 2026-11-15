@@ -83,7 +83,8 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
   @Override
   public ResponseEntity createTrait(Trait trait) {
-    traitService.create(trait.getName(), trait.getSchema(), trait.getInheritsFrom());
+    traitService.create(
+        trait.getName(), trait.getSchema(), trait.getInheritsFrom(), trait.getTraits());
     return status(204).build();
   }
 
@@ -522,12 +523,34 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
             new TypeCapabilities()
                 .aggregateRoot(capabilities.aggregateRoot())
                 .provisionable(capabilities.provisionable())
-                .authorizable(capabilities.authorizable()));
+                .authorizable(capabilities.authorizable())
+                .asset(capabilities.asset()));
+  }
+
+  @Override
+  public ResponseEntity listAssetTypes() {
+    return entityTypeList(aggregateSchemaService.assetTypes());
+  }
+
+  @Override
+  public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.Asset>> listAssets() {
+    var assets = aggregateService.assets().stream().map(dtoMapper::assetToDto).toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(assets);
+  }
+
+  @Override
+  public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.AssetDependencyRule>>
+      listAssetDependencyRules() {
+    var rules =
+        aggregateSchemaService.assetDependencyRules().stream()
+            .map(dtoMapper::assetDependencyRuleToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(rules);
   }
 
   /**
-   * The three capability listings differ only in which question they ask the service; the endpoints
-   * stay separate because the answers are, but their bodies need not be.
+   * The capability listings differ only in which question they ask the service; the endpoints stay
+   * separate because the answers are, but their bodies need not be.
    */
   private ResponseEntity entityTypeList(
       java.util.List<it.davidgreco.metacatalog.entity.EntityType> types) {
@@ -560,6 +583,16 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity updateAggregateAsYaml(String aggregateId, Resource body) {
+    try {
+      bulkLoaderService.aggregateUpdate(aggregateId, body.getInputStream());
+    } catch (java.io.IOException e) {
+      throw new ServiceError(e.getMessage(), e);
+    }
+    return status(204).build();
+  }
+
+  @Override
   public ResponseEntity createEntityTypeVersion(String name, EntityType entityType) {
     var created =
         entityTypeService.createVersion(
@@ -571,7 +604,9 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
 
   @Override
   public ResponseEntity createTraitVersion(String name, Trait trait) {
-    var created = traitService.createVersion(name, trait.getSchema(), trait.getInheritsFrom());
+    var created =
+        traitService.createVersion(
+            name, trait.getSchema(), trait.getInheritsFrom(), trait.getTraits());
     return status(200).contentType(MediaType.APPLICATION_JSON).body(dtoMapper.traitToDto(created));
   }
 

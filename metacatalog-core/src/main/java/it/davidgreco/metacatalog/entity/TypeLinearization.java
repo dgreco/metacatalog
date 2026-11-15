@@ -6,11 +6,11 @@ import java.util.List;
 /**
  * Computes the Scala-style linearization of a {@link Type} hierarchy.
  *
- * <p>Metacatalog types support single inheritance through a {@link Type#getFather() father} (the
- * equivalent of a Scala superclass) and multiple {@link Type#getTraits() traits} (the equivalent of
- * Scala mixins). To decide, for a property defined by several ancestors, which declaration wins,
- * the ancestors are ordered with the same algorithm the Scala language uses for class
- * linearization.
+ * <p>Metacatalog types — entity types and traits alike — support single inheritance through a
+ * {@link Type#getFather() father} (the equivalent of a Scala superclass) and multiple {@link
+ * Type#getTraits() traits} (the equivalent of Scala mixins). To decide, for a property defined by
+ * several ancestors, which declaration wins, the ancestors are ordered with the same algorithm the
+ * Scala language uses for class linearization.
  *
  * <p>Given a type {@code C} whose direct parents are, in Scala {@code extends} order, {@code C1
  * with ... with Cn} (here {@code C1} is the father and {@code C2 ... Cn} are the traits), the
@@ -39,10 +39,6 @@ public final class TypeLinearization {
    * type (the type itself, at the head) to the most general ancestor (at the tail). Every ancestor
    * reachable through the father chain and the trait mixins appears exactly once.
    *
-   * <p>This method is specific to {@link EntityType} because only entity types can mix in traits.
-   * Trait types do not participate in the trait mixin graph and therefore cannot be linearized
-   * using this algorithm.
-   *
    * @param type the entity type to linearize
    * @return the de-duplicated, most-specific-first list of the type and all its ancestors
    */
@@ -51,9 +47,24 @@ public final class TypeLinearization {
   }
 
   /**
-   * Recursive helper that traverses both {@link EntityType} and {@link Trait} ancestors. The public
-   * {@link #linearize(EntityType)} entry point enforces the EntityType precondition; this internal
-   * variant is used for recursive descent through trait and father chains.
+   * Returns the linearization of the given trait's hierarchy: the trait itself at the head, then
+   * every trait reachable through its father chain and its mixed-in traits, each exactly once.
+   *
+   * <p>This is what makes a diamond harmless. {@code Asset} inherits {@code Provisionable} and
+   * mixes in {@code Authorizable}, and both of those descend from {@code Aggregate}; {@code
+   * Aggregate} appears here once, after both, rather than once per path.
+   *
+   * @param trait the trait to linearize
+   * @return the de-duplicated, most-specific-first list of the trait and all its ancestors
+   */
+  public static List<Trait> linearize(Trait trait) {
+    // A trait's ancestors are all traits: only an entity type has an entity type for a father.
+    return linearizeInternal(trait).stream().map(Trait.class::cast).toList();
+  }
+
+  /**
+   * Recursive helper that traverses both {@link EntityType} and {@link Trait} ancestors, descending
+   * through fathers and mixed-in traits alike.
    */
   private static List<Type<?>> linearizeInternal(Type<?> type) {
     // Scala: L(C) = C, L(Cn) +: ... +: L(C1), with C1 the father (superclass, lowest precedence)
@@ -96,8 +107,13 @@ public final class TypeLinearization {
    * Two types are the same ancestor when they are of the same kind ({@link EntityType} vs {@link
    * Trait}) and share the same unique name. Names are unique within each kind, so this identifies a
    * type independently of the particular object instance loaded from the database.
+   *
+   * <p>The kind is tested with {@code instanceof}, not by comparing classes: a lazily fetched
+   * father is a Hibernate proxy, whose class is a generated subclass. Comparing classes would call
+   * the proxy and the loaded instance of one trait two different ancestors — precisely in a
+   * diamond, where the same trait is reached once through a father and once through a mix-in.
    */
   private static boolean sameType(Type<?> a, Type<?> b) {
-    return a.getClass().equals(b.getClass()) && a.getName().equals(b.getName());
+    return (a instanceof Trait) == (b instanceof Trait) && a.getName().equals(b.getName());
   }
 }

@@ -6,6 +6,7 @@ Traits:
         name:
           type: string
   - name: DataProduct
+  - name: Domain
   - name: DataProductComponent
   - name: OutputPort
     inheritsFrom: DataProductComponent
@@ -17,18 +18,36 @@ Relationships:
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
 
+  # The dependencies allowed between assets.
+  - sourceTrait: DataProduct
+    relationshipType: DEPENDS_ON
+    targetTrait: Domain
+
+  - sourceTrait: DataProduct
+    relationshipType: DEPENDS_ON
+    targetTrait: DataProduct
+
 ---
 EntityTypes:
+
+  - name: DomainType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - Asset
+      - WithName
+      - Domain
 
   - name: DataProductType
     schema:
       type: object
       properties: {}
     traits:
-      - Provisionable
-      - Authorizable
+      - Asset
       - Versionable
       - WithName
+      - DataProduct
 
   - name: OutputPortType
     schema:

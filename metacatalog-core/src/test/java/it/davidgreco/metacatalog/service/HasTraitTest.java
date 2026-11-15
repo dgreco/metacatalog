@@ -73,6 +73,21 @@ class HasTraitTest {
   }
 
   @Test
+  void traitInheritedThroughATraitsMixinIsVisible() {
+    var aggregate = trait("Aggregate");
+    var provisionable = trait("Provisionable", aggregate);
+    var authorizable = trait("Authorizable", aggregate);
+    var asset = trait("Asset", provisionable);
+    asset.setTraits(List.of(authorizable));
+    var type = entityType("TableType", null, asset);
+
+    assertTrue(hasTrait(entity(type), "Provisionable"));
+    // Reached only through the mix-in: a father-chain walk alone would miss it.
+    assertTrue(hasTrait(entity(type), "Authorizable"));
+    assertTrue(hasTrait(entity(type), "Aggregate"));
+  }
+
+  @Test
   void absentTraitReturnsFalse() {
     var other = trait("Other");
     var type = entityType("MyType", null, other);

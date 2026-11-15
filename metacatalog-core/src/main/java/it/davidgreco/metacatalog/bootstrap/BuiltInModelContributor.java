@@ -3,6 +3,7 @@ package it.davidgreco.metacatalog.bootstrap;
 import it.davidgreco.metacatalog.entity.BuiltInCapability;
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.RelationType;
+import java.util.List;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -13,7 +14,8 @@ import org.springframework.stereotype.Component;
  * provisioning pair {@link BuiltInTraits#PROVISIONABLE} / {@link
  * BuiltInTraits#PROVISIONABLE_RESOURCE} and the authorization pair {@link
  * BuiltInTraits#AUTHORIZABLE} / {@link BuiltInTraits#AUTHORIZABLE_RESOURCE} — the composition
- * between the first two, and the {@link BuiltInTraits#VERSIONABLE} marker.
+ * between the first two, the {@link BuiltInTraits#ASSET} trait that combines the two capabilities,
+ * and the {@link BuiltInTraits#VERSIONABLE} marker.
  *
  * <p>The capabilities are looped over rather than spelled out one by one: each names its own traits
  * and renders its own root and resource schemas, so this class holds no field names and a third
@@ -53,6 +55,15 @@ public class BuiltInModelContributor implements ImmutableModelContributor {
     // Composition: what makes a type able to contain another, and what AggregateSchemaService
     // projects onto the types carrying these traits to derive the aggregate model.
     registry.link(BuiltInTraits.AGGREGATE, RelationType.HAS_PART, BuiltInTraits.AGGREGATE_ELEMENT);
+    // An asset is a provisionable, authorizable aggregate. Aggregate is deliberately absent from
+    // this declaration: both capabilities already inherit it, so naming it would only repeat what
+    // they say — and the trait service refuses exactly that repetition. After the capability loop,
+    // since both of its parents are declared there.
+    registry.trait(
+        BuiltInTraits.ASSET,
+        null,
+        BuiltInTraits.PROVISIONABLE,
+        List.of(BuiltInTraits.AUTHORIZABLE));
     // A marker with no schema of its own: the entity services check for it by name to decide
     // whether an update snapshots the entity, so it is frozen like the rest.
     registry.trait(BuiltInTraits.VERSIONABLE);

@@ -1775,27 +1775,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/aggregate/asset-type:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the asset entity types
+      description: >
+        Returns the entity types whose instances are data platform assets: the aggregate root
+        types carrying the built-in Asset trait, directly or through the type and trait
+        inheritance chains. Asset inherits Provisionable and Authorizable, so every type listed
+        here is also listed by /aggregate/root-type, /aggregate/provisionable-type and
+        /aggregate/authorizable-type. A type carrying Asset that is also an aggregate element is
+        not listed: it is a part of another aggregate, and an asset is the root of its own.
+      operationId: listAssetTypes
+      responses:
+        200:
+          description: The asset entity types, ordered by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityType'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
   /metacatalog/v1/aggregate/type-capabilities:
     get:
       tags:
         - Meta Catalog Manager
       summary: List every type classification in one answer
       description: >
-        Returns, in one call, the three per-type classifications a client needs in order to decide
+        Returns, in one call, the per-type classifications a client needs in order to decide
         which actions an instance of that type offers: which types are aggregate roots, which can
-        be provisioned, and which can be authorized. They are the same answers
-        /aggregate/root-type, /aggregate/provisionable-type and /aggregate/authorizable-type give,
-        and they remain three separate answers — the capabilities are declared by independent
-        pairs of traits, so none implies another.
+        be provisioned, which can be authorized, and which are asset types. They are the same
+        answers /aggregate/root-type, /aggregate/provisionable-type, /aggregate/authorizable-type
+        and /aggregate/asset-type give, and the first three remain separate answers — the
+        capabilities are declared by independent pairs of traits, so none implies another.
 
         What this saves is the work, not the distinction. Each of those endpoints walks the whole
-        catalog and every type's and trait's inheritance chain, so a page needing all three paid
-        for that walk three times. Only the names are returned: a caller deciding which buttons a
-        row gets has no use for the schemas the per-capability endpoints carry.
+        catalog and every type's and trait's inheritance chain, so a page needing all of them paid
+        for that walk once per answer. Only the names are returned: a caller deciding which
+        buttons a row gets has no use for the schemas the per-capability endpoints carry.
       operationId: getTypeCapabilities
       responses:
         200:
-          description: The three classifications, each ordered by name
+          description: The classifications, each ordered by name
           content:
             application/json:
               schema:
@@ -1860,6 +1888,11 @@ paths:
         Accepts a YAML document containing one or more aggregate definitions and creates
         them in a single transaction. Each aggregate is an entity of an aggregate entity type,
         composed of parts (other entities) and dependencies.
+
+        A document served by GET /aggregate/{id}/yaml is accepted unchanged and creates a copy:
+        a node's id is read as a second ref, and its dependencies as more dependsOn names. A
+        dependency name that no node of the file declares is taken as the id of an existing
+        entity, so the copy keeps the dependencies the original had on entities outside it.
       operationId: createAggregateAsYaml
       requestBody:
         description: A YAML file containing one or more aggregate YAML documents
@@ -2007,6 +2040,128 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+    put:
+      tags:
+        - Meta Catalog Manager
+      summary: Update an aggregate as a whole
+      description: >
+        Updates an existing aggregate in place so that it matches a YAML document, in a single
+        transaction: either the whole update is applied or nothing is. A versionable root gains
+        one new version, however many members changed.
+
+        The document has the shape GET /aggregate/{id}/yaml serves, so an aggregate can be
+        downloaded, edited and sent back; it also understands what POST /aggregate/yaml consumes,
+        so a new part is written the way a new aggregate is.
+
+        A node with an id is that existing member: its values are updated when they differ, its
+        type cannot change and it cannot move to another parent. A node without an id is a new
+        part, created under the node listing it. A member the document does not list is removed,
+        with its own parts and the entities derived from them by mappings.
+
+        A node declaring dependencies (ids) or dependsOn (the ref or id of another node, or the id
+        of an existing entity) depends on exactly those afterwards. A node declaring neither keeps
+        the dependencies it has.
+
+        The fields a provisioning or authorization run writes (the status and result pairs, and
+        effectiveGrants) are never taken from the document: the entity keeps the ones it has.
+        Nodes naming an entity derived by a mapping are ignored.
+
+        Refused, with nothing changed, when the removal would leave a remaining entity depending
+        on a removed part, or would remove a link a mapping resolves a path reference through.
+      operationId: updateAggregateAsYaml
+      parameters:
+        - in: path
+          name: id
+          required: true
+          description: Aggregate Id
+          schema:
+            type: string
+      requestBody:
+        description: A YAML file containing exactly one aggregate document
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        204:
+          description: Aggregate updated
+        400:
+          description: Invalid input, or the update is refused; details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        404:
+          description: Aggregate not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        500:
+          description: System problem, details of the error are provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/asset:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the assets
+      description: >
+        Returns the catalog of data platform assets: every aggregate whose root type is an asset
+        type (see /aggregate/asset-type), with the assets it depends on. An asset is an
+        aggregate, so everything else — reading, updating, deleting, provisioning and authorizing
+        it — goes through the /aggregate endpoints with the asset's id.
+
+        A dependency between two assets is a DEPENDS_ON link between their roots, created and
+        removed like any other entity link (POST /entity/link, DELETE /entity/link/...). Which
+        pairs of types may be linked is answered by /asset/dependency-rule.
+      operationId: listAssets
+      responses:
+        200:
+          description: The assets, grouped by type in type-name order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        500:
+          description: System problem
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemError'
+  /metacatalog/v1/asset/dependency-rule:
+    get:
+      tags:
+        - Meta Catalog Manager
+      summary: List the dependencies allowed between asset types
+      description: >
+        Returns, for every ordered pair of asset types whose instances may be linked by a
+        dependency, the DEPENDS_ON trait relationships that allow it. This is the test POST
+        /entity/link applies, so a client can tell in advance which asset may depend on which —
+        and explain why — rather than discover it from a refused link. A pair that is not listed
+        is refused.
+      operationId: listAssetDependencyRules
+      responses:
+        200:
+          description: The allowed dependencies, ordered by source then target type name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetDependencyRule'
         500:
           description: System problem
           content:
@@ -2371,6 +2526,16 @@ components:
         inheritsFrom:
           type: string
           description: Name of the parent trait this trait inherits from, or null for a root trait.
+        traits:
+          type: array
+          items:
+            type: string
+          description: >
+            Names of the traits mixed into this trait, in declaration order: the last has the
+            highest precedence when two of them declare the same property. Together with
+            inheritsFrom they are the trait's parents, so a trait may inherit from several traits.
+            A parent that another parent already inherits is refused as redundant. Omitted or
+            empty when the trait mixes none in; on a new version, omitting one removes it.
         version:
           type: integer
           readOnly: true
@@ -2711,13 +2876,16 @@ components:
     TypeCapabilities:
       type: object
       description: >
-        The per-type classifications that decide which actions an instance offers. Three separate
+        The per-type classifications that decide which actions an instance offers. Separate
         lists, because the capabilities are declared by independent pairs of traits: a type may be
         provisionable, authorizable, both or neither, and being an aggregate root implies neither.
+        Only an asset type, whose Asset trait inherits both capabilities, is by construction in
+        all of them.
       required:
         - aggregateRoot
         - provisionable
         - authorizable
+        - asset
       properties:
         aggregateRoot:
           type: array
@@ -2736,6 +2904,69 @@ components:
           items:
             type: string
           description: Names of the entity types carrying Authorizable, ordered by name.
+        asset:
+          type: array
+          items:
+            type: string
+          description: >
+            Names of the asset types — the aggregate root types carrying Asset. Ordered by name.
+    Asset:
+      type: object
+      description: >
+        A data platform asset as the catalog lists it: the root entity of an aggregate whose type
+        carries the built-in Asset trait, with the assets it depends on. The whole aggregate is
+        read with GET /aggregate/{id}.
+      required:
+        - id
+        - entityType
+        - values
+        - dependencies
+      properties:
+        id:
+          type: string
+          description: Identifier of the asset's root entity, which is also the aggregate id.
+        entityType:
+          type: string
+          description: Name of the root entity's type.
+        values:
+          type: string
+          description: JSON string containing the root entity's values.
+        version:
+          type: integer
+          description: >
+            The asset's current version number, present only when its type is versionable.
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: >
+            Ids of the assets this asset depends on: the assets whose root is the target of a
+            DEPENDS_ON link from this asset's root.
+    AssetDependencyRule:
+      type: object
+      description: >
+        A dependency the model allows between assets of two types. A dependency is declared
+        between traits, never between entity types; this is that declaration projected onto the
+        asset types carrying the traits.
+      required:
+        - sourceEntityType
+        - targetEntityType
+        - sanctionedBy
+      properties:
+        sourceEntityType:
+          type: string
+          description: Name of the type of the asset that may depend.
+        targetEntityType:
+          type: string
+          description: Name of the type of the asset it may depend on.
+        sanctionedBy:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraitRelationship'
+          description: >
+            The DEPENDS_ON trait relationships that allow the dependency: at least one, and
+            several when the two types carry more than one related pair of traits. Removing all of
+            them makes the dependency illegal again.
     AccessPrincipal:
       type: object
       description: >

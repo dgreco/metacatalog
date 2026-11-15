@@ -675,6 +675,22 @@ public class EntityServiceImpl implements EntityService {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public void unlink(String sourceId, RelationType relType, String targetId) {
+    doUnlink(sourceId, relType, targetId, false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void unlinkInternal(String sourceId, RelationType relType, String targetId) {
+    doUnlink(sourceId, relType, targetId, true);
+  }
+
+  /**
+   * The shared body, private so that it cannot be mistaken for an entry point: a public method
+   * delegating to another would bypass the proxy and with it the transaction.
+   */
+  private void doUnlink(
+      String sourceId, RelationType relType, String targetId, boolean partIsBeingRemoved) {
     log.info("Unlinking entity with id {} from entity with id {}", sourceId, targetId);
     var source =
         entityRepository
@@ -686,7 +702,7 @@ public class EntityServiceImpl implements EntityService {
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
     ServiceUtils.checkNotFrozen(source);
     ServiceUtils.checkNotFrozen(target);
-    checkIsNotAggregateContainment(source, relType, target);
+    if (!partIsBeingRemoved) checkIsNotAggregateContainment(source, relType, target);
     var directRel =
         entityRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(source, relType, target)

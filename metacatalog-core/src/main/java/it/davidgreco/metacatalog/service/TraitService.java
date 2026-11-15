@@ -23,7 +23,24 @@ public interface TraitService extends CommonTypeService<Trait, String> {
   Trait create(String name, Optional<String> schema, Optional<String> fatherName);
 
   /**
-   * Creates a new version of an existing trait, snapshotting the current live state.
+   * Creates a new trait that, besides its optional father, mixes other traits in.
+   *
+   * <p>The mix-ins are given in declaration order: the last has the highest precedence, as for an
+   * entity type's traits. A declaration naming a trait that another of its parents already inherits
+   * is refused as redundant rather than accepted — see {@code TraitServiceImpl}.
+   *
+   * @param name the trait name
+   * @param schema an optional JSON schema string
+   * @param fatherName an optional father trait name
+   * @param traits the names of the traits mixed in, in declaration order; may be empty
+   * @return the created trait
+   */
+  Trait create(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits);
+
+  /**
+   * Creates a new version of an existing trait, snapshotting the current live state. The new
+   * version mixes no traits in.
    *
    * @param name the trait name
    * @param schema the new optional JSON schema string
@@ -31,6 +48,21 @@ public interface TraitService extends CommonTypeService<Trait, String> {
    * @return the mutated (now current) live trait
    */
   Trait createVersion(String name, Optional<String> schema, Optional<String> fatherName);
+
+  /**
+   * Creates a new version of an existing trait, snapshotting the current live state.
+   *
+   * <p>A version restates the whole trait: the father and the mix-ins given here replace the live
+   * ones, so omitting a mix-in removes it.
+   *
+   * @param name the trait name
+   * @param schema the new optional JSON schema string
+   * @param fatherName the new optional father name
+   * @param traits the names of the traits the new version mixes in, in declaration order
+   * @return the mutated (now current) live trait
+   */
+  Trait createVersion(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits);
 
   /**
    * Reads a specific version of a trait.

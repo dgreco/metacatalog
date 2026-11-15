@@ -153,6 +153,40 @@ class AggregateDeletionTests extends CommonServiceTestingSupport {
     Assertions.assertTrue(entityService.exists(outsider.getId()));
   }
 
+  /**
+   * The reverse direction is not an obstacle. What the aggregate itself depends on loses a
+   * dependent — which is what deleting the dependent means — so those links go with it.
+   */
+  @Test
+  void testDeleteTakesTheAggregatesOwnOutsideDependenciesAlong() throws IOException {
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+
+    var root = entity(aggregateRootType, "dependingRoot");
+    var leaf = entity(aggregateElementType, "dependingLeaf");
+
+    var created =
+        (AggregateService.Aggregate)
+            aggregateService.create(
+                new AggregateService.Aggregate(
+                    root, List.of(new AggregateService.AggregateElement(leaf))));
+
+    var dependedOn =
+        entityService.create(
+            "AggregateElementType",
+            """
+            {"name": "dependedOn"}""");
+    entityService.link(leaf.getId(), DEPENDS_ON, dependedOn.getId());
+
+    aggregateService.delete(created.entity().getId());
+
+    Assertions.assertFalse(entityService.exists(created.entity().getId()));
+    Assertions.assertFalse(entityService.exists(leaf.getId()));
+    Assertions.assertTrue(entityService.exists(dependedOn.getId()));
+    Assertions.assertTrue(
+        entityService.linked(dependedOn.getId(), RelationType.IS_REQUIRED_BY).isEmpty());
+  }
+
   @Test
   void testDeleteIsRefusedForAnEntityThatIsNotAnAggregateRoot() throws IOException {
     var entityService = getApplicationContext().getBean(EntityService.class);

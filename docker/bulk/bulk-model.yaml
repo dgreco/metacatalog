@@ -1,11 +1,19 @@
 # The demo model for the base stack (docker-compose.yml, loaded by the bulk-loader service).
 #
-# The data product is both Provisionable and Authorizable, and its two resources carry both
-# resource traits, because the two capabilities are independent and the demo is the easiest place
-# to see that: provisioning creates the S3 folder and the Athena table, authorization grants access
-# to them, and each records into its own pair of status fields on the resource and on the root.
-# Everything here is handled by the `stdout` task (see application-docker.yaml), which prints what
-# it would do for all four operations instead of touching anything real.
+# The data product and the domain are *assets*: aggregate root types carrying the built-in `Asset`
+# trait, which is what the Assets half of the UI lists and manages. `Asset` inherits `Provisionable`
+# and mixes in `Authorizable`, so an asset type gets both capabilities by naming one trait — the
+# data product used to mix the two in itself. Its two resources carry both resource traits:
+# provisioning creates the S3 folder and the Athena table, authorization grants access to them, and
+# each records into its own pair of status fields on the resource and on the root. Everything here
+# is handled by the `stdout` task (see application-docker.yaml), which prints what it would do for
+# all four operations instead of touching anything real.
+#
+# Which asset may depend on which is declared between traits, under Relationships below: a data
+# product may belong to a domain, and may consume another data product. Nothing else is allowed — a
+# domain cannot be made to depend on a data product — which is what the catalog's drag and drop
+# shows when an asset is dropped where it may not go. Only dp1 is seeded: create a DomainType asset
+# from the UI and drag dp1 onto it to see a dependency being made.
 #
 # The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
 # change to its values adds one. That includes the status write-backs each provision / authorize
@@ -20,6 +28,7 @@ Traits:
         name:
           type: string
   - name: DataProduct
+  - name: Domain
   - name: DataProductComponent
   - name: OutputPort
     inheritsFrom: DataProductComponent
@@ -31,18 +40,36 @@ Relationships:
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
 
+  # The dependencies allowed between assets.
+  - sourceTrait: DataProduct
+    relationshipType: DEPENDS_ON
+    targetTrait: Domain
+
+  - sourceTrait: DataProduct
+    relationshipType: DEPENDS_ON
+    targetTrait: DataProduct
+
 ---
 EntityTypes:
+
+  - name: DomainType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - Asset
+      - WithName
+      - Domain
 
   - name: DataProductType
     schema:
       type: object
       properties: {}
     traits:
-      - Provisionable
-      - Authorizable
+      - Asset
       - Versionable
       - WithName
+      - DataProduct
 
   - name: OutputPortType
     schema:

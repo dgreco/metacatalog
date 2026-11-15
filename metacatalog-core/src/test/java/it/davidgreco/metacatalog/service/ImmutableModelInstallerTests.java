@@ -196,6 +196,43 @@ class ImmutableModelInstallerTests extends CommonServiceTestingSupport {
   }
 
   /**
+   * So are a trait's mixed-in traits — and their order, which decides whose declaration of a
+   * property wins.
+   */
+  @Test
+  void testChangedMixinsOnAnInstalledTraitAbortStartup() {
+    install(
+        registry -> {
+          registry.trait("InstallerMixA");
+          registry.trait("InstallerMixB");
+          registry.trait("InstallerMixed", null, null, List.of("InstallerMixA", "InstallerMixB"));
+        });
+
+    var dropped =
+        Assertions.assertThrows(
+            IllegalStateException.class,
+            () ->
+                install(
+                    registry ->
+                        registry.trait("InstallerMixed", null, null, List.of("InstallerMixA"))));
+    Assertions.assertTrue(dropped.getMessage().contains("mixed-in traits"), dropped.getMessage());
+
+    Assertions.assertThrows(
+        IllegalStateException.class,
+        () ->
+            install(
+                registry ->
+                    registry.trait(
+                        "InstallerMixed", null, null, List.of("InstallerMixB", "InstallerMixA"))));
+
+    // The same declaration again is not drift.
+    install(
+        registry ->
+            registry.trait(
+                "InstallerMixed", null, null, List.of("InstallerMixA", "InstallerMixB")));
+  }
+
+  /**
    * And so is an entity type's trait set, which is what decides the schema it validates against.
    */
   @Test
