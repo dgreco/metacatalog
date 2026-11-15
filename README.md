@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-458-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-460-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -303,7 +303,7 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 255 · ui 110 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 17 = **458, 0 failures**.
+for the Testcontainers PostgreSQL): core 255 · ui 111 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 18 = **460, 0 failures**.
 
 ### Coverage
 
@@ -604,6 +604,11 @@ has a picker and a remove button for the same thing without a pointer.
 asset types, and the aggregate and plain types some asset may depend on, and the dialog asks for
 the scalar values the chosen type declares. Only the root is created; the parts of a new asset or
 aggregate, and anything structured such as an access policy, are added from its own page.
+
+**A right-click on an asset** also offers its four runs — **Provision**, **Unprovision**,
+**Authorize** and **Reject** — launched as from the asset's own page. The browser stays on the
+graph: the progress popup follows the run, and when it ends the graph is redrawn with the status
+it left on the asset and on its mapped entities.
 
 **A right-click on a node** opens it, edits it when it is an asset, or **deletes it**. An asset or
 an aggregate is deleted as one, its parts and the entities derived from them with it; a plain

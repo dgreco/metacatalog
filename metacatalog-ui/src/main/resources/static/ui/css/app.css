@@ -1206,6 +1206,7 @@ select[multiple].traits-select {
     cursor: pointer;
 }
 .board-menu button:hover, .board-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.board-menu-rule { height: 1px; margin: 0.25rem 0.4rem; background: var(--border); }
 .board-menu button.danger { color: var(--error-text); }
 .board-menu button.danger:hover, .board-menu button.danger:focus-visible { background: var(--error-bg); }
 .board-menu .empty { padding: 0.4rem 0.6rem; margin: 0; }

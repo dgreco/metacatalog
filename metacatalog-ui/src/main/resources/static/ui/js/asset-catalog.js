@@ -38,6 +38,10 @@
  * something for assets to depend on. The dialog asks for the scalar values the type declares and
  * creates the root alone; an asset's parts are added from its own page.
  *
+ * A right-click on an asset also offers its four runs — provision, unprovision, authorize, reject
+ * — which are launched as from the asset's page and bring the browser back to the graph, where
+ * the progress popup follows the run and the nodes show what it left.
+ *
  * A right-click on a node offers to open it and, for what stands on the board in its own right —
  * an asset, an aggregate, an entity — to delete it. An asset or an aggregate goes with everything
  * inside it. What something still depends on is refused here, with what depends on it; the server
@@ -86,6 +90,7 @@
       c.rules = c.rules || [];
       c.types = c.types || [];
       c.creatable = c.creatable || [];
+      c.procedures = c.procedures || [];
       // One shape for everything on the board: an asset is its own kind of node.
       c.assets.forEach(function (a) {
         a.kind = "asset";
@@ -290,6 +295,30 @@
       post("/ui/assets/dependencies/delete", source, target, function () {
         notify("«" + source.name + "» no longer depends on «" + target.name + "».", true);
       });
+    }
+
+    // Launches a run on an asset the way its page does — a form posted to the same address — so
+    // that the answer is a page carrying the seed of the progress popup. It says where it was
+    // launched from, and the server sends the browser back here instead of to the asset's page.
+    function run(asset, procedure) {
+      if (!window.confirm("«" + asset.name + "» — " + procedure.confirm)) return;
+      var launch = el("form");
+      launch.method = "post";
+      launch.action = asset.href + "/procedure/" + encodeURIComponent(procedure.path);
+      launch.hidden = true;
+      function field(name, value) {
+        var input = el("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        launch.appendChild(input);
+      }
+      field("from", "graph");
+      // With security enabled the UI chain enforces CSRF; the page's own form holds the token.
+      var csrf = form ? form.querySelector("input[name='_csrf']") : null;
+      if (csrf) field("_csrf", csrf.value);
+      document.body.appendChild(launch);
+      launch.submit();
     }
 
     // Why `node` may not be deleted, or null when the server may be asked.
@@ -915,7 +944,16 @@
         var node = at.node.data;
         menu.appendChild(el("div", "board-menu-head", node.name));
         menuItem("Open", function () { window.location.href = node.href; });
-        if (isAsset(node)) menuItem("Edit", function () { window.location.href = node.href + "/edit"; });
+        if (isAsset(node)) {
+          menuItem("Edit", function () { window.location.href = node.href + "/edit"; });
+          // The asset as a whole is what a run acts on; its parts and resources have no run of
+          // their own.
+          if (catalog.procedures.length) menu.appendChild(el("div", "board-menu-head", "Run"));
+          catalog.procedures.forEach(function (p) {
+            menuItem(p.label, function () { run(node, p); });
+          });
+          menu.appendChild(el("div", "board-menu-rule"));
+        }
         // Not for a part or a mapped entity: neither is on the board in its own right, and
         // deleting one would change its asset without the asset knowing.
         if (isAsset(node) || node.kind === "aggregate" || node.kind === "entity") {

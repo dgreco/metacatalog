@@ -707,6 +707,44 @@ class AssetUiControllerTest {
         .andExpect(flash().attribute("procedureLabel", "Provisioning"));
   }
 
+  /**
+   * Launched from the dependency graph's menu, a run comes back to the graph — which is where the
+   * progress popup then follows it — and the catalog tells the page which runs to offer.
+   */
+  @Test
+  void aRunLaunchedFromTheGraphComesBackToTheGraph() throws Exception {
+    given(api.authorizeAggregate("table-1", Optional.of(Boolean.TRUE)))
+        .willReturn(
+            ResponseEntity.accepted()
+                .body(
+                    new ProcedureStatus()
+                        .scheduleId("run-2")
+                        .status(ProcedureStatus.StatusEnum.RUNNING)));
+
+    mockMvc
+        .perform(post("/ui/assets/table-1/procedure/authorize").param("from", "graph"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/assets?view=graph"))
+        .andExpect(flash().attribute("procedureScheduleId", "run-2"))
+        .andExpect(flash().attribute("procedureLabel", "Authorizing"));
+
+    // Where a run returns to is a name the server knows, never an address taken from the request.
+    mockMvc
+        .perform(
+            post("/ui/assets/table-1/procedure/authorize").param("from", "https://example.org/"))
+        .andExpect(redirectedUrl("/ui/assets/table-1"));
+
+    mockMvc
+        .perform(get("/ui/assets/data"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.procedures[*].path")
+                .value(
+                    org.hamcrest.Matchers.contains(
+                        "provision", "unprovision", "authorize", "reject")))
+        .andExpect(jsonPath("$.procedures[0].label").value("Provision"));
+  }
+
   /** Only the four procedures are reachable through the procedure route. */
   @Test
   void anUnknownProcedureIsRefused() throws Exception {

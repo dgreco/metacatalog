@@ -24,13 +24,16 @@ import java.util.Map;
  * @param rules the dependencies the model allows an asset type to have
  * @param types the names of the asset types, ordered by name
  * @param creatable the types a new node of the graph can be created from
+ * @param procedures the runs an asset's menu offers — the same for every asset, since an asset type
+ *     is provisionable and authorizable by definition
  */
 public record AssetCatalogView(
     List<Row> assets,
     List<Ref> targets,
     List<Rule> rules,
     List<String> types,
-    List<Creatable> creatable) {
+    List<Creatable> creatable,
+    List<Procedure> procedures) {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -198,6 +201,16 @@ public record AssetCatalogView(
   public record Creatable(String type, String kind, String schema) {}
 
   /**
+   * A run that can be launched on an asset, as {@link AggregateAction} describes it: the catalog
+   * carries the descriptions to the page rather than the page spelling the four out again.
+   *
+   * @param path the last segment of the address the run is posted to, which names the operation
+   * @param label what the menu calls it
+   * @param confirm the question asked before it is launched
+   */
+  public record Procedure(String path, String label, String confirm) {}
+
+  /**
    * Builds the catalog from the answers the API gives about assets.
    *
    * @param assets the assets, as {@code GET /asset} lists them
@@ -296,7 +309,11 @@ public record AssetCatalogView(
         List.copyOf(targetRefs),
         ruleViews,
         List.copyOf(types),
-        List.copyOf(creatable.values()));
+        List.copyOf(creatable.values()),
+        java.util.Arrays.stream(AggregateAction.values())
+            .filter(AggregateAction::isProcedure)
+            .map(action -> new Procedure(action.getPath(), action.getLabel(), action.getConfirm()))
+            .toList());
   }
 
   /** The row of the asset with the given id, or {@code null} when the catalog does not hold it. */

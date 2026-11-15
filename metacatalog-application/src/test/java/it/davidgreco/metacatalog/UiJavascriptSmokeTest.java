@@ -645,6 +645,54 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * A right-click on an asset offers its four runs. One launched there comes back to the graph,
+   * where the progress popup follows it to its end — the browser is not taken to the asset's page.
+   */
+  @Test
+  void aRightClickOnAnAssetLaunchesItsRuns() {
+    ensureAssetModel();
+    var table =
+        context.getBean(EntityService.class).create("SmTableType", "{\"name\": \"sm-runnable\"}");
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var node =
+        await()
+            .until(
+                ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
+    new org.openqa.selenium.interactions.Actions(driver).contextClick(node).perform();
+    var menu = await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    var items = menu.findElements(By.cssSelector("button")).stream().map(e -> e.getText()).toList();
+    Assertions.assertTrue(
+        items.containsAll(List.of("Provision", "Unprovision", "Authorize", "Reject")),
+        items.toString());
+
+    menu.findElements(By.cssSelector("button")).stream()
+        .filter(item -> item.getText().equals("Provision"))
+        .findFirst()
+        .orElseThrow()
+        .click();
+    var question = await().until(ExpectedConditions.alertIsPresent());
+    Assertions.assertTrue(question.getText().contains("sm-runnable"), question.getText());
+    question.accept();
+
+    // The run is followed from the graph, to its end.
+    var outcome =
+        await()
+            .until(
+                ExpectedConditions.visibilityOfElementLocated(
+                    By.cssSelector("#procedure-popup.ok")));
+    Assertions.assertTrue(outcome.getText().contains("Provisioning"), outcome.getText());
+    Assertions.assertTrue(outcome.getText().contains("completed"), outcome.getText());
+    Assertions.assertTrue(
+        driver.getCurrentUrl().contains("/ui/assets?view=graph"), driver.getCurrentUrl());
+    await()
+        .until(
+            ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
+  }
+
+  /**
    * A right-click on a node deletes it, after asking: an asset as the whole aggregate it is, an
    * entity alone. What an asset still depends on is refused before anything is asked, with the
    * asset that depends on it.

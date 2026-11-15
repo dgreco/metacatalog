@@ -488,14 +488,27 @@ public class AssetUiController {
    * Runs one of the four procedures on the asset and comes back to its page, which shows the run's
    * progress and reloads with the statuses it leaves (see {@link AggregateProcedureLauncher}).
    */
+  /**
+   * Launches one of the four runs on an asset and goes back to where it was asked for, which shows
+   * its progress and reloads when it is over.
+   *
+   * @param id the asset
+   * @param action the run, as the last segment of the address
+   * @param from {@code graph} when the run was launched from the dependency graph's menu, which is
+   *     then where the answer goes; anything else, or nothing, returns to the asset's page. A name
+   *     rather than an address, so that the redirect cannot be pointed elsewhere
+   */
   @PostMapping("/{id}/procedure/{action}")
   public String runProcedure(
-      @PathVariable String id, @PathVariable String action, RedirectAttributes redirectAttributes) {
+      @PathVariable String id,
+      @PathVariable String action,
+      @RequestParam(required = false) String from,
+      RedirectAttributes redirectAttributes) {
     var procedure = AggregateProcedureLauncher.procedure(action);
     if (procedure.isEmpty())
       redirectAttributes.addFlashAttribute("error", "Unknown asset procedure: " + action);
     else procedures.launch(redirectAttributes, procedure.get(), id);
-    return assetPage(id);
+    return "graph".equals(from) ? CATALOG + "?view=graph" : assetPage(id);
   }
 
   @PostMapping("/{id}/delete")
