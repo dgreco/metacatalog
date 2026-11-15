@@ -24,10 +24,12 @@ still answer.
   lists the asset types, `GET /asset` the catalog: every asset with the assets it depends on.
   `GET /aggregate/type-capabilities` reports the asset types alongside the other classifications.
   A database created by an earlier release gains `Asset` on its first start.
-- **Dependencies between assets, decided by the model.** A dependency is a `DEPENDS_ON` link
-  between two assets' roots, legal only when their types carry traits related by `DEPENDS_ON`.
-  `GET /asset/dependency-rule` lists the pairs of asset types that may be linked and the trait
-  relationships that allow each, so a client can tell in advance instead of from a refused link.
+- **What an asset depends on, decided by the model.** An asset can depend on another asset, on an
+  aggregate or on a plain entity: a `DEPENDS_ON` link from its root, legal only when the two types
+  carry traits related by `DEPENDS_ON`. `GET /asset/dependency-rule` lists, for every asset type,
+  the types its assets may depend on, what each is and the trait relationships that allow it, so a
+  client can tell in advance instead of from a refused link; `GET /asset/dependency-target` lists
+  the aggregates and entities that qualify.
 - **Traits inheriting from several traits.** A trait has a father and, now, any number of mixed-in
   traits (`traits` on the `Trait` resource, in the bulk YAML and in `ImmutableModelRegistry`),
   linearized as an entity type's ancestors are, so a shared ancestor contributes once. A parent
@@ -37,9 +39,11 @@ still answer.
   to match a document, in one transaction and as one new version: values of the members it lists,
   parts it adds, parts it no longer lists, and the dependencies it declares. The fields a run
   writes are never taken from the document.
-- **The Assets half of the web UI.** A catalog shown as a list or as a dependency graph, with drag
-  and drop to make one asset depend on another — accepted only where the model allows it, with the
-  reason shown where it does not; an asset's page with its structure, lifecycle actions, mappings
+- **The Assets half of the web UI.** A catalog shown as a list of assets or as a dependency graph
+  that also draws the aggregates and entities assets may depend on; drag and drop to make an asset
+  depend on any of them — accepted only where the model allows it, with the reason shown where it
+  does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
+  in place; an asset's page with its structure, lifecycle actions, mappings
   and access; the schema-driven editor on an existing asset; and YAML download and upload.
 - **A model graph.** Under Administration, every trait and entity type as a card laid out in rows
   — traits above the types assembled from them — with inheritance, mixed-in traits, carried
@@ -62,8 +66,8 @@ still answer.
   declares as the id of an existing entity. It used to ignore both fields, so a document served by
   `GET /aggregate/{id}/yaml` created a copy with its dependencies silently gone.
 - **The demo.** The data product type carries `Asset` instead of mixing the two capability traits
-  in itself, and the model gains a `DomainType` asset type and the two dependencies allowed
-  between assets. A volume created by an earlier build has to be recreated (`make down ARGS=-v`),
+  in itself, and the model gains a plain `DomainType` and the two dependencies a data product may
+  have: on a domain, and on another data product. A volume created by an earlier build has to be recreated (`make down ARGS=-v`),
   as the loader says.
 
 ### Fixed

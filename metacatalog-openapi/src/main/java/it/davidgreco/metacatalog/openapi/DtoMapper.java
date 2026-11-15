@@ -233,12 +233,28 @@ public class DtoMapper {
     return dto;
   }
 
-  /** Maps an allowed dependency between two asset types, with the declarations allowing it. */
+  /** Maps something an asset may depend on that is not an asset. */
+  public it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget assetDependencyTargetToDto(
+      AggregateService.DependencyTarget target) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget();
+    dto.setId(target.entity().getId());
+    dto.setEntityType(target.entity().getEntityType().getName());
+    dto.setValues(target.entity().getValues().toPrettyString());
+    dto.setKind(
+        it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget.KindEnum.valueOf(
+            target.kind().name()));
+    return dto;
+  }
+
+  /** Maps a dependency the model allows an asset type, with the declarations allowing it. */
   public it.davidgreco.metacatalog.openapi.model.AssetDependencyRule assetDependencyRuleToDto(
       it.davidgreco.metacatalog.service.AggregateSchemaService.AssetDependencyRule rule) {
     var dto = new it.davidgreco.metacatalog.openapi.model.AssetDependencyRule();
     dto.setSourceEntityType(rule.source().getName());
     dto.setTargetEntityType(rule.target().getName());
+    dto.setTargetKind(
+        it.davidgreco.metacatalog.openapi.model.AssetDependencyRule.TargetKindEnum.valueOf(
+            rule.targetKind().name()));
     dto.setSanctionedBy(rule.sanctionedBy().stream().map(this::traitRelationshipToDto).toList());
     return dto;
   }

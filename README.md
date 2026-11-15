@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-447-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-449-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -28,7 +28,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Entity Management**: CRUD operations for business entities with JSON-based attributes
 - **Entity Types**: Define and manage entity type hierarchies
 - **Traits**: Reusable characteristics applicable to entities. A trait inherits from a father and from any number of mixed-in traits, linearized the way Scala does it, so a shared ancestor contributes once (see [Trait inheritance](#trait-inheritance))
-- **Assets**: A data platform asset is an aggregate whose root type carries the built-in `Asset` trait — a provisionable, authorizable aggregate. Assets are listed in a catalog with the dependencies between them, and the model decides which asset may depend on which (see [Assets](#assets))
+- **Assets**: A data platform asset is an aggregate whose root type carries the built-in `Asset` trait — a provisionable, authorizable aggregate. Assets are listed in a catalog with what each depends on — another asset, an aggregate or a plain entity — and the model decides what an asset may depend on (see [Assets](#assets))
 - **Type Versioning**: Immutable version history for entity types and traits — every update creates a new version, old versions stay readable and deletable, and the version chain is shown on the graph
 - **Entity Versioning**: Every instance of a type carrying the built-in `Versionable` trait keeps a read-only history — each change to its values is recorded as a numbered version, readable through the API, the UI, the graph and SPARQL (see [Entity versioning](#entity-versioning)). Each past version of an aggregate root is also a frozen, runnable copy that can still be provisioned or authorized but never changed (see [Running functions on past versions](#running-functions-on-past-versions))
 - **Relationship Management**: Complex relationship mapping between entities
@@ -45,7 +45,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
-- **Web UI**: Two halves behind one application bar (see [Web UI](#web-ui)). **Assets** manages the data platform assets as a whole: a catalog shown as a list or as a dependency graph, drag and drop to make one asset depend on another, an asset's page with its structure, lifecycle actions, mappings and access, a schema-driven editor, and YAML download and upload. **Administration** defines what assets are assembled from: traits, entity types, their relationships and mappings, a graph of the whole model, and the type-agnostic instance tooling
+- **Web UI**: Two halves behind one application bar (see [Web UI](#web-ui)). **Assets** manages the data platform assets as a whole: a catalog shown as a list of assets or as a dependency graph, drag and drop to make an asset depend on another asset, an aggregate or an entity, a right-click on the graph to create a new one, an asset's page with its structure, lifecycle actions, mappings and access, a schema-driven editor, and YAML download and upload. **Administration** defines what assets are assembled from: traits, entity types, their relationships and mappings, a graph of the whole model, and the type-agnostic instance tooling
 
 ## Technology Stack
 
@@ -83,10 +83,10 @@ This starts:
 - **PostgreSQL 18.6** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
-  traits, entity types and entities from `docker/bulk/` once the app is healthy: two asset
-  types (a data product and a domain) and one asset, the data product `dp1` with two output
-  ports. Create a `DomainType` asset from the UI and drag `dp1` onto it in the catalog to see a
-  dependency between assets being made
+  traits, entity types and entities from `docker/bulk/` once the app is healthy: an asset type
+  (the data product), a plain `DomainType` for data products to belong to, and one asset, the
+  data product `dp1` with two output ports. Right-click the board of the catalog's dependency
+  graph, create a `DomainType` there and drag `dp1` onto it to see a dependency being made
 
 Nothing is provisioned by starting the stack. Provisioning is something you ask for, and it runs
 the task registered for every `ProvisionableResource` in dependency order; unprovisioning tears
@@ -301,13 +301,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 251 · ui 107 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 13 = **447, 0 failures**.
+for the Testcontainers PostgreSQL): core 251 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 14 = **449, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.6% of instructions, 41.4% of branches, 60.6% of lines**.
+**58.7% of instructions, 41.3% of branches, 60.7% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -575,20 +575,21 @@ each as a whole:
 
 | Page | What it does |
 | --- | --- |
-| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, and the assets on both sides of its dependencies. Shown as a **list** or as a **dependency graph** — assets as nodes, dependencies as edges, an asset drawn below what it depends on — and filtered by type and name. |
+| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, what it depends on and the assets depending on it. Shown as a **list**, which is always of assets, or as a **dependency graph** — nodes joined by dependencies, an asset drawn below what it depends on — and filtered by type and name. The graph also draws what an asset may depend on without its being an asset: aggregates and plain entities. |
 | `/ui/assets/new` | A new asset: pick an asset type and fill in the tree its combined schema describes. |
 | `/ui/assets/upload` | Assets from a YAML file, one per document. |
 | `/ui/assets/{id}` | One asset: its statuses, its structure (the root, its parts, and the resources mappings derived from them), the assets it depends on and is required by, the mappings that apply to its members, the access it declares and holds, and its YAML. Provision, unprovision, authorize, reject and delete are here. |
 | `/ui/assets/{id}/edit` | The same editor on an existing asset; saving applies the whole document in one step (see [Updating an aggregate](#updating-an-aggregate)). |
 | `/ui/assets/{id}/yaml` | The asset as a YAML file. It can be edited and uploaded back onto the asset from its page, or uploaded as a new asset to copy it. |
 
-**Dependencies are made by drag and drop**, in either view of the catalog: drag an asset onto
-another to make it depend on it. While an asset is being dragged, the ones it may be dropped on are
-marked, and the one under the pointer says what the drop would do or why it is refused. A drop is
-accepted only when
+**Dependencies are made by drag and drop.** Drag an asset onto what it should depend on: another
+asset, in either view of the catalog, or — in the graph — an aggregate or a plain entity. While an
+asset is being dragged, the nodes it may be dropped on are marked, and the one under the pointer
+says what the drop would do or why it is refused. A drop is accepted only when
 
-- the model allows it — the two asset types carry traits related by `DEPENDS_ON` (see
-  [Dependencies between assets](#dependencies-between-assets)),
+- what is dragged is an asset — an aggregate or an entity is depended on, it does not depend,
+- the model allows it — the two types carry traits related by `DEPENDS_ON` (see
+  [What an asset may depend on](#what-an-asset-may-depend-on)),
 - the dependency is not already there, and
 - it would not close a cycle.
 
@@ -596,6 +597,12 @@ The same checks are the server's, which is still asked: the page only refuses ea
 looking, what could not succeed. Selecting a dependency in the graph shows the trait relationships
 that allow it, removes it, or leads to the mappings of the asset it starts from; an asset's page
 has a picker and a remove button for the same thing without a pointer.
+
+**A right-click on the graph's board creates a new node** without leaving it: the menu lists the
+asset types, and the aggregate and plain types some asset may depend on, and the dialog asks for
+the scalar values the chosen type declares. Only the root is created; the parts of a new asset or
+aggregate, and anything structured such as an access policy, are added from its own page. A
+right-click on a node opens it.
 
 **Administration** (`/ui/admin`) is for defining what assets are assembled from, and for the
 type-agnostic tooling:
@@ -1597,59 +1604,82 @@ somebody else's aggregate, and an asset is the root of its own.
 ```bash
 curl http://localhost:8080/metacatalog/v1/asset
 # [ { "id": "…", "entityType": "DataProductType", "values": "{ \"name\" : \"dp1\", … }",
-#     "version": 3, "dependencies": [ "…the sales domain's id…" ] },
-#   { "id": "…", "entityType": "DomainType", "values": "{ \"name\" : \"sales\" }", "dependencies": [] } ]
+#     "version": 3, "dependencies": [ "…the sales domain's id…" ] } ]
 ```
 
-lists every asset — the root entity of every aggregate of an asset type — with the assets it
+lists every asset — the root entity of every aggregate of an asset type — with the ids of what it
 depends on. Everything else about an asset is read from the aggregate endpoints:
 `GET /aggregate/{id}` for its tree, `PUT /aggregate/{id}/yaml` to update it, `.../provision`,
 `.../authorize`, `.../access` and `DELETE /aggregate/{id}`.
 
-### Dependencies between assets
+### What an asset may depend on
 
-A dependency between two assets is a `DEPENDS_ON` link between their **roots**, created and removed
-like any other entity link:
+An asset can depend on **another asset**, on **an aggregate** that is not an asset, or on **a plain
+entity** — one whose type carries no aggregate trait at all. A data product may consume another
+data product, build on a reference data set nobody provisions, and belong to a domain that is
+nothing more than a name. The dependency is in every case a `DEPENDS_ON` link from the asset's
+**root**, created and removed like any other entity link:
 
 ```bash
 curl -X POST http://localhost:8080/metacatalog/v1/entity/link \
   -H 'Content-Type: application/json' \
-  -d '{ "sourceEntityId": "<table>", "relationshipTypeName": "DEPENDS_ON", "targetEntityId": "<domain>" }'
+  -d '{ "sourceEntityId": "<data product>", "relationshipTypeName": "DEPENDS_ON", "targetEntityId": "<domain>" }'
 ```
 
 **Whether it is legal is decided by the model, not by the caller.** A dependency is never declared
-between entity types: it is declared between traits, and an asset may depend on another when its
-type carries a trait related by `DEPENDS_ON` to a trait the other's type carries. Declaring that a
-table belongs to a domain is one trait relationship:
+between entity types: it is declared between traits, and an asset may depend on an entity when its
+type carries a trait related by `DEPENDS_ON` to a trait that entity's type carries. Declaring that
+a data product belongs to a domain is one trait relationship, and the domain needs nothing but the
+trait:
 
 ```yaml
 Relationships:
-  - sourceTrait: Table
+  - sourceTrait: DataProduct
     relationshipType: DEPENDS_ON
     targetTrait: Domain
+
+EntityTypes:
+  - name: DomainType                 # a plain type: not an asset, not an aggregate
+    schema: { type: object, properties: {} }
+    traits: [WithName, Domain]
 ```
 
-and from then on every asset whose type carries `Table` may depend on every asset whose type
+From then on every asset whose type carries `DataProduct` may depend on every entity whose type
 carries `Domain` — and not the other way round. A link the model does not allow is refused with a
 `400`. So that a client can tell in advance, and say why,
 
 ```bash
 curl http://localhost:8080/metacatalog/v1/asset/dependency-rule
-# [ { "sourceEntityType": "TableType", "targetEntityType": "DomainType",
-#     "sanctionedBy": [ { "sourceTrait": "Table", "relationType": "DEPENDS_ON", "targetTrait": "Domain" } ] } ]
+# [ { "sourceEntityType": "DataProductType", "targetEntityType": "DataProductType", "targetKind": "ASSET",
+#     "sanctionedBy": [ { "sourceTrait": "DataProduct", "relationType": "DEPENDS_ON", "targetTrait": "DataProduct" } ] },
+#   { "sourceEntityType": "DataProductType", "targetEntityType": "DomainType", "targetKind": "ENTITY",
+#     "sanctionedBy": [ { "sourceTrait": "DataProduct", "relationType": "DEPENDS_ON", "targetTrait": "Domain" } ] } ]
 ```
 
-lists every ordered pair of asset types that may be linked, with the trait relationships that
-allow it. This is what the catalog's drag and drop reads to mark where an asset may be dropped. A
-pair that is not listed is refused, and removing the last trait relationship behind a pair is
-itself refused while a dependency still relies on it (see
-[Deleting entities and links](#deleting-entities-and-links)).
+lists, for every asset type, each type its assets may depend on, what that type is — `ASSET`,
+`AGGREGATE` or `ENTITY` — and the trait relationships that allow it. The source is always an asset
+type. Types that only exist inside an aggregate, and types whose instances a mapping derives, are
+not listed as targets: neither stands on its own. A pair that is not listed is refused, and
+removing the last trait relationship behind a pair is itself refused while a dependency still
+relies on it (see [Deleting entities and links](#deleting-entities-and-links)).
+
+What an asset may depend on without its being an asset is not in the catalog above, so it is
+listed apart:
+
+```bash
+curl http://localhost:8080/metacatalog/v1/asset/dependency-target
+# [ { "id": "…", "entityType": "DomainType", "values": "{ \"name\" : \"sales\" }", "kind": "ENTITY" } ]
+```
+
+— every aggregate root and plain entity of a type some rule names as a target. `GET /asset` and
+this together are everything a dependency of an asset can point at, which is what the catalog's
+graph draws and what its drag and drop reads to mark where an asset may be dropped.
 
 An asset's dependencies are part of what a version of it records, and an asset is provisioned and
-authorized independently of the assets it depends on — the dependency orders nothing across
-aggregates by itself. What it can do is feed a **mapping**: a mapping's path reference may walk
+authorized independently of what it depends on — the dependency orders nothing across aggregates
+by itself. What it can do is feed a **mapping**: a mapping's path reference may walk
 `DEPENDS_ON` or `IS_REQUIRED_BY` from the entity it derives from (see [Mappings](#mappings)), so a
-table's resource can be derived from values of the domain the table was made to depend on. The
+data product's resource can be derived from values of the domain it was made to depend on. The
 asset's page lists the mappings that apply to its members, marks the ones that walk a dependency,
 and opens each in the mapping editor.
 

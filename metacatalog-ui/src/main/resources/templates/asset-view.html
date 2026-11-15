@@ -122,8 +122,9 @@
                 <h2>Depends on</h2>
                 <ul class="ref-list" th:if="${!detail.asset.dependsOn.isEmpty()}">
                     <li th:each="d : ${detail.asset.dependsOn}">
-                        <a th:href="@{/ui/assets/{id}(id=${d.id})}" th:text="${d.name}">asset</a>
+                        <a th:href="@{${d.href}}" th:text="${d.name}">name</a>
                         <span class="tag muted" th:text="${d.entityType}">type</span>
+                        <span class="kind-tag" th:if="${d.kind != 'asset'}" th:text="${d.kind}">kind</span>
                         <form method="post" class="inline-form"
                               th:action="@{/ui/assets/{id}/dependencies/delete(id=${detail.asset.id})}"
                               data-confirm="Remove this dependency?">
@@ -132,20 +133,21 @@
                         </form>
                     </li>
                 </ul>
-                <p class="empty" th:if="${detail.asset.dependsOn.isEmpty()}">This asset depends on no other asset.</p>
+                <p class="empty" th:if="${detail.asset.dependsOn.isEmpty()}">This asset depends on nothing.</p>
 
                 <form method="post" class="add-dependency" th:if="${!detail.candidates.isEmpty()}"
                       th:action="@{/ui/assets/{id}/dependencies(id=${detail.asset.id})}">
-                    <select name="target" required aria-label="Asset to depend on">
+                    <select name="target" required aria-label="What to depend on">
                         <option value="">— Add a dependency on… —</option>
                         <option th:each="c : ${detail.candidates}" th:value="${c.id}"
-                                th:text="${c.name} + ' (' + ${c.entityType} + ')'">asset</option>
+                                th:text="${c.name} + ' (' + ${c.entityType} + ', ' + ${c.kind} + ')'">name</option>
                     </select>
                     <button type="submit" class="btn-sm">Add</button>
                 </form>
                 <p class="hint" th:if="${detail.candidates.isEmpty()}">
-                    No other asset can be added: the model allows a dependency only between types
-                    whose traits are related by <code>DEPENDS_ON</code>.
+                    Nothing else can be added: the model allows a dependency only towards an asset,
+                    an aggregate or an entity whose type carries a trait related to one of this
+                    asset's by <code>DEPENDS_ON</code>.
                 </p>
 
                 <h2 class="spaced">Required by</h2>

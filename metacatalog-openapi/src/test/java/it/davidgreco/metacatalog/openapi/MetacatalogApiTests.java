@@ -429,10 +429,11 @@ class MetacatalogApiTests {
     columnType.setSchema(schema);
     columnType.setTraits(List.of("AggregateElement"));
     api.createEntityType(columnType);
+    // A plain type: a domain is not provisioned, it is only something a table belongs to.
     var domainType = new EntityType();
     domainType.setName("ApiAstDomainType");
     domainType.setSchema(schema);
-    domainType.setTraits(List.of("Asset", "ApiAstDomain"));
+    domainType.setTraits(List.of("ApiAstDomain"));
     api.createEntityType(domainType);
     var tableType = new EntityType();
     tableType.setName("ApiAstTableType");
@@ -441,9 +442,8 @@ class MetacatalogApiTests {
     api.createEntityType(tableType);
 
     var assetTypes = api.listAssetTypes().stream().map(EntityType::getName).toList();
-    Assertions.assertTrue(
-        assetTypes.containsAll(List.of("ApiAstDomainType", "ApiAstTableType")),
-        assetTypes.toString());
+    Assertions.assertTrue(assetTypes.contains("ApiAstTableType"), assetTypes.toString());
+    Assertions.assertFalse(assetTypes.contains("ApiAstDomainType"));
     Assertions.assertFalse(assetTypes.contains("ApiAstColumnType"));
     var capabilities = api.getTypeCapabilities();
     Assertions.assertEquals(assetTypes, capabilities.getAsset());
@@ -458,16 +458,18 @@ class MetacatalogApiTests {
     Assertions.assertEquals("ApiAstTableType", rules.getFirst().getSourceEntityType());
     Assertions.assertEquals("ApiAstDomainType", rules.getFirst().getTargetEntityType());
     Assertions.assertEquals(
+        AssetDependencyRule.TargetKindEnum.ENTITY, rules.getFirst().getTargetKind());
+    Assertions.assertEquals(
         "ApiAstTable", rules.getFirst().getSanctionedBy().getFirst().getSourceTrait());
 
     var documents = Files.createTempFile("assets", ".yaml");
+    var domainEntity = new Entity();
+    domainEntity.setEntityType("ApiAstDomainType");
+    domainEntity.setValues("{\"name\": \"sales\"}");
+    var domainId = api.createEntity(domainEntity);
     Files.writeString(
         documents,
         """
-        entityType: "ApiAstDomainType"
-        values:
-          name: "sales"
-        ---
         entityType: "ApiAstTableType"
         values:
           name: "orders"
@@ -477,7 +479,6 @@ class MetacatalogApiTests {
             name: "id"
         """);
     api.createAggregateAsYaml(documents.toFile());
-    var domainId = api.getEntities("ApiAstDomainType", null).getFirst().getId();
     var tableId = api.getEntities("ApiAstTableType", null).getFirst().getId();
 
     // The illegal direction is refused; the legal one is a plain entity link.
@@ -499,8 +500,15 @@ class MetacatalogApiTests {
     // Versionable through the trait its type mixes in: created at 1, and the dependency just
     // linked is part of what a version of an aggregate records.
     Assertions.assertEquals(2, table.getVersion());
-    var domain = catalog.stream().filter(a -> a.getId().equals(domainId)).findFirst().orElseThrow();
-    Assertions.assertTrue(domain.getDependencies().isEmpty());
+    // The domain is what the table depends on, not an asset: it is listed among the targets.
+    Assertions.assertTrue(catalog.stream().noneMatch(a -> a.getId().equals(domainId)));
+    var target =
+        api.listAssetDependencyTargets().stream()
+            .filter(t -> t.getId().equals(domainId))
+            .findFirst()
+            .orElseThrow();
+    Assertions.assertEquals(AssetDependencyTarget.KindEnum.ENTITY, target.getKind());
+    Assertions.assertEquals("ApiAstDomainType", target.getEntityType());
 
     // Download, edit, upload: rename the table, rename its column and add a second one.
     var downloaded = Files.readString(api.getAggregateAsYaml(tableId, Boolean.FALSE).toPath());
@@ -530,7 +538,7 @@ class MetacatalogApiTests {
     Assertions.assertEquals(List.of(domainId), updated.getDependencies());
     Assertions.assertEquals(3, api.listEntityVersions(tableId).size(), "one update is one version");
 
-    // A document about another aggregate is refused, and so is one that is not found.
+    // An entity that is not an aggregate is refused, and so is one that is not found.
     var wrong = Files.createTempFile("asset-wrong", ".yaml");
     Files.writeString(wrong, downloaded);
     var mismatch =
@@ -546,9 +554,8 @@ class MetacatalogApiTests {
 
     // Deleting the table takes its dependency on the domain along; the domain is then free to go.
     api.deleteAggregate(tableId);
-    api.deleteAggregate(domainId);
-    Assertions.assertTrue(
-        api.listAssets().stream().noneMatch(a -> List.of(tableId, domainId).contains(a.getId())));
+    api.deleteEntity(domainId);
+    Assertions.assertTrue(api.listAssets().stream().noneMatch(a -> a.getId().equals(tableId)));
   }
 
   @Test

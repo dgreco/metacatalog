@@ -539,6 +539,16 @@ public class MetacatalogApiImpl implements MetacatalogApiDelegate {
   }
 
   @Override
+  public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget>>
+      listAssetDependencyTargets() {
+    var targets =
+        aggregateService.assetDependencyTargets().stream()
+            .map(dtoMapper::assetDependencyTargetToDto)
+            .toList();
+    return status(200).contentType(MediaType.APPLICATION_JSON).body(targets);
+  }
+
+  @Override
   public ResponseEntity<List<it.davidgreco.metacatalog.openapi.model.AssetDependencyRule>>
       listAssetDependencyRules() {
     var rules =

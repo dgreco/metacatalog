@@ -4,34 +4,66 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.model.Asset;
 import it.davidgreco.metacatalog.openapi.model.AssetDependencyRule;
+import it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The asset catalog as the Assets pages show it: every asset with its lifecycle statuses and the
- * assets on either side of its dependencies, and the dependencies the model allows.
+ * The asset catalog as the Assets pages show it: every asset with its lifecycle statuses and what
+ * stands on either side of its dependencies, what an asset may depend on besides other assets, and
+ * the dependencies the model allows.
  *
  * <p>The same value serves the list, the dependency graph and — serialized — the scripts that drive
- * both, so the three cannot disagree about what an asset is called or what it may be linked to.
+ * both, so the three cannot disagree about what something is called or what it may be linked to.
  *
- * @param assets the assets, in the order the API lists them
- * @param rules the dependencies the model allows between asset types
+ * @param assets the assets, in the order the API lists them — the only things the list shows
+ * @param targets what an asset may depend on that is not an asset: aggregate roots and plain
+ *     entities. The graph draws them next to the assets, since a dependency has to end somewhere
+ * @param rules the dependencies the model allows an asset type to have
  * @param types the names of the asset types, ordered by name
+ * @param creatable the types a new node of the graph can be created from
  */
-public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> types) {
+public record AssetCatalogView(
+    List<Row> assets,
+    List<Ref> targets,
+    List<Rule> rules,
+    List<String> types,
+    List<Creatable> creatable) {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
+  /** The three kinds of thing a dependency can point at, as the pages name them. */
+  static final String ASSET = "asset";
+
+  static final String AGGREGATE = "aggregate";
+  static final String ENTITY = "entity";
+
   /**
-   * An asset named from another asset's row: the other end of a dependency.
+   * Something named from an asset's row or drawn on the graph: an asset, or what one depends on.
    *
-   * @param id the asset id
+   * @param id the entity id
    * @param name its display name
    * @param entityType the name of its type
+   * @param kind {@code asset}, {@code aggregate} or {@code entity}
+   * @param href the page showing it — an asset has its own, the other two are shown by the
+   *     Administration half
    */
-  public record Ref(String id, String name, String entityType) {}
+  public record Ref(String id, String name, String entityType, String kind, String href) {
+
+    static Ref of(String id, String values, String entityType, String kind) {
+      return new Ref(id, displayName(parse(values), id), entityType, kind, hrefOf(kind, id));
+    }
+
+    private static String hrefOf(String kind, String id) {
+      return switch (kind) {
+        case ASSET -> "/ui/assets/" + id;
+        case AGGREGATE -> "/ui/admin/aggregates/" + id;
+        default -> "/ui/admin/instances/" + id;
+      };
+    }
+  }
 
   /**
    * One asset.
@@ -42,7 +74,7 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
    * @param version the asset's current version, or {@code null} when its type is not versionable
    * @param provisioningStatus the status the last provisioning run left, or {@code null} for none
    * @param authorizationStatus the status the last authorization run left, or {@code null}
-   * @param dependsOn the assets this one depends on
+   * @param dependsOn what this asset depends on: assets, aggregates and plain entities
    * @param requiredBy the assets depending on this one
    */
   public record Row(
@@ -57,37 +89,63 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
 
     /** This asset as the other end of a dependency. */
     public Ref ref() {
-      return new Ref(id, name, entityType);
+      return new Ref(id, name, entityType, ASSET, "/ui/assets/" + id);
     }
   }
 
   /**
-   * A dependency the model allows between assets of two types.
+   * A dependency the model allows an asset of one type to have.
    *
    * @param source the type of the asset that may depend
-   * @param target the type of the asset it may depend on
+   * @param target the type of what it may depend on
+   * @param targetKind what the target is: {@code asset}, {@code aggregate} or {@code entity}
    * @param sanctionedBy the trait relationships allowing it, each spelled {@code Source DEPENDS_ON
    *     Target}
    */
-  public record Rule(String source, String target, List<String> sanctionedBy) {}
+  public record Rule(String source, String target, String targetKind, List<String> sanctionedBy) {}
 
   /**
-   * Builds the catalog from the three answers the API gives about assets.
+   * A type a new node of the graph can be created from: an asset type, or a type some asset may
+   * depend on.
+   *
+   * @param type the entity type name
+   * @param kind what an instance of it is: {@code asset}, {@code aggregate} or {@code entity}
+   * @param schema the type's schema as JSON, from which the creation dialog builds its fields
+   */
+  public record Creatable(String type, String kind, String schema) {}
+
+  /**
+   * Builds the catalog from the answers the API gives about assets.
    *
    * @param assets the assets, as {@code GET /asset} lists them
+   * @param targets what else an asset may depend on, as {@code GET /asset/dependency-target} lists
    * @param rules the allowed dependencies, as {@code GET /asset/dependency-rule} lists them
    * @param types the names of the asset types
+   * @param schemas the schema of every entity type, by name
    */
   public static AssetCatalogView from(
-      List<Asset> assets, List<AssetDependencyRule> rules, List<String> types) {
+      List<Asset> assets,
+      List<AssetDependencyTarget> targets,
+      List<AssetDependencyRule> rules,
+      List<String> types,
+      Map<String, String> schemas) {
     var refs = new LinkedHashMap<String, Ref>();
     var values = new LinkedHashMap<String, JsonNode>();
     for (var asset : assets) {
-      var parsed = parse(asset.getValues());
-      values.put(asset.getId(), parsed);
+      values.put(asset.getId(), parse(asset.getValues()));
       refs.put(
-          asset.getId(),
-          new Ref(asset.getId(), displayName(parsed, asset.getId()), asset.getEntityType()));
+          asset.getId(), Ref.of(asset.getId(), asset.getValues(), asset.getEntityType(), ASSET));
+    }
+    var targetRefs = new ArrayList<Ref>();
+    for (var target : targets) {
+      var ref =
+          Ref.of(
+              target.getId(),
+              target.getValues(),
+              target.getEntityType(),
+              target.getKind() == AssetDependencyTarget.KindEnum.AGGREGATE ? AGGREGATE : ENTITY);
+      targetRefs.add(ref);
+      refs.putIfAbsent(ref.id(), ref);
     }
     Map<String, List<Ref>> requiredBy = new LinkedHashMap<>();
     for (var asset : assets) {
@@ -109,8 +167,8 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
               asset.getVersion().orElse(null),
               text(parsed, "provisioningStatus"),
               text(parsed, "authorizationStatus"),
-              // A dependency on an asset the listing does not hold cannot occur — both come from
-              // one read — but a null would break the page, so it is filtered rather than trusted.
+              // A dependency on something neither listing holds — a part of another aggregate,
+              // linked through the entity API — has nothing to be drawn as, and is left out.
               asset.getDependencies().stream()
                   .map(refs::get)
                   .filter(java.util.Objects::nonNull)
@@ -124,6 +182,7 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
                     new Rule(
                         rule.getSourceEntityType(),
                         rule.getTargetEntityType(),
+                        rule.getTargetKind().name().toLowerCase(java.util.Locale.ROOT),
                         rule.getSanctionedBy().stream()
                             .map(
                                 relationship ->
@@ -134,7 +193,25 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
                                         + relationship.getTargetTrait().orElse("?"))
                             .toList()))
             .toList();
-    return new AssetCatalogView(List.copyOf(rows), ruleViews, List.copyOf(types));
+
+    // An asset can always be created; anything else only where some asset could depend on it —
+    // the board is for assets and what they depend on, not a second instance editor.
+    var creatable = new LinkedHashMap<String, Creatable>();
+    for (var type : types) {
+      creatable.put(type, new Creatable(type, ASSET, schemas.getOrDefault(type, "{}")));
+    }
+    for (var rule : ruleViews) {
+      creatable.putIfAbsent(
+          rule.target(),
+          new Creatable(
+              rule.target(), rule.targetKind(), schemas.getOrDefault(rule.target(), "{}")));
+    }
+    return new AssetCatalogView(
+        List.copyOf(rows),
+        List.copyOf(targetRefs),
+        ruleViews,
+        List.copyOf(types),
+        List.copyOf(creatable.values()));
   }
 
   /** The row of the asset with the given id, or {@code null} when the catalog does not hold it. */
@@ -142,7 +219,22 @@ public record AssetCatalogView(List<Row> assets, List<Rule> rules, List<String> 
     return assets.stream().filter(row -> row.id().equals(id)).findFirst().orElse(null);
   }
 
-  /** Whether the model allows an asset of the first type to depend on one of the second. */
+  /**
+   * Anything a dependency can end at — an asset or one of the other targets — by id, or {@code
+   * null} when the catalog does not hold it.
+   */
+  public Ref node(String id) {
+    var asset = row(id);
+    if (asset != null) return asset.ref();
+    return targets.stream().filter(target -> target.id().equals(id)).findFirst().orElse(null);
+  }
+
+  /** Whether a new node of the graph may be created from the given type. */
+  public boolean canCreate(String type) {
+    return creatable.stream().anyMatch(candidate -> candidate.type().equals(type));
+  }
+
+  /** Whether the model allows an asset of the first type to depend on something of the second. */
   public boolean allows(String sourceType, String targetType) {
     return rules.stream()
         .anyMatch(rule -> rule.source().equals(sourceType) && rule.target().equals(targetType));

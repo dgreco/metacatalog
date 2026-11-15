@@ -24,6 +24,7 @@
  *     ranked: function (edge) { return true; },   // does this edge place its target above?
  *     band: function (node) { return 0; },        // coarse top-to-bottom grouping, optional
  *     onSelect: function (selection) {},          // { node } | { edge } | null
+ *     onContextMenu: function (at) {},            // { clientX, clientY, node } on a right-click
  *     drop: { allowed(source, target), hint(source, target), onDrop(source, target) }
  *   });
  *   graph.setData(nodes, edges); graph.fit(); graph.relayout(); graph.setFilter(fn);
@@ -669,6 +670,16 @@
       applyView();
     }
 
+    // A right-click is handed to the caller, which decides what to offer there — on the board or
+    // on a node. Without a hook the browser's own menu is left alone.
+    function onContextMenu(ev) {
+      if (!opts.onContextMenu) return;
+      ev.preventDefault();
+      var el = ev.target.closest ? ev.target.closest(".gc-node") : null;
+      var n = el ? byId[el.getAttribute("data-node-id")] : null;
+      opts.onContextMenu({ clientX: ev.clientX, clientY: ev.clientY, node: n ? n.raw : null });
+    }
+    root.addEventListener("contextmenu", onContextMenu);
     root.addEventListener("mousedown", onPointerDown);
     window.addEventListener("mousemove", onPointerMove);
     window.addEventListener("mouseup", onPointerUp);

@@ -25,6 +25,7 @@ import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Aggregate;
 import it.davidgreco.metacatalog.openapi.model.Asset;
 import it.davidgreco.metacatalog.openapi.model.AssetDependencyRule;
+import it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
 import it.davidgreco.metacatalog.openapi.model.LinkEntityRequest;
 import it.davidgreco.metacatalog.openapi.model.Mapping;
@@ -49,9 +50,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
  * Route / model / API-interaction tests for {@link AssetUiController} using a standalone MockMvc
  * setup with a mocked {@link MetacatalogApiDelegate} (no Spring context or database required).
  *
- * <p>The catalog every test starts from: a {@code sales} domain, an {@code orders} table depending
- * on it, and a model in which a table may depend on a domain and nothing else may depend on
- * anything.
+ * <p>The catalog every test starts from: two tables and a view, which are assets, and a {@code
+ * sales} domain, which is a plain entity. The {@code orders} table depends on the domain, and the
+ * model lets a table depend on a domain or on another table — and nothing else on anything.
  */
 class AssetUiControllerTest {
 
@@ -102,31 +103,54 @@ class AssetUiControllerTest {
     return aggregate;
   }
 
-  @BeforeEach
-  void setUp() {
+  private static AssetDependencyRule rule(
+      String target, AssetDependencyRule.TargetKindEnum kind, String targetTrait) {
     var sanction = new TraitRelationship();
     sanction.setSourceTrait(Optional.of("Table"));
     sanction.setRelationType(Optional.of("DEPENDS_ON"));
-    sanction.setTargetTrait(Optional.of("Domain"));
+    sanction.setTargetTrait(Optional.of(targetTrait));
     var rule = new AssetDependencyRule();
     rule.setSourceEntityType("TableType");
-    rule.setTargetEntityType("DomainType");
+    rule.setTargetEntityType(target);
+    rule.setTargetKind(kind);
     rule.setSanctionedBy(List.of(sanction));
+    return rule;
+  }
+
+  @BeforeEach
+  void setUp() {
+    var domain = new AssetDependencyTarget();
+    domain.setId("domain-1");
+    domain.setEntityType("DomainType");
+    domain.setValues("{\"name\":\"sales\"}");
+    domain.setKind(AssetDependencyTarget.KindEnum.ENTITY);
+    var domainType = entityType("DomainType");
+    domainType.setSchema("{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}");
 
     given(api.listAssets())
         .willReturn(
             ResponseEntity.ok(
                 List.of(
-                    asset("domain-1", "DomainType", "{\"name\":\"sales\"}"),
                     asset(
                         "table-1",
                         "TableType",
                         "{\"name\":\"orders\",\"provisioningStatus\":\"PROVISIONED\"}",
                         "domain-1"),
-                    asset("table-2", "TableType", "{}"))));
-    given(api.listAssetDependencyRules()).willReturn(ResponseEntity.ok(List.of(rule)));
+                    asset("table-2", "TableType", "{}", "table-1"),
+                    asset("view-1", "ViewType", "{\"name\":\"report\"}"))));
+    given(api.listAssetDependencyTargets()).willReturn(ResponseEntity.ok(List.of(domain)));
+    given(api.listAssetDependencyRules())
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(
+                    rule("DomainType", AssetDependencyRule.TargetKindEnum.ENTITY, "Domain"),
+                    rule("TableType", AssetDependencyRule.TargetKindEnum.ASSET, "Table"))));
     given(api.listAssetTypes())
-        .willReturn(ResponseEntity.ok(List.of(entityType("DomainType"), entityType("TableType"))));
+        .willReturn(ResponseEntity.ok(List.of(entityType("TableType"), entityType("ViewType"))));
+    given(api.listEntityTypes())
+        .willReturn(
+            ResponseEntity.ok(
+                List.of(domainType, entityType("TableType"), entityType("ViewType"))));
     given(api.listMappings()).willReturn(ResponseEntity.ok(List.of()));
     given(api.getAggregateAsYaml(eq("table-1"), any()))
         .willReturn(
@@ -170,11 +194,12 @@ class AssetUiControllerTest {
   }
 
   /**
-   * The catalog names each asset, reads its statuses out of its values and lists the assets on both
-   * sides of its dependencies — the reverse side is not something the API reports.
+   * The catalog lists assets only, names each, reads its statuses out of its values and says what
+   * stands on both sides of its dependencies — an asset or not. What an asset may depend on without
+   * being one is kept apart, for the graph.
    */
   @Test
-  void catalogListsAssetsWithBothSidesOfTheirDependencies() throws Exception {
+  void catalogListsAssetsAndKeepsWhatTheyDependOnApart() throws Exception {
     var result =
         mockMvc
             .perform(get("/ui/assets"))
@@ -184,26 +209,45 @@ class AssetUiControllerTest {
             .andReturn();
 
     var catalog = (AssetCatalogView) result.getModelAndView().getModel().get("catalog");
-    Assertions.assertEquals(List.of("DomainType", "TableType"), catalog.types());
+    Assertions.assertEquals(List.of("TableType", "ViewType"), catalog.types());
+    Assertions.assertEquals(
+        List.of("table-1", "table-2", "view-1"),
+        catalog.assets().stream().map(AssetCatalogView.Row::id).toList());
+
+    var sales =
+        new AssetCatalogView.Ref(
+            "domain-1", "sales", "DomainType", "entity", "/ui/admin/instances/domain-1");
+    Assertions.assertEquals(List.of(sales), catalog.targets());
+    Assertions.assertNull(catalog.row("domain-1"), "a domain is not an asset");
+    Assertions.assertEquals(sales, catalog.node("domain-1"));
 
     var table = catalog.row("table-1");
     Assertions.assertEquals("orders", table.name());
     Assertions.assertEquals("PROVISIONED", table.provisioningStatus());
     Assertions.assertNull(table.authorizationStatus());
-    Assertions.assertEquals(
-        List.of(new AssetCatalogView.Ref("domain-1", "sales", "DomainType")), table.dependsOn());
-
-    var domain = catalog.row("domain-1");
-    Assertions.assertEquals(
-        List.of(new AssetCatalogView.Ref("table-1", "orders", "TableType")), domain.requiredBy());
-
+    Assertions.assertEquals(List.of(sales), table.dependsOn());
     // An asset with no name of its own is shown under its id rather than blank.
-    Assertions.assertEquals("table-2", catalog.row("table-2").name());
+    Assertions.assertEquals(
+        List.of(
+            new AssetCatalogView.Ref(
+                "table-2", "table-2", "TableType", "asset", "/ui/assets/table-2")),
+        table.requiredBy());
 
     Assertions.assertTrue(catalog.allows("TableType", "DomainType"));
-    Assertions.assertFalse(catalog.allows("DomainType", "TableType"));
+    Assertions.assertTrue(catalog.allows("TableType", "TableType"));
+    Assertions.assertFalse(catalog.allows("TableType", "ViewType"));
+    Assertions.assertFalse(catalog.allows("ViewType", "TableType"));
+    Assertions.assertEquals("entity", catalog.rules().getFirst().targetKind());
     Assertions.assertEquals(
         List.of("Table DEPENDS_ON Domain"), catalog.rules().getFirst().sanctionedBy());
+
+    // A new node may be an asset of any asset type, or anything some asset may depend on.
+    Assertions.assertEquals(
+        List.of("TableType:asset", "ViewType:asset", "DomainType:entity"),
+        catalog.creatable().stream().map(c -> c.type() + ":" + c.kind()).toList());
+    Assertions.assertTrue(
+        catalog.creatable().getLast().schema().contains("\"name\""),
+        "the dialog builds its fields from the type's schema");
   }
 
   @Test
@@ -215,9 +259,12 @@ class AssetUiControllerTest {
         .andExpect(model().attribute("selectedType", "TableType"));
   }
 
-  /** A drop the model allows becomes a DEPENDS_ON link, and the answer is the refreshed catalog. */
+  /**
+   * A drop the model allows becomes a DEPENDS_ON link — here onto a plain entity — and the answer
+   * is the refreshed catalog.
+   */
   @Test
-  void droppingAnAssetOnAnAllowedOneLinksThem() throws Exception {
+  void droppingAnAssetOnSomethingAllowedLinksThem() throws Exception {
     mockMvc
         .perform(
             post("/ui/assets/dependencies").param("source", "table-2").param("target", "domain-1"))
@@ -233,10 +280,20 @@ class AssetUiControllerTest {
 
   /**
    * A drop the model does not allow is refused before the API is asked, with a reason an asset
-   * manager can act on — the API's own answer is "Relationship is not legit".
+   * manager can act on — the API's own answer is "Relationship is not legit". So is one that does
+   * not start at an asset: an entity or an aggregate is depended on, it does not depend.
    */
   @Test
-  void droppingAnAssetWhereTheModelForbidsItIsRefusedWithTheReason() throws Exception {
+  void aDropTheModelForbidsIsRefusedWithTheReason() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/assets/dependencies").param("source", "table-2").param("target", "view-1"))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.error")
+                .value(
+                    org.hamcrest.Matchers.containsString(
+                        "A TableType asset cannot depend on a ViewType asset")));
     mockMvc
         .perform(
             post("/ui/assets/dependencies").param("source", "domain-1").param("target", "table-1"))
@@ -244,10 +301,41 @@ class AssetUiControllerTest {
         .andExpect(
             jsonPath("$.error")
                 .value(
-                    org.hamcrest.Matchers.containsString(
-                        "A DomainType asset cannot depend on a TableType asset")));
+                    org.hamcrest.Matchers.containsString("Only an asset can be made to depend")));
+    mockMvc
+        .perform(
+            post("/ui/assets/dependencies").param("source", "table-2").param("target", "nowhere"))
+        .andExpect(status().isBadRequest());
 
     verify(api, never()).linkEntity(any());
+  }
+
+  /**
+   * The board's dialog creates the root of a new node: an asset, or something an asset may depend
+   * on. Any other type is refused — the board is not a second instance editor.
+   */
+  @Test
+  void aNodeIsCreatedFromTheBoardOnlyForTypesThatBelongOnIt() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/assets/entities")
+                .param("type", "DomainType")
+                .param("values", "{\"name\":\"hr\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.catalog.targets.length()").value(1));
+
+    var created = ArgumentCaptor.forClass(it.davidgreco.metacatalog.openapi.model.Entity.class);
+    verify(api).createEntity(created.capture());
+    Assertions.assertEquals("DomainType", created.getValue().getEntityType());
+    Assertions.assertEquals("{\"name\":\"hr\"}", created.getValue().getValues());
+
+    mockMvc
+        .perform(post("/ui/assets/entities").param("type", "ColumnType").param("values", "{}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(
+            jsonPath("$.error")
+                .value(org.hamcrest.Matchers.containsString("neither an asset type nor a type")));
+    verify(api, org.mockito.Mockito.times(1)).createEntity(any());
   }
 
   /** What the API refuses — a cycle, say — is reported as it says it. */
@@ -319,8 +407,14 @@ class AssetUiControllerTest {
     Assertions.assertEquals("PROVISIONED", detail.root().derived().getFirst().provisioningStatus());
     Assertions.assertEquals(2, detail.root().descendants());
 
-    // Already depends on the only domain there is, so nothing is left to offer.
-    Assertions.assertTrue(detail.candidates().isEmpty());
+    // What it depends on is named whatever it is, and linked to the page that shows it.
+    Assertions.assertEquals(
+        List.of("/ui/admin/instances/domain-1"),
+        detail.asset().dependsOn().stream().map(AssetCatalogView.Ref::href).toList());
+    // It already depends on the domain, so what is left to offer is the other table — not the
+    // view, which the model does not let a table depend on.
+    Assertions.assertEquals(
+        List.of("table-2"), detail.candidates().stream().map(AssetCatalogView.Ref::id).toList());
 
     Assertions.assertEquals(1, detail.mappings().size());
     Assertions.assertEquals("TableType", detail.mappings().getFirst().source());
@@ -418,8 +512,8 @@ class AssetUiControllerTest {
     mockMvc
         .perform(
             post("/ui/assets")
-                .param("rootType", "DomainType")
-                .param("document", "{\"entityType\":\"DomainType\",\"values\":{\"name\":\"hr\"}}"))
+                .param("rootType", "ViewType")
+                .param("document", "{\"entityType\":\"ViewType\",\"values\":{\"name\":\"hr\"}}"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/ui/assets"));
 
@@ -436,7 +530,7 @@ class AssetUiControllerTest {
         .perform(get("/ui/assets/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("asset-form"))
-        .andExpect(model().attribute("rootTypes", List.of("DomainType", "TableType")));
+        .andExpect(model().attribute("rootTypes", List.of("TableType", "ViewType")));
 
     verify(api, never()).listAggregateRootTypes();
   }
@@ -531,11 +625,11 @@ class AssetUiControllerTest {
 
     doThrow(new RuntimeException("is linked to entity with id: x outside the aggregate"))
         .when(api)
-        .deleteAggregate("domain-1");
+        .deleteAggregate("view-1");
     mockMvc
-        .perform(post("/ui/assets/domain-1/delete"))
+        .perform(post("/ui/assets/view-1/delete"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/assets/domain-1"))
+        .andExpect(redirectedUrl("/ui/assets/view-1"))
         .andExpect(flash().attributeExists("error"));
   }
 

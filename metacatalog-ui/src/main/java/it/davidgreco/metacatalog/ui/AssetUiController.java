@@ -104,11 +104,11 @@ public class AssetUiController {
   }
 
   /**
-   * Makes one asset depend on another — what dropping an asset onto another asks for. Answers with
-   * the refreshed catalog, or with the reason the dependency was refused.
+   * Makes an asset depend on something — what dropping an asset onto another node asks for. Answers
+   * with the refreshed catalog, or with the reason the dependency was refused.
    *
    * @param source the id of the asset that is to depend
-   * @param target the id of the asset it is to depend on
+   * @param target the id of what it is to depend on: an asset, an aggregate or a plain entity
    */
   @PostMapping("/dependencies")
   @ResponseBody
@@ -117,7 +117,7 @@ public class AssetUiController {
     return dependencyAnswer(() -> addDependency(readCatalog(), source, target));
   }
 
-  /** Removes the dependency of one asset on another; answers like {@link #link}. */
+  /** Removes a dependency of an asset; answers like {@link #link}. */
   @PostMapping("/dependencies/delete")
   @ResponseBody
   public ResponseEntity<Map<String, Object>> unlink(
@@ -138,7 +138,8 @@ public class AssetUiController {
   }
 
   /**
-   * Links two assets, saying why when the model does not allow it.
+   * Makes an asset depend on an asset, an aggregate or a plain entity, saying why when the model
+   * does not allow it.
    *
    * <p>The API is still what decides — it is asked, and whatever it refuses is reported. The check
    * made first only exists for its message: the API answers an unsanctioned link with "Relationship
@@ -146,22 +147,59 @@ public class AssetUiController {
    */
   private void addDependency(AssetCatalogView catalog, String source, String target) {
     var from = catalog.row(source);
-    var to = catalog.row(target);
-    if (from == null || to == null)
-      throw new IllegalArgumentException("Both ends of a dependency must be assets.");
+    if (from == null)
+      throw new IllegalArgumentException("Only an asset can be made to depend on something.");
+    var to = catalog.node(target);
+    if (to == null)
+      throw new IllegalArgumentException(
+          "An asset can depend on another asset, an aggregate or an entity the model allows it"
+              + " to; "
+              + target
+              + " is none of those.");
     if (!catalog.allows(from.entityType(), to.entityType()))
       throw new IllegalArgumentException(
           "A "
               + from.entityType()
               + " asset cannot depend on a "
               + to.entityType()
-              + " asset: no DEPENDS_ON relationship is declared between traits those two types"
-              + " carry. Declare one under Administration to allow it.");
+              + " "
+              + to.kind()
+              + ": no DEPENDS_ON relationship is declared between traits those two types carry."
+              + " Declare one under Administration to allow it.");
     var request = new LinkEntityRequest();
     request.setSourceEntityId(source);
     request.setRelationshipTypeName("DEPENDS_ON");
     request.setTargetEntityId(target);
     api.linkEntity(request);
+  }
+
+  /**
+   * Creates a new node of the dependency graph from the values typed into the board's dialog: an
+   * asset, or something an asset may depend on. Answers with the refreshed catalog, or with the
+   * reason the creation was refused.
+   *
+   * <p>Only the root is created. An asset or an aggregate made this way has no parts yet; they are
+   * added from its own page, where the whole tree can be edited. The board is where a dependency's
+   * other end is brought into being without leaving it, not a second editor.
+   *
+   * @param type the entity type of the new node — an asset type, or a type some asset may depend
+   *     on; any other is refused, since nothing else belongs on the board
+   * @param values the new entity's values, as JSON
+   */
+  @PostMapping("/entities")
+  @ResponseBody
+  public ResponseEntity<Map<String, Object>> createNode(
+      @RequestParam String type, @RequestParam String values) {
+    return dependencyAnswer(
+        () -> {
+          if (!readCatalog().canCreate(type))
+            throw new IllegalArgumentException(
+                type + " is neither an asset type nor a type an asset may depend on.");
+          var entity = new it.davidgreco.metacatalog.openapi.model.Entity();
+          entity.setEntityType(type);
+          entity.setValues(values);
+          api.createEntity(entity);
+        });
   }
 
   // --- creating ----------------------------------------------------------------------------------
@@ -256,15 +294,17 @@ public class AssetUiController {
       var authored = (Aggregate) api.getAggregate(id, Boolean.FALSE).getBody();
       var names = new LinkedHashMap<String, String>();
       catalog.assets().forEach(row -> names.put(row.id(), row.name()));
+      catalog.targets().forEach(target -> names.put(target.id(), target.name()));
       var root = AssetDetailView.tree(withDerived, authored, names);
       var rootValues = AssetCatalogView.parse(withDerived.getValues());
 
       var linked = asset.dependsOn().stream().map(AssetCatalogView.Ref::id).toList();
       var candidates =
-          catalog.assets().stream()
-              .filter(row -> !row.id().equals(id) && !linked.contains(row.id()))
-              .filter(row -> catalog.allows(asset.entityType(), row.entityType()))
-              .map(AssetCatalogView.Row::ref)
+          java.util.stream.Stream.concat(
+                  catalog.assets().stream().map(AssetCatalogView.Row::ref),
+                  catalog.targets().stream())
+              .filter(node -> !node.id().equals(id) && !linked.contains(node.id()))
+              .filter(node -> catalog.allows(asset.entityType(), node.entityType()))
               .toList();
 
       model.addAttribute(
@@ -440,9 +480,17 @@ public class AssetUiController {
     return "redirect:/ui/assets/" + id;
   }
 
+  @SuppressWarnings("unchecked")
   private AssetCatalogView readCatalog() {
+    var schemas = new LinkedHashMap<String, String>();
+    ((List<EntityType>) api.listEntityTypes().getBody())
+        .forEach(type -> schemas.put(type.getName(), type.getSchema()));
     return AssetCatalogView.from(
-        api.listAssets().getBody(), api.listAssetDependencyRules().getBody(), assetTypeNames());
+        api.listAssets().getBody(),
+        api.listAssetDependencyTargets().getBody(),
+        api.listAssetDependencyRules().getBody(),
+        assetTypeNames(),
+        schemas);
   }
 
   @SuppressWarnings("unchecked")

@@ -65,30 +65,41 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
   }
 
   /**
-   * The rules are the trait-level {@code DEPENDS_ON} declarations projected onto the asset types,
-   * and nothing else: not the reverse direction, and not a pair involving a type that is not an
-   * asset.
+   * The rules are the trait-level {@code DEPENDS_ON} declarations projected onto the types: from an
+   * asset type, towards anything that stands on its own — another asset type, an aggregate root
+   * type, a plain type — and nothing else. Not the reverse direction, and never from a type that is
+   * not an asset.
    */
   @Test
-  void testDependencyRulesAreTheSanctionedPairsOfAssetTypes() {
+  void testDependencyRulesGoFromAssetTypesToAssetsAggregatesAndPlainTypes() {
     var rules =
         getApplicationContext().getBean(AggregateSchemaService.class).assetDependencyRules();
 
-    Assertions.assertEquals(1, rules.size(), rules.toString());
-    var rule = rules.getFirst();
-    Assertions.assertEquals("AsTableType", rule.source().getName());
-    Assertions.assertEquals("AsDomainType", rule.target().getName());
     Assertions.assertEquals(
-        List.of("AsTable DEPENDS_ON AsDomain"),
-        rule.sanctionedBy().stream().map(AssetCatalogTests::describe).toList());
+        List.of(
+            "AsTableType -> AsDomainType ASSET [AsTable DEPENDS_ON AsDomain]",
+            "AsTableType -> AsNoteType ENTITY [AsTable DEPENDS_ON AsNote]",
+            "AsTableType -> AsReportType AGGREGATE [AsTable DEPENDS_ON AsDomain]"),
+        rules.stream()
+            .map(
+                rule ->
+                    rule.source().getName()
+                        + " -> "
+                        + rule.target().getName()
+                        + " "
+                        + rule.targetKind()
+                        + " "
+                        + rule.sanctionedBy().stream().map(AssetCatalogTests::describe).toList())
+            .toList());
   }
 
   /**
-   * The catalog lists the roots of asset types with the assets each depends on. A link to something
-   * that is not an asset is a link of the entity, not a dependency between assets.
+   * The catalog lists the roots of asset types, each with everything its root depends on — an
+   * asset, an aggregate or a plain entity alike — and, apart from the assets, the entities an asset
+   * may be made to depend on.
    */
   @Test
-  void testCatalogListsAssetsAndTheDependenciesBetweenThem() {
+  void testCatalogListsAssetsTheirDependenciesAndWhatTheyMayDependOn() {
     var entityService = getApplicationContext().getBean(EntityService.class);
     var aggregateService = getApplicationContext().getBean(AggregateService.class);
 
@@ -96,8 +107,10 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
     var table = entityService.create("AsTableType", named("orders"));
     var report = entityService.create("AsReportType", named("weekly"));
     var note = entityService.create("AsNoteType", named("todo"));
+    var column = entityService.create("AsColumnType", named("id"));
     entityService.link(table.getId(), DEPENDS_ON, domain.getId());
     entityService.link(table.getId(), DEPENDS_ON, note.getId());
+    entityService.link(table.getId(), DEPENDS_ON, report.getId());
 
     var assets = aggregateService.assets();
     var ids = assets.stream().map(asset -> asset.entity().getId()).toList();
@@ -110,7 +123,23 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
             .filter(asset -> asset.entity().getId().equals(table.getId()))
             .findFirst()
             .orElseThrow();
-    Assertions.assertEquals(List.of(domain.getId()), listedTable.dependencies());
+    Assertions.assertEquals(
+        java.util.Set.of(domain.getId(), note.getId(), report.getId()),
+        java.util.Set.copyOf(listedTable.dependencies()));
+
+    // What is not an asset but may be depended on: the aggregate and the plain entity, each told
+    // apart. Not the asset, and not a part, which never stands on its own.
+    var targets =
+        aggregateService.assetDependencyTargets().stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    target -> target.entity().getId(), AggregateService.DependencyTarget::kind));
+    Assertions.assertEquals(
+        AggregateSchemaService.DependencyTargetKind.AGGREGATE, targets.get(report.getId()));
+    Assertions.assertEquals(
+        AggregateSchemaService.DependencyTargetKind.ENTITY, targets.get(note.getId()));
+    Assertions.assertFalse(targets.containsKey(domain.getId()));
+    Assertions.assertFalse(targets.containsKey(column.getId()));
 
     // What the rules do not list, linking refuses — the two answers come from the same model.
     Assertions.assertThrows(

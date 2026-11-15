@@ -104,25 +104,34 @@ public class AggregateService {
 
   /**
    * An asset as the catalog lists it: the root entity of an aggregate whose type carries the
-   * built-in {@link BuiltInTraits#ASSET} trait, and the other assets it depends on.
+   * built-in {@link BuiltInTraits#ASSET} trait, and what it depends on.
    *
    * @param entity the asset's root entity
-   * @param dependencies the IDs of the assets its root depends on, in no particular order
+   * @param dependencies the IDs of the entities its root depends on — other assets, aggregates or
+   *     plain entities alike — in no particular order
    */
   public record Asset(Entity entity, List<String> dependencies) {}
 
   /**
-   * Lists every asset — every aggregate rooted at an entity of an asset type — with the assets it
-   * depends on.
+   * Something an asset depends on, or may be made to depend on, that is not itself an asset.
+   *
+   * @param entity the entity: the root of an aggregate, or an entity outside the aggregate model
+   * @param kind which of the two it is
+   */
+  public record DependencyTarget(Entity entity, AggregateSchemaService.DependencyTargetKind kind) {}
+
+  /**
+   * Lists every asset — every aggregate rooted at an entity of an asset type — with what it depends
+   * on.
    *
    * <p>An asset is an aggregate and nothing more, which is why this lives here: reading, updating,
    * deleting and running one all go through the methods of this service and the procedures, with
    * the asset's id. What a catalog needs on top is the view <em>across</em> assets, which none of
    * those gives without one read per aggregate.
    *
-   * <p>A dependency between assets is a {@code DEPENDS_ON} link between their <em>roots</em>. A
-   * link from a root to something that is not an asset, or between parts of two assets, is not a
-   * dependency between the assets and is left out.
+   * <p>A dependency of an asset is a {@code DEPENDS_ON} link from its <em>root</em>, whatever it
+   * points at. Links between the parts of an asset, or from a part to something outside, are the
+   * parts' own and are left out.
    *
    * @return the assets, grouped by type in type-name order
    */
@@ -138,9 +147,8 @@ public class AggregateService {
     for (var link : entityService.listAllRelationships()) {
       if (link.getRelationType() != DEPENDS_ON) continue;
       var source = link.getSource().getId();
-      var target = link.getTarget().getId();
-      if (roots.containsKey(source) && roots.containsKey(target))
-        dependencies.computeIfAbsent(source, id -> new ArrayList<>()).add(target);
+      if (roots.containsKey(source))
+        dependencies.computeIfAbsent(source, id -> new ArrayList<>()).add(link.getTarget().getId());
     }
     var assets =
         roots.values().stream()
@@ -148,6 +156,36 @@ public class AggregateService {
             .toList();
     log.info("Listed {} asset(s)", assets.size());
     return assets;
+  }
+
+  /**
+   * Lists what assets may depend on besides each other: every aggregate root and every plain entity
+   * of a type the model lets some asset type depend on.
+   *
+   * <p>These are not assets and never appear in {@link #assets()}, but a catalog has to show them:
+   * an asset's dependency on a domain is as much a fact about the asset as its dependency on
+   * another asset, and to make one the domain has to be there to point at. The types come from
+   * {@link AggregateSchemaService#assetDependencyRules()}, so what is listed here is exactly what a
+   * link from some asset would be accepted for.
+   *
+   * @return the entities, grouped by type in type-name order
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public List<DependencyTarget> assetDependencyTargets() {
+    log.info("Listing what assets may depend on");
+    var kinds = new LinkedHashMap<String, AggregateSchemaService.DependencyTargetKind>();
+    for (var rule : aggregateSchemaService.assetDependencyRules()) {
+      if (rule.targetKind() != AggregateSchemaService.DependencyTargetKind.ASSET)
+        kinds.putIfAbsent(rule.target().getName(), rule.targetKind());
+    }
+    var targets = new ArrayList<DependencyTarget>();
+    kinds.forEach(
+        (typeName, kind) ->
+            entityService
+                .list(typeName, "")
+                .forEach(entity -> targets.add(new DependencyTarget(entity, kind))));
+    log.info("Listed {} dependency target(s)", targets.size());
+    return targets;
   }
 
   /**

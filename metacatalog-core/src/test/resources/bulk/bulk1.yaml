@@ -35,7 +35,6 @@ EntityTypes:
       type: object
       properties: {}
     traits:
-      - Asset
       - WithName
       - Domain
 

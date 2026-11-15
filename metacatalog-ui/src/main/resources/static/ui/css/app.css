@@ -883,6 +883,10 @@ select[multiple].traits-select {
 .gc-node-builtin > .gc-node-card:first-child { stroke-dasharray: 4 3; }
 .gc-node-entityType .gc-node-accent { fill: var(--kind-type); }
 .gc-node-asset .gc-node-accent { fill: var(--kind-asset); }
+.gc-node-aggregate .gc-node-accent { fill: var(--kind-type); }
+/* What an asset depends on without being one is drawn lighter than an asset. */
+.gc-node-aggregate > .gc-node-card:first-child,
+.gc-node-entity > .gc-node-card:first-child { stroke-dasharray: 5 3; }
 .gc-node-entity .gc-node-accent, .gc-node-entityVersion .gc-node-accent { fill: var(--kind-entity); }
 .gc-node-traitVersion .gc-node-accent { fill: var(--kind-trait); opacity: 0.45; }
 .gc-node-entityTypeVersion .gc-node-accent { fill: var(--kind-type); opacity: 0.45; }
@@ -1129,6 +1133,70 @@ select[multiple].traits-select {
 .status-PROVISIONED, .status-AUTHORIZED { background: var(--ok-bg); color: var(--ok-text); border-color: var(--ok-border); }
 .status-FAILED { background: var(--error-bg); color: var(--error-text); border-color: var(--error-border); }
 .status-UNPROVISIONED, .status-REJECTED { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-border); }
+
+.kind-tag {
+    padding: 0.05rem 0.45rem;
+    border: 1px dashed var(--border-strong);
+    border-radius: 999px;
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+.lg-card.lg-aggregate { border-left-color: var(--kind-type); border-style: dashed; border-left-style: solid; }
+.lg-card.lg-plain { border-left-color: var(--kind-entity); border-style: dashed; border-left-style: solid; }
+/* the menu a right-click on the board opens, and the dialog its entries lead to */
+.board-menu {
+    position: absolute;
+    z-index: 80;
+    min-width: 220px;
+    max-height: 70vh;
+    overflow: auto;
+    padding: 0.3rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    box-shadow: var(--shadow-lg);
+    font-size: 0.86rem;
+}
+.board-menu-head {
+    padding: 0.35rem 0.6rem 0.2rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 700;
+}
+.board-menu button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: none;
+    border-radius: var(--radius-xs);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.board-menu button:hover, .board-menu button:focus-visible { background: var(--accent-soft); outline: none; }
+.board-menu .empty { padding: 0.4rem 0.6rem; margin: 0; }
+.board-dialog {
+    width: min(460px, calc(100vw - 2rem));
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: var(--shadow-lg);
+}
+.board-dialog::backdrop { background: rgba(15, 23, 42, 0.45); }
+.board-dialog form { border: none; box-shadow: none; border-radius: 0; background: none; gap: 0.8rem; }
+.board-dialog h2 { margin: 0; }
+.board-dialog .hint { margin: 0; }
+.board-dialog-field { display: grid; gap: 0.25rem; font-size: 0.86rem; }
+.board-dialog-field input[type="checkbox"] { width: auto; justify-self: start; }
+#board-dialog-fields { display: grid; gap: 0.7rem; }
 
 .rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; font-size: 0.84rem; }
 .rule-list li { display: grid; gap: 0.1rem; }

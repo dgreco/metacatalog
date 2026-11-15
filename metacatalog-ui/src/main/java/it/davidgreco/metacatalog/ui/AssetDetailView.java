@@ -19,8 +19,8 @@ import java.util.Set;
  * @param provisioningResult the message the last provisioning run left on the root, or {@code null}
  * @param authorizationResult the message the last authorization run left, or {@code null}
  * @param root the aggregate tree
- * @param candidates the assets this one may still be made to depend on: of a type the model allows,
- *     not already depended on, not itself
+ * @param candidates what this asset may still be made to depend on — assets, aggregates and plain
+ *     entities of a type the model allows, not already depended on, not itself
  * @param mappings the mappings whose source is the type of some member of the asset
  * @param access the access the asset declares and holds, or {@code null} when it could not be read
  * @param actions the lifecycle actions offered, in declaration order

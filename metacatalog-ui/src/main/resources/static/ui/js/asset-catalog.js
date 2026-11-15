@@ -1,22 +1,32 @@
 /*
  * Asset catalog: the list of assets and the graph of their dependencies, two views of one model.
  *
- * The page embeds the catalog as JSON in #catalog-data — the assets, each with the assets it
- * depends on and the ones depending on it, and the dependency rules: which asset type may depend on
- * which, and the trait relationships allowing it. Both views are rendered from that, by this
- * script, so that a dependency added in one is in the other without a second source of truth.
+ * The page embeds the catalog as JSON in #catalog-data: the assets, each with what it depends on
+ * and the assets depending on it; the targets — aggregates and plain entities an asset may depend
+ * on without their being assets; the dependency rules, saying which asset type may depend on which
+ * type and the trait relationships allowing it; and the types a new node can be created from. Both
+ * views are rendered from that, by this script, so that a dependency added in one is in the other
+ * without a second source of truth.
  *
- * A dependency is created by dragging an asset onto another, in either view: a row onto a row in
- * the list, a node onto a node in the graph (graph-core.js). While something is being dragged the
- * assets that may be dropped on are marked, and whether one may is decided here before the server
- * is asked, from the same rules the server applies:
+ * The list is of assets and nothing else. The graph also draws the targets: a dependency has to end
+ * somewhere, and to make one its other end has to be there to drop on.
  *
+ * A dependency is created by dragging an asset onto something: a row onto a row in the list, a node
+ * onto a node in the graph (graph-core.js). While an asset is being dragged the nodes it may be
+ * dropped on are marked, and whether one may is decided here before the server is asked, from the
+ * same rules the server applies:
+ *
+ *   - only an asset depends on something;
  *   - the model must allow it: some rule from the dragged asset's type to the target's type;
  *   - it must not exist already;
  *   - it must not close a cycle.
  *
  * The server still decides — the drop is a POST, and whatever it refuses is shown — but a drop that
  * cannot succeed is refused where the user is looking, with the reason, instead of after the fact.
+ *
+ * A right-click on the graph's board offers to create a new node there and then: an asset, or
+ * something for assets to depend on. The dialog asks for the scalar values the type declares and
+ * creates the root alone; an asset's parts are added from its own page.
  */
 (function () {
   "use strict";
@@ -54,9 +64,19 @@
     } catch (e) {
       catalog = {};
     }
-    catalog.assets = catalog.assets || [];
-    catalog.rules = catalog.rules || [];
-    catalog.types = catalog.types || [];
+    function normalize(c) {
+      c = c || {};
+      c.assets = c.assets || [];
+      c.targets = c.targets || [];
+      c.rules = c.rules || [];
+      c.types = c.types || [];
+      c.creatable = c.creatable || [];
+      // One shape for everything on the board: an asset is its own kind of node.
+      c.assets.forEach(function (a) { a.kind = "asset"; a.href = "/ui/assets/" + encodeURIComponent(a.id); });
+      c.targets.forEach(function (t) { t.dependsOn = []; });
+      return c;
+    }
+    catalog = normalize(catalog);
 
     var listSection = document.getElementById("catalog-list");
     var graphSection = document.getElementById("catalog-graph");
@@ -77,11 +97,20 @@
 
     // --- the model ------------------------------------------------------------------------------
 
+    // Anything on the board, by id: an asset or one of the other targets.
     function byId(id) {
-      for (var i = 0; i < catalog.assets.length; i++) {
+      var i;
+      for (i = 0; i < catalog.assets.length; i++) {
         if (catalog.assets[i].id === id) return catalog.assets[i];
       }
+      for (i = 0; i < catalog.targets.length; i++) {
+        if (catalog.targets[i].id === id) return catalog.targets[i];
+      }
       return null;
+    }
+
+    function isAsset(node) {
+      return node.kind === "asset";
     }
 
     function colorOf(type) {
@@ -101,6 +130,15 @@
       return asset.dependsOn.some(function (d) { return d.id === target.id; });
     }
 
+    // The assets depending on a node, whatever the node is. An asset's row already says; for an
+    // aggregate or an entity it is read off the assets.
+    function dependents(node) {
+      if (isAsset(node)) return node.requiredBy;
+      return catalog.assets
+        .filter(function (a) { return dependsOn(a, node); })
+        .map(function (a) { return { id: a.id, name: a.name, entityType: a.entityType, kind: "asset", href: a.href }; });
+    }
+
     // Whether `from` already reaches `to` through dependencies: a new dependency of `to` on `from`
     // would then close a cycle.
     function reaches(from, to, seen) {
@@ -116,22 +154,28 @@
 
     // Why `source` may not be made to depend on `target`, or null when it may.
     function refusal(source, target) {
+      if (!isAsset(source)) {
+        return "Only an asset depends on something: «" + source.name + "» is " +
+          (source.kind === "aggregate" ? "an aggregate" : "an entity");
+      }
       if (source.id === target.id) return "An asset cannot depend on itself";
       if (dependsOn(source, target)) return "«" + source.name + "» already depends on «" + target.name + "»";
       if (!rule(source.entityType, target.entityType)) {
-        return "A " + source.entityType + " asset cannot depend on a " + target.entityType + " asset";
+        return "A " + source.entityType + " asset cannot depend on a " + target.entityType + " " + target.kind;
       }
-      if (reaches(target, source)) {
+      if (isAsset(target) && reaches(target, source)) {
         return "«" + target.name + "» already depends on «" + source.name + "»: this would close a cycle";
       }
       return null;
     }
 
-    function matches(asset) {
+    // The type filter is about assets; what they depend on stays lit under it, or filtering by a
+    // type would hide the very things that type's assets point at.
+    function matches(node) {
       var type = typeSelect ? typeSelect.value : "";
       var text = search ? search.value.trim().toLowerCase() : "";
-      if (type && asset.entityType !== type) return false;
-      return !text || asset.name.toLowerCase().indexOf(text) !== -1;
+      if (type && isAsset(node) && node.entityType !== type) return false;
+      return !text || node.name.toLowerCase().indexOf(text) !== -1;
     }
 
     // --- notices --------------------------------------------------------------------------------
@@ -150,34 +194,43 @@
 
     // --- talking to the server ------------------------------------------------------------------
 
-    function post(path, source, target, done) {
+    // Posts a change and, when it is accepted, redraws from the catalog the server answers with.
+    // `failed` receives the reason otherwise; without one the reason is shown as a notice.
+    function send(path, params, done, failed) {
       var headers = { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" };
       // With security enabled the UI chain enforces CSRF; Thymeleaf injects the token into the
       // hidden form as a _csrf field, and this request must forward it as the header.
       var csrf = form ? form.querySelector("input[name='_csrf']") : null;
       if (csrf) headers["X-CSRF-TOKEN"] = csrf.value;
+      var report = failed || function (why) { notify(why, false); };
       fetch(path, {
         method: "POST",
         headers: headers,
-        body: "source=" + encodeURIComponent(source.id) + "&target=" + encodeURIComponent(target.id)
+        body: Object.keys(params)
+          .map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]); })
+          .join("&")
       })
         .then(function (res) {
           return res.json().then(function (body) { return { ok: res.ok, body: body }; });
         })
         .then(function (answer) {
           if (!answer.ok || !answer.body.catalog) {
-            notify(answer.body.error || "The dependency could not be changed.", false);
+            report(answer.body.error || "The change was refused.");
             return;
           }
-          catalog = answer.body.catalog;
+          catalog = normalize(answer.body.catalog);
           // Laid out afresh rather than in place: a dependency decides which row an asset sits
           // in, so keeping the old positions would leave an arrow pointing the wrong way.
           render();
           done();
         })
         .catch(function () {
-          notify("The server could not be reached; the dependency was not changed.", false);
+          report("The server could not be reached; nothing was changed.");
         });
+    }
+
+    function post(path, source, target, done) {
+      send(path, { source: source.id, target: target.id }, done);
     }
 
     function link(source, target) {
@@ -214,8 +267,8 @@
       refs.forEach(function (ref) {
         var chip = el("span", "ref-chip");
         var a = el("a", null, ref.name);
-        a.href = "/ui/assets/" + encodeURIComponent(ref.id);
-        a.title = ref.entityType;
+        a.href = ref.href;
+        a.title = ref.kind === "asset" ? ref.entityType : ref.entityType + " (" + ref.kind + ")";
         chip.appendChild(a);
         if (owner) {
           var remove = el("button", "ref-chip-remove", "×");
@@ -355,8 +408,17 @@
       };
     }
 
+    // An aggregate or an entity an asset may depend on: on the board, but told apart from the
+    // assets by its outline and a badge saying what it is.
+    function toTargetNode(target) {
+      return {
+        id: target.id, title: target.name, subtitle: target.entityType, kind: target.kind,
+        badges: [{ text: target.kind, tone: "plain" }], data: target
+      };
+    }
+
     function graphData() {
-      var nodes = catalog.assets.map(toNode);
+      var nodes = catalog.assets.map(toNode).concat(catalog.targets.map(toTargetNode));
       var edges = [];
       catalog.assets.forEach(function (asset) {
         asset.dependsOn.forEach(function (d) {
@@ -373,6 +435,7 @@
         graph = window.MetacatalogGraphCore.create(canvas, {
           nodes: data.nodes, edges: data.edges, label: "Asset dependency graph",
           onSelect: onSelect,
+          onContextMenu: openMenu,
           drop: {
             allowed: function (source, target) { return !refusal(source.data, target.data); },
             hint: function (source, target) {
@@ -411,7 +474,7 @@
       }
       refs.forEach(function (ref) {
         var a = el("a", "tag", ref.name);
-        a.href = "/ui/assets/" + encodeURIComponent(ref.id);
+        a.href = ref.href;
         parent.appendChild(a);
       });
     }
@@ -447,15 +510,30 @@
         var list = el("ul", "rule-list");
         targets.forEach(function (r) {
           var li = el("li");
-          li.appendChild(el("strong", null, r.target + " assets"));
+          li.appendChild(el("strong", null, r.target + (r.targetKind === "asset" ? " assets" : " (" + r.targetKind + ")")));
           li.appendChild(el("span", "rule-why", r.sanctionedBy.join("; ")));
           list.appendChild(li);
         });
         detail.appendChild(list);
-        detail.appendChild(el("p", "hint", "Drag this asset onto one of those to add the dependency."));
+        detail.appendChild(el("p", "hint", "Drag this asset onto one of those to add the dependency, or right-click the board to create one."));
       } else {
         detail.appendChild(el("p", "empty", "The model allows a " + asset.entityType + " asset no dependency."));
       }
+    }
+
+    function targetDetail(target) {
+      detail.textContent = "";
+      detail.appendChild(el("div", "graph-panel-kind", target.kind));
+      detail.appendChild(el("h2", null, target.name));
+      panelRow(detail, "type", function (v) { v.textContent = target.entityType; });
+      panelRow(detail, "required by", function (v) { assetLinks(v, dependents(target)); });
+      var actions = el("div", "graph-panel-actions");
+      button(actions, "Open", target.href);
+      detail.appendChild(actions);
+      detail.appendChild(el("p", "hint",
+        (target.kind === "aggregate" ? "An aggregate" : "An entity") +
+        " that is not an asset: it is not provisioned or authorized from here, but assets may depend on it. " +
+        "Drag an asset onto it to add the dependency."));
     }
 
     function dependencyDetail(edge) {
@@ -489,7 +567,7 @@
       remove.type = "button";
       remove.addEventListener("click", function () { unlink(source, target); });
       actions.appendChild(remove);
-      button(actions, "Mappings of " + source.name, "/ui/assets/" + encodeURIComponent(source.id) + "#mappings");
+      button(actions, "Mappings of " + source.name, source.href + "#mappings");
       button(actions, "Edit the model", "/ui/admin");
       detail.appendChild(actions);
     }
@@ -501,8 +579,12 @@
       }
       if (idle) idle.hidden = true;
       detail.hidden = false;
-      if (selection.node) assetDetail(selection.node.data);
-      else dependencyDetail(selection.edge.data);
+      if (selection.node) {
+        if (isAsset(selection.node.data)) assetDetail(selection.node.data);
+        else targetDetail(selection.node.data);
+      } else {
+        dependencyDetail(selection.edge.data);
+      }
     }
 
     function renderLegend() {
@@ -518,6 +600,14 @@
           li.appendChild(document.createTextNode(type + " (" + n + ")"));
           legend.appendChild(li);
         });
+        [["aggregate", "lg-aggregate", "Aggregates"], ["entity", "lg-plain", "Entities"]].forEach(function (k) {
+          var n = catalog.targets.filter(function (t) { return t.kind === k[0]; }).length;
+          if (!n) return;
+          var li = el("li");
+          li.appendChild(el("span", "lg-card " + k[1]));
+          li.appendChild(document.createTextNode(k[2] + " assets may depend on (" + n + ")"));
+          legend.appendChild(li);
+        });
       }
       var rules = document.getElementById("asset-rule-list");
       if (rules) {
@@ -529,10 +619,162 @@
         catalog.rules.forEach(function (r) {
           var li = el("li");
           li.appendChild(el("strong", null, r.source + " → " + r.target));
-          li.appendChild(el("span", "rule-why", r.sanctionedBy.join("; ")));
+          li.appendChild(el("span", "rule-why",
+            (r.targetKind === "asset" ? "" : (r.targetKind === "aggregate" ? "an aggregate" : "a plain entity") + " · ") +
+            r.sanctionedBy.join("; ")));
           rules.appendChild(li);
         });
       }
+    }
+
+    // --- the board's menu and its dialog --------------------------------------------------------
+
+    var menu = document.getElementById("board-menu");
+    var dialog = document.getElementById("board-dialog");
+
+    function closeMenu() {
+      if (menu) menu.hidden = true;
+    }
+
+    function menuItem(text, onClick) {
+      var b = el("button", null, text);
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.addEventListener("click", function () {
+        closeMenu();
+        onClick();
+      });
+      menu.appendChild(b);
+      return b;
+    }
+
+    // A right-click on a node offers what can be done to that node; on the board, what can be
+    // put on it.
+    function openMenu(at) {
+      if (!menu) return;
+      menu.textContent = "";
+      if (at.node) {
+        var node = at.node.data;
+        menu.appendChild(el("div", "board-menu-head", node.name));
+        menuItem("Open", function () { window.location.href = node.href; });
+        if (isAsset(node)) menuItem("Edit", function () { window.location.href = node.href + "/edit"; });
+      } else {
+        var groups = [["asset", "New asset"], ["aggregate", "New aggregate"], ["entity", "New entity"]];
+        groups.forEach(function (group) {
+          var types = catalog.creatable.filter(function (c) { return c.kind === group[0]; });
+          if (!types.length) return;
+          menu.appendChild(el("div", "board-menu-head", group[1]));
+          types.forEach(function (c) {
+            menuItem(c.type, function () { openDialog(c); });
+          });
+        });
+        if (!menu.childNodes.length) {
+          menu.appendChild(el("p", "empty", "Nothing can be created here yet."));
+        }
+      }
+      menu.hidden = false;
+      // Kept inside the window: a menu opened near the right or bottom edge would be cut off. It
+      // is placed in page coordinates, so it stays where it was opened when the page scrolls —
+      // closing it on scroll instead would lose it to any scroll that merely happens to follow
+      // the click.
+      var w = menu.offsetWidth, h = menu.offsetHeight;
+      var x = Math.max(8, Math.min(at.clientX, window.innerWidth - w - 8));
+      var y = Math.max(8, Math.min(at.clientY, window.innerHeight - h - 8));
+      menu.style.left = (x + window.scrollX) + "px";
+      menu.style.top = (y + window.scrollY) + "px";
+      var first = menu.querySelector("button");
+      if (first) first.focus();
+    }
+
+    document.addEventListener("mousedown", function (ev) {
+      if (menu && !menu.hidden && !menu.contains(ev.target)) closeMenu();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") closeMenu();
+    });
+
+    // The fields the dialog asks for: the scalar properties the type's schema declares, minus the
+    // ones a run writes. Anything structured — an access policy, say — is left to the full editor.
+    function dialogFields(schema) {
+      var props = (schema && schema.properties) || {};
+      var required = Array.isArray(schema && schema.required) ? schema.required : [];
+      return Object.keys(props)
+        .filter(function (key) {
+          var p = props[key] || {};
+          if (p.readOnly === true) return false;
+          return Array.isArray(p.enum) || ["string", "number", "integer", "boolean"].indexOf(p.type || "string") !== -1;
+        })
+        .map(function (key) {
+          return { key: key, schema: props[key] || {}, required: required.indexOf(key) !== -1 };
+        });
+    }
+
+    function openDialog(creatable) {
+      if (!dialog) return;
+      var schema;
+      try {
+        schema = JSON.parse(creatable.schema || "{}");
+      } catch (e) {
+        schema = {};
+      }
+      document.getElementById("board-dialog-title").textContent = "New " + creatable.type;
+      document.getElementById("board-dialog-hint").textContent =
+        creatable.kind === "entity"
+          ? "A plain entity: assets may depend on it, and it is not provisioned."
+          : "Creates the " + creatable.kind + " itself. Its parts, and anything structured, are added from its own page afterwards.";
+      var fieldsEl = document.getElementById("board-dialog-fields");
+      var errorEl = document.getElementById("board-dialog-error");
+      fieldsEl.textContent = "";
+      errorEl.hidden = true;
+      var inputs = dialogFields(schema).map(function (field) {
+        var label = el("label", "board-dialog-field", field.key + (field.required ? " *" : ""));
+        var type = field.schema.type || "string";
+        var input;
+        if (Array.isArray(field.schema.enum)) {
+          input = document.createElement("select");
+          input.appendChild(new Option("—", ""));
+          field.schema.enum.forEach(function (v) { input.appendChild(new Option(v, v)); });
+        } else {
+          input = document.createElement("input");
+          input.type = type === "boolean" ? "checkbox" : type === "string" ? "text" : "number";
+          if (type === "integer") input.step = "1";
+        }
+        input.name = field.key;
+        if (field.required && type !== "boolean") input.required = true;
+        label.appendChild(input);
+        fieldsEl.appendChild(label);
+        return { field: field, input: input, type: type };
+      });
+      if (!inputs.length) {
+        fieldsEl.appendChild(el("p", "empty", "This type declares no value to fill in here."));
+      }
+
+      document.getElementById("board-dialog-form").onsubmit = function (ev) {
+        ev.preventDefault();
+        var values = {};
+        inputs.forEach(function (i) {
+          if (i.type === "boolean") {
+            if (i.input.checked) values[i.field.key] = true;
+          } else if (i.input.value !== "") {
+            values[i.field.key] = i.type === "string" || Array.isArray(i.field.schema.enum)
+              ? i.input.value
+              : Number(i.input.value);
+          }
+        });
+        send("/ui/assets/entities", { type: creatable.type, values: JSON.stringify(values) },
+          function () {
+            dialog.close();
+            notify("Created " + (values.name ? "«" + values.name + "»" : "a new " + creatable.type) + ".", true);
+          },
+          function (why) {
+            // Shown in the dialog, which is still open over the page's own notices.
+            errorEl.textContent = why;
+            errorEl.hidden = false;
+          });
+      };
+      document.getElementById("board-dialog-cancel").onclick = function () { dialog.close(); };
+      dialog.showModal();
+      if (inputs.length) inputs[0].input.focus();
     }
 
     // --- views ----------------------------------------------------------------------------------

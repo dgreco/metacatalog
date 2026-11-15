@@ -464,8 +464,9 @@ class UiJavascriptSmokeTest {
   }
 
   /**
-   * The asset model the asset pages are tested against, created once: a table may depend on a
-   * domain, and nothing else may depend on anything. Each test adds its own assets on top.
+   * The asset model the asset pages are tested against, created once: a table is an asset, a domain
+   * is a plain type, and a table may depend on a domain — nothing else on anything. Each test adds
+   * its own assets on top.
    */
   private static void ensureAssetModel() {
     var traitService = context.getBean(it.davidgreco.metacatalog.service.TraitService.class);
@@ -488,7 +489,7 @@ class UiJavascriptSmokeTest {
     entityTypeService.create(
         "SmColumnType", List.of("AggregateElement", "SmNamed"), Optional.empty(), empty);
     entityTypeService.create(
-        "SmDomainType", List.of("Asset", "SmNamed", "SmDomain"), Optional.empty(), empty);
+        "SmDomainType", List.of("SmNamed", "SmDomain"), Optional.empty(), empty);
     entityTypeService.create(
         "SmTableType", List.of("Asset", "SmNamed", "SmTable"), Optional.empty(), empty);
   }
@@ -512,12 +513,14 @@ class UiJavascriptSmokeTest {
   }
 
   /**
-   * Dropping an asset onto another in the dependency graph makes it depend on it — when the model
-   * allows it. The drop is a real pointer gesture: this is the one place {@code graph-core.js}'s
-   * drag handling and {@code asset-catalog.js}'s rules run together, against the real API.
+   * Dropping an asset onto something in the dependency graph makes it depend on it — when the model
+   * allows it. Here the other end is a plain entity, which is on the board because an asset may
+   * depend on it, and which cannot itself depend on anything. The drop is a real pointer gesture:
+   * this is the one place {@code graph-core.js}'s drag handling and {@code asset-catalog.js}'s
+   * rules run together, against the real API.
    */
   @Test
-  void assetsAreLinkedByDraggingOneOntoAnotherInTheGraph() {
+  void anAssetIsMadeToDependOnAnEntityByDraggingItOntoItInTheGraph() {
     ensureAssetModel();
     var entityService = context.getBean(EntityService.class);
     var domain = entityService.create("SmDomainType", "{\"name\": \"sm-sales\"}");
@@ -529,13 +532,13 @@ class UiJavascriptSmokeTest {
             ExpectedConditions.presenceOfElementLocated(
                 By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
 
-    // The model lets a table depend on a domain, not a domain on a table.
+    // A domain is depended on; it does not depend. Only an asset can be dropped onto something.
     dragOnto(graphNode(domain.getId()), graphNode(table.getId()));
     await()
         .until(
             d ->
                 d.findElements(By.cssSelector("#catalog-notices .error")).stream()
-                    .anyMatch(e -> e.getText().contains("cannot depend on")));
+                    .anyMatch(e -> e.getText().contains("Only an asset depends on something")));
     Assertions.assertTrue(
         entityService
             .linked(domain.getId(), it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON)
@@ -559,11 +562,17 @@ class UiJavascriptSmokeTest {
         driver.findElements(By.cssSelector("#asset-graph .gc-edge-dependency")).isEmpty(),
         "the new dependency must be drawn");
 
-    // The list is the same model: the dependency made in the graph is there without a reload.
+    // The list is the same model: the dependency made in the graph is there without a reload. It
+    // lists assets only — the domain is what an asset depends on, never a row of its own.
     driver.findElement(By.cssSelector(".view-switch [data-view='list']")).click();
     var row =
         driver.findElement(By.cssSelector("#asset-rows tr[data-asset-id='" + table.getId() + "']"));
     Assertions.assertTrue(row.getText().contains("sm-sales"), row.getText());
+    Assertions.assertTrue(
+        driver
+            .findElements(By.cssSelector("#asset-rows tr[data-asset-id='" + domain.getId() + "']"))
+            .isEmpty(),
+        "an entity that is not an asset must not be listed");
 
     // And it can be removed from there.
     row.findElement(By.cssSelector(".ref-chip-remove")).click();
@@ -574,6 +583,65 @@ class UiJavascriptSmokeTest {
                 entityService
                     .linked(table.getId(), it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON)
                     .isEmpty());
+  }
+
+  /**
+   * A right-click on the board creates a new node without leaving it: the menu offers the types
+   * that belong there, and the dialog asks for the values the chosen type declares.
+   */
+  @Test
+  void aRightClickOnTheBoardCreatesSomethingForAssetsToDependOn() {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var board =
+        await()
+            .until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("#asset-graph svg")));
+    // The corner of the board: the layout centres the nodes, so nothing is drawn there. Read from
+    // the page rather than offset from the element: the board can reach below the window, and the
+    // driver measures an element offset from the centre of the part that is in view.
+    @SuppressWarnings("unchecked")
+    var corner =
+        (List<Number>)
+            ((org.openqa.selenium.JavascriptExecutor) driver)
+                .executeScript(
+                    "var r = arguments[0].getBoundingClientRect();"
+                        + " return [Math.round(r.left + 24), Math.round(r.top + 24)];",
+                    board);
+    new org.openqa.selenium.interactions.Actions(driver)
+        .moveToLocation(corner.get(0).intValue(), corner.get(1).intValue())
+        .contextClick()
+        .perform();
+
+    var menu = await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    Assertions.assertTrue(menu.getText().contains("SmTableType"), menu.getText());
+    menu.findElements(By.cssSelector("button")).stream()
+        .filter(item -> item.getText().equals("SmDomainType"))
+        .findFirst()
+        .orElseThrow()
+        .click();
+
+    var name =
+        await()
+            .until(
+                ExpectedConditions.visibilityOfElementLocated(
+                    By.cssSelector("#board-dialog input[name='name']")));
+    name.sendKeys("sm-created-on-the-board");
+    driver.findElement(By.id("board-dialog-create")).click();
+
+    await()
+        .until(
+            d ->
+                d
+                    .findElements(By.cssSelector("#asset-graph .gc-node-entity .gc-node-title"))
+                    .stream()
+                    .anyMatch(title -> title.getText().equals("sm-created-on-the-board")));
+    Assertions.assertTrue(
+        entityService.list("SmDomainType", "").stream()
+            .anyMatch(
+                entity ->
+                    "sm-created-on-the-board".equals(entity.getValues().get("name").asText())));
   }
 
   /**

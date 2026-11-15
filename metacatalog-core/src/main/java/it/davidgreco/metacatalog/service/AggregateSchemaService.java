@@ -171,42 +171,83 @@ public class AggregateSchemaService {
   }
 
   /**
-   * A dependency the model allows between assets of two types.
+   * What an asset may depend on, by the role its type plays in the aggregate model.
+   *
+   * <p>An asset is not limited to depending on other assets: it may belong to a domain that is a
+   * plain entity, or build on an aggregate nobody provisions. The three kinds are the three things
+   * that stand on their own — a part of somebody else's aggregate is not one of them, and neither
+   * is an entity a mapping derives.
+   */
+  public enum DependencyTargetKind {
+    /** An asset: the root of an aggregate whose type carries {@code Asset}. */
+    ASSET,
+    /** The root of an aggregate that is not an asset. */
+    AGGREGATE,
+    /** An entity outside the aggregate model: its type carries no aggregate trait at all. */
+    ENTITY
+  }
+
+  /**
+   * A dependency the model allows an asset of one type to have.
    *
    * @param source the type of the asset that depends
-   * @param target the type of the asset depended on
+   * @param target the type of what it depends on
+   * @param targetKind what the target is: an asset, an aggregate or a plain entity
    * @param sanctionedBy the {@code DEPENDS_ON} trait relationships that allow it — at least one,
    *     and several when the two types carry more than one related pair of traits
    */
   public record AssetDependencyRule(
-      EntityType source, EntityType target, List<TraitRelationship> sanctionedBy) {}
+      EntityType source,
+      EntityType target,
+      DependencyTargetKind targetKind,
+      List<TraitRelationship> sanctionedBy) {}
 
   /**
-   * Lists the dependencies the model allows between asset types.
+   * Lists the dependencies the model allows assets to have.
    *
    * <p>The same projection {@link #aggregateSchema} makes of {@code HAS_PART}, made of {@code
-   * DEPENDS_ON}: a dependency is never declared between entity types but between traits, and two
-   * types may be linked when the source carries a trait that declares {@code DEPENDS_ON} towards a
-   * trait the target carries. That is the rule {@link ServiceUtils#relIsLegit} applies when two
-   * entities are actually linked, so a client can tell in advance which assets may depend on which
-   * — and why — rather than discover it from a refused link.
+   * DEPENDS_ON}: a dependency is never declared between entity types but between traits, and an
+   * asset may depend on an entity when its type carries a trait that declares {@code DEPENDS_ON}
+   * towards a trait the entity's type carries. That is the rule {@link ServiceUtils#relIsLegit}
+   * applies when two entities are actually linked, so a client can tell in advance what an asset
+   * may depend on — and why — rather than discover it from a refused link.
    *
-   * @return one rule per ordered pair of asset types the model allows, ordered by source then
-   *     target name; a pair of a type with itself is included when it is allowed
+   * <p>The source is always an asset type. The target is any type whose instances stand on their
+   * own: another asset type, an aggregate root type, or a type outside the aggregate model. Types
+   * that only exist inside an aggregate (carrying {@code AggregateElement}) and types whose
+   * instances a mapping derives are left out, though nothing stops such a link being made through
+   * the entity API where the traits allow it.
+   *
+   * @return one rule per allowed pair, ordered by source then target name; a pair of a type with
+   *     itself is included when it is allowed
    */
   @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
   public List<AssetDependencyRule> assetDependencyRules() {
     log.info("Computing the asset dependency rules");
-    var types = assetTypes();
+    var assetTypes = assetTypes();
+    var assetTypeNames = assetTypes.stream().map(EntityType::getName).collect(Collectors.toSet());
     var traitsByType = new LinkedHashMap<String, Set<String>>();
-    for (var type : types) traitsByType.put(type.getName(), ServiceUtils.traitNamesOf(type));
+    var targets = new LinkedHashMap<EntityType, DependencyTargetKind>();
+    for (var type :
+        authorableTypes().stream().sorted(Comparator.comparing(EntityType::getName)).toList()) {
+      var traits = ServiceUtils.traitNamesOf(type);
+      traitsByType.put(type.getName(), traits);
+      if (traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)) continue;
+      targets.put(
+          type,
+          assetTypeNames.contains(type.getName())
+              ? DependencyTargetKind.ASSET
+              : traits.contains(BuiltInTraits.AGGREGATE)
+                  ? DependencyTargetKind.AGGREGATE
+                  : DependencyTargetKind.ENTITY);
+    }
     var declarations = traitRelationshipRepository.findByRelationType(RelationType.DEPENDS_ON);
 
     var rules = new ArrayList<AssetDependencyRule>();
-    for (var source : types) {
+    for (var source : assetTypes) {
       var sourceTraits = traitsByType.get(source.getName());
-      for (var target : types) {
-        var targetTraits = traitsByType.get(target.getName());
+      for (var target : targets.entrySet()) {
+        var targetTraits = traitsByType.get(target.getKey().getName());
         var sanctions =
             declarations.stream()
                 .filter(
@@ -214,7 +255,8 @@ public class AggregateSchemaService {
                         sourceTraits.contains(declaration.getSource().getName())
                             && targetTraits.contains(declaration.getTarget().getName()))
                 .toList();
-        if (!sanctions.isEmpty()) rules.add(new AssetDependencyRule(source, target, sanctions));
+        if (!sanctions.isEmpty())
+          rules.add(new AssetDependencyRule(source, target.getKey(), target.getValue(), sanctions));
       }
     }
     log.info("Computed {} asset dependency rule(s)", rules.size());

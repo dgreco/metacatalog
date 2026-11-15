@@ -57,9 +57,10 @@
     </div>
 
     <p class="hint catalog-hint" th:unless="${catalog.types.isEmpty()}">
-        Drag an asset onto another to make it <strong>depend on</strong> it. Only the combinations
-        the model allows accept the drop — an asset may depend on another when their types carry
-        traits related by <code>DEPENDS_ON</code>.
+        Drag an asset onto another asset — or, in the graph, onto an aggregate or an entity — to make
+        it <strong>depend on</strong> it. Only the combinations the model allows accept the drop:
+        the two types must carry traits related by <code>DEPENDS_ON</code>. Right-click the graph's
+        board to create a new asset, or a new thing for assets to depend on.
     </p>
 
     <section id="catalog-list" th:unless="${catalog.types.isEmpty()}" th:hidden="${view == 'graph'}">
@@ -89,10 +90,12 @@
                 <div id="asset-panel-idle">
                     <h2>Dependency graph</h2>
                     <p class="hint">
-                        Every asset is a node; an arrow points from an asset to one it depends on,
-                        which is drawn above it. Select an asset or a dependency to act on it.
+                        Every asset is a node, and so is everything an asset depends on or may
+                        depend on: other assets, aggregates and plain entities. An arrow points
+                        from an asset to what it depends on, which is drawn above it. Select a node
+                        or a dependency to act on it; right-click the board to create a new one.
                     </p>
-                    <h3>Asset types</h3>
+                    <h3>On the board</h3>
                     <ul class="graph-legend-list" id="asset-type-legend"></ul>
                     <h3>Allowed dependencies</h3>
                     <ul class="rule-list" id="asset-rule-list"></ul>
@@ -104,9 +107,25 @@
 
     <!-- Carries the CSRF token the dependency requests must forward when security is enabled. -->
     <form id="dependency-form" method="post" th:action="@{/ui/assets/dependencies}" hidden></form>
+
+    <!-- What a right-click on the board opens, and the dialog its entries lead to. Both are filled
+         by asset-catalog.js from the types the catalog says can be created. -->
+    <div class="board-menu" id="board-menu" role="menu" hidden></div>
+    <dialog class="board-dialog" id="board-dialog" aria-labelledby="board-dialog-title">
+        <form method="dialog" id="board-dialog-form">
+            <h2 id="board-dialog-title">New</h2>
+            <p class="hint" id="board-dialog-hint"></p>
+            <div id="board-dialog-fields"></div>
+            <div class="error" id="board-dialog-error" hidden></div>
+            <div class="actions">
+                <button type="submit" class="btn primary" id="board-dialog-create">Create</button>
+                <button type="button" class="btn" id="board-dialog-cancel">Cancel</button>
+            </div>
+        </form>
+    </dialog>
 </main>
 
-<script type="application/json" id="catalog-data" th:utext="${catalogJson}">{"assets":[],"rules":[],"types":[]}</script>
+<script type="application/json" id="catalog-data" th:utext="${catalogJson}">{"assets":[],"targets":[],"rules":[],"types":[],"creatable":[]}</script>
 <script th:src="@{/ui/js/graph-core.js}"></script>
 <script th:src="@{/ui/js/asset-catalog.js}"></script>
 </body>

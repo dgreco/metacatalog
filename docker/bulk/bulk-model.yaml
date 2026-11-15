@@ -1,19 +1,21 @@
 # The demo model for the base stack (docker-compose.yml, loaded by the bulk-loader service).
 #
-# The data product and the domain are *assets*: aggregate root types carrying the built-in `Asset`
-# trait, which is what the Assets half of the UI lists and manages. `Asset` inherits `Provisionable`
-# and mixes in `Authorizable`, so an asset type gets both capabilities by naming one trait — the
-# data product used to mix the two in itself. Its two resources carry both resource traits:
+# The data product is an *asset*: an aggregate root type carrying the built-in `Asset` trait, which
+# is what the Assets half of the UI lists and manages. `Asset` inherits `Provisionable` and mixes in
+# `Authorizable`, so an asset type gets both capabilities by naming one trait — the data product
+# used to mix the two in itself. Its two resources carry both resource traits:
 # provisioning creates the S3 folder and the Athena table, authorization grants access to them, and
 # each records into its own pair of status fields on the resource and on the root. Everything here
 # is handled by the `stdout` task (see application-docker.yaml), which prints what it would do for
 # all four operations instead of touching anything real.
 #
-# Which asset may depend on which is declared between traits, under Relationships below: a data
-# product may belong to a domain, and may consume another data product. Nothing else is allowed — a
-# domain cannot be made to depend on a data product — which is what the catalog's drag and drop
-# shows when an asset is dropped where it may not go. Only dp1 is seeded: create a DomainType asset
-# from the UI and drag dp1 onto it to see a dependency being made.
+# What an asset may depend on is declared between traits, under Relationships below: a data product
+# may belong to a domain, and may consume another data product. An asset can depend on another
+# asset, on an aggregate or on a plain entity, and the demo shows two of the three: the domain is
+# not an asset and not an aggregate — it is a simple type carrying no aggregate trait, nothing is
+# provisioned for it, and it exists to be depended on. Nothing else is allowed, which is what the
+# catalog's drag and drop shows when an asset is dropped where it may not go. Only dp1 is seeded:
+# right-click the dependency graph's board, create a DomainType there and drag dp1 onto it.
 #
 # The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
 # change to its values adds one. That includes the status write-backs each provision / authorize
@@ -57,7 +59,6 @@ EntityTypes:
       type: object
       properties: {}
     traits:
-      - Asset
       - WithName
       - Domain
 
