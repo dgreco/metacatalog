@@ -11,6 +11,18 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies.** Spring Boot 4.1.2 (with Spring Framework 7.0.10 and Spring Security 7.1.2),
+  which now manages most of the patch releases this build used to pin by hand; on top of it,
+  Hibernate ORM 7.4.16, Hibernate Validator 9.1.6, Netty 4.2.20, Tomcat 11.0.29 and Byte Buddy
+  1.18.17. Flyway 13.12.2, springdoc-openapi 3.2.0, Vavr 1.1.0, json-schema-validator 3.0.9,
+  Guava 33.8.0 and jackson-databind-nullable 0.2.13; Selenium 4.52.0 for the tests. No change in
+  behaviour, API, schema or configuration.
+- **Build plugins.** maven-surefire-plugin 3.6.1, maven-enforcer-plugin 3.7.0,
+  jacoco-maven-plugin 0.8.16, spotless-maven-plugin 3.11.0, openapi-generator-maven-plugin 7.27.0
+  and versions-maven-plugin 2.25.2.
+
 ## [2.1.0] - 2026-11-15
 
 The catalog becomes a place to manage data platform assets. Nothing is taken away, which is what

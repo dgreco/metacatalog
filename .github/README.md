@@ -51,7 +51,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 ## Technology Stack
 
 - **Java 25**
-- **Spring Boot 4.1.0**
+- **Spring Boot 4.1**
 - **PostgreSQL** (JDBC driver 42.7.14, server 18+)
 - **Maven 3.9.9+**
 - **Ontop 5.5.0** (embedded SPARQL endpoint) · **RDF4J 6.1.0** (SPARQL protocol + result serialisation)
@@ -354,7 +354,7 @@ for the Testcontainers PostgreSQL): core 257 · ui 111 · security 23 · openapi
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.3% of instructions, 41.1% of branches, 60.4% of lines**.
+**58.3% of instructions, 41.1% of branches, 60.3% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
