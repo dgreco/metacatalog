@@ -13,7 +13,7 @@ Meta Catalog is a metadata management system: entities, entity types, traits, re
 mappings and aggregates, with a REST API, a server-rendered UI and a SPARQL endpoint over the same
 model.
 
-Java 25, Spring Boot 4.1.0, PostgreSQL 18+, Maven 3.9.9+. A JDK 25+ builds it.
+Java 25, Spring Boot 4.1, PostgreSQL 18+, Maven 3.9.9+. A JDK 25+ builds it.
 
 ## Layout
 
