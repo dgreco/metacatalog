@@ -186,27 +186,7 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
     var entityService = getApplicationContext().getBean(EntityService.class);
 
     var bulkDir = java.nio.file.Path.of("..", "docker", "bulk");
-    // The same model also ships as the bulk1.yaml test fixture, so another test in this class may
-    // have loaded it already — mirror the compose loader and only load it when it is missing.
-    //
-    // The two files must therefore stay byte-identical in what they declare. They drifted once,
-    // when the docker model gained Authorizable / AuthorizableResource and the fixture did not:
-    // the probe below found WithName, skipped the load, and this test went on validating the
-    // docker demo's aggregate against the *fixture's* DataProductType — silently, until that
-    // aggregate grew a field only the docker model's traits admit. Keep them in sync.
-    var traitService = getApplicationContext().getBean(TraitService.class);
-    boolean modelLoaded;
-    try {
-      traitService.read("WithName");
-      modelLoaded = true;
-    } catch (NotFoundException e) {
-      modelLoaded = false;
-    }
-    if (!modelLoaded) {
-      try (var model = java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-model.yaml"))) {
-        bulkLoaderService.bulkModelCreation(model);
-      }
-    }
+    loadDemoModelIfMissing();
     var s3Before = entityService.list("S3FolderType", "").size();
     var athenaBefore = entityService.list("AthenaTableType", "").size();
     java.util.List<String> ids;
@@ -231,17 +211,121 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
                 entityService.list("S3FolderType", "").size() == s3Before + 1
                     && entityService.list("AthenaTableType", "").size() == athenaBefore + 1);
 
+    var domainId = ids.get(1);
     aggregateService.delete(ids.getFirst());
+    // Deleting the data product takes its own dependency with it and nothing else: the domain is
+    // not part of the aggregate, and other data products may belong to it.
+    assertTrue(entityService.exists(domainId), "the domain must outlive the data product");
 
     // Mimic the compose bulk-loader's read probe before reloading: list entities of the root type,
-    // then reload the same aggregate document. The reload must succeed after the delete above.
+    // then reload the aggregate. The domain is still there, so — as load-bulk.sh does — its
+    // document is left out and the data product is pointed at the existing one by id; loading the
+    // file as it is would leave a second `sales` behind on every reload.
     entityService.list("DataProductType", "");
 
-    try (var instances =
-        java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-instances.yaml"))) {
-      ids = bulkLoaderService.bulkAggregateCreation(instances);
+    var documents =
+        java.nio.file.Files.readString(bulkDir.resolve("bulk-instances.yaml")).split("(?m)^---$");
+    assertEquals(2, documents.length, "the demo is one data product and the domain it belongs to");
+    var dataProductOnly = documents[0].replace("- \"sales\"", "- \"" + domainId + "\"");
+    assertTrue(dataProductOnly.contains(domainId), "the demo data product must depend on sales");
+    ids =
+        bulkLoaderService.bulkAggregateCreation(
+            new ByteArrayInputStream(dataProductOnly.getBytes(StandardCharsets.UTF_8)));
+    assertEquals(1, ids.size(), "the demo aggregate must load again after being deleted");
+    assertEquals(
+        java.util.List.of(domainId),
+        entityService.linked(ids.getFirst(), RelationType.DEPENDS_ON).stream()
+            .map(it.davidgreco.metacatalog.entity.Entity::getId)
+            .toList());
+  }
+
+  /**
+   * A data product created before it belongs to a domain has nothing to name its folder after, so
+   * the folder is not derived — and is, once the product is given its domain. Without that, a
+   * product assembled in the UI and dropped onto a domain afterwards would stay without resources
+   * until one of its output ports happened to be edited.
+   */
+  @Test
+  @org.junit.jupiter.api.Timeout(60)
+  void testADependencyAddedLaterDerivesWhatCouldNotBeDerivedWithoutIt() {
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var events =
+        getApplicationContext()
+            .getBean(it.davidgreco.metacatalog.repository.EntityLifeCycleEventRepository.class);
+    loadDemoModelIfMissing();
+
+    var dataProductId =
+        bulkLoaderService
+            .bulkAggregateCreation(
+                new ByteArrayInputStream(
+                    """
+                    entityType: "DataProductType"
+                    values:
+                      name: "late"
+                    parts:
+                      - entityType: "FileBasedOutputPortType"
+                        values:
+                          name: "files"
+                    """
+                        .getBytes(StandardCharsets.UTF_8)))
+            .getFirst();
+    var outputPortId =
+        entityService.linked(dataProductId, RelationType.HAS_PART).getFirst().getId();
+
+    // The engine has had its go at the output port, and had no domain to read.
+    await()
+        .atMost(Durations.TEN_SECONDS)
+        .until(
+            () ->
+                !events.existsByEntityIdAndEventTypeAndEventStatus(
+                    outputPortId,
+                    it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+                    it.davidgreco.metacatalog.entity.EntityLifeCycleEvent.STATUS_PENDING));
+    assertEquals(java.util.List.of(), mappedPaths(aggregateService, dataProductId));
+
+    var domain = entityService.create("DomainType", "{\"name\": \"finance\"}");
+    entityService.link(dataProductId, RelationType.DEPENDS_ON, domain.getId());
+
+    await()
+        .atMost(Durations.TEN_SECONDS)
+        .until(() -> !mappedPaths(aggregateService, dataProductId).isEmpty());
+    assertEquals(
+        java.util.List.of("/root/finance/late/files"),
+        mappedPaths(aggregateService, dataProductId));
+  }
+
+  private static java.util.List<String> mappedPaths(
+      AggregateService aggregateService, String dataProductId) {
+    return aggregateService.assets().stream()
+        .filter(asset -> asset.entity().getId().equals(dataProductId))
+        .flatMap(asset -> asset.mapped().stream())
+        .map(mapped -> mapped.entity().getValues().get("path").asText())
+        .toList();
+  }
+
+  /**
+   * Loads the docker demo's model unless it is there already.
+   *
+   * <p>The same model also ships as the bulk1.yaml test fixture, so another test in this class may
+   * have loaded it — mirror the compose loader and only load it when it is missing.
+   *
+   * <p>The two files must therefore stay byte-identical in what they declare. They drifted once,
+   * when the docker model gained Authorizable / AuthorizableResource and the fixture did not: the
+   * probe below found WithName, skipped the load, and a test went on validating the docker demo's
+   * aggregate against the <em>fixture's</em> DataProductType — silently, until that aggregate grew
+   * a field only the docker model's traits admit. Keep them in sync.
+   */
+  private void loadDemoModelIfMissing() {
+    if (getApplicationContext().getBean(TraitService.class).exists("WithName")) return;
+    try (var model =
+        java.nio.file.Files.newInputStream(
+            java.nio.file.Path.of("..", "docker", "bulk", "bulk-model.yaml"))) {
+      getApplicationContext().getBean(BulkLoaderService.class).bulkModelCreation(model);
+    } catch (java.io.IOException e) {
+      throw new java.io.UncheckedIOException(e);
     }
-    assertTrue(ids.size() == 1, "the demo aggregate must load again after being deleted");
   }
 
   /** Malformed top-level section (non-array) must throw ServiceError, not silently skip. */

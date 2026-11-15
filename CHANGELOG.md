@@ -21,7 +21,8 @@ still answer.
 - **Assets.** A data platform asset is an aggregate whose root type carries the new built-in
   `Asset` trait, which inherits `Provisionable` and mixes in `Authorizable` — so an asset type gets
   both capabilities, and is an aggregate root, by naming one trait. `GET /aggregate/asset-type`
-  lists the asset types, `GET /asset` the catalog: every asset with the assets it depends on.
+  lists the asset types, `GET /asset` the catalog: every asset with what it depends on and the
+  entities mappings derived from its members.
   `GET /aggregate/type-capabilities` reports the asset types alongside the other classifications.
   A database created by an earlier release gains `Asset` on its first start.
 - **What an asset depends on, decided by the model.** An asset can depend on another asset, on an
@@ -43,7 +44,8 @@ still answer.
   that also draws the aggregates and entities assets may depend on; drag and drop to make an asset
   depend on any of them — accepted only where the model allows it, with the reason shown where it
   does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
-  in place; an asset's page with its structure, lifecycle actions, mappings
+  in place; each asset's mapped entities, named in the list and drawn below it in the graph with
+  the status a run left on them; an asset's page with its structure, lifecycle actions, mappings
   and access; the schema-driven editor on an existing asset; and YAML download and upload.
 - **A model graph.** Under Administration, every trait and entity type as a card laid out in rows
   — traits above the types assembled from them — with inheritance, mixed-in traits, carried
@@ -65,10 +67,19 @@ still answer.
   `id` as a second `ref` and its `dependencies` as more `dependsOn` names, and takes a name no node
   declares as the id of an existing entity. It used to ignore both fields, so a document served by
   `GET /aggregate/{id}/yaml` created a copy with its dependencies silently gone.
+- **Adding a dependency derives what could not be derived without it.** A mapping may read
+  through a dependency — a resource named after the domain its data product belongs to. An entity
+  created before it had that dependency used to stay without its derived entity until it happened
+  to be edited; linking it now asks the mapping engine for whatever it, and everything it
+  contains, should have derived and has not. Entities that already have their derived entity are
+  not touched.
 - **The demo.** The data product type carries `Asset` instead of mixing the two capability traits
-  in itself, and the model gains a plain `DomainType` and the two dependencies a data product may
-  have: on a domain, and on another data product. A volume created by an earlier build has to be recreated (`make down ARGS=-v`),
-  as the loader says.
+  in itself, and the model gains a plain `DomainType` and the one dependency a data product may
+  have, on a domain. The loader seeds a `sales` domain with `dp1` depending on it, and the
+  mappings name the resources after it: the S3 folder is `/root/<domain>/<data product>/<port>`
+  (`/root/sales/dp1/op1`) and the Athena database `<domain>_<data product>` (`sales_dp1`). A
+  volume created by an earlier build has to be recreated (`make down ARGS=-v`), as the loader
+  says.
 
 ### Fixed
 

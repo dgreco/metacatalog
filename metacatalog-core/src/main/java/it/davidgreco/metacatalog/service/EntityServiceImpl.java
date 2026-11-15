@@ -610,7 +610,64 @@ public class EntityServiceImpl implements EntityService {
       checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
     }
     entityVersionRecorder.aggregateChanged(source, target);
+    if (relType == RelationType.DEPENDS_ON || relType == RelationType.IS_REQUIRED_BY) {
+      deriveWhatTheDependencyMadeDerivable(source);
+      deriveWhatTheDependencyMadeDerivable(target);
+    }
     log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
+  }
+
+  /**
+   * Asks the mapping engine to derive, for an entity a dependency was just added to and for
+   * everything it contains, whatever a mapping should have derived and has not.
+   *
+   * <p>A mapping may read through a dependency: a data product's folder is named after the domain
+   * the product depends on. Created before it had that dependency, the product's parts had nothing
+   * to derive their folder from — the path reference resolved to nothing and the creation event
+   * failed, for good, since nothing re-emits it. Without this, giving the product its domain
+   * afterwards changed nothing: it would stay without resources until one of its parts happened to
+   * be edited.
+   *
+   * <p>Only what is <em>missing</em> is asked for. An entity that already has its derived entity
+   * keeps it as it is, and one whose creation event is still pending — every part of an aggregate
+   * being loaded, whose dependencies are linked in the same transaction — is left to that event, so
+   * a load does not queue everything twice.
+   */
+  private void deriveWhatTheDependencyMadeDerivable(Entity entity) {
+    var seen = new HashSet<String>();
+    var pending = new java.util.ArrayDeque<Entity>(List.of(entity));
+    while (!pending.isEmpty()) {
+      var current = pending.poll();
+      if (!seen.add(current.getId())) continue;
+      entityRelationshipRepository
+          .findBySourceAndRelationType(current, RelationType.HAS_PART)
+          .stream()
+          .map(EntityRelationship::getTarget)
+          .forEach(pending::add);
+      var underived =
+          mappingEntityTypeRelationshipRepository
+              .findMappingEntityTypeRelationshipBySource(current.getEntityType())
+              .stream()
+              .anyMatch(
+                  rule ->
+                      mappingEntityRelationshipRepository
+                          .findBySourceAndMappingEntityTypeRelationship(current, rule)
+                          .isEmpty());
+      if (!underived
+          || entityLifeCycleEventRepository.existsByEntityIdAndEventTypeAndEventStatus(
+              current.getId(),
+              EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+              EntityLifeCycleEvent.STATUS_PENDING)) continue;
+      log.info(
+          "Emitting SOURCE_CREATED for {}: a dependency was added and it has nothing derived yet",
+          current.getId());
+      entityLifeCycleEventRepository.save(
+          new EntityLifeCycleEvent(
+              current.getId(),
+              current.getEntityType().getName(),
+              EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+              EntityLifeCycleEvent.STATUS_PENDING));
+    }
   }
 
   /**

@@ -18,14 +18,10 @@ Relationships:
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
 
-  # The dependencies allowed between assets.
+  # What an asset may depend on: a data product belongs to a domain.
   - sourceTrait: DataProduct
     relationshipType: DEPENDS_ON
     targetTrait: Domain
-
-  - sourceTrait: DataProduct
-    relationshipType: DEPENDS_ON
-    targetTrait: DataProduct
 
 ---
 EntityTypes:
@@ -102,20 +98,24 @@ Mappings:
   - sourceEntityType: FileBasedOutputPortType
     targetEntityType: S3FolderType
     mappingValues:
-      path: "'/root/'+ #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      path: "'/root/' + #domain.getValue('$.name').asText() + '/' + #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
       bucket: "'my-bucket'"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
 
   - sourceEntityType: TableBasedOutputPortType
     targetEntityType: AthenaTableType
     mappingValues:
-      database: "#dp.getValue('$.name').asText()"
+      database: "#domain.getValue('$.name').asText() + '_' + #dp.getValue('$.name').asText()"
       table: "#source.getValue('$.name').asText()"
       dataPath: "#fbo.getValue('$.path').asText()"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
       - alias: "fbo"
         referencePath: "IS_REQUIRED_BY{$}/MAPPED_TO{$}"

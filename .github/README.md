@@ -14,8 +14,8 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-58.7%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-449-brightgreen)](#coverage)
+[![coverage](https://img.shields.io/badge/coverage-58.4%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![tests](https://img.shields.io/badge/tests-452-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -85,9 +85,11 @@ This starts:
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
   traits, entity types and entities from `docker/bulk/` once the app is healthy: an asset type
-  (the data product), a plain `DomainType` for data products to belong to, and one asset, the
-  data product `dp1` with two output ports. Right-click the board of the catalog's dependency
-  graph, create a `DomainType` there and drag `dp1` onto it to see a dependency being made
+  (the data product), a plain `DomainType` for data products to belong to, and one of each: the
+  data product `dp1` with two output ports, and the `sales` domain it depends on — which is where
+  its resources get their names from, `/root/sales/dp1/op1` and `sales_dp1`. Right-click the board
+  of the catalog's dependency graph to create another data product, and drag it onto `sales` to see
+  a dependency being made and the resources appear
 
 Nothing is provisioned by starting the stack. Provisioning is something you ask for, and it runs
 the task registered for every `ProvisionableResource` in dependency order; unprovisioning tears
@@ -104,9 +106,9 @@ curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT
 curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/unprovision
 
 docker logs metacatalog-app | grep -E '\[(un)?provisioning\]'
-# [provisioning]   start S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
+# [provisioning]   start S3FolderType id=0849185c… {"path":"/root/sales/dp1/op1","bucket":"my-bucket"}
 # [provisioning]   done  S3FolderType id=0849185c…
-# [provisioning]   start AthenaTableType id=693457a7… {"table":"op2",…}
+# [provisioning]   start AthenaTableType id=693457a7… {"database":"sales_dp1","table":"op2",…}
 # [provisioning]   done  AthenaTableType id=693457a7…
 # [unprovisioning] start AthenaTableType id=693457a7…      <- reversed
 # [unprovisioning] done  AthenaTableType id=693457a7…
@@ -134,7 +136,7 @@ curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT
 curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/reject
 
 docker logs metacatalog-app | grep -E '\[(authorizing|rejecting)\]'
-# [authorizing] start  S3FolderType id=0849185c… {"path":"/root/dp1/op1","bucket":"my-bucket"}
+# [authorizing] start  S3FolderType id=0849185c… {"path":"/root/sales/dp1/op1","bucket":"my-bucket"}
 # [authorizing] grants S3FolderType id=0849185c… analysts(GROUP)=READ, dp1-loader(SERVICE)=READ|WRITE
 # [authorizing] done   S3FolderType id=0849185c…
 # [authorizing] start  AthenaTableType id=693457a7…
@@ -302,13 +304,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 251 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 14 = **449, 0 failures**.
+for the Testcontainers PostgreSQL): core 253 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 15 = **452, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.7% of instructions, 41.3% of branches, 60.7% of lines**.
+**58.4% of instructions, 41.2% of branches, 60.3% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -576,7 +578,7 @@ each as a whole:
 
 | Page | What it does |
 | --- | --- |
-| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, what it depends on and the assets depending on it. Shown as a **list**, which is always of assets, or as a **dependency graph** — nodes joined by dependencies, an asset drawn below what it depends on — and filtered by type and name. The graph also draws what an asset may depend on without its being an asset: aggregates and plain entities. |
+| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, what it depends on, the assets depending on it and the entities mappings derived from it. Shown as a **list**, which is always of assets, or as a **dependency graph** — nodes joined by dependencies, an asset drawn below what it depends on — and filtered by type and name. The graph also draws what an asset may depend on without its being an asset — aggregates and plain entities — and, below each asset, its **mapped entities** with the status a run left on them; a checkbox leaves those out. Selecting one says which member it was derived from and opens the mapping that made it. |
 | `/ui/assets/new` | A new asset: pick an asset type and fill in the tree its combined schema describes. |
 | `/ui/assets/upload` | Assets from a YAML file, one per document. |
 | `/ui/assets/{id}` | One asset: its statuses, its structure (the root, its parts, and the resources mappings derived from them), the assets it depends on and is required by, the mappings that apply to its members, the access it declares and holds, and its YAML. Provision, unprovision, authorize, reject and delete are here. |
@@ -1182,6 +1184,12 @@ updating an entity whose type is a mapping **source** records a lifecycle event 
 
 - `EntityService.create` emits a `SOURCE_CREATED` event for source types, `CREATED` otherwise.
 - `EntityService.update` emits a `SOURCE_UPDATED` event for source types, `UPDATED` otherwise.
+- `EntityService.link`, for a `DEPENDS_ON` / `IS_REQUIRED_BY` link, emits a `SOURCE_CREATED` event
+  for each of the two entities, and for everything they contain, that is of a source type and has
+  a mapping with nothing derived yet — unless one is already pending. A mapping may resolve a path
+  reference through a dependency, and an entity created before it had that dependency exhausted
+  its retries and was marked `FAILED`; this is what derives it once the dependency is there.
+  Entities that already have their derived entity are left alone.
 
 `MappingUpdaterService` is a `@Scheduled` job (gated by
 `application.config.automaticEntitiesMapping`, interval
@@ -1289,7 +1297,8 @@ What it does:
    race to acquire `pg_try_advisory_xact_lock(1)` every second. Both run with
    `LOGGING_LEVEL_IT_DAVIDGRECO_METACATALOG=DEBUG` so the skip log line is visible.
 2. A single `tester` container (started once both apps are healthy) POSTs the model +
-   200 aggregate instances (400 output ports) in one batch, producing 400
+   200 aggregate instances (400 output ports) and the one domain they all belong to in one
+   batch, producing 400
    `SOURCE_CREATED` lifecycle events. The 400 events take several seconds to process
    (creating mapped entities + `MAPPED_TO`/`IS_MAPPED_BY` relationships), so the
    instance that wins the lock on the next tick holds it for longer than the other
@@ -1605,11 +1614,16 @@ somebody else's aggregate, and an asset is the root of its own.
 ```bash
 curl http://localhost:8080/metacatalog/v1/asset
 # [ { "id": "…", "entityType": "DataProductType", "values": "{ \"name\" : \"dp1\", … }",
-#     "version": 3, "dependencies": [ "…the sales domain's id…" ] } ]
+#     "version": 3, "dependencies": [ "…the sales domain's id…" ],
+#     "mapped": [ { "id": "…", "entityType": "S3FolderType", "values": "{ … \"provisioningStatus\" : \"PROVISIONED\" }",
+#                   "sourceEntityId": "…op1's id…", "sourceEntityType": "FileBasedOutputPortType", … } ] } ]
 ```
 
 lists every asset — the root entity of every aggregate of an asset type — with the ids of what it
-depends on. Everything else about an asset is read from the aggregate endpoints:
+depends on and, under `mapped`, the entities mappings derived from its members: from its root,
+from its parts, and from those derived entities in turn, each with the entity it was derived from.
+They are what the asset materialises as, and where a provisioning or authorization run records its
+outcome, so a catalog shows them next to the asset's own status. Everything else about an asset is read from the aggregate endpoints:
 `GET /aggregate/{id}` for its tree, `PUT /aggregate/{id}/yaml` to update it, `.../provision`,
 `.../authorize`, `.../access` and `DELETE /aggregate/{id}`.
 
@@ -1651,9 +1665,7 @@ carries `Domain` — and not the other way round. A link the model does not allo
 
 ```bash
 curl http://localhost:8080/metacatalog/v1/asset/dependency-rule
-# [ { "sourceEntityType": "DataProductType", "targetEntityType": "DataProductType", "targetKind": "ASSET",
-#     "sanctionedBy": [ { "sourceTrait": "DataProduct", "relationType": "DEPENDS_ON", "targetTrait": "DataProduct" } ] },
-#   { "sourceEntityType": "DataProductType", "targetEntityType": "DomainType", "targetKind": "ENTITY",
+# [ { "sourceEntityType": "DataProductType", "targetEntityType": "DomainType", "targetKind": "ENTITY",
 #     "sanctionedBy": [ { "sourceTrait": "DataProduct", "relationType": "DEPENDS_ON", "targetTrait": "Domain" } ] } ]
 ```
 
@@ -1683,6 +1695,38 @@ by itself. What it can do is feed a **mapping**: a mapping's path reference may 
 data product's resource can be derived from values of the domain it was made to depend on. The
 asset's page lists the mappings that apply to its members, marks the ones that walk a dependency,
 and opens each in the mapping editor.
+
+The demo does exactly this. Its two mappings name what they derive after the domain: an output
+port's folder is `/root/<domain>/<data product>/<port>` and a table's database is
+`<domain>_<data product>`, both reaching the domain from the port through its data product:
+
+```yaml
+Mappings:
+  - sourceEntityType: FileBasedOutputPortType
+    targetEntityType: S3FolderType
+    mappingValues:
+      path: "'/root/' + #domain.getValue('$.name').asText() + '/' + #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      bucket: "'my-bucket'"
+    entityPathReferences:
+      - alias: "dp"                                  # the data product the port is a part of
+        referencePath: "HAS_PART{$}"
+      - alias: "domain"                              # ...and what that data product depends on
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
+```
+
+Three things follow from a mapping that reads through a dependency, and none is specific to the
+demo:
+
+- **An asset without the dependency has nothing derived.** A data product created before it
+  belongs to a domain has no folder and no table. Making it depend on one — a link, a drop in the
+  catalog's graph — derives them then: adding a dependency asks the mapping engine for whatever
+  the asset's members should have derived and have not.
+- **The dependency cannot be removed while something is derived through it** (see
+  [Deleting entities and links](#deleting-entities-and-links)).
+- **`IS_REQUIRED_BY{$}` takes whatever the asset depends on**, so it has to be one thing: with two
+  dependencies the path is ambiguous and the derivation fails. The demo's model therefore lets a
+  data product depend on a domain and on nothing else; a model that allows several dependencies
+  has to tell them apart with a JSONPath on their values in place of `$`.
 
 ## Authorization
 

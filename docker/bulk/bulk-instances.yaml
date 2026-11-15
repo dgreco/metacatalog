@@ -27,6 +27,12 @@ values:
       resources:
         entityTypes: ["S3FolderType"]
 
+# dp1 belongs to the sales domain, declared in the document below. The model allows it through
+# `DataProduct DEPENDS_ON Domain`, the catalog draws it as an edge, and the mappings read through
+# it: without a domain neither output port could derive its resource.
+dependsOn:
+  - "sales"
+
 parts:
 
 - ref: "op1"
@@ -40,3 +46,12 @@ parts:
     name: "op2"
   dependsOn:
      - "op1"
+
+---
+# The domain: a plain entity, not an aggregate — nothing is provisioned for it. It comes after dp1
+# on purpose: the loader decides whether the instances are already there by looking for the first
+# document's root, and treats every later document as that root's companion.
+ref: "sales"
+entityType: "DomainType"
+values:
+  name: "sales"

@@ -22,6 +22,39 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     super(applicationContext);
   }
 
+  /** Holds the mapping updater's advisory lock while a test has asked for it to be kept out. */
+  private java.sql.Connection updaterKeptOut;
+
+  /**
+   * Keeps the scheduled mapping updater from running until the end of the calling test.
+   *
+   * <p>A test that derives mapped entities by hand and then asserts on exactly which exist races
+   * the updater, which drains the same creation events every second: a tick landing inside the test
+   * derives an entity the test is about to derive (a duplicate key) or one it has just established
+   * is not there. Which test a tick lands in depends on how long the tests before it took, so the
+   * failure comes and goes with unrelated changes.
+   *
+   * <p>The lock is the one a tick must take and skips without. The blocking variant waits for a
+   * tick already under way and cannot queue behind one, since the service only ever tries.
+   */
+  private void keepTheMappingUpdaterOut() throws java.sql.SQLException {
+    updaterKeptOut =
+        java.sql.DriverManager.getConnection(
+            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    updaterKeptOut.setAutoCommit(false);
+    try (var lock = updaterKeptOut.prepareStatement("SELECT pg_advisory_xact_lock(1)")) {
+      lock.execute();
+    }
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void letTheMappingUpdaterBackIn() throws java.sql.SQLException {
+    if (updaterKeptOut == null) return;
+    // Closing the connection ends its transaction, and the lock with it.
+    updaterKeptOut.close();
+    updaterKeptOut = null;
+  }
+
   @Test
   void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
@@ -502,7 +535,8 @@ class EntityServiceTests extends CommonServiceTestingSupport {
    * the guarded link becomes removable too.
    */
   @Test
-  void testDependsOnLinkReferredByAMappingCannotBeRemoved() {
+  void testDependsOnLinkReferredByAMappingCannotBeRemoved() throws java.sql.SQLException {
+    keepTheMappingUpdaterOut();
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);

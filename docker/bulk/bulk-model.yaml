@@ -10,12 +10,21 @@
 # all four operations instead of touching anything real.
 #
 # What an asset may depend on is declared between traits, under Relationships below: a data product
-# may belong to a domain, and may consume another data product. An asset can depend on another
-# asset, on an aggregate or on a plain entity, and the demo shows two of the three: the domain is
-# not an asset and not an aggregate — it is a simple type carrying no aggregate trait, nothing is
-# provisioned for it, and it exists to be depended on. Nothing else is allowed, which is what the
-# catalog's drag and drop shows when an asset is dropped where it may not go. Only dp1 is seeded:
-# right-click the dependency graph's board, create a DomainType there and drag dp1 onto it.
+# belongs to a domain. An asset can depend on another asset, on an aggregate or on a plain entity,
+# and the domain is the last of those — a simple type carrying no aggregate trait, for which
+# nothing is provisioned, and which exists to be depended on. Nothing else is allowed, which is
+# what the catalog's drag and drop shows when an asset is dropped where it may not go.
+#
+# The dependency is not decoration: the mappings below read through it. A file-based port's folder
+# is /root/<domain>/<data product>/<port>, and a table-based port's database is
+# <domain>_<data product>. Both reach the domain by walking from the port up to its data product
+# (HAS_PART) and across the product's dependency (IS_REQUIRED_BY). Two things follow:
+#
+#   - a data product needs its domain to have resources at all. One created without is derived
+#     nothing until it is made to depend on a domain, which is when its resources appear;
+#   - it has exactly one. `IS_REQUIRED_BY{$}` takes whatever the product depends on, so a second
+#     dependency would make the path ambiguous and the derivation fail — which is why the model
+#     lets a data product depend on a domain and on nothing else.
 #
 # The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
 # change to its values adds one. That includes the status write-backs each provision / authorize
@@ -42,14 +51,10 @@ Relationships:
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
 
-  # The dependencies allowed between assets.
+  # What an asset may depend on: a data product belongs to a domain.
   - sourceTrait: DataProduct
     relationshipType: DEPENDS_ON
     targetTrait: Domain
-
-  - sourceTrait: DataProduct
-    relationshipType: DEPENDS_ON
-    targetTrait: DataProduct
 
 ---
 EntityTypes:
@@ -126,20 +131,24 @@ Mappings:
   - sourceEntityType: FileBasedOutputPortType
     targetEntityType: S3FolderType
     mappingValues:
-      path: "'/root/'+ #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      path: "'/root/' + #domain.getValue('$.name').asText() + '/' + #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
       bucket: "'my-bucket'"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
 
   - sourceEntityType: TableBasedOutputPortType
     targetEntityType: AthenaTableType
     mappingValues:
-      database: "#dp.getValue('$.name').asText()"
+      database: "#domain.getValue('$.name').asText() + '_' + #dp.getValue('$.name').asText()"
       table: "#source.getValue('$.name').asText()"
       dataPath: "#fbo.getValue('$.path').asText()"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
       - alias: "fbo"
         referencePath: "IS_REQUIRED_BY{$}/MAPPED_TO{$}"
