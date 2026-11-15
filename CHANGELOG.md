@@ -90,6 +90,11 @@ still answer.
 - **The aggregate editor inventing empty values.** An optional object or array left empty was
   submitted as `{}` or `[]`, so an access grant with no `resources` came out with an empty
   selector. Empty optional containers are now left out, as the instance editor already did.
+- **A link that could not be removed once a mapping's path through it was ambiguous.** An entity
+  given a second dependency makes a path reference that takes whatever it depends on
+  (`IS_REQUIRED_BY{$}`) ambiguous, and removing either dependency then failed with a `500` —
+  "Transaction silently rolled back because it has been marked as rollback-only" in the web UI —
+  leaving no way out. The link is now removed, which is what resolves the ambiguity.
 
 ## [2.0.0] - 2026-10-22
 

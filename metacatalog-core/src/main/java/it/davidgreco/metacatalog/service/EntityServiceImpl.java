@@ -15,7 +15,6 @@ import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -816,13 +815,7 @@ public class EntityServiceImpl implements EntityService {
       for (var reference : rule.getEntityPathReferences()) {
         var path = reference.referencePath();
         if (!path.contains(relTypeName) && !path.contains(inverseName)) continue;
-        var traversed = new ArrayList<EntityRelationship>();
-        try {
-          entityPathResolver.retrieveEntityByPath(mapping.getSource().getId(), path, traversed);
-        } catch (RuntimeException e) {
-          // an ambiguous or invalid path stops the traversal; whatever it walked first still counts
-        }
-        for (var row : traversed) {
+        for (var row : entityPathResolver.linksWalkedBy(mapping.getSource().getId(), path)) {
           if (!row.getId().equals(directRel.getId())
               && (inverseRel == null || !row.getId().equals(inverseRel.getId()))) continue;
           throw new ServiceError(
