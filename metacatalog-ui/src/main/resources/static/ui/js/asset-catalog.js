@@ -15,6 +15,12 @@
  * a provisioning or authorization run acts on. The list names them in a column; the graph hangs
  * them below their asset, and can leave them out.
  *
+ * Each asset also carries its parts, and the graph draws the asset's inside with them: every part
+ * below what contains it, and the dependencies between parts as edges — the same relation as a
+ * dependency between assets, one level down. A mapped entity then hangs from the part it was
+ * derived from rather than from the asset. The inside is looked at here, not edited: parts and
+ * their dependencies are the asset's own content and change on its page, as one version of it.
+ *
  * A dependency is created by dragging an asset onto something: a row onto a row in the list, a node
  * onto a node in the graph (graph-core.js). While an asset is being dragged the nodes it may be
  * dropped on are marked, and whether one may is decided here before the server is asked, from the
@@ -81,6 +87,10 @@
         a.href = "/ui/assets/" + encodeURIComponent(a.id);
         a.mapped = a.mapped || [];
         a.mapped.forEach(function (m) { m.kind = "mapped"; m.asset = a; m.dependsOn = []; });
+        a.parts = a.parts || [];
+        // `dependsOn` is what an asset's dependencies are walked through when looking for a
+        // cycle; a part's own are kept apart, in `dependencies`, and never enter that walk.
+        a.parts.forEach(function (p) { p.kind = "part"; p.asset = a; p.dependsOn = []; });
       });
       c.targets.forEach(function (t) { t.dependsOn = []; });
       return c;
@@ -116,9 +126,9 @@
         if (catalog.targets[i].id === id) return catalog.targets[i];
       }
       for (i = 0; i < catalog.assets.length; i++) {
-        var mapped = catalog.assets[i].mapped;
-        for (var j = 0; j < mapped.length; j++) {
-          if (mapped[j].id === id) return mapped[j];
+        var inside = catalog.assets[i].parts.concat(catalog.assets[i].mapped);
+        for (var j = 0; j < inside.length; j++) {
+          if (inside[j].id === id) return inside[j];
         }
       }
       return null;
@@ -170,10 +180,17 @@
     // Why `source` may not be made to depend on `target`, or null when it may.
     function refusal(source, target) {
       if (!isAsset(source)) {
+        // A part does depend on things, but not from here: its dependencies are content of its
+        // asset, changed with the asset so that the change is one version of it.
+        if (source.kind === "part") {
+          return "«" + source.name + "» is a part of «" + source.asset.name + "»: what a part depends on is edited on the asset's page";
+        }
         return "Only an asset depends on something: «" + source.name + "» is " +
           (source.kind === "aggregate" ? "an aggregate" : source.kind === "mapped" ? "a mapped entity" : "an entity");
       }
       if (source.id === target.id) return "An asset cannot depend on itself";
+      // A part never stands on its own: what can be depended on is the asset it belongs to.
+      if (target.kind === "part") return "«" + target.name + "» is a part of «" + target.asset.name + "»; depend on «" + target.asset.name + "» instead";
       // A mapped entity is the consequence of an asset, not a thing of its own to depend on.
       if (target.kind === "mapped") return "«" + target.name + "» is derived by a mapping; depend on «" + target.asset.name + "» instead";
       if (dependsOn(source, target)) return "«" + source.name + "» already depends on «" + target.name + "»";
@@ -189,8 +206,8 @@
     // The type filter is about assets; what they depend on stays lit under it, or filtering by a
     // type would hide the very things that type's assets point at.
     function matches(node) {
-      // A mapped entity goes with the asset it was derived from.
-      if (node.kind === "mapped") return matches(node.asset);
+      // A part and a mapped entity go with the asset they belong to.
+      if (node.kind === "mapped" || node.kind === "part") return matches(node.asset);
       var type = typeSelect ? typeSelect.value : "";
       var text = search ? search.value.trim().toLowerCase() : "";
       if (type && isAsset(node) && node.entityType !== type) return false;
@@ -470,19 +487,51 @@
       return { id: m.id, title: m.name, subtitle: "from " + m.sourceName, kind: "mapped", badges: badges, data: m };
     }
 
+    // An entity inside an asset, in its asset's color so that the parts of two assets side by
+    // side are told apart.
+    function toPartNode(p) {
+      return {
+        id: p.id, title: p.name, subtitle: p.entityType, kind: "part",
+        color: colorOf(p.asset.entityType), data: p
+      };
+    }
+
     function showsMapped() {
       var toggle = document.getElementById("asset-show-mapped");
+      return !toggle || toggle.checked;
+    }
+
+    function showsParts() {
+      var toggle = document.getElementById("asset-show-parts");
       return !toggle || toggle.checked;
     }
 
     function graphData() {
       var nodes = catalog.assets.map(toNode).concat(catalog.targets.map(toTargetNode));
       var edges = [];
+      var onBoard = {};
+      function add(node) {
+        nodes.push(node);
+        onBoard[node.id] = true;
+      }
+      nodes.forEach(function (n) { onBoard[n.id] = true; });
+      if (showsParts()) {
+        catalog.assets.forEach(function (asset) {
+          asset.parts.forEach(function (p) {
+            add(toPartNode(p));
+            edges.push({ source: p.parentId, target: p.id, kind: "part", label: "", data: p });
+          });
+        });
+      }
       if (showsMapped()) {
         catalog.assets.forEach(function (asset) {
+          asset.mapped.forEach(function (m) { add(toMappedNode(m)); });
+        });
+        catalog.assets.forEach(function (asset) {
           asset.mapped.forEach(function (m) {
-            nodes.push(toMappedNode(m));
-            edges.push({ source: asset.id, target: m.id, kind: "mapping", label: "", data: m });
+            // From what it was derived from — a part, or in a chain of mappings another mapped
+            // entity — when that is drawn; from the asset when its inside is left out.
+            edges.push({ source: onBoard[m.sourceId] ? m.sourceId : asset.id, target: m.id, kind: "mapping", label: "", data: m });
           });
         });
       }
@@ -491,6 +540,17 @@
           edges.push({ source: asset.id, target: d.id, kind: "dependency", label: "", data: { source: asset.id, target: d.id } });
         });
       });
+      if (showsParts()) {
+        catalog.assets.forEach(function (asset) {
+          asset.parts.forEach(function (p) {
+            p.dependencies.forEach(function (d) {
+              // Almost always another part of the same asset. One that leaves the asset is drawn
+              // when its other end is on the board, and has nowhere to go when it is not.
+              if (onBoard[d]) edges.push({ source: p.id, target: d, kind: "internal", label: "", data: { source: p.id, target: d } });
+            });
+          });
+        });
+      }
       return { nodes: nodes, edges: edges };
     }
 
@@ -500,9 +560,10 @@
       if (!graph) {
         graph = window.MetacatalogGraphCore.create(canvas, {
           nodes: data.nodes, edges: data.edges, label: "Asset dependency graph",
-          // A dependency points up, at what the asset depends on; a mapping points down, at what
-          // follows from the asset.
-          ranked: function (edge) { return edge.kind === "mapping" ? "reverse" : true; },
+          // A dependency points up, at what is depended on — between assets and between parts
+          // alike; containment and a mapping point down, at what an asset holds and at what
+          // follows from it.
+          ranked: function (edge) { return edge.kind === "mapping" || edge.kind === "part" ? "reverse" : true; },
           onSelect: onSelect,
           onContextMenu: openMenu,
           drop: {
@@ -624,6 +685,59 @@
         m.asset.name + "» records its outcome here."));
     }
 
+    // The parts of the same asset depending on the given part.
+    function partDependents(p) {
+      return p.asset.parts.filter(function (other) { return other.dependencies.indexOf(p.id) !== -1; });
+    }
+
+    function partDetail(p) {
+      detail.textContent = "";
+      detail.appendChild(el("div", "graph-panel-kind", "part"));
+      detail.appendChild(el("h2", null, p.name));
+      panelRow(detail, "type", function (v) { v.textContent = p.entityType; });
+      panelRow(detail, "asset", function (v) { assetLinks(v, [p.asset]); });
+      var parent = byId(p.parentId);
+      if (parent && parent.kind === "part") panelRow(detail, "inside", function (v) { assetLinks(v, [parent]); });
+      panelRow(detail, "depends on", function (v) {
+        assetLinks(v, p.dependencies.map(byId).filter(function (d) { return d; }));
+      });
+      panelRow(detail, "required by", function (v) { assetLinks(v, partDependents(p)); });
+      panelRow(detail, "mapped to", function (v) {
+        assetLinks(v, p.asset.mapped.filter(function (m) { return m.sourceId === p.id; }));
+      });
+      var actions = el("div", "graph-panel-actions");
+      button(actions, "Open", p.href);
+      button(actions, "Edit «" + p.asset.name + "»", p.asset.href + "/edit");
+      detail.appendChild(actions);
+      detail.appendChild(el("p", "hint",
+        "A part of «" + p.asset.name + "». It is created, changed and removed with the asset, and what it " +
+        "depends on is part of the asset's content: edit the asset to change either."));
+    }
+
+    // A dependency of a part: shown, with the way to where it is changed.
+    function internalDetail(edge) {
+      var source = byId(edge.source), target = byId(edge.target);
+      if (!source || !target) {
+        showIdle();
+        return;
+      }
+      detail.textContent = "";
+      detail.appendChild(el("div", "graph-panel-kind", "internal dependency"));
+      detail.appendChild(el("h2", null, source.name + " → " + target.name));
+      panelRow(detail, "asset", function (v) { assetLinks(v, [source.asset]); });
+      var outside = target.kind !== "part" || target.asset !== source.asset;
+      detail.appendChild(el("p", "hint",
+        "«" + source.name + "», a part of «" + source.asset.name + "», depends on «" + target.name + "»" +
+        (outside ? ", which is outside it" : ", another of its parts") +
+        ". Mappings read through this: what is derived from «" + source.name + "» can take values from «" +
+        target.name + "» and from what was derived from it. It is part of the asset's content and is " +
+        "changed by editing the asset."));
+      var actions = el("div", "graph-panel-actions");
+      button(actions, "Edit «" + source.asset.name + "»", source.asset.href + "/edit");
+      button(actions, "Mappings of " + source.asset.name, source.asset.href + "#mappings");
+      detail.appendChild(actions);
+    }
+
     function dependencyDetail(edge) {
       var source = byId(edge.source), target = byId(edge.target);
       if (!source || !target) {
@@ -670,9 +784,14 @@
       if (selection.node) {
         if (isAsset(selection.node.data)) assetDetail(selection.node.data);
         else if (selection.node.data.kind === "mapped") mappedDetail(selection.node.data);
+        else if (selection.node.data.kind === "part") partDetail(selection.node.data);
         else targetDetail(selection.node.data);
       } else if (selection.edge.kind === "mapping") {
         mappedDetail(selection.edge.data);
+      } else if (selection.edge.kind === "part") {
+        partDetail(selection.edge.data);
+      } else if (selection.edge.kind === "internal") {
+        internalDetail(selection.edge.data);
       } else {
         dependencyDetail(selection.edge.data);
       }
@@ -699,6 +818,17 @@
           li.appendChild(document.createTextNode(k[2] + " assets may depend on (" + n + ")"));
           legend.appendChild(li);
         });
+        var inside = catalog.assets.reduce(function (sum, a) { return sum + a.parts.length; }, 0);
+        if (inside) {
+          var partItem = el("li");
+          partItem.appendChild(el("span", "lg-card lg-part"));
+          partItem.appendChild(document.createTextNode("Parts of assets (" + inside + ")"));
+          legend.appendChild(partItem);
+          var internal = el("li");
+          internal.appendChild(el("span", "lg-line sw-internal"));
+          internal.appendChild(document.createTextNode(" a part depends on another"));
+          legend.appendChild(internal);
+        }
         var derived = catalog.assets.reduce(function (sum, a) { return sum + a.mapped.length; }, 0);
         if (derived) {
           var item = el("li");
@@ -931,8 +1061,10 @@
       var b = document.getElementById(id);
       if (b) b.addEventListener("click", function () { if (graph) fn(); });
     }
-    var mappedToggle = document.getElementById("asset-show-mapped");
-    if (mappedToggle) mappedToggle.addEventListener("change", function () { if (graph) renderGraph(); });
+    ["asset-show-mapped", "asset-show-parts"].forEach(function (id) {
+      var toggle = document.getElementById(id);
+      if (toggle) toggle.addEventListener("change", function () { if (graph) renderGraph(); });
+    });
     bind("asset-fit", function () { graph.fit(); });
     bind("asset-relayout", function () { graph.relayout(); });
     bind("asset-zoom-in", function () { graph.zoomIn(); });

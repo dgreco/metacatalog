@@ -21,8 +21,9 @@ still answer.
 - **Assets.** A data platform asset is an aggregate whose root type carries the new built-in
   `Asset` trait, which inherits `Provisionable` and mixes in `Authorizable` — so an asset type gets
   both capabilities, and is an aggregate root, by naming one trait. `GET /aggregate/asset-type`
-  lists the asset types, `GET /asset` the catalog: every asset with what it depends on and the
-  entities mappings derived from its members.
+  lists the asset types, `GET /asset` the catalog: every asset with what it depends on, its
+  parts — each with what contains it and what it depends on — and the entities mappings derived
+  from its members.
   `GET /aggregate/type-capabilities` reports the asset types alongside the other classifications.
   A database created by an earlier release gains `Asset` on its first start.
 - **What an asset depends on, decided by the model.** An asset can depend on another asset, on an
@@ -45,7 +46,8 @@ still answer.
   depend on any of them — accepted only where the model allows it, with the reason shown where it
   does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
   in place; each asset's mapped entities, named in the list and drawn below it in the graph with
-  the status a run left on them; an asset's page with its structure, lifecycle actions, mappings
+  the status a run left on them; each asset's inside in the graph — its parts and the
+  dependencies between them; an asset's page with its structure, lifecycle actions, mappings
   and access; the schema-driven editor on an existing asset; and YAML download and upload.
 - **A model graph.** Under Administration, every trait and entity type as a card laid out in rows
   — traits above the types assembled from them — with inheritance, mixed-in traits, carried

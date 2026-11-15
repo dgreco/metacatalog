@@ -91,6 +91,9 @@
     var edges = [];
     var byId = {};
     var view = { x: 0, y: 0, s: 1 };
+    // Whether the view is still the one fit() chose. While it is, it follows the canvas; once the
+    // user has panned or zoomed it is theirs, and a resize must not take it back.
+    var fitted = true;
     var selection = null;
     var hiddenEdgeKinds = {};
     var filter = null;
@@ -473,6 +476,7 @@
       view.s = s;
       view.x = W / 2 - s * (minX + maxX) / 2;
       view.y = H / 2 - s * (minY + maxY) / 2;
+      fitted = true;
       applyView();
     }
 
@@ -600,6 +604,7 @@
         if (Math.abs(ev.clientX - drag.sx) + Math.abs(ev.clientY - drag.sy) > DRAG_THRESHOLD) drag.moved = true;
         view.x = ev.clientX - drag.x0;
         view.y = ev.clientY - drag.y0;
+        fitted = false;
         applyView();
         return;
       }
@@ -673,6 +678,7 @@
       view.x = mx - (mx - view.x) * (ns / view.s);
       view.y = my - (my - view.y) * (ns / view.s);
       view.s = ns;
+      fitted = false;
       applyView();
     }
 
@@ -697,7 +703,20 @@
       view.x = W / 2 - (W / 2 - view.x) * (ns / view.s);
       view.y = H / 2 - (H / 2 - view.y) * (ns / view.s);
       view.s = ns;
+      fitted = false;
       applyView();
+    }
+
+    // The graph is fitted to the canvas as it is when it is laid out, and the canvas changes: the
+    // window is resized, or the page was loaded where it had no size yet — a tab opened in the
+    // background — and the fit was made against nothing. A graph several rows tall then opened
+    // with its lower rows outside the board until Fit was pressed.
+    var resizeObserver = null;
+    if (window.ResizeObserver) {
+      resizeObserver = new window.ResizeObserver(function () {
+        if (!destroyed && fitted) fit();
+      });
+      resizeObserver.observe(canvas);
     }
 
     setData(opts.nodes, opts.edges, false);
@@ -730,6 +749,7 @@
       nodeCount: function () { return nodes.length; },
       destroy: function () {
         destroyed = true;
+        if (resizeObserver) resizeObserver.disconnect();
         window.removeEventListener("mousemove", onPointerMove);
         window.removeEventListener("mouseup", onPointerUp);
         canvas.innerHTML = "";

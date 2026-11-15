@@ -109,9 +109,22 @@ public class AggregateService {
    * @param entity the asset's root entity
    * @param dependencies the IDs of the entities its root depends on — other assets, aggregates or
    *     plain entities alike — in no particular order
+   * @param parts every entity the asset contains, at any depth, a container before what it contains
    * @param mapped the entities mappings derived from the asset's members
    */
-  public record Asset(Entity entity, List<String> dependencies, List<MappedEntity> mapped) {}
+  public record Asset(
+      Entity entity, List<String> dependencies, List<Part> parts, List<MappedEntity> mapped) {}
+
+  /**
+   * An entity inside an asset, with what it depends on: the asset's internal structure, which is
+   * what its mappings resolve their path references through.
+   *
+   * @param entity the part
+   * @param parentId the ID of the entity containing it: the asset's root, or another part
+   * @param dependencies the IDs of the entities the part depends on — usually other parts of the
+   *     same asset, but a part may depend on something outside it — in no particular order
+   */
+  public record Part(Entity entity, String parentId, List<String> dependencies) {}
 
   /**
    * An entity a mapping derived from a member of an asset: what the asset actually turns into — the
@@ -142,7 +155,7 @@ public class AggregateService {
    *
    * <p>A dependency of an asset is a {@code DEPENDS_ON} link from its <em>root</em>, whatever it
    * points at. Links between the parts of an asset, or from a part to something outside, are the
-   * parts' own and are left out.
+   * parts' own: they are reported on each of {@link Asset#parts()}, not as the asset's.
    *
    * <p>Each asset comes with the entities mappings derived from its members. They are not parts and
    * nobody authors them, but they are what the asset materialises as — the folder, the table — and
@@ -166,7 +179,7 @@ public class AggregateService {
       var source = link.getSource().getId();
       if (link.getRelationType() == HAS_PART) {
         parts.computeIfAbsent(source, id -> new ArrayList<>()).add(link.getTarget());
-      } else if (link.getRelationType() == DEPENDS_ON && roots.containsKey(source)) {
+      } else if (link.getRelationType() == DEPENDS_ON) {
         dependencies.computeIfAbsent(source, id -> new ArrayList<>()).add(link.getTarget().getId());
       }
     }
@@ -184,10 +197,37 @@ public class AggregateService {
                     new Asset(
                         root,
                         dependencies.getOrDefault(root.getId(), List.of()),
+                        partsOf(root, parts, dependencies),
                         mappedFrom(root, parts, derivations)))
             .toList();
     log.info("Listed {} asset(s)", assets.size());
     return assets;
+  }
+
+  /**
+   * Everything an asset contains, each with its container and what it depends on.
+   *
+   * @param root the asset's root
+   * @param parts for each entity id, the parts it contains
+   * @param dependencies for each entity id, the ids of what it depends on
+   */
+  private static List<Part> partsOf(
+      Entity root, Map<String, List<Entity>> parts, Map<String, List<String>> dependencies) {
+    var contained = new ArrayList<Part>();
+    var seen = new HashSet<String>(List.of(root.getId()));
+    var pending = new ArrayDeque<Entity>(List.of(root));
+    while (!pending.isEmpty()) {
+      var container = pending.poll();
+      for (var part : parts.getOrDefault(container.getId(), List.of())) {
+        if (!seen.add(part.getId())) continue;
+        // Read here, inside the transaction, as in mappedFrom: the end of a link is lazy.
+        part.getEntityType().getName();
+        contained.add(
+            new Part(part, container.getId(), dependencies.getOrDefault(part.getId(), List.of())));
+        pending.add(part);
+      }
+    }
+    return contained;
   }
 
   /**

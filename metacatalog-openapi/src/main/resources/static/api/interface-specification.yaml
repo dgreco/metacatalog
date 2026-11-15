@@ -2950,6 +2950,7 @@ components:
         - entityType
         - values
         - dependencies
+        - parts
         - mapped
       properties:
         id:
@@ -2974,6 +2975,14 @@ components:
             this asset's root. A target is another asset, the root of an aggregate that is not an
             asset, or a plain entity; the ones that are not assets are listed by
             /asset/dependency-target.
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetPart'
+          description: >
+            Every entity the asset contains, at any depth, each with the entity containing it and
+            what it depends on: the asset's internal structure, without its values being nested as
+            GET /aggregate/{id} nests them. A container comes before what it contains.
         mapped:
           type: array
           items:
@@ -2982,6 +2991,37 @@ components:
             The entities mappings derived from the asset's members: from its root, from its parts,
             and from those derived entities in turn. They are what the asset's provisioning and
             authorization runs act on and record their outcome in.
+    AssetPart:
+      type: object
+      description: An entity inside an asset.
+      required:
+        - id
+        - entityType
+        - values
+        - parentId
+        - dependencies
+      properties:
+        id:
+          type: string
+          description: Identifier of the part.
+        entityType:
+          type: string
+          description: Name of the part's type.
+        values:
+          type: string
+          description: JSON string containing the part's values.
+        parentId:
+          type: string
+          description: >
+            Identifier of the entity containing the part: the asset's root, or another part.
+        dependencies:
+          type: array
+          items:
+            type: string
+          description: >
+            Ids of the entities the part depends on: the targets of the DEPENDS_ON links from it.
+            Usually other parts of the same asset, which is what a mapping's path reference
+            walks, but a part may depend on something outside it.
     AssetMappedEntity:
       type: object
       description: An entity a mapping derived from a member of an asset.

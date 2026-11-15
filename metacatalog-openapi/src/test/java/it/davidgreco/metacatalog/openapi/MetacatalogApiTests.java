@@ -497,6 +497,13 @@ class MetacatalogApiTests {
     var table = catalog.stream().filter(a -> a.getId().equals(tableId)).findFirst().orElseThrow();
     Assertions.assertEquals("ApiAstTableType", table.getEntityType());
     Assertions.assertEquals(List.of(domainId), table.getDependencies());
+    // Its inside comes with it: the column, under the table's root, depending on nothing.
+    Assertions.assertEquals(1, table.getParts().size(), table.getParts().toString());
+    var column = table.getParts().getFirst();
+    Assertions.assertEquals("ApiAstColumnType", column.getEntityType());
+    Assertions.assertEquals(tableId, column.getParentId());
+    Assertions.assertEquals(List.of(), column.getDependencies());
+    Assertions.assertTrue(column.getValues().contains("\"id\""), column.getValues());
     // Versionable through the trait its type mixes in: created at 1, and the dependency just
     // linked is part of what a version of an aggregate records.
     Assertions.assertEquals(2, table.getVersion());

@@ -49,6 +49,9 @@
                placeholder="Filter by name…" aria-label="Filter assets by name"/>
         <span class="catalog-count" id="catalog-count"></span>
         <div class="catalog-tools" id="catalog-graph-tools" hidden>
+            <label class="graph-toggle" title="Draw each asset's parts and the dependencies between them">
+                <input type="checkbox" id="asset-show-parts" checked/> Parts
+            </label>
             <label class="graph-toggle" title="Draw the entities mappings derived from each asset's members">
                 <input type="checkbox" id="asset-show-mapped" checked/> Mapped entities
             </label>
@@ -96,9 +99,10 @@
                     <p class="hint">
                         Every asset is a node, and so is everything an asset depends on or may
                         depend on: other assets, aggregates and plain entities. An arrow points
-                        from an asset to what it depends on, which is drawn above it; the entities
-                        mappings derived from an asset hang below it. Select a node or an edge to
-                        act on it; right-click the board to create a new one.
+                        from an asset to what it depends on, which is drawn above it. Below an
+                        asset is its inside: its parts, with a dashed arrow from a part to each
+                        part it depends on, and the entities mappings derived from them. Select a
+                        node or an edge to act on it; right-click the board to create a new one.
                     </p>
                     <h3>On the board</h3>
                     <ul class="graph-legend-list" id="asset-type-legend"></ul>

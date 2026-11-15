@@ -47,9 +47,22 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
     traitService.create("AsNote", Optional.empty(), Optional.empty());
     traitService.link("AsTable", DEPENDS_ON, "AsNote");
 
-    // A part type, so that the types below root an aggregate at all.
+    // What lets one part of an asset depend on another.
+    traitService.create("AsColumn", Optional.empty(), Optional.empty());
+    traitService.link("AsColumn", DEPENDS_ON, "AsColumn");
+
+    // A part type, so that the types below root an aggregate at all, and one that is both a part
+    // and a container, so that an asset can be more than one level deep.
     entityTypeService.create(
-        "AsColumnType", List.of("AggregateElement", "AsNamed"), Optional.empty(), EMPTY_SCHEMA);
+        "AsColumnType",
+        List.of("AggregateElement", "AsNamed", "AsColumn"),
+        Optional.empty(),
+        EMPTY_SCHEMA);
+    entityTypeService.create(
+        "AsGroupType",
+        List.of("Aggregate", "AggregateElement", "AsNamed"),
+        Optional.empty(),
+        EMPTY_SCHEMA);
     entityTypeService.create(
         "AsDomainType", List.of("Asset", "AsNamed", "AsDomain"), Optional.empty(), EMPTY_SCHEMA);
     entityTypeService.create(
@@ -202,6 +215,63 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
     Assertions.assertEquals("amount-resource", mapped.entity().getValues().get("name").asText());
     Assertions.assertEquals("AsColumnType", mapped.source().getEntityType().getName());
     Assertions.assertEquals("amount", mapped.source().getValues().get("name").asText());
+  }
+
+  /**
+   * An asset is listed with everything it contains, at any depth: each part with the entity
+   * containing it and with what it depends on. A dependency between two parts is the parts' own —
+   * it is not reported as a dependency of the asset.
+   */
+  @Test
+  void testCatalogListsAnAssetsPartsWithTheirContainerAndTheirDependencies() {
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+    var bulkLoader = getApplicationContext().getBean(BulkLoaderService.class);
+    var id =
+        bulkLoader
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: AsTableType
+                    values: { name: structured }
+                    parts:
+                      - ref: key
+                        entityType: AsColumnType
+                        values: { name: key }
+                      - entityType: AsGroupType
+                        values: { name: address }
+                        parts:
+                          - entityType: AsColumnType
+                            values: { name: city }
+                            dependsOn: [key]
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+
+    var asset =
+        aggregateService.assets().stream()
+            .filter(listed -> listed.entity().getId().equals(id))
+            .findFirst()
+            .orElseThrow();
+    Assertions.assertEquals(List.of(), asset.dependencies());
+
+    var parts = new java.util.HashMap<String, AggregateService.Part>();
+    asset.parts().forEach(part -> parts.put(part.entity().getValues().get("name").asText(), part));
+    Assertions.assertEquals(java.util.Set.of("key", "address", "city"), parts.keySet());
+    Assertions.assertEquals(id, parts.get("key").parentId());
+    Assertions.assertEquals(id, parts.get("address").parentId());
+    Assertions.assertEquals(
+        parts.get("address").entity().getId(),
+        parts.get("city").parentId(),
+        "a part of a part is listed under the part containing it");
+    Assertions.assertEquals(
+        List.of(parts.get("key").entity().getId()), parts.get("city").dependencies());
+    Assertions.assertEquals(List.of(), parts.get("key").dependencies());
+    Assertions.assertEquals("AsGroupType", parts.get("address").entity().getEntityType().getName());
+    // A container is listed before what it contains, so a reader can build the tree in one pass.
+    var order = asset.parts().stream().map(part -> part.entity().getId()).toList();
+    Assertions.assertTrue(
+        order.indexOf(parts.get("address").entity().getId())
+            < order.indexOf(parts.get("city").entity().getId()));
   }
 
   private static String named(String name) {

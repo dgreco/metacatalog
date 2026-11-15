@@ -76,6 +76,7 @@ public record AssetCatalogView(
    * @param authorizationStatus the status the last authorization run left, or {@code null}
    * @param dependsOn what this asset depends on: assets, aggregates and plain entities
    * @param requiredBy the assets depending on this one
+   * @param parts everything the asset contains, a container before what it contains
    * @param mapped the entities mappings derived from the asset's members
    */
   public record Row(
@@ -87,11 +88,42 @@ public record AssetCatalogView(
       String authorizationStatus,
       List<Ref> dependsOn,
       List<Ref> requiredBy,
+      List<Part> parts,
       List<Mapped> mapped) {
 
     /** This asset as the other end of a dependency. */
     public Ref ref() {
       return new Ref(id, name, entityType, ASSET, "/ui/assets/" + id);
+    }
+  }
+
+  /**
+   * An entity inside an asset, which the graph draws below what contains it together with the
+   * dependencies between parts — the asset's internal structure.
+   *
+   * @param id the part's id
+   * @param name its display name: its {@code name} value, or its type when it has none
+   * @param entityType the name of its type
+   * @param parentId the id of what contains it: the asset's root, or another part
+   * @param dependencies the ids of what the part depends on — other parts of the asset, as a rule
+   * @param href the page showing the part
+   */
+  public record Part(
+      String id,
+      String name,
+      String entityType,
+      String parentId,
+      List<String> dependencies,
+      String href) {
+
+    static Part of(it.davidgreco.metacatalog.openapi.model.AssetPart part) {
+      return new Part(
+          part.getId(),
+          displayName(parse(part.getValues()), part.getEntityType()),
+          part.getEntityType(),
+          part.getParentId(),
+          List.copyOf(part.getDependencies()),
+          "/ui/admin/instances/" + part.getId());
     }
   }
 
@@ -104,6 +136,7 @@ public record AssetCatalogView(
    * @param entityType the name of its type, the mapping's target
    * @param provisioningStatus the status a provisioning run left on it, or {@code null}
    * @param authorizationStatus the status an authorization run left on it, or {@code null}
+   * @param sourceId the id of the member it was derived from, which is where the graph hangs it
    * @param sourceName the display name of the member it was derived from
    * @param sourceEntityType the name of that member's type, the mapping's source
    * @param href the page showing the derived entity
@@ -115,6 +148,7 @@ public record AssetCatalogView(
       String entityType,
       String provisioningStatus,
       String authorizationStatus,
+      String sourceId,
       String sourceName,
       String sourceEntityType,
       String href,
@@ -129,6 +163,7 @@ public record AssetCatalogView(
           mapped.getEntityType(),
           text(values, "provisioningStatus"),
           text(values, "authorizationStatus"),
+          mapped.getSourceEntityId(),
           displayName(parse(mapped.getSourceValues().orElse(null)), mapped.getSourceEntityType()),
           mapped.getSourceEntityType(),
           "/ui/admin/instances/" + mapped.getId(),
@@ -222,6 +257,7 @@ public record AssetCatalogView(
                   .filter(java.util.Objects::nonNull)
                   .toList(),
               requiredBy.getOrDefault(asset.getId(), List.of()),
+              asset.getParts().stream().map(Part::of).toList(),
               asset.getMapped().stream().map(Mapped::of).toList()));
     }
     var ruleViews =

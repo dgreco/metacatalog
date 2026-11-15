@@ -230,6 +230,19 @@ public class DtoMapper {
     dto.setValues(root.getValues().toPrettyString());
     dto.setVersion(Optional.ofNullable(root.getVersion()));
     dto.setDependencies(asset.dependencies());
+    dto.setParts(
+        asset.parts().stream()
+            .map(
+                part -> {
+                  var entry = new it.davidgreco.metacatalog.openapi.model.AssetPart();
+                  entry.setId(part.entity().getId());
+                  entry.setEntityType(part.entity().getEntityType().getName());
+                  entry.setValues(part.entity().getValues().toPrettyString());
+                  entry.setParentId(part.parentId());
+                  entry.setDependencies(part.dependencies());
+                  return entry;
+                })
+            .toList());
     dto.setMapped(
         asset.mapped().stream()
             .map(

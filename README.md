@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-452-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-454-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -303,13 +303,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 253 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 15 = **452, 0 failures**.
+for the Testcontainers PostgreSQL): core 254 · ui 108 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 16 = **454, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.4% of instructions, 41.2% of branches, 60.3% of lines**.
+**58.2% of instructions, 40.8% of branches, 60.2% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -577,7 +577,7 @@ each as a whole:
 
 | Page | What it does |
 | --- | --- |
-| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, what it depends on, the assets depending on it and the entities mappings derived from it. Shown as a **list**, which is always of assets, or as a **dependency graph** — nodes joined by dependencies, an asset drawn below what it depends on — and filtered by type and name. The graph also draws what an asset may depend on without its being an asset — aggregates and plain entities — and, below each asset, its **mapped entities** with the status a run left on them; a checkbox leaves those out. Selecting one says which member it was derived from and opens the mapping that made it. |
+| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, what it depends on, the assets depending on it and the entities mappings derived from it. Shown as a **list**, which is always of assets, or as a **dependency graph** — nodes joined by dependencies, an asset drawn below what it depends on — and filtered by type and name. The graph also draws what an asset may depend on without its being an asset — aggregates and plain entities — and, below each asset, its inside: its **parts**, each under what contains it, with a dashed arrow from a part to each part it depends on, and its **mapped entities**, each hanging from the member it was derived from, with the status a run left on them. A checkbox leaves either out. Selecting a part says what it belongs to, what it depends on and what was derived from it; selecting a mapped entity says which member it was derived from and opens the mapping that made it. The inside is shown, not edited there: parts and their dependencies are the asset's content, changed on its page. |
 | `/ui/assets/new` | A new asset: pick an asset type and fill in the tree its combined schema describes. |
 | `/ui/assets/upload` | Assets from a YAML file, one per document. |
 | `/ui/assets/{id}` | One asset: its statuses, its structure (the root, its parts, and the resources mappings derived from them), the assets it depends on and is required by, the mappings that apply to its members, the access it declares and holds, and its YAML. Provision, unprovision, authorize, reject and delete are here. |
@@ -1614,13 +1614,20 @@ somebody else's aggregate, and an asset is the root of its own.
 curl http://localhost:8080/metacatalog/v1/asset
 # [ { "id": "…", "entityType": "DataProductType", "values": "{ \"name\" : \"dp1\", … }",
 #     "version": 3, "dependencies": [ "…the sales domain's id…" ],
+#     "parts": [ { "id": "…op1's id…", "entityType": "FileBasedOutputPortType", "values": "{ \"name\" : \"op1\" }",
+#                  "parentId": "…dp1's id…", "dependencies": [ ] },
+#                { "id": "…op2's id…", "entityType": "TableBasedOutputPortType", "values": "{ \"name\" : \"op2\" }",
+#                  "parentId": "…dp1's id…", "dependencies": [ "…op1's id…" ] } ],
 #     "mapped": [ { "id": "…", "entityType": "S3FolderType", "values": "{ … \"provisioningStatus\" : \"PROVISIONED\" }",
 #                   "sourceEntityId": "…op1's id…", "sourceEntityType": "FileBasedOutputPortType", … } ] } ]
 ```
 
 lists every asset — the root entity of every aggregate of an asset type — with the ids of what it
-depends on and, under `mapped`, the entities mappings derived from its members: from its root,
-from its parts, and from those derived entities in turn, each with the entity it was derived from.
+depends on; under `parts`, everything it contains at any depth, each with the id of what contains
+it and the ids of what it depends on — the asset's internal structure, flat, a container before
+what it contains; and, under `mapped`, the entities mappings derived from its members: from its
+root, from its parts, and from those derived entities in turn, each with the entity it was derived
+from. A dependency between two parts is the parts' own and is not among the asset's `dependencies`.
 They are what the asset materialises as, and where a provisioning or authorization run records its
 outcome, so a catalog shows them next to the asset's own status. Everything else about an asset is read from the aggregate endpoints:
 `GET /aggregate/{id}` for its tree, `PUT /aggregate/{id}/yaml` to update it, `.../provision`,

@@ -136,6 +136,19 @@ class AssetUiControllerTest {
     derived.setSourceEntityType("ColumnType");
     derived.setSourceValues(Optional.of("{\"name\":\"id\"}"));
 
+    // The orders table's inside: two columns, the second depending on the first.
+    var id = new it.davidgreco.metacatalog.openapi.model.AssetPart();
+    id.setId("col-1");
+    id.setEntityType("ColumnType");
+    id.setValues("{\"name\":\"id\"}");
+    id.setParentId("table-1");
+    var total = new it.davidgreco.metacatalog.openapi.model.AssetPart();
+    total.setId("col-2");
+    total.setEntityType("ColumnType");
+    total.setValues("{}");
+    total.setParentId("table-1");
+    total.setDependencies(List.of("col-1"));
+
     given(api.listAssets())
         .willReturn(
             ResponseEntity.ok(
@@ -145,6 +158,7 @@ class AssetUiControllerTest {
                             "TableType",
                             "{\"name\":\"orders\",\"provisioningStatus\":\"PROVISIONED\"}",
                             "domain-1")
+                        .parts(List.of(id, total))
                         .mapped(List.of(derived)),
                     asset("table-2", "TableType", "{}", "table-1"),
                     asset("view-1", "ViewType", "{\"name\":\"report\"}"))));
@@ -253,12 +267,29 @@ class AssetUiControllerTest {
                 "AthenaTableType",
                 "PROVISIONED",
                 null,
+                "col-1",
                 "id",
                 "ColumnType",
                 "/ui/admin/instances/res-1",
                 "/ui/admin/mappings/new?source=ColumnType&target=AthenaTableType")),
         table.mapped());
     Assertions.assertTrue(catalog.row("table-2").mapped().isEmpty());
+
+    // So does the asset's inside: each part with what contains it and what it depends on, named
+    // by its type when it has no name — which is what the graph draws below the asset.
+    Assertions.assertEquals(
+        List.of(
+            new AssetCatalogView.Part(
+                "col-1", "id", "ColumnType", "table-1", List.of(), "/ui/admin/instances/col-1"),
+            new AssetCatalogView.Part(
+                "col-2",
+                "ColumnType",
+                "ColumnType",
+                "table-1",
+                List.of("col-1"),
+                "/ui/admin/instances/col-2")),
+        table.parts());
+    Assertions.assertTrue(catalog.row("table-2").parts().isEmpty());
 
     Assertions.assertTrue(catalog.allows("TableType", "DomainType"));
     Assertions.assertTrue(catalog.allows("TableType", "TableType"));

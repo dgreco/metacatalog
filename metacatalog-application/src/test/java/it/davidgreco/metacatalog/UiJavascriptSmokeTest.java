@@ -725,6 +725,117 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * The graph draws an asset's inside: its parts below it, and a dependency between two parts as an
+   * edge of its own kind. The inside is shown, not edited — a part dropped on something is refused
+   * with the place where its dependencies are changed — and can be left out.
+   */
+  @Test
+  void theGraphShowsAnAssetsPartsAndTheDependenciesBetweenThem() {
+    ensureAssetModel();
+    var traitService = context.getBean(it.davidgreco.metacatalog.service.TraitService.class);
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    if (!traitService.exists("SmField")) {
+      // What lets one part depend on another. Its own trait rather than SmNamed, which the asset
+      // types carry too: relating that to itself would let every asset depend on every other.
+      traitService.create("SmField", Optional.empty(), Optional.empty());
+      traitService.link(
+          "SmField", it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON, "SmField");
+      entityTypeService.create(
+          "SmFieldType",
+          List.of("AggregateElement", "SmNamed", "SmField"),
+          Optional.empty(),
+          """
+          { "type": "object", "properties": {} }""");
+    }
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-structured }
+                    parts:
+                      - ref: key
+                        entityType: SmFieldType
+                        values: { name: sm-key }
+                      - entityType: SmFieldType
+                        values: { name: sm-ref }
+                        dependsOn: [key]
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    java.util.function.Function<String, org.openqa.selenium.WebElement> part =
+        name ->
+            await()
+                .until(
+                    d ->
+                        d.findElements(By.cssSelector("#asset-graph .gc-node-part")).stream()
+                            .filter(node -> node.getText().contains(name))
+                            .findFirst()
+                            .orElse(null));
+    var key = part.apply("sm-key");
+    var ref = part.apply("sm-ref");
+    Assertions.assertTrue(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-part")).size() >= 2,
+        "each part must be joined to what contains it");
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-internal")).isEmpty(),
+        "the dependency between the two parts must be drawn");
+    // With its inside drawn an asset is several rows tall, and all of it stays in view when the
+    // board shrinks: the graph follows the canvas rather than keeping the fit it was given when
+    // it was laid out, which left its lower rows outside a board that had got smaller.
+    var window = driver.manage().window();
+    var size = window.getSize();
+    try {
+      window.setSize(new org.openqa.selenium.Dimension(900, 520));
+      await()
+          .until(
+              d -> {
+                var board = d.findElement(By.id("asset-graph")).getRect();
+                return d.findElements(By.cssSelector("#asset-graph .gc-node")).stream()
+                    .map(org.openqa.selenium.WebElement::getRect)
+                    .allMatch(
+                        node ->
+                            node.getX() >= board.getX()
+                                && node.getY() >= board.getY()
+                                && node.getX() + node.getWidth() <= board.getX() + board.getWidth()
+                                && node.getY() + node.getHeight()
+                                    <= board.getY() + board.getHeight());
+              });
+    } finally {
+      window.setSize(size);
+    }
+
+    // What is depended on goes above, between parts as between assets.
+    Assertions.assertTrue(
+        key.getRect().getY() < ref.getRect().getY(),
+        "sm-key, which sm-ref depends on, must be drawn above it");
+
+    // Selecting a part says what it belongs to and what it depends on.
+    ref.click();
+    var panel =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("asset-panel-detail")));
+    Assertions.assertTrue(panel.getText().contains("sm-structured"), panel.getText());
+    Assertions.assertTrue(panel.getText().contains("sm-key"), panel.getText());
+
+    // A part is not something to drop: its dependencies are the asset's content.
+    dragOnto(ref, graphNode(tableId));
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .error")).stream()
+                    .anyMatch(e -> e.getText().contains("is a part of «sm-structured»")));
+
+    driver.findElement(By.id("asset-show-parts")).click();
+    await().until(d -> d.findElements(By.cssSelector("#asset-graph .gc-node-part")).isEmpty());
+    Assertions.assertTrue(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-internal")).isEmpty());
+  }
+
+  /**
    * Editing an asset saves it as a whole and changes only what was edited: the member keeps its
    * identity, a new part is added, and the access policy comes back exactly as it was — a grant
    * with no {@code resources} must not gain an empty one on the way through the builder.

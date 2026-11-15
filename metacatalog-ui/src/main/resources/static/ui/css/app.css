@@ -852,6 +852,10 @@ select[multiple].traits-select {
 .gc-edge-rel { stroke: var(--edge-rel); stroke-width: 1.9; }
 .gc-edge-mapping { stroke: var(--edge-mapping); stroke-width: 1.9; }
 .gc-edge-dependency { stroke: var(--kind-asset); stroke-width: 2.1; }
+/* Inside an asset: containment is structure, drawn faint; a dependency between parts is the same
+   relation as one between assets and keeps its color, dashed to tell the two levels apart. */
+.gc-edge-part { stroke-width: 1.3; stroke-dasharray: 2 4; }
+.gc-edge-internal { stroke: var(--kind-asset); stroke-width: 1.7; stroke-dasharray: 6 3; }
 .gc-edge.gc-lit { stroke-width: 2.6; }
 .gc-edge.gc-selected { stroke: var(--accent); stroke-width: 3; }
 .gc-edge.gc-dim { opacity: 0.12; }
@@ -885,6 +889,8 @@ select[multiple].traits-select {
 .gc-node-asset .gc-node-accent { fill: var(--kind-asset); }
 .gc-node-aggregate .gc-node-accent { fill: var(--kind-type); }
 .gc-node-mapped .gc-node-accent { fill: var(--edge-mapping); }
+.gc-node-part .gc-node-accent { fill: var(--kind-asset); opacity: 0.5; }
+.gc-node-part .gc-node-title { font-weight: 500; }
 .gc-node-mapped > .gc-node-card:first-child { stroke-dasharray: 2 3; }
 /* What an asset depends on without being one is drawn lighter than an asset. */
 .gc-node-aggregate > .gc-node-card:first-child,
@@ -975,6 +981,7 @@ select[multiple].traits-select {
 .sw-mapping { border-top-color: var(--edge-mapping); }
 .sw-version { border-top-style: dotted; border-top-color: var(--kind-entity); }
 .sw-dependency { border-top-color: var(--kind-asset); }
+.sw-internal { border-top-color: var(--kind-asset); border-top-style: dashed; vertical-align: middle; }
 
 .graph-stage { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1rem; align-items: start; }
 .graph-panel {
@@ -1146,6 +1153,7 @@ select[multiple].traits-select {
 .lg-card.lg-aggregate { border-left-color: var(--kind-type); border-style: dashed; border-left-style: solid; }
 .lg-card.lg-plain { border-left-color: var(--kind-entity); border-style: dashed; border-left-style: solid; }
 .lg-card.lg-mapped { border-left-color: var(--edge-mapping); border-style: dotted; border-left-style: solid; }
+.lg-card.lg-part { border-left-color: color-mix(in srgb, var(--kind-asset) 50%, transparent); }
 .mapped-chip {
     display: inline-flex;
     align-items: center;
