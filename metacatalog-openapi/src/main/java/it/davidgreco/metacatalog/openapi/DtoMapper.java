@@ -87,6 +87,8 @@ public class DtoMapper {
     dto.setSchema(Optional.of(t.getSchema().toPrettyString()));
     dto.setInheritsFrom(
         Optional.ofNullable(t.getFather()).map(it.davidgreco.metacatalog.entity.Trait::getName));
+    dto.setTraits(
+        t.getTraits().stream().map(it.davidgreco.metacatalog.entity.Trait::getName).toList());
     dto.setVersion(Optional.of(t.getVersion()));
     dto.setVersionGroupId(Optional.of(t.getVersionGroupId()));
     return dto;
@@ -99,6 +101,13 @@ public class DtoMapper {
     dto.setName(v.getName());
     dto.setSchema(Optional.of(v.getSchema().toPrettyString()));
     dto.setInheritsFrom(Optional.ofNullable(v.getFatherName()));
+    // Null on a snapshot taken before traits could mix traits in, which reads as none.
+    dto.setTraits(
+        v.getTraits() == null
+            ? List.of()
+            : StreamSupport.stream(v.getTraits().spliterator(), false)
+                .map(com.fasterxml.jackson.databind.JsonNode::asText)
+                .toList());
     dto.setVersion(Optional.of(v.getVersion()));
     dto.setVersionGroupId(Optional.of(v.getVersionGroupId()));
     dto.setPreviousVersionId(Optional.ofNullable(v.getPreviousVersionId()));
@@ -209,6 +218,71 @@ public class DtoMapper {
     dto.setSourceTrait(Optional.of(rel.getSource().getName()));
     dto.setTargetTrait(Optional.of(rel.getTarget().getName()));
     dto.setRelationType(Optional.of(rel.getRelationType().name()));
+    return dto;
+  }
+
+  /** Maps a catalog entry: the asset's root entity and the ids of the assets it depends on. */
+  public it.davidgreco.metacatalog.openapi.model.Asset assetToDto(AggregateService.Asset asset) {
+    var root = asset.entity();
+    var dto = new it.davidgreco.metacatalog.openapi.model.Asset();
+    dto.setId(root.getId());
+    dto.setEntityType(root.getEntityType().getName());
+    dto.setValues(root.getValues().toPrettyString());
+    dto.setVersion(Optional.ofNullable(root.getVersion()));
+    dto.setDependencies(asset.dependencies());
+    dto.setParts(
+        asset.parts().stream()
+            .map(
+                part -> {
+                  var entry = new it.davidgreco.metacatalog.openapi.model.AssetPart();
+                  entry.setId(part.entity().getId());
+                  entry.setEntityType(part.entity().getEntityType().getName());
+                  entry.setValues(part.entity().getValues().toPrettyString());
+                  entry.setParentId(part.parentId());
+                  entry.setDependencies(part.dependencies());
+                  return entry;
+                })
+            .toList());
+    dto.setMapped(
+        asset.mapped().stream()
+            .map(
+                mapped -> {
+                  var entry = new it.davidgreco.metacatalog.openapi.model.AssetMappedEntity();
+                  entry.setId(mapped.entity().getId());
+                  entry.setEntityType(mapped.entity().getEntityType().getName());
+                  entry.setValues(mapped.entity().getValues().toPrettyString());
+                  entry.setSourceEntityId(mapped.source().getId());
+                  entry.setSourceEntityType(mapped.source().getEntityType().getName());
+                  entry.setSourceValues(Optional.of(mapped.source().getValues().toPrettyString()));
+                  return entry;
+                })
+            .toList());
+    return dto;
+  }
+
+  /** Maps something an asset may depend on that is not an asset. */
+  public it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget assetDependencyTargetToDto(
+      AggregateService.DependencyTarget target) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget();
+    dto.setId(target.entity().getId());
+    dto.setEntityType(target.entity().getEntityType().getName());
+    dto.setValues(target.entity().getValues().toPrettyString());
+    dto.setKind(
+        it.davidgreco.metacatalog.openapi.model.AssetDependencyTarget.KindEnum.valueOf(
+            target.kind().name()));
+    return dto;
+  }
+
+  /** Maps a dependency the model allows an asset type, with the declarations allowing it. */
+  public it.davidgreco.metacatalog.openapi.model.AssetDependencyRule assetDependencyRuleToDto(
+      it.davidgreco.metacatalog.service.AggregateSchemaService.AssetDependencyRule rule) {
+    var dto = new it.davidgreco.metacatalog.openapi.model.AssetDependencyRule();
+    dto.setSourceEntityType(rule.source().getName());
+    dto.setTargetEntityType(rule.target().getName());
+    dto.setTargetKind(
+        it.davidgreco.metacatalog.openapi.model.AssetDependencyRule.TargetKindEnum.valueOf(
+            rule.targetKind().name()));
+    dto.setSanctionedBy(rule.sanctionedBy().stream().map(this::traitRelationshipToDto).toList());
     return dto;
   }
 

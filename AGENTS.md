@@ -26,7 +26,7 @@ changing code:
 | `metacatalog-functions` | Procedures that run over entities — `EntityProcedure`, `ProcedureExecutor`, and the provisioning / authorization procedures. |
 | `metacatalog-functions-provisioning-tasks` | Concrete provisioning tasks and their registrars. |
 | `metacatalog-openapi` | The API. Controllers and a client are **generated** from the spec. |
-| `metacatalog-ui` | Thymeleaf pages, served by the application on the same port. |
+| `metacatalog-ui` | Thymeleaf pages, served by the application on the same port: Assets (`/ui/assets`) and Administration (`/ui/admin`). |
 | `metacatalog-security` | Pluggable auth: `none` / basic / oauth2 / ldap. |
 | `metacatalog-sparql` | Embedded Ontop SPARQL 1.1 endpoint + Yasgui. |
 | `metacatalog-application` | The Spring Boot app that assembles the rest. |
@@ -63,6 +63,14 @@ it exercises the same contract external clients do. `metacatalog-core` and `meta
 are *excluded* from its compile classpath in `metacatalog-ui/pom.xml`, which turns a stray
 `import ...metacatalog.service.*` into a compile error rather than a convention. If a page needs
 something, expose it as an endpoint first. Never "fix" this by deleting the exclusions.
+
+**The UI has two halves, and a page belongs to one.** *Assets* (`/ui/assets`) manages data
+platform assets as a whole — an asset is an aggregate whose root type carries the built-in `Asset`
+trait. *Administration* (`/ui/admin`) defines what assets are assembled from (traits, entity types,
+relationships, mappings) and holds the type-agnostic tooling. A new page states its half in the
+`appbar` fragment it starts with (`templates/fragments/shell.html`) and takes its address under
+that half's prefix. An asset is not a new kind of thing on the server either: there is no asset
+service, and an asset page calls the aggregate endpoints with the asset's id.
 
 **Controllers are generated, not written.** The OpenAPI spec at
 `metacatalog-openapi/src/main/resources/static/api/interface-specification.yaml` is the source; the

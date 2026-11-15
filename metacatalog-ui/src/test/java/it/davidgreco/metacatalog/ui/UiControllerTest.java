@@ -65,7 +65,7 @@ class UiControllerTest {
     mockMvc =
         MockMvcBuilders.standaloneSetup(
                 new RootController(),
-                new GraphUiController(api, catalogGraphService),
+                new GraphUiController(api, catalogGraphService, new HtmlSafeJsonSerializer(mapper)),
                 new TraitUiController(api, catalogGraphService),
                 new EntityTypeUiController(api),
                 new MappingUiController(api, mapper, new HtmlSafeJsonSerializer(mapper)),
@@ -100,7 +100,7 @@ class UiControllerTest {
   @Test
   void dashboardRenders() throws Exception {
     mockMvc
-        .perform(get("/ui"))
+        .perform(get("/ui/admin"))
         .andExpect(status().isOk())
         .andExpect(view().name("index"))
         .andExpect(model().attributeExists("traits", "entityTypes", "mappings"));
@@ -109,7 +109,7 @@ class UiControllerTest {
   @Test
   void traitFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/traits/new"))
+        .perform(get("/ui/admin/traits/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("trait-form"))
         .andExpect(model().attributeExists("traitForm", "traits"));
@@ -118,7 +118,7 @@ class UiControllerTest {
   @Test
   void entityTypeFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/entity-types/new"))
+        .perform(get("/ui/admin/entity-types/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("entity-type-form"))
         .andExpect(model().attributeExists("entityTypeForm", "entityTypes", "traits"));
@@ -128,12 +128,12 @@ class UiControllerTest {
   void createTraitSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/traits")
+            post("/ui/admin/traits")
                 .param("name", "Timestamped")
                 .param("father", "")
                 .param("schema", "{\"type\":\"object\",\"properties\":{}}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     var captor = org.mockito.ArgumentCaptor.forClass(Trait.class);
     verify(api).createTrait(captor.capture());
@@ -144,23 +144,115 @@ class UiControllerTest {
   void createEntityTypeSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/entity-types")
+            post("/ui/admin/entity-types")
                 .param("name", "Person")
                 .param("father", "")
                 .param("traits", "Timestamped")
                 .param("schema", "{\"type\":\"object\",\"properties\":{}}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     var captor = org.mockito.ArgumentCaptor.forClass(EntityType.class);
     verify(api).createEntityType(captor.capture());
     org.junit.jupiter.api.Assertions.assertEquals("Person", captor.getValue().getName());
   }
 
+  /**
+   * The traits selected as mix-ins reach the API with the father, and the model graph draws them as
+   * edges of their own — a trait inheriting from two traits is a diamond the graph has to show.
+   */
+  @Test
+  void aTraitsMixedInTraitsAreSubmittedAndDrawn() throws Exception {
+    mockMvc
+        .perform(
+            post("/ui/admin/traits")
+                .param("name", "Governed")
+                .param("father", "Provisionable")
+                .param("traits", "Authorizable", "Versionable"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/ui/admin"));
+    var captor =
+        org.mockito.ArgumentCaptor.forClass(it.davidgreco.metacatalog.openapi.model.Trait.class);
+    verify(api).createTrait(captor.capture());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("Authorizable", "Versionable"), captor.getValue().getTraits());
+
+    var asset = new it.davidgreco.metacatalog.openapi.model.Trait();
+    asset.setName("Asset");
+    asset.setInheritsFrom(java.util.Optional.of("Provisionable"));
+    asset.setTraits(List.of("Authorizable"));
+    var provisionable = new it.davidgreco.metacatalog.openapi.model.Trait();
+    provisionable.setName("Provisionable");
+    var authorizable = new it.davidgreco.metacatalog.openapi.model.Trait();
+    authorizable.setName("Authorizable");
+    given(api.listTraits())
+        .willReturn(ResponseEntity.ok(List.of(asset, provisionable, authorizable)));
+
+    var graph =
+        new CatalogGraphService(api, new HtmlSafeJsonSerializer(mapper), mapper)
+            .buildGraphModel(false, false);
+    var edges =
+        graph.edges().stream()
+            .map(edge -> edge.source() + " " + edge.kind() + " " + edge.target())
+            .toList();
+    org.junit.jupiter.api.Assertions.assertTrue(
+        edges.contains("trait:Asset extends trait:Provisionable"), edges.toString());
+    org.junit.jupiter.api.Assertions.assertTrue(
+        edges.contains("trait:Asset mixes-in trait:Authorizable"), edges.toString());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        List.of("Authorizable"),
+        graph.nodes().stream()
+            .filter(node -> node.id().equals("trait:Asset"))
+            .findFirst()
+            .orElseThrow()
+            .traits());
+  }
+
+  /**
+   * The model graph is told which types play a role, so it can badge them; the classification is
+   * the API's, not something the page derives from the edges.
+   */
+  @Test
+  void modelGraphIsGivenTheRolesOfItsNodes() throws Exception {
+    given(api.getTypeCapabilities())
+        .willReturn(
+            ResponseEntity.ok(
+                new it.davidgreco.metacatalog.openapi.model.TypeCapabilities()
+                    .aggregateRoot(List.of("TableType"))
+                    .provisionable(List.of("TableType"))
+                    .authorizable(List.of("TableType"))
+                    .asset(List.of("TableType"))));
+
+    var result = mockMvc.perform(get("/ui/admin/graph")).andExpect(status().isOk()).andReturn();
+
+    var roles = mapper.readTree((String) result.getModelAndView().getModel().get("rolesJson"));
+    org.junit.jupiter.api.Assertions.assertEquals("TableType", roles.at("/assetTypes/0").asText());
+    org.junit.jupiter.api.Assertions.assertEquals("TableType", roles.at("/rootTypes/0").asText());
+    org.junit.jupiter.api.Assertions.assertTrue(
+        roles.get("builtInTraits").toString().contains("\"Asset\""));
+  }
+
+  /** "Edit mapping" links open the form on a pair; the page then proposes that pair's mapping. */
+  @Test
+  void mappingFormCanBeOpenedOnAPair() throws Exception {
+    var result =
+        mockMvc
+            .perform(
+                get("/ui/admin/mappings/new")
+                    .param("source", "TableType")
+                    .param("target", "ResType"))
+            .andExpect(status().isOk())
+            .andReturn();
+
+    var form = (MappingForm) result.getModelAndView().getModel().get("mappingForm");
+    org.junit.jupiter.api.Assertions.assertEquals("TableType", form.getSourceEntityType());
+    org.junit.jupiter.api.Assertions.assertEquals("ResType", form.getTargetEntityType());
+  }
+
   @Test
   void graphRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/graph"))
+        .perform(get("/ui/admin/graph"))
         .andExpect(status().isOk())
         .andExpect(view().name("graph"))
         .andExpect(model().attributeExists("graphJson", "showInverses", "showEntities"));
@@ -169,7 +261,7 @@ class UiControllerTest {
   @Test
   void mappingFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/mappings/new"))
+        .perform(get("/ui/admin/mappings/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("mapping-form"))
         .andExpect(
@@ -187,7 +279,8 @@ class UiControllerTest {
     existing.setEntityPathReferences("[{\"alias\":\"a\",\"referencePath\":\"HAS_PART{$}\"}]");
     given(api.listMappings()).willReturn(ResponseEntity.ok(List.of(existing)));
 
-    var result = mockMvc.perform(get("/ui/mappings/new")).andExpect(status().isOk()).andReturn();
+    var result =
+        mockMvc.perform(get("/ui/admin/mappings/new")).andExpect(status().isOk()).andReturn();
 
     var mappingsJson = (String) result.getModelAndView().getModel().get("mappingsJson");
     org.junit.jupiter.api.Assertions.assertTrue(mappingsJson.contains("\"source\":\"Source\""));
@@ -201,14 +294,14 @@ class UiControllerTest {
   void createMappingSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/mappings")
+            post("/ui/admin/mappings")
                 .param("sourceEntityType", "Source")
                 .param("targetEntityType", "Target")
                 .param("mappingValues", "{\"n\":\"#source.n\"}")
                 .param("aliases", "a")
                 .param("referencePaths", "HAS_PART{$}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     var captor = org.mockito.ArgumentCaptor.forClass(Mapping.class);
     verify(api).createMapping(captor.capture());
@@ -224,7 +317,7 @@ class UiControllerTest {
 
     mockMvc
         .perform(
-            post("/ui/mappings")
+            post("/ui/admin/mappings")
                 .param("sourceEntityType", "Source")
                 .param("targetEntityType", "Target")
                 .param("mappingValues", "{}"))
@@ -238,7 +331,7 @@ class UiControllerTest {
   @Test
   void traitLinkFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/trait-links/new"))
+        .perform(get("/ui/admin/trait-links/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("trait-link-form"))
         .andExpect(
@@ -249,12 +342,12 @@ class UiControllerTest {
   void createTraitLinkSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/trait-links")
+            post("/ui/admin/trait-links")
                 .param("sourceTrait", "A")
                 .param("relationshipType", "DEPENDS_ON")
                 .param("targetTrait", "B"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     verify(api).linkTrait(any());
   }
@@ -265,7 +358,7 @@ class UiControllerTest {
 
     mockMvc
         .perform(
-            post("/ui/trait-links")
+            post("/ui/admin/trait-links")
                 .param("sourceTrait", "A")
                 .param("relationshipType", "DEPENDS_ON")
                 .param("targetTrait", "B"))
@@ -280,12 +373,12 @@ class UiControllerTest {
   void deleteTraitLinkSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/trait-links/delete")
+            post("/ui/admin/trait-links/delete")
                 .param("sourceTrait", "A")
                 .param("relationshipType", "HAS_PART")
                 .param("targetTrait", "B"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     verify(api).unlinkTrait("A", "HAS_PART", "B");
   }
@@ -293,9 +386,9 @@ class UiControllerTest {
   @Test
   void deleteTraitDelegatesToApiAndRedirects() throws Exception {
     mockMvc
-        .perform(post("/ui/traits/delete").param("name", "Timestamped"))
+        .perform(post("/ui/admin/traits/delete").param("name", "Timestamped"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     verify(api).deleteTrait("Timestamped");
   }
@@ -303,9 +396,9 @@ class UiControllerTest {
   @Test
   void deleteEntityTypeDelegatesToApiAndRedirects() throws Exception {
     mockMvc
-        .perform(post("/ui/entity-types/delete").param("name", "Person"))
+        .perform(post("/ui/admin/entity-types/delete").param("name", "Person"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     verify(api).deleteEntityType("Person");
   }
@@ -313,9 +406,9 @@ class UiControllerTest {
   @Test
   void deleteMappingDelegatesToApiAndRedirects() throws Exception {
     mockMvc
-        .perform(post("/ui/mappings/delete").param("id", "abc-123"))
+        .perform(post("/ui/admin/mappings/delete").param("id", "abc-123"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui"));
+        .andExpect(redirectedUrl("/ui/admin"));
 
     verify(api).deleteMapping("abc-123");
   }
@@ -325,7 +418,7 @@ class UiControllerTest {
     doThrow(apiError("violates foreign key")).when(api).deleteMapping("abc-123");
 
     mockMvc
-        .perform(post("/ui/mappings/delete").param("id", "abc-123"))
+        .perform(post("/ui/admin/mappings/delete").param("id", "abc-123"))
         .andExpect(status().is3xxRedirection())
         .andExpect(
             flash()
@@ -342,7 +435,7 @@ class UiControllerTest {
     doThrow(apiError("Trait already exists")).when(api).createTrait(any());
 
     mockMvc
-        .perform(post("/ui/traits").param("name", "Dup").param("schema", "{}"))
+        .perform(post("/ui/admin/traits").param("name", "Dup").param("schema", "{}"))
         .andExpect(status().isOk())
         .andExpect(view().name("trait-form"))
         .andExpect(
@@ -355,7 +448,7 @@ class UiControllerTest {
   @Test
   void instancesListRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/instances"))
+        .perform(get("/ui/admin/instances"))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-list"))
         .andExpect(model().attributeExists("instances", "entityTypes"));
@@ -369,7 +462,7 @@ class UiControllerTest {
     given(api.listEntityTypes()).willReturn(ResponseEntity.ok(List.of(type)));
 
     mockMvc
-        .perform(get("/ui/instances"))
+        .perform(get("/ui/admin/instances"))
         .andExpect(status().isOk())
         .andExpect(
             model()
@@ -381,7 +474,9 @@ class UiControllerTest {
   void instancesSearchForwardsTypeAndQueryPathToApi() throws Exception {
     mockMvc
         .perform(
-            get("/ui/instances").param("type", "Person").param("query", "$.name ? (@ == \"x\")"))
+            get("/ui/admin/instances")
+                .param("type", "Person")
+                .param("query", "$.name ? (@ == \"x\")"))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-list"))
         .andExpect(model().attribute("selectedType", "Person"))
@@ -396,7 +491,7 @@ class UiControllerTest {
   @Test
   void instancesSearchWithBlankParamsAppliesNoFilter() throws Exception {
     mockMvc
-        .perform(get("/ui/instances").param("type", "").param("query", " "))
+        .perform(get("/ui/admin/instances").param("type", "").param("query", " "))
         .andExpect(status().isOk());
 
     verify(api).getEntities(eq(java.util.Optional.empty()), eq(java.util.Optional.empty()));
@@ -408,7 +503,7 @@ class UiControllerTest {
         .willThrow(apiError("Invalid json path"));
 
     mockMvc
-        .perform(get("/ui/instances").param("query", "$["))
+        .perform(get("/ui/admin/instances").param("query", "$["))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-list"))
         .andExpect(model().attribute("instances", List.of()))
@@ -419,7 +514,7 @@ class UiControllerTest {
   @Test
   void instancesNewFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/instances/new"))
+        .perform(get("/ui/admin/instances/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-form"))
         .andExpect(model().attributeExists("instanceForm", "entityTypes"));
@@ -429,11 +524,11 @@ class UiControllerTest {
   void createEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances")
+            post("/ui/admin/instances")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Alice\"}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"));
+        .andExpect(redirectedUrl("/ui/admin/instances"));
 
     var captor = org.mockito.ArgumentCaptor.forClass(Entity.class);
     verify(api).createEntity(captor.capture());
@@ -446,7 +541,7 @@ class UiControllerTest {
 
     mockMvc
         .perform(
-            post("/ui/instances")
+            post("/ui/admin/instances")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Alice\"}"))
         .andExpect(status().isOk())
@@ -463,7 +558,7 @@ class UiControllerTest {
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
     mockMvc
-        .perform(get("/ui/instances/ent-1/edit"))
+        .perform(get("/ui/admin/instances/ent-1/edit"))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-form"))
         .andExpect(model().attribute("instanceId", "ent-1"))
@@ -497,7 +592,10 @@ class UiControllerTest {
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
     var result =
-        mockMvc.perform(get("/ui/instances/ent-1/edit")).andExpect(status().isOk()).andReturn();
+        mockMvc
+            .perform(get("/ui/admin/instances/ent-1/edit"))
+            .andExpect(status().isOk())
+            .andReturn();
 
     var model = result.getModelAndView().getModel();
     @SuppressWarnings("unchecked")
@@ -527,7 +625,10 @@ class UiControllerTest {
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
     var result =
-        mockMvc.perform(get("/ui/instances/ent-1/edit")).andExpect(status().isOk()).andReturn();
+        mockMvc
+            .perform(get("/ui/admin/instances/ent-1/edit"))
+            .andExpect(status().isOk())
+            .andReturn();
 
     var model = result.getModelAndView().getModel();
     @SuppressWarnings("unchecked")
@@ -547,7 +648,8 @@ class UiControllerTest {
     entity.setValues("{\"name\":\"Alice\",\"age\":42}");
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
-    var result = mockMvc.perform(get("/ui/instances/ent-1")).andExpect(status().isOk()).andReturn();
+    var result =
+        mockMvc.perform(get("/ui/admin/instances/ent-1")).andExpect(status().isOk()).andReturn();
 
     var model = result.getModelAndView().getModel();
     var valuesJson = (String) model.get("valuesJson");
@@ -588,7 +690,8 @@ class UiControllerTest {
     entity.setValues("{\"name\":\"Alice\"}");
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
-    var result = mockMvc.perform(get("/ui/instances/ent-1")).andExpect(status().isOk()).andReturn();
+    var result =
+        mockMvc.perform(get("/ui/admin/instances/ent-1")).andExpect(status().isOk()).andReturn();
 
     var model = result.getModelAndView().getModel();
     org.junit.jupiter.api.Assertions.assertEquals(Boolean.TRUE, model.get("readOnly"));
@@ -602,11 +705,11 @@ class UiControllerTest {
   void updateEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/ent-1")
+            post("/ui/admin/instances/ent-1")
                 .param("entityType", "Person")
                 .param("values", "{\"name\":\"Bob\"}"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"));
+        .andExpect(redirectedUrl("/ui/admin/instances"));
 
     verify(api).updateEntity(eq("ent-1"), any());
   }
@@ -614,9 +717,9 @@ class UiControllerTest {
   @Test
   void deleteEntityInstanceSubmitsAndRedirects() throws Exception {
     mockMvc
-        .perform(post("/ui/instances/ent-1/delete"))
+        .perform(post("/ui/admin/instances/ent-1/delete"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"));
+        .andExpect(redirectedUrl("/ui/admin/instances"));
 
     verify(api).deleteEntity("ent-1");
   }
@@ -624,9 +727,9 @@ class UiControllerTest {
   @Test
   void deleteAggregateSubmitsAndRedirects() throws Exception {
     mockMvc
-        .perform(post("/ui/instances/agg-1/delete-aggregate"))
+        .perform(post("/ui/admin/instances/agg-1/delete-aggregate"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("message", "Aggregate deleted."));
 
     verify(api).deleteAggregate("agg-1");
@@ -639,9 +742,9 @@ class UiControllerTest {
         .deleteAggregate("agg-1");
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/delete-aggregate"))
+        .perform(post("/ui/admin/instances/agg-1/delete-aggregate"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(
             flash()
                 .attribute("error", org.hamcrest.Matchers.containsString("outside the aggregate")));
@@ -694,9 +797,9 @@ class UiControllerTest {
         .getEntity("agg-1");
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/provision"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/provision"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-1"))
         .andExpect(flash().attribute("procedureLabel", "Provisioning"))
         .andExpect(flash().attribute("procedureEntityId", "agg-1"))
@@ -711,9 +814,9 @@ class UiControllerTest {
         .thenReturn(accepted("sched-2"));
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/unprovision"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/unprovision"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-2"))
         .andExpect(flash().attribute("procedureLabel", "Unprovisioning"))
         // The type lookup is best-effort: unstubbed here, so it degrades to empty.
@@ -730,9 +833,9 @@ class UiControllerTest {
         .provisionAggregate("agg-1", ASYNC);
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/provision"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/provision"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(
             flash()
                 .attribute("error", org.hamcrest.Matchers.containsString("No factory for name")));
@@ -750,9 +853,9 @@ class UiControllerTest {
         .getEntity("agg-1");
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/authorize"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/authorize"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-3"))
         // The popup is driven by this label, which is the only thing that distinguishes an
         // authorization run from a provisioning one on the browser side.
@@ -768,9 +871,9 @@ class UiControllerTest {
     org.mockito.Mockito.when(api.rejectAggregate("agg-1", ASYNC)).thenReturn(accepted("sched-4"));
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/reject"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/reject"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-4"))
         .andExpect(flash().attribute("procedureLabel", "Rejecting"))
         .andExpect(flash().attribute("procedureEntityId", "agg-1"))
@@ -786,9 +889,9 @@ class UiControllerTest {
         .authorizeAggregate("agg-1", ASYNC);
 
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/authorize"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/authorize"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(
             flash()
                 .attribute(
@@ -804,9 +907,9 @@ class UiControllerTest {
   @Test
   void unknownAggregateProcedureIsRefused() throws Exception {
     mockMvc
-        .perform(post("/ui/instances/agg-1/procedure/delete-aggregate"))
+        .perform(post("/ui/admin/instances/agg-1/procedure/delete-aggregate"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(
             flash()
                 .attribute(
@@ -829,7 +932,7 @@ class UiControllerTest {
   private List<InstanceRowView> instanceRows() throws Exception {
     return (List<InstanceRowView>)
         mockMvc
-            .perform(get("/ui/instances"))
+            .perform(get("/ui/admin/instances"))
             .andExpect(status().isOk())
             .andReturn()
             .getModelAndView()
@@ -879,7 +982,7 @@ class UiControllerTest {
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(entity));
 
     mockMvc
-        .perform(get("/ui/instances/ent-1"))
+        .perform(get("/ui/admin/instances/ent-1"))
         .andExpect(status().isOk())
         .andExpect(view().name("instances-form"))
         .andExpect(model().attribute("readOnly", true))
@@ -891,7 +994,7 @@ class UiControllerTest {
   @Test
   void entityLinkFormRenders() throws Exception {
     mockMvc
-        .perform(get("/ui/instances/ent-1/links"))
+        .perform(get("/ui/admin/instances/ent-1/links"))
         .andExpect(status().isOk())
         .andExpect(view().name("entity-link-form"))
         .andExpect(
@@ -910,7 +1013,7 @@ class UiControllerTest {
     var relationTypes =
         (List<String>)
             mockMvc
-                .perform(get("/ui/instances/ent-1/links"))
+                .perform(get("/ui/admin/instances/ent-1/links"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getModelAndView()
@@ -925,7 +1028,7 @@ class UiControllerTest {
     var relationTypes =
         (List<String>)
             mockMvc
-                .perform(get("/ui/trait-links/new"))
+                .perform(get("/ui/admin/trait-links/new"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getModelAndView()
@@ -951,7 +1054,7 @@ class UiControllerTest {
     var mappingLinks =
         (List<EntityLinkView>)
             mockMvc
-                .perform(get("/ui/instances/ent-1/links"))
+                .perform(get("/ui/admin/instances/ent-1/links"))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getModelAndView()
@@ -968,7 +1071,7 @@ class UiControllerTest {
   void createEntityLinkRejectsAMappingRelationType() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/ent-1/links")
+            post("/ui/admin/instances/ent-1/links")
                 .param("sourceEntityId", "ent-1")
                 .param("relationshipType", "MAPPED_TO")
                 .param("targetEntityId", "ent-2"))
@@ -984,12 +1087,12 @@ class UiControllerTest {
   void createEntityLinkSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/ent-1/links")
+            post("/ui/admin/instances/ent-1/links")
                 .param("sourceEntityId", "ent-1")
                 .param("relationshipType", "DEPENDS_ON")
                 .param("targetEntityId", "ent-2"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
+        .andExpect(redirectedUrl("/ui/admin/instances/ent-1/links"));
 
     verify(api).linkEntity(any());
   }
@@ -1000,7 +1103,7 @@ class UiControllerTest {
 
     mockMvc
         .perform(
-            post("/ui/instances/ent-1/links")
+            post("/ui/admin/instances/ent-1/links")
                 .param("sourceEntityId", "ent-1")
                 .param("relationshipType", "DEPENDS_ON")
                 .param("targetEntityId", "ent-2"))
@@ -1015,12 +1118,12 @@ class UiControllerTest {
   void deleteEntityLinkSubmitsToApiAndRedirects() throws Exception {
     mockMvc
         .perform(
-            post("/ui/instances/ent-1/links/delete")
+            post("/ui/admin/instances/ent-1/links/delete")
                 .param("sourceEntityId", "ent-1")
                 .param("relationshipType", "HAS_PART")
                 .param("targetEntityId", "ent-2"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/ent-1/links"));
+        .andExpect(redirectedUrl("/ui/admin/instances/ent-1/links"));
 
     verify(api).unlinkEntity("ent-1", "HAS_PART", "ent-2");
   }
@@ -1073,7 +1176,7 @@ class UiControllerTest {
 
     var result =
         mockMvc
-            .perform(get("/ui/instances/ent-1/versions"))
+            .perform(get("/ui/admin/instances/ent-1/versions"))
             .andExpect(status().isOk())
             .andExpect(view().name("entity-versions"))
             .andExpect(model().attribute("instanceName", "Alice"))
@@ -1123,7 +1226,7 @@ class UiControllerTest {
 
     var result =
         mockMvc
-            .perform(get("/ui/instances/root-1/versions"))
+            .perform(get("/ui/admin/instances/root-1/versions"))
             .andExpect(status().isOk())
             .andReturn();
 
@@ -1215,9 +1318,9 @@ class UiControllerTest {
     given(api.getEntity("gone")).willThrow(apiError("Entity with id gone not found"));
 
     mockMvc
-        .perform(get("/ui/instances/gone/versions"))
+        .perform(get("/ui/admin/instances/gone/versions"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"))
+        .andExpect(redirectedUrl("/ui/admin/instances"))
         .andExpect(flash().attribute("error", "Entity with id gone not found"));
   }
 
@@ -1248,7 +1351,7 @@ class UiControllerTest {
 
     var result =
         mockMvc
-            .perform(get("/ui/instances/root-1/versions"))
+            .perform(get("/ui/admin/instances/root-1/versions"))
             .andExpect(status().isOk())
             .andReturn();
 
@@ -1284,16 +1387,16 @@ class UiControllerTest {
     given(api.getEntity("copy-1")).willReturn(ResponseEntity.ok(copy));
 
     mockMvc
-        .perform(post("/ui/instances/root-1/versions/1/procedure/provision"))
+        .perform(post("/ui/admin/instances/root-1/versions/1/procedure/provision"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .andExpect(redirectedUrl("/ui/admin/instances/root-1/versions"))
         .andExpect(flash().attribute("procedureScheduleId", "sched-9"))
         .andExpect(flash().attribute("procedureEntityId", "copy-1"));
     verify(api).provisionAggregate("copy-1", ASYNC);
 
     mockMvc
-        .perform(post("/ui/instances/root-1/versions/2/procedure/provision"))
-        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .perform(post("/ui/admin/instances/root-1/versions/2/procedure/provision"))
+        .andExpect(redirectedUrl("/ui/admin/instances/root-1/versions"))
         .andExpect(flash().attribute("error", "Version 2 has no frozen copy to run provision on."));
     verify(api, org.mockito.Mockito.never()).provisionAggregate("root-1", ASYNC);
   }
@@ -1302,14 +1405,14 @@ class UiControllerTest {
   @Test
   void pastVersionsCanBeDeletedFromTheHistoryPage() throws Exception {
     mockMvc
-        .perform(post("/ui/instances/root-1/versions/1/delete"))
-        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .perform(post("/ui/admin/instances/root-1/versions/1/delete"))
+        .andExpect(redirectedUrl("/ui/admin/instances/root-1/versions"))
         .andExpect(flash().attribute("message", "Version 1 deleted."));
     verify(api).deleteEntityVersion("root-1", 1);
 
     mockMvc
-        .perform(post("/ui/instances/root-1/versions/delete-all"))
-        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .perform(post("/ui/admin/instances/root-1/versions/delete-all"))
+        .andExpect(redirectedUrl("/ui/admin/instances/root-1/versions"))
         .andExpect(flash().attribute("message", "Past versions deleted."));
     verify(api).deleteAllEntityVersions("root-1");
 
@@ -1317,8 +1420,8 @@ class UiControllerTest {
         .when(api)
         .deleteEntityVersion("root-1", 2);
     mockMvc
-        .perform(post("/ui/instances/root-1/versions/2/delete"))
-        .andExpect(redirectedUrl("/ui/instances/root-1/versions"))
+        .perform(post("/ui/admin/instances/root-1/versions/2/delete"))
+        .andExpect(redirectedUrl("/ui/admin/instances/root-1/versions"))
         .andExpect(flash().attribute("error", "Cannot delete version 2: it is PROVISIONED"));
   }
 
@@ -1374,7 +1477,7 @@ class UiControllerTest {
 
     given(api.getEntity("ent-1")).willReturn(ResponseEntity.ok(versioned));
     mockMvc
-        .perform(get("/ui/instances/ent-1"))
+        .perform(get("/ui/admin/instances/ent-1"))
         .andExpect(status().isOk())
         .andExpect(model().attribute("entityVersion", 3));
   }

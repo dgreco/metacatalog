@@ -20,7 +20,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * delete / delete-all) via the REST API.
  */
 @Controller
-@RequestMapping("/ui")
+@RequestMapping("/ui/admin")
 public class TraitUiController {
 
   private final MetacatalogApiDelegate api;
@@ -53,9 +53,10 @@ public class TraitUiController {
       if (form.getSchema() != null && !form.getSchema().isBlank()) dto.schema(form.getSchema());
       if (form.getFather() != null && !form.getFather().isBlank())
         dto.inheritsFrom(form.getFather());
+      if (form.getTraits() != null) dto.setTraits(form.getTraits());
       api.createTrait(dto);
       redirectAttributes.addFlashAttribute("message", "Trait '" + form.getName() + "' created.");
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     } catch (RuntimeException e) {
       model.addAttribute("error", e.getMessage());
       model.addAttribute("traits", api.listTraits().getBody());
@@ -70,7 +71,7 @@ public class TraitUiController {
         "Trait '" + name + "' deleted.",
         "Trait",
         name,
-        "/ui",
+        "/ui/admin",
         redirectAttributes);
   }
 
@@ -106,7 +107,7 @@ public class TraitUiController {
       redirectAttributes.addFlashAttribute(
           "message",
           "Linked '" + source + "' " + relType + " '" + target + "' (inverse created too).");
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     } catch (IllegalArgumentException e) {
       return renderTraitLinkError(model, "Invalid relationship type.");
     } catch (RuntimeException e) {
@@ -130,7 +131,7 @@ public class TraitUiController {
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
-    return "redirect:/ui";
+    return "redirect:/ui/admin";
   }
 
   private String renderTraitLinkError(Model model, String message) {
@@ -151,12 +152,12 @@ public class TraitUiController {
       model.addAttribute("kind", "Trait");
       model.addAttribute("resource", "traits");
       model.addAttribute("name", name);
-      model.addAttribute("showTraits", false);
+      model.addAttribute("showTraits", true);
       model.addAttribute("versions", traitVersionViews(name));
       return "versions";
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     }
   }
 
@@ -168,12 +169,13 @@ public class TraitUiController {
       live = api.getTrait(name).getBody();
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     }
     if (!model.containsAttribute("traitVersionForm")) {
       var form = new TraitVersionForm();
       form.setName(live.getName());
       form.setFather(live.getInheritsFrom().orElse(null));
+      if (live.getTraits() != null) form.setTraits(new ArrayList<>(live.getTraits()));
       form.setSchema(live.getSchema().orElse(null));
       model.addAttribute("traitVersionForm", form);
     }
@@ -193,10 +195,12 @@ public class TraitUiController {
       if (form.getSchema() != null && !form.getSchema().isBlank()) dto.schema(form.getSchema());
       if (form.getFather() != null && !form.getFather().isBlank())
         dto.inheritsFrom(form.getFather());
+      // A version restates the trait: whatever is selected here replaces the live mix-ins.
+      if (form.getTraits() != null) dto.setTraits(form.getTraits());
       api.createTraitVersion(name, dto);
       redirectAttributes.addFlashAttribute(
           "message", "New version of trait '" + name + "' created.");
-      return "redirect:/ui/traits/" + name + "/versions";
+      return "redirect:/ui/admin/traits/" + name + "/versions";
     } catch (RuntimeException e) {
       model.addAttribute("error", e.getMessage());
       populateTraitVersionModel(name, model);
@@ -220,7 +224,7 @@ public class TraitUiController {
     return UiControllerHelper.flashAndRedirect(
         () -> api.deleteTraitVersion(name, version),
         "Version " + version + " of trait '" + name + "' deleted.",
-        "/ui/traits/" + name + "/versions",
+        "/ui/admin/traits/" + name + "/versions",
         redirectAttributes);
   }
 
@@ -234,7 +238,7 @@ public class TraitUiController {
           }
         },
         "All versions of trait '" + name + "' deleted.",
-        "/ui/traits/" + name + "/versions",
+        "/ui/admin/traits/" + name + "/versions",
         redirectAttributes);
   }
 
@@ -246,7 +250,7 @@ public class TraitUiController {
               v.getVersion().orElse(0),
               true,
               v.getInheritsFrom().orElse(null),
-              List.of(),
+              v.getTraits() == null ? List.of() : v.getTraits(),
               v.getSchema().orElse(null),
               null));
     }

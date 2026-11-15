@@ -70,4 +70,56 @@ class TypeLinearizationTest {
     assertEquals(1, result.stream().filter("S"::equals).count(), "S must appear exactly once");
     assertEquals("Child", result.getFirst());
   }
+
+  private static Trait trait(String name, Trait father, Trait... mixins) {
+    Trait t = trait(name, father);
+    t.setTraits(List.of(mixins));
+    return t;
+  }
+
+  @Test
+  void traitMixingTraitsInLinearizesItsOwnDiamondOnce() {
+    // The shape of the built-in Asset trait: a father and a mix-in sharing one ancestor.
+    var aggregate = trait("Aggregate", null);
+    var provisionable = trait("Provisionable", aggregate);
+    var authorizable = trait("Authorizable", aggregate);
+    var asset = trait("Asset", provisionable, authorizable);
+
+    assertEquals(
+        List.of("Asset", "Authorizable", "Provisionable", "Aggregate"),
+        TypeLinearization.linearize(asset).stream().map(Trait::getName).toList());
+  }
+
+  @Test
+  void entityTypeSeesThroughATraitsMixins() {
+    var aggregate = trait("Aggregate", null);
+    var provisionable = trait("Provisionable", aggregate);
+    var authorizable = trait("Authorizable", aggregate);
+    var asset = trait("Asset", provisionable, authorizable);
+    var named = trait("WithName", null);
+    var table = entityType("Table", null, asset, named);
+
+    assertEquals(
+        List.of("Table", "WithName", "Asset", "Authorizable", "Provisionable", "Aggregate"),
+        names(TypeLinearization.linearize(table)));
+  }
+
+  /**
+   * A lazily fetched father is a Hibernate proxy — an instance of a generated subclass. The
+   * ancestor reached through it and the same ancestor reached through a loaded mix-in must still
+   * count as one, or the diamond's shared trait would be listed (and merged) twice.
+   */
+  @Test
+  void anAncestorReachedAsASubclassInstanceIsStillTheSameAncestor() {
+    var aggregate = trait("Aggregate", null);
+    var aggregateProxy = new Trait() {};
+    aggregateProxy.setName("Aggregate");
+    var provisionable = trait("Provisionable", aggregateProxy);
+    var authorizable = trait("Authorizable", aggregate);
+    var asset = trait("Asset", provisionable, authorizable);
+
+    assertEquals(
+        List.of("Asset", "Authorizable", "Provisionable", "Aggregate"),
+        TypeLinearization.linearize(asset).stream().map(Trait::getName).toList());
+  }
 }

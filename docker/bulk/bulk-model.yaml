@@ -1,16 +1,37 @@
 # The demo model for the base stack (docker-compose.yml, loaded by the bulk-loader service).
 #
-# The data product is both Provisionable and Authorizable, and its two resources carry both
-# resource traits, because the two capabilities are independent and the demo is the easiest place
-# to see that: provisioning creates the S3 folder and the Athena table, authorization grants access
-# to them, and each records into its own pair of status fields on the resource and on the root.
-# Everything here is handled by the `stdout` task (see application-docker.yaml), which prints what
-# it would do for all four operations instead of touching anything real.
+# The data product is an *asset*: an aggregate root type carrying the built-in `Asset` trait, which
+# is what the Assets half of the UI lists and manages. `Asset` inherits `Provisionable` and mixes in
+# `Authorizable`, so an asset type gets both capabilities by naming one trait — the data product
+# used to mix the two in itself. Its two resources carry both resource traits:
+# provisioning creates the S3 folder and the Athena table, authorization grants access to them, and
+# each records into its own pair of status fields on the resource and on the root. Everything here
+# is handled by the `stdout` task (see application-docker.yaml), which prints what it would do for
+# all four operations instead of touching anything real.
 #
-# The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
-# change to its values adds one. That includes the status write-backs each provision / authorize
-# run makes on the root, so the History link on the Instances page grows as you click through the
-# lifecycle.
+# What an asset may depend on is declared between traits, under Relationships below: a data product
+# belongs to a domain. An asset can depend on another asset, on an aggregate or on a plain entity,
+# and the domain is the last of those — a simple type carrying no aggregate trait, for which
+# nothing is provisioned, and which exists to be depended on. Nothing else is allowed, which is
+# what the catalog's drag and drop shows when an asset is dropped where it may not go.
+#
+# The dependency is not decoration: the mappings below read through it. A file-based port's folder
+# is /root/<domain>/<data product>/<port>, and a table-based port's database is
+# <domain>_<data product>. Both reach the domain by walking from the port up to its data product
+# (HAS_PART) and across the product's dependency (IS_REQUIRED_BY). Two things follow:
+#
+#   - a data product needs its domain to have resources at all. One created without is derived
+#     nothing until it is made to depend on a domain, which is when its resources appear;
+#   - it has exactly one. `IS_REQUIRED_BY{$}` takes whatever the product depends on, so a second
+#     dependency would make the path ambiguous and the derivation fail — which is why the model
+#     lets a data product depend on a domain and on nothing else.
+#
+# The data product is also Versionable, so dp1 keeps a version history, and the demo starts with
+# one: v1 is the load of bulk-instances.yaml, and v2 is recorded by the loader right after it from
+# bulk-instances-v2.yaml, which adds a third output port. Every later change adds a version too —
+# including the status write-backs each provision / authorize run makes — so the History page,
+# reached from dp1's version on its asset page, grows as you click through the lifecycle. Each
+# past version is there as a frozen copy that can still be opened and run.
 
 Traits:
   - name: WithName
@@ -20,6 +41,7 @@ Traits:
         name:
           type: string
   - name: DataProduct
+  - name: Domain
   - name: DataProductComponent
   - name: OutputPort
     inheritsFrom: DataProductComponent
@@ -31,18 +53,31 @@ Relationships:
     relationshipType: IS_REQUIRED_BY
     targetTrait: DataProductComponent
 
+  # What an asset may depend on: a data product belongs to a domain.
+  - sourceTrait: DataProduct
+    relationshipType: DEPENDS_ON
+    targetTrait: Domain
+
 ---
 EntityTypes:
+
+  - name: DomainType
+    schema:
+      type: object
+      properties: {}
+    traits:
+      - WithName
+      - Domain
 
   - name: DataProductType
     schema:
       type: object
       properties: {}
     traits:
-      - Provisionable
-      - Authorizable
+      - Asset
       - Versionable
       - WithName
+      - DataProduct
 
   - name: OutputPortType
     schema:
@@ -98,20 +133,24 @@ Mappings:
   - sourceEntityType: FileBasedOutputPortType
     targetEntityType: S3FolderType
     mappingValues:
-      path: "'/root/'+ #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
+      path: "'/root/' + #domain.getValue('$.name').asText() + '/' + #dp.getValue('$.name').asText() + '/' + #source.getValue('$.name').asText()"
       bucket: "'my-bucket'"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
 
   - sourceEntityType: TableBasedOutputPortType
     targetEntityType: AthenaTableType
     mappingValues:
-      database: "#dp.getValue('$.name').asText()"
+      database: "#domain.getValue('$.name').asText() + '_' + #dp.getValue('$.name').asText()"
       table: "#source.getValue('$.name').asText()"
       dataPath: "#fbo.getValue('$.path').asText()"
     entityPathReferences:
       - alias: "dp"
         referencePath: "HAS_PART{$}"
+      - alias: "domain"
+        referencePath: "HAS_PART{$}/IS_REQUIRED_BY{$}"
       - alias: "fbo"
         referencePath: "IS_REQUIRED_BY{$}/MAPPED_TO{$}"

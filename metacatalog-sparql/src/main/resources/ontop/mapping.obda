@@ -25,8 +25,8 @@ target		mt:EntityTypeVersion/{id} a mt:EntityTypeVersion ; mt:id {id}^^xsd:strin
 source		SELECT "id", "version_group_id", "version", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "father_name", CAST("traits" AS TEXT) AS "traits", "created_at" FROM "entity_type_version"
 
 mappingId	MAPPING-ID-TRAIT-VERSION
-target		mt:TraitVersion/{id} a mt:TraitVersion ; mt:id {id}^^xsd:string ; mt:versionGroupId {version_group_id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:fatherName {father_name}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime .
-source		SELECT "id", "version_group_id", "version", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "father_name", "created_at" FROM "trait_version"
+target		mt:TraitVersion/{id} a mt:TraitVersion ; mt:id {id}^^xsd:string ; mt:versionGroupId {version_group_id}^^xsd:string ; mt:version {version}^^xsd:integer ; mt:name {name}^^xsd:string ; mt:baseSchema {base_schema}^^xsd:string ; mt:derivedSchema {derived_schema}^^xsd:string ; mt:fatherName {father_name}^^xsd:string ; mt:traits {traits}^^xsd:string ; mt:createdAt {created_at}^^xsd:dateTime .
+source		SELECT "id", "version_group_id", "version", "name", CAST("base_schema" AS TEXT) AS "base_schema", CAST("derived_schema" AS TEXT) AS "derived_schema", "father_name", CAST("traits" AS TEXT) AS "traits", "created_at" FROM "trait_version"
 
 mappingId	MAPPING-ID-ENTITY-TYPE-VERSION-PREVIOUS
 target		mt:EntityTypeVersion/{id} mt:hasPreviousVersion mt:EntityTypeVersion/{previous_version_id} .
@@ -55,6 +55,10 @@ source		SELECT "id", "previous_version_id" FROM "entity_version" WHERE "previous
 mappingId	MAPPING-ID-TYPE-HAS-TRAIT
 target		mt:EntityType/{entity_type_id} mt:hasTrait mt:Trait/{trait_id} .
 source		SELECT "entity_type_id", "trait_id" FROM "type_traits"
+
+mappingId	MAPPING-ID-TRAIT-HAS-TRAIT
+target		mt:Trait/{trait_id} mt:hasTrait mt:Trait/{mixin_id} .
+source		SELECT "trait_id", "mixin_id" FROM "trait_traits"
 
 mappingId	MAPPING-ID-TYPE-INHERITS-FROM
 target		mt:EntityType/{child_id} mt:inheritsFrom mt:EntityType/{father_id} .

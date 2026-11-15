@@ -15,7 +15,6 @@ import it.davidgreco.metacatalog.entity.EntityTypeVersion;
 import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.*;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -610,7 +609,64 @@ public class EntityServiceImpl implements EntityService {
       checkRelationshipExistenceAndSave(targetId, relType.inverse(), sourceId, target, source);
     }
     entityVersionRecorder.aggregateChanged(source, target);
+    if (relType == RelationType.DEPENDS_ON || relType == RelationType.IS_REQUIRED_BY) {
+      deriveWhatTheDependencyMadeDerivable(source);
+      deriveWhatTheDependencyMadeDerivable(target);
+    }
     log.info("Linked entity with id {} with entity with id {}", sourceId, targetId);
+  }
+
+  /**
+   * Asks the mapping engine to derive, for an entity a dependency was just added to and for
+   * everything it contains, whatever a mapping should have derived and has not.
+   *
+   * <p>A mapping may read through a dependency: a data product's folder is named after the domain
+   * the product depends on. Created before it had that dependency, the product's parts had nothing
+   * to derive their folder from — the path reference resolved to nothing and the creation event
+   * failed, for good, since nothing re-emits it. Without this, giving the product its domain
+   * afterwards changed nothing: it would stay without resources until one of its parts happened to
+   * be edited.
+   *
+   * <p>Only what is <em>missing</em> is asked for. An entity that already has its derived entity
+   * keeps it as it is, and one whose creation event is still pending — every part of an aggregate
+   * being loaded, whose dependencies are linked in the same transaction — is left to that event, so
+   * a load does not queue everything twice.
+   */
+  private void deriveWhatTheDependencyMadeDerivable(Entity entity) {
+    var seen = new HashSet<String>();
+    var pending = new java.util.ArrayDeque<Entity>(List.of(entity));
+    while (!pending.isEmpty()) {
+      var current = pending.poll();
+      if (!seen.add(current.getId())) continue;
+      entityRelationshipRepository
+          .findBySourceAndRelationType(current, RelationType.HAS_PART)
+          .stream()
+          .map(EntityRelationship::getTarget)
+          .forEach(pending::add);
+      var underived =
+          mappingEntityTypeRelationshipRepository
+              .findMappingEntityTypeRelationshipBySource(current.getEntityType())
+              .stream()
+              .anyMatch(
+                  rule ->
+                      mappingEntityRelationshipRepository
+                          .findBySourceAndMappingEntityTypeRelationship(current, rule)
+                          .isEmpty());
+      if (!underived
+          || entityLifeCycleEventRepository.existsByEntityIdAndEventTypeAndEventStatus(
+              current.getId(),
+              EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+              EntityLifeCycleEvent.STATUS_PENDING)) continue;
+      log.info(
+          "Emitting SOURCE_CREATED for {}: a dependency was added and it has nothing derived yet",
+          current.getId());
+      entityLifeCycleEventRepository.save(
+          new EntityLifeCycleEvent(
+              current.getId(),
+              current.getEntityType().getName(),
+              EntityLifeCycleEvent.ENTITY_SOURCE_CREATED,
+              EntityLifeCycleEvent.STATUS_PENDING));
+    }
   }
 
   /**
@@ -675,6 +731,22 @@ public class EntityServiceImpl implements EntityService {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public void unlink(String sourceId, RelationType relType, String targetId) {
+    doUnlink(sourceId, relType, targetId, false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public void unlinkInternal(String sourceId, RelationType relType, String targetId) {
+    doUnlink(sourceId, relType, targetId, true);
+  }
+
+  /**
+   * The shared body, private so that it cannot be mistaken for an entry point: a public method
+   * delegating to another would bypass the proxy and with it the transaction.
+   */
+  private void doUnlink(
+      String sourceId, RelationType relType, String targetId, boolean partIsBeingRemoved) {
     log.info("Unlinking entity with id {} from entity with id {}", sourceId, targetId);
     var source =
         entityRepository
@@ -686,7 +758,7 @@ public class EntityServiceImpl implements EntityService {
             .orElseThrow(() -> new NotFoundException(ENTITY_WITH_ID + targetId + NOT_FOUND));
     ServiceUtils.checkNotFrozen(source);
     ServiceUtils.checkNotFrozen(target);
-    checkIsNotAggregateContainment(source, relType, target);
+    if (!partIsBeingRemoved) checkIsNotAggregateContainment(source, relType, target);
     var directRel =
         entityRelationshipRepository
             .findBySourceAndRelationTypeAndTarget(source, relType, target)
@@ -743,13 +815,7 @@ public class EntityServiceImpl implements EntityService {
       for (var reference : rule.getEntityPathReferences()) {
         var path = reference.referencePath();
         if (!path.contains(relTypeName) && !path.contains(inverseName)) continue;
-        var traversed = new ArrayList<EntityRelationship>();
-        try {
-          entityPathResolver.retrieveEntityByPath(mapping.getSource().getId(), path, traversed);
-        } catch (RuntimeException e) {
-          // an ambiguous or invalid path stops the traversal; whatever it walked first still counts
-        }
-        for (var row : traversed) {
+        for (var row : entityPathResolver.linksWalkedBy(mapping.getSource().getId(), path)) {
           if (!row.getId().equals(directRel.getId())
               && (inverseRel == null || !row.getId().equals(inverseRel.getId()))) continue;
           throw new ServiceError(

@@ -9,13 +9,10 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Trait Relationship</h1>
-    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
+    <nav><a class="btn" th:href="@{/ui/admin}">← Back</a></nav>
 </header>
 
 <main>
@@ -25,7 +22,7 @@
         You need at least two traits before you can relate them.
     </p>
 
-    <form method="post" th:action="@{/ui/trait-links}" th:object="${traitLinkForm}"
+    <form method="post" th:action="@{/ui/admin/trait-links}" th:object="${traitLinkForm}"
           id="trait-link-form" th:if="${traits.size() >= 2}">
 
         <label>
@@ -65,7 +62,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary" id="submit-link">Create relationship</button>
-            <a class="btn" th:href="@{/ui}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin}">Cancel</a>
         </div>
     </form>
 
@@ -86,7 +83,7 @@
                 <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
                 <td th:text="${link.target}">target</td>
                 <td>
-                    <form method="post" th:action="@{/ui/trait-links/delete}" class="inline-form">
+                    <form method="post" th:action="@{/ui/admin/trait-links/delete}" class="inline-form">
                         <input type="hidden" name="sourceTrait" th:value="${link.source}"/>
                         <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
                         <input type="hidden" name="targetTrait" th:value="${link.target}"/>

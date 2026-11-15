@@ -11,6 +11,108 @@ renames that section to the new version.
 
 ## [Unreleased]
 
+The catalog becomes a place to manage data platform assets. Nothing is taken away, which is what
+makes this a minor release: the REST API gains endpoints and fields and loses none, the
+configuration is unchanged, and the one schema change is a migration that needs no data moved, so
+a 2.0 database runs on this as it is. Two existing operations accept more than they did (see
+*Changed*). Pages of the web UI have moved, and their old addresses still answer.
+
+The REST contract's own version, `info.version` in the OpenAPI document, moves from 1.0.0 to
+1.1.0: it had not changed since 1.0.0, and it gains endpoints and fields here without breaking a
+client of 1.0.0.
+
+### Added
+
+- **Assets.** A data platform asset is an aggregate whose root type carries the new built-in
+  `Asset` trait, which inherits `Provisionable` and mixes in `Authorizable` — so an asset type gets
+  both capabilities, and is an aggregate root, by naming one trait. `GET /aggregate/asset-type`
+  lists the asset types, `GET /asset` the catalog: every asset with what it depends on, its
+  parts — each with what contains it and what it depends on — and the entities mappings derived
+  from its members.
+  `GET /aggregate/type-capabilities` reports the asset types alongside the other classifications.
+  A database created by an earlier release gains `Asset` on its first start.
+- **What an asset depends on, decided by the model.** An asset can depend on another asset, on an
+  aggregate or on a plain entity: a `DEPENDS_ON` link from its root, legal only when the two types
+  carry traits related by `DEPENDS_ON`. `GET /asset/dependency-rule` lists, for every asset type,
+  the types its assets may depend on, what each is and the trait relationships that allow it, so a
+  client can tell in advance instead of from a refused link; `GET /asset/dependency-target` lists
+  the aggregates and entities that qualify.
+- **Traits inheriting from several traits.** A trait has a father and, now, any number of mixed-in
+  traits (`traits` on the `Trait` resource, in the bulk YAML and in `ImmutableModelRegistry`),
+  linearized as an entity type's ancestors are, so a shared ancestor contributes once. A parent
+  that another parent already inherits is refused as redundant, with a message naming what to
+  drop. In SPARQL a mixed-in trait is `mt:hasTrait`.
+- **Updating an aggregate as a whole.** `PUT /aggregate/{id}/yaml` updates an aggregate in place
+  to match a document, in one transaction and as one new version: values of the members it lists,
+  parts it adds, parts it no longer lists, and the dependencies it declares. The fields a run
+  writes are never taken from the document.
+- **The Assets half of the web UI.** A catalog shown as a list of assets or as a dependency graph
+  that also draws the aggregates and entities assets may depend on; drag and drop to make an asset
+  depend on any of them — accepted only where the model allows it, with the reason shown where it
+  does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
+  in place, and on a node to open, edit or delete it — or, on an asset, to provision,
+  unprovision, authorize or reject it without leaving the graph; each asset's mapped entities,
+  named in the list and drawn below it in the graph with the status a run left on them; each
+  asset's inside in the graph — its parts and the dependencies between them; an asset's page with
+  its structure, lifecycle actions, mappings and access; the schema-driven editor on an existing
+  asset; and YAML download and upload.
+- **A model graph.** Under Administration, every trait and entity type as a card laid out in rows
+  — traits above the types assembled from them — with inheritance, mixed-in traits, carried
+  traits, relationships and mappings as edges, filters per kind of edge, search, and a panel
+  describing the selected node or edge.
+
+### Changed
+
+- **The web UI is split in two.** Assets (`/ui/assets`, where `/ui` now lands) and Administration
+  (`/ui/admin`), which holds everything the UI had before: the model, the graph, instances,
+  aggregates and bulk upload. The addresses those pages had directly under `/ui` redirect to their
+  new place.
+- **Deleting an aggregate no longer requires removing its own dependencies first.**
+  `DELETE /aggregate/{id}` used to be refused for any link to an entity outside the aggregate. It
+  is now refused only when an outside entity depends on a member or contains one; the aggregate's
+  own dependencies on outside entities are removed with it. An asset that depends on another can
+  therefore be deleted, one that others depend on cannot.
+- **A downloaded aggregate uploads as a faithful copy.** `POST /aggregate/yaml` reads a node's
+  `id` as a second `ref` and its `dependencies` as more `dependsOn` names, and takes a name no node
+  declares as the id of an existing entity. It used to ignore both fields, so a document served by
+  `GET /aggregate/{id}/yaml` created a copy with its dependencies silently gone. The other side
+  of the same change: a document whose `dependencies` name something that does not exist is now
+  refused, where it used to load without them.
+- **Adding a dependency derives what could not be derived without it.** A mapping may read
+  through a dependency — a resource named after the domain its data product belongs to. An entity
+  created before it had that dependency used to stay without its derived entity until it happened
+  to be edited; linking it now asks the mapping engine for whatever it, and everything it
+  contains, should have derived and has not. Entities that already have their derived entity are
+  not touched.
+- **A past version keeps what it depended on outside its aggregate.** A frozen copy used to drop
+  a dependency on an entity outside the aggregate. It now depends on a frozen stand-in for that
+  entity — its values as they are when the copy is made, belonging to the copy — so a mapping
+  that reads through the dependency still derives the copy's resources, and the copy stays
+  something a function can run on. A copy still never links to a live entity. Copies made before
+  this release are left as they are.
+- **The demo.** The data product type carries `Asset` instead of mixing the two capability traits
+  in itself, and the model gains a plain `DomainType` and the one dependency a data product may
+  have, on a domain. The loader seeds a `sales` domain with `dp1` depending on it, and the
+  mappings name the resources after it: the S3 folder is `/root/<domain>/<data product>/<port>`
+  (`/root/sales/dp1/op1`) and the Athena database `<domain>_<data product>` (`sales_dp1`). `dp1`
+  starts with a history: the loader records a second version of it, adding a third output port
+  from `docker/bulk/bulk-instances-v2.yaml`, which leaves the first as a past version to open and
+  run. A volume created by an earlier build has to be recreated (`make down ARGS=-v`), as the
+  loader says.
+
+### Fixed
+
+- **Versioning a trait onto one of its own descendants** overflowed the stack instead of being
+  refused. It is now a `400` naming the cycle.
+- **The aggregate editor inventing empty values.** An optional object or array left empty was
+  submitted as `{}` or `[]`, so an access grant with no `resources` came out with an empty
+  selector. Empty optional containers are now left out, as the instance editor already did.
+- **A link that could not be removed once a mapping's path through it was ambiguous.** An entity
+  given a second dependency makes a path reference that takes whatever it depends on
+  (`IS_REQUIRED_BY{$}`) ambiguous, and removing either dependency then failed with a `500` —
+  "Transaction silently rolled back because it has been marked as rollback-only" in the web UI —
+  leaving no way out. The link is now removed, which is what resolves the ambiguity.
+
 ## [2.0.0] - 2026-10-22
 
 A major release: the Iceberg REST catalog and the Hive Metastore are removed, which breaks anyone

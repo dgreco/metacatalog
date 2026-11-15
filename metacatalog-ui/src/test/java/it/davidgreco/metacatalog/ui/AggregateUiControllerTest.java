@@ -91,7 +91,7 @@ class AggregateUiControllerTest {
 
     var result =
         mockMvc
-            .perform(get("/ui/aggregates"))
+            .perform(get("/ui/admin/aggregates"))
             .andExpect(status().isOk())
             .andExpect(view().name("aggregates-list"))
             .andReturn();
@@ -127,7 +127,7 @@ class AggregateUiControllerTest {
 
     var result =
         mockMvc
-            .perform(get("/ui/aggregates/agg-1"))
+            .perform(get("/ui/admin/aggregates/agg-1"))
             .andExpect(status().isOk())
             .andExpect(view().name("aggregate-view"))
             .andReturn();
@@ -150,7 +150,7 @@ class AggregateUiControllerTest {
   void yamlPreviewRendersTheDocumentAsYaml() throws Exception {
     mockMvc
         .perform(
-            post("/ui/aggregates/yaml-preview")
+            post("/ui/admin/aggregates/yaml-preview")
                 .contentType("application/json")
                 .content("{\"entityType\":\"ProductType\",\"values\":{\"name\":\"Widget\"}}"))
         .andExpect(status().isOk())
@@ -163,7 +163,9 @@ class AggregateUiControllerTest {
   void yamlPreviewRejectsMalformedJson() throws Exception {
     mockMvc
         .perform(
-            post("/ui/aggregates/yaml-preview").contentType("application/json").content("{oops"))
+            post("/ui/admin/aggregates/yaml-preview")
+                .contentType("application/json")
+                .content("{oops"))
         .andExpect(status().isBadRequest());
   }
 
@@ -173,15 +175,15 @@ class AggregateUiControllerTest {
     given(api.getAggregateAsYaml("missing", true)).willThrow(new RuntimeException("not found"));
 
     mockMvc
-        .perform(get("/ui/aggregates/missing"))
+        .perform(get("/ui/admin/aggregates/missing"))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/aggregates"));
+        .andExpect(redirectedUrl("/ui/admin/aggregates"));
   }
 
   @Test
   void formRendersWithRootTypes() throws Exception {
     mockMvc
-        .perform(get("/ui/aggregates/new"))
+        .perform(get("/ui/admin/aggregates/new"))
         .andExpect(status().isOk())
         .andExpect(view().name("aggregate-form"))
         .andExpect(model().attributeExists("aggregateForm", "rootTypes"))
@@ -192,7 +194,7 @@ class AggregateUiControllerTest {
   @Test
   void formEmbedsTheSchemaOfTheSelectedRootType() throws Exception {
     mockMvc
-        .perform(get("/ui/aggregates/new").param("rootType", "ProductType"))
+        .perform(get("/ui/admin/aggregates/new").param("rootType", "ProductType"))
         .andExpect(status().isOk())
         .andExpect(view().name("aggregate-form"))
         .andExpect(model().attributeExists("aggregateSchema"))
@@ -206,7 +208,7 @@ class AggregateUiControllerTest {
         .willThrow(new RuntimeException("EntityType LonelyType is not an aggregate root"));
 
     mockMvc
-        .perform(get("/ui/aggregates/new").param("rootType", "LonelyType"))
+        .perform(get("/ui/admin/aggregates/new").param("rootType", "LonelyType"))
         .andExpect(status().isOk())
         .andExpect(view().name("aggregate-form"))
         .andExpect(model().attributeExists("error"))
@@ -227,9 +229,11 @@ class AggregateUiControllerTest {
 
     mockMvc
         .perform(
-            post("/ui/aggregates").param("rootType", "ProductType").param("document", document))
+            post("/ui/admin/aggregates")
+                .param("rootType", "ProductType")
+                .param("document", document))
         .andExpect(status().is3xxRedirection())
-        .andExpect(redirectedUrl("/ui/instances"));
+        .andExpect(redirectedUrl("/ui/admin/instances"));
 
     var captor = org.mockito.ArgumentCaptor.forClass(Resource.class);
     verify(api).createAggregateAsYaml(captor.capture());
@@ -248,7 +252,9 @@ class AggregateUiControllerTest {
   void createRejectsAMalformedDocument() throws Exception {
     mockMvc
         .perform(
-            post("/ui/aggregates").param("rootType", "ProductType").param("document", "{not json"))
+            post("/ui/admin/aggregates")
+                .param("rootType", "ProductType")
+                .param("document", "{not json"))
         .andExpect(status().isOk())
         .andExpect(view().name("aggregate-form"))
         .andExpect(model().attributeExists("error"));
@@ -260,7 +266,8 @@ class AggregateUiControllerTest {
   @Test
   void createRejectsAnEmptyDocument() throws Exception {
     mockMvc
-        .perform(post("/ui/aggregates").param("rootType", "ProductType").param("document", ""))
+        .perform(
+            post("/ui/admin/aggregates").param("rootType", "ProductType").param("document", ""))
         .andExpect(status().isOk())
         .andExpect(view().name("aggregate-form"))
         .andExpect(model().attribute("error", "The aggregate document is empty."));
@@ -272,7 +279,7 @@ class AggregateUiControllerTest {
   @Test
   void schemaEndpointServesTheCombinedSchema() throws Exception {
     mockMvc
-        .perform(get("/ui/aggregates/schema").param("rootType", "ProductType"))
+        .perform(get("/ui/admin/aggregates/schema").param("rootType", "ProductType"))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("\"$defs\"")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("ProductType")));

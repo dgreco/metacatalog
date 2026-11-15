@@ -382,6 +382,8 @@ public class CoreConfig {
    * @param entityRelationshipRepository the entity relationship repository
    * @param mappingEntityRelationshipRepository the mapping entity relationship repository
    * @param mappedEntityService the mapped entity service
+   * @param entityVersionRecorder the recorder told about the parts an update removes
+   * @param aggregateSchemaService the aggregate schema service, which knows the asset types
    * @return the aggregate service
    */
   @Bean
@@ -389,12 +391,16 @@ public class CoreConfig {
       EntityService entityService,
       EntityRelationshipRepository entityRelationshipRepository,
       MappingEntityRelationshipRepository mappingEntityRelationshipRepository,
-      MappedEntityService mappedEntityService) {
+      MappedEntityService mappedEntityService,
+      EntityVersionRecorder entityVersionRecorder,
+      AggregateSchemaService aggregateSchemaService) {
     return new AggregateService(
         entityService,
         entityRelationshipRepository,
         mappingEntityRelationshipRepository,
-        mappedEntityService);
+        mappedEntityService,
+        entityVersionRecorder,
+        aggregateSchemaService);
   }
 
   /**
@@ -452,6 +458,7 @@ public class CoreConfig {
    * @param entityTypeService the entity type service
    * @param mappingService the mapping service
    * @param entityService the entity service
+   * @param aggregateService the aggregate service, which applies an aggregate update document
    * @return the bulk loader service
    */
   @Bean
@@ -460,9 +467,15 @@ public class CoreConfig {
       EntityTypeService entityTypeService,
       MappingService mappingService,
       EntityService entityService,
+      AggregateService aggregateService,
       @Qualifier("yamlMapper") ObjectMapper yamlMapper) {
     return new BulkLoaderService(
-        traitService, entityTypeService, mappingService, entityService, yamlMapper);
+        traitService,
+        entityTypeService,
+        mappingService,
+        entityService,
+        aggregateService,
+        yamlMapper);
   }
 
   /**

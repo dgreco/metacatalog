@@ -68,6 +68,14 @@ public class TraitVersion {
   @Column(name = "father_name")
   private String fatherName;
 
+  /**
+   * The names of the traits mixed in when the snapshot was taken, as a JSON array in declaration
+   * order. {@code null} on a snapshot taken before traits could mix traits in, which reads as none.
+   */
+  @org.hibernate.annotations.Type(JsonBinaryType.class)
+  @Column(name = "traits", columnDefinition = "jsonb")
+  private JsonNode traits;
+
   @Column(name = "previous_version_id")
   private String previousVersionId;
 

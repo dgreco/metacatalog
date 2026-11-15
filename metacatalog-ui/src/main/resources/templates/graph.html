@@ -3,52 +3,96 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Catalog Graph — Meta Catalog</title>
+    <title>Model graph — Meta Catalog</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
-<body>
-<header class="topbar">
-    <h1>Catalog Graph</h1>
-    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
-</header>
+<body class="graph-page">
+<header th:replace="~{fragments/shell :: appbar('admin', 'graph')}"></header>
 
-<main>
-    <div class="graph-toolbar">
-        <div class="graph-legend">
-            <span class="lg lg-node lg-type">Entity type</span>
-            <span class="lg lg-node lg-trait">Trait</span>
-            <span class="lg lg-node lg-entity">Entity</span>
-            <span class="lg lg-node lg-entity-version">Entity version</span>
-            <span class="lg lg-edge lg-extends">extends</span>
-            <span class="lg lg-edge lg-has-trait">trait</span>
-            <span class="lg lg-edge lg-instance-of">instance-of</span>
-            <span class="lg lg-edge lg-rel">relationship</span>
-            <span class="lg lg-edge lg-mapping">MAPPED_TO</span>
+<main class="graph-main">
+    <div class="graph-bar">
+        <div class="graph-bar-group">
+            <input type="search" id="graph-search" class="graph-search"
+                   placeholder="Find a trait or type…" aria-label="Find a trait or type"/>
         </div>
-        <div class="graph-actions">
-            <button class="btn" id="graph-relayout" type="button" title="Recompute the layout to minimise overlaps">↻ Re-layout</button>
+        <div class="graph-bar-group" role="group" aria-label="Edges shown">
+            <button type="button" class="chip active" data-edge-group="inheritance"
+                    title="A trait or type inheriting from its father, and a trait mixing traits in">
+                <span class="chip-swatch sw-extends"></span>Inheritance</button>
+            <button type="button" class="chip active" data-edge-group="traits"
+                    title="An entity type carrying a trait">
+                <span class="chip-swatch sw-has-trait"></span>Traits carried</button>
+            <button type="button" class="chip active" data-edge-group="relationships"
+                    title="Relationships declared between traits: composition and dependency">
+                <span class="chip-swatch sw-rel"></span>Relationships</button>
+            <button type="button" class="chip active" data-edge-group="mappings"
+                    title="Mappings deriving entities of one type from another">
+                <span class="chip-swatch sw-mapping"></span>Mappings</button>
+            <button type="button" class="chip active" data-edge-group="versions"
+                    title="Past versions of traits and types, and the instances of each type">
+                <span class="chip-swatch sw-version"></span>Versions &amp; instances</button>
+        </div>
+        <div class="graph-bar-group">
             <label class="graph-toggle" title="Show the inverse of each relationship (IS_REQUIRED_BY, IS_PART_OF, IS_MAPPED_BY)">
-                <input type="checkbox" id="graph-show-inverses" th:checked="${showInverses}"/> Show inverses
+                <input type="checkbox" id="graph-show-inverses" th:checked="${showInverses}"/> Inverses
             </label>
-            <label class="graph-toggle" title="Show entity instances and their relationships alongside the type layer">
-                <input type="checkbox" id="graph-show-entities" th:checked="${showEntities}"/> Show entities
+            <label class="graph-toggle" title="Show entity instances and their relationships under the type layer">
+                <input type="checkbox" id="graph-show-entities" th:checked="${showEntities}"/> Entities
             </label>
-            <span class="graph-hint">Drag nodes to rearrange · drag the background to pan · scroll to zoom</span>
+        </div>
+        <div class="graph-bar-group graph-bar-end">
+            <button class="btn-sm" id="graph-zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+            <button class="btn-sm" id="graph-zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+            <button class="btn-sm" id="graph-fit" type="button" title="Fit the whole graph in view">Fit</button>
+            <button class="btn-sm" id="graph-relayout" type="button" title="Put every node back where the layout places it">Re-layout</button>
         </div>
     </div>
-    <div id="graph-canvas" class="graph-canvas">
-        <p class="empty graph-empty" id="graph-empty" hidden>Nothing has been created yet.</p>
+
+    <div class="graph-stage">
+        <div id="graph-canvas" class="graph-canvas">
+            <p class="empty graph-empty" id="graph-empty" hidden>Nothing has been created yet.</p>
+        </div>
+
+        <aside class="graph-panel" id="graph-panel" aria-live="polite">
+            <div id="graph-panel-idle">
+                <h2>Model graph</h2>
+                <p class="hint">
+                    Traits sit at the top, the entity types assembled from them below. Select a
+                    node or an edge to see what it declares. Drag a node to move it, the
+                    background to pan, and scroll to zoom.
+                </p>
+                <dl class="graph-counts">
+                    <dt>Traits</dt><dd id="count-traits">0</dd>
+                    <dt>Entity types</dt><dd id="count-types">0</dd>
+                    <dt>Asset types</dt><dd id="count-assets">0</dd>
+                    <dt>Relationships</dt><dd id="count-relationships">0</dd>
+                    <dt>Mappings</dt><dd id="count-mappings">0</dd>
+                </dl>
+                <h3>Legend</h3>
+                <ul class="graph-legend-list">
+                    <li><span class="lg-card lg-trait"></span>Trait</li>
+                    <li><span class="lg-card lg-builtin"></span>Built-in trait</li>
+                    <li><span class="lg-card lg-type"></span>Entity type</li>
+                    <li><span class="lg-card lg-asset"></span>Asset type</li>
+                    <li><span class="lg-card lg-entity"></span>Entity</li>
+                    <li><span class="lg-line sw-extends"></span>inherits from</li>
+                    <li><span class="lg-line sw-mixes-in"></span>mixes in</li>
+                    <li><span class="lg-line sw-has-trait"></span>carries trait</li>
+                    <li><span class="lg-line sw-rel"></span>relationship</li>
+                    <li><span class="lg-line sw-mapping"></span>mapping</li>
+                </ul>
+            </div>
+            <div id="graph-panel-detail" hidden></div>
+        </aside>
     </div>
 </main>
 
 <script type="application/json" id="graph-data" th:utext="${graphJson}">{"nodes":[],"edges":[]}</script>
+<script type="application/json" id="graph-roles" th:utext="${rolesJson} ?: '{}'">{}</script>
 <script th:src="@{/ui/js/schema-view.js}"></script>
+<script th:src="@{/ui/js/graph-core.js}"></script>
 <script th:src="@{/ui/js/graph.js}"></script>
 </body>
 </html>

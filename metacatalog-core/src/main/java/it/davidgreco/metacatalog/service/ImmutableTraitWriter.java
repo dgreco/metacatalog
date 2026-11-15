@@ -2,6 +2,7 @@ package it.davidgreco.metacatalog.service;
 
 import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,6 +33,18 @@ public interface ImmutableTraitWriter {
    * @return the created immutable trait
    */
   Trait createImmutable(String name, Optional<String> schema, Optional<String> fatherName);
+
+  /**
+   * Creates a trait that can afterwards be neither deleted nor versioned, mixing other traits in.
+   *
+   * @param name the trait name
+   * @param schema an optional JSON schema string
+   * @param fatherName an optional father trait name
+   * @param traits the names of the traits mixed in, in declaration order; may be empty
+   * @return the created immutable trait
+   */
+  Trait createImmutable(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits);
 
   /**
    * Links two traits with a relationship that can afterwards never be removed. The inverse row is

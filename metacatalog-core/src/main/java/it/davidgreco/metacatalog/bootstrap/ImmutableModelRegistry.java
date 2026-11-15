@@ -25,7 +25,21 @@ public interface ImmutableModelRegistry {
    *     exist — declare it earlier in the same {@code contribute} call, or in a module ordered
    *     before this one.
    */
-  void trait(String name, String schema, String fatherName);
+  default void trait(String name, String schema, String fatherName) {
+    trait(name, schema, fatherName, List.of());
+  }
+
+  /**
+   * Declares an immutable trait that mixes other traits in.
+   *
+   * @param name the trait name
+   * @param schema the JSON Schema string, or {@code null} for {@link #EMPTY_SCHEMA}
+   * @param fatherName the parent trait name, or {@code null} for a root trait
+   * @param traits the names of the traits mixed in, in declaration order; may be {@code null}. Like
+   *     the father, each must already exist. Naming one that another parent already inherits is
+   *     refused as redundant.
+   */
+  void trait(String name, String schema, String fatherName, List<String> traits);
 
   /**
    * Declares a root immutable trait with an empty schema — the marker-trait case.

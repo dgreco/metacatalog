@@ -10,9 +10,11 @@ import java.util.List;
  * @param name the trait name
  * @param version the trait version number
  * @param father the name of the parent trait this inherits from, or {@code null}
+ * @param traits the names of the traits it mixes in, in declaration order
  * @param schema the trait's JSON schema as a string, or {@code null}
  */
-public record TraitRowView(String name, int version, String father, String schema) {
+public record TraitRowView(
+    String name, int version, String father, List<String> traits, String schema) {
 
   public static List<TraitRowView> listFrom(List<Trait> traits) {
     var views = new ArrayList<TraitRowView>();
@@ -22,6 +24,7 @@ public record TraitRowView(String name, int version, String father, String schem
               t.getName(),
               t.getVersion().orElse(0),
               t.getInheritsFrom().orElse(null),
+              t.getTraits() == null ? List.of() : t.getTraits(),
               t.getSchema().orElse(null)));
     }
     return views;

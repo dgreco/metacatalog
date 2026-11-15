@@ -9,13 +9,10 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Mapping</h1>
-    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
+    <nav><a class="btn" th:href="@{/ui/admin}">← Back</a></nav>
 </header>
 
 <main>
@@ -25,7 +22,7 @@
         You need at least one entity type before you can create a mapping.
     </p>
 
-    <form method="post" th:action="@{/ui/mappings}" th:object="${mappingForm}"
+    <form method="post" th:action="@{/ui/admin/mappings}" th:object="${mappingForm}"
           id="mapping-form" th:if="${entityTypes.size() >= 1}">
 
         <label>
@@ -75,7 +72,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary" id="submit-mapping">Create mapping</button>
-            <a class="btn" th:href="@{/ui}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin}">Cancel</a>
         </div>
     </form>
 

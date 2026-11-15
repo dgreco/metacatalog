@@ -136,7 +136,7 @@ class UiJavascriptSmokeTest {
         "{\"b\": \"" + expression + "\"}",
         List.of(new MappingEntityTypeRelationship.EntityPathReference("ai", "IS_REQUIRED_BY{$}")));
 
-    driver.get(baseUrl + "/ui/mappings/new");
+    driver.get(baseUrl + "/ui/admin/mappings/new");
 
     new Select(driver.findElement(By.id("sourceEntityType"))).selectByVisibleText("PropSrcType");
     new Select(driver.findElement(By.id("targetEntityType"))).selectByVisibleText("PropDstType");
@@ -203,7 +203,7 @@ class UiJavascriptSmokeTest {
         }
         """);
 
-    driver.get(baseUrl + "/ui/instances/" + instance.getId() + "/edit");
+    driver.get(baseUrl + "/ui/admin/instances/" + instance.getId() + "/edit");
 
     await()
         .until(
@@ -233,7 +233,7 @@ class UiJavascriptSmokeTest {
 
     // The read-only view page offers the same values as JSON and YAML: clicking the YAML tab
     // hides the builder and shows the YAML rendering.
-    driver.get(baseUrl + "/ui/instances/" + instance.getId());
+    driver.get(baseUrl + "/ui/admin/instances/" + instance.getId());
     await().until(ExpectedConditions.elementToBeClickable(By.cssSelector("[data-view='yaml']")));
     driver.findElement(By.cssSelector("[data-view='yaml']")).click();
     var yamlPanel = driver.findElement(By.cssSelector("[data-view-panel='yaml']"));
@@ -280,7 +280,7 @@ class UiJavascriptSmokeTest {
         }""";
     var instance = entityService.create("PolicyUiType", policy);
 
-    driver.get(baseUrl + "/ui/instances/" + instance.getId() + "/edit");
+    driver.get(baseUrl + "/ui/admin/instances/" + instance.getId() + "/edit");
     await()
         .until(
             ExpectedConditions.presenceOfElementLocated(
@@ -334,7 +334,7 @@ class UiJavascriptSmokeTest {
         { "type": "object", "properties": { "a": { "type": "integer" } } }""");
     entityService.create("FlashUiType", "{\"a\": 1}");
 
-    driver.get(baseUrl + "/ui/instances?type=FlashUiType");
+    driver.get(baseUrl + "/ui/admin/instances?type=FlashUiType");
     await()
         .until(
             ExpectedConditions.elementToBeClickable(
@@ -376,7 +376,7 @@ class UiJavascriptSmokeTest {
     entityService.create("SearchUiType", "{\"name\": \"big\", \"size\": 500}");
     entityService.create("SearchUiType", "{\"name\": \"small\", \"size\": 5}");
 
-    driver.get(baseUrl + "/ui/instances?type=SearchUiType");
+    driver.get(baseUrl + "/ui/admin/instances?type=SearchUiType");
 
     // With a type selected, the builder appears listing the schema's fields.
     await().until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("#query-builder")));
@@ -461,5 +461,641 @@ class UiJavascriptSmokeTest {
               var trs = d.findElements(By.cssSelector("main table tbody tr"));
               return trs.size() == 1 && trs.getFirst().getText().contains("big");
             });
+  }
+
+  /**
+   * The asset model the asset pages are tested against, created once: a table is an asset, a domain
+   * is a plain type, and a table may depend on a domain — nothing else on anything. Each test adds
+   * its own assets on top.
+   */
+  private static void ensureAssetModel() {
+    var traitService = context.getBean(it.davidgreco.metacatalog.service.TraitService.class);
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    if (traitService.exists("SmNamed")) return;
+
+    traitService.create(
+        "SmNamed",
+        Optional.of(
+            """
+            { "type": "object", "properties": { "name": { "type": "string" } } }"""),
+        Optional.empty());
+    traitService.create("SmDomain", Optional.empty(), Optional.empty());
+    traitService.create("SmTable", Optional.empty(), Optional.empty());
+    traitService.link(
+        "SmTable", it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON, "SmDomain");
+    var empty =
+        """
+        { "type": "object", "properties": {} }""";
+    entityTypeService.create(
+        "SmColumnType", List.of("AggregateElement", "SmNamed"), Optional.empty(), empty);
+    entityTypeService.create(
+        "SmDomainType", List.of("SmNamed", "SmDomain"), Optional.empty(), empty);
+    entityTypeService.create(
+        "SmTableType", List.of("Asset", "SmNamed", "SmTable"), Optional.empty(), empty);
+  }
+
+  private static org.openqa.selenium.WebElement graphNode(String entityId) {
+    return driver.findElement(
+        By.cssSelector("#asset-graph .gc-node[data-node-id='" + entityId + "']"));
+  }
+
+  /** Carries one graph node onto another with the pointer, as a user would. */
+  private static void dragOnto(
+      org.openqa.selenium.WebElement source, org.openqa.selenium.WebElement target) {
+    new org.openqa.selenium.interactions.Actions(driver)
+        .moveToElement(source)
+        .clickAndHold()
+        // A first small move, so the gesture is past the threshold that tells a drag from a click.
+        .moveByOffset(8, 8)
+        .moveToElement(target)
+        .release()
+        .perform();
+  }
+
+  /**
+   * Dropping an asset onto something in the dependency graph makes it depend on it — when the model
+   * allows it. Here the other end is a plain entity, which is on the board because an asset may
+   * depend on it, and which cannot itself depend on anything. The drop is a real pointer gesture:
+   * this is the one place {@code graph-core.js}'s drag handling and {@code asset-catalog.js}'s
+   * rules run together, against the real API.
+   */
+  @Test
+  void anAssetIsMadeToDependOnAnEntityByDraggingItOntoItInTheGraph() {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+    var domain = entityService.create("SmDomainType", "{\"name\": \"sm-sales\"}");
+    var table = entityService.create("SmTableType", "{\"name\": \"sm-orders\"}");
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    await()
+        .until(
+            ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
+
+    // A domain is depended on; it does not depend. Only an asset can be dropped onto something.
+    dragOnto(graphNode(domain.getId()), graphNode(table.getId()));
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .error")).stream()
+                    .anyMatch(e -> e.getText().contains("Only an asset depends on something")));
+    Assertions.assertTrue(
+        entityService
+            .linked(domain.getId(), it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON)
+            .isEmpty(),
+        "a refused drop must not link anything");
+
+    dragOnto(graphNode(table.getId()), graphNode(domain.getId()));
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .flash")).stream()
+                    .anyMatch(e -> e.getText().contains("now depends on")));
+    Assertions.assertEquals(
+        List.of(domain.getId()),
+        entityService
+            .linked(table.getId(), it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON)
+            .stream()
+            .map(it.davidgreco.metacatalog.entity.Entity::getId)
+            .toList());
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-dependency")).isEmpty(),
+        "the new dependency must be drawn");
+
+    // The list is the same model: the dependency made in the graph is there without a reload. It
+    // lists assets only — the domain is what an asset depends on, never a row of its own.
+    driver.findElement(By.cssSelector(".view-switch [data-view='list']")).click();
+    var row =
+        driver.findElement(By.cssSelector("#asset-rows tr[data-asset-id='" + table.getId() + "']"));
+    Assertions.assertTrue(row.getText().contains("sm-sales"), row.getText());
+    Assertions.assertTrue(
+        driver
+            .findElements(By.cssSelector("#asset-rows tr[data-asset-id='" + domain.getId() + "']"))
+            .isEmpty(),
+        "an entity that is not an asset must not be listed");
+
+    // And it can be removed from there.
+    row.findElement(By.cssSelector(".ref-chip-remove")).click();
+    driver.switchTo().alert().accept();
+    await()
+        .until(
+            d ->
+                entityService
+                    .linked(table.getId(), it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON)
+                    .isEmpty());
+  }
+
+  /**
+   * A right-click on the board creates a new node without leaving it: the menu offers the types
+   * that belong there, and the dialog asks for the values the chosen type declares.
+   */
+  @Test
+  void aRightClickOnTheBoardCreatesSomethingForAssetsToDependOn() {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var board =
+        await()
+            .until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("#asset-graph svg")));
+    // The corner of the board: the layout centres the nodes, so nothing is drawn there. Read from
+    // the page rather than offset from the element: the board can reach below the window, and the
+    // driver measures an element offset from the centre of the part that is in view.
+    @SuppressWarnings("unchecked")
+    var corner =
+        (List<Number>)
+            ((org.openqa.selenium.JavascriptExecutor) driver)
+                .executeScript(
+                    "var r = arguments[0].getBoundingClientRect();"
+                        + " return [Math.round(r.left + 24), Math.round(r.top + 24)];",
+                    board);
+    new org.openqa.selenium.interactions.Actions(driver)
+        .moveToLocation(corner.get(0).intValue(), corner.get(1).intValue())
+        .contextClick()
+        .perform();
+
+    var menu = await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    Assertions.assertTrue(menu.getText().contains("SmTableType"), menu.getText());
+    menu.findElements(By.cssSelector("button")).stream()
+        .filter(item -> item.getText().equals("SmDomainType"))
+        .findFirst()
+        .orElseThrow()
+        .click();
+
+    var name =
+        await()
+            .until(
+                ExpectedConditions.visibilityOfElementLocated(
+                    By.cssSelector("#board-dialog input[name='name']")));
+    name.sendKeys("sm-created-on-the-board");
+    driver.findElement(By.id("board-dialog-create")).click();
+
+    await()
+        .until(
+            d ->
+                d
+                    .findElements(By.cssSelector("#asset-graph .gc-node-entity .gc-node-title"))
+                    .stream()
+                    .anyMatch(title -> title.getText().equals("sm-created-on-the-board")));
+    Assertions.assertTrue(
+        entityService.list("SmDomainType", "").stream()
+            .anyMatch(
+                entity ->
+                    "sm-created-on-the-board".equals(entity.getValues().get("name").asText())));
+  }
+
+  /**
+   * A right-click on an asset offers its four runs. One launched there comes back to the graph,
+   * where the progress popup follows it to its end — the browser is not taken to the asset's page.
+   */
+  @Test
+  void aRightClickOnAnAssetLaunchesItsRuns() {
+    ensureAssetModel();
+    var table =
+        context.getBean(EntityService.class).create("SmTableType", "{\"name\": \"sm-runnable\"}");
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var node =
+        await()
+            .until(
+                ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
+    new org.openqa.selenium.interactions.Actions(driver).contextClick(node).perform();
+    var menu = await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    var items = menu.findElements(By.cssSelector("button")).stream().map(e -> e.getText()).toList();
+    Assertions.assertTrue(
+        items.containsAll(List.of("Provision", "Unprovision", "Authorize", "Reject")),
+        items.toString());
+
+    menu.findElements(By.cssSelector("button")).stream()
+        .filter(item -> item.getText().equals("Provision"))
+        .findFirst()
+        .orElseThrow()
+        .click();
+    var question = await().until(ExpectedConditions.alertIsPresent());
+    Assertions.assertTrue(question.getText().contains("sm-runnable"), question.getText());
+    question.accept();
+
+    // The run is followed from the graph, to its end.
+    var outcome =
+        await()
+            .until(
+                ExpectedConditions.visibilityOfElementLocated(
+                    By.cssSelector("#procedure-popup.ok")));
+    Assertions.assertTrue(outcome.getText().contains("Provisioning"), outcome.getText());
+    Assertions.assertTrue(outcome.getText().contains("completed"), outcome.getText());
+    Assertions.assertTrue(
+        driver.getCurrentUrl().contains("/ui/assets?view=graph"), driver.getCurrentUrl());
+    await()
+        .until(
+            ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector("#asset-graph .gc-node[data-node-id='" + table.getId() + "']")));
+  }
+
+  /**
+   * A right-click on a node deletes it, after asking: an asset as the whole aggregate it is, an
+   * entity alone. What an asset still depends on is refused before anything is asked, with the
+   * asset that depends on it.
+   */
+  @Test
+  void aRightClickOnANodeDeletesIt() {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+    var domain = entityService.create("SmDomainType", "{\"name\": \"sm-doomed-domain\"}");
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-doomed-table }
+                    parts:
+                      - entityType: SmColumnType
+                        values: { name: sm-doomed-column }
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    var columnId =
+        entityService
+            .linked(tableId, it.davidgreco.metacatalog.entity.RelationType.HAS_PART)
+            .getFirst()
+            .getId();
+    entityService.link(
+        tableId, it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON, domain.getId());
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    java.util.function.Consumer<String> deleteFromMenu =
+        id -> {
+          var node =
+              await()
+                  .until(
+                      ExpectedConditions.presenceOfElementLocated(
+                          By.cssSelector("#asset-graph .gc-node[data-node-id='" + id + "']")));
+          new org.openqa.selenium.interactions.Actions(driver).contextClick(node).perform();
+          await()
+              .until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")))
+              .findElements(By.cssSelector("button"))
+              .stream()
+              .filter(item -> item.getText().equals("Delete"))
+              .findFirst()
+              .orElseThrow()
+              .click();
+        };
+
+    // The table depends on the domain: nothing is asked, and the reason names the table.
+    deleteFromMenu.accept(domain.getId());
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .error")).stream()
+                    .anyMatch(e -> e.getText().contains("«sm-doomed-table» depends on it")));
+    Assertions.assertTrue(entityService.exists(domain.getId()));
+
+    // A part is content of its asset: its menu has no Delete.
+    new org.openqa.selenium.interactions.Actions(driver)
+        .contextClick(graphNode(columnId))
+        .perform();
+    var partMenu =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("board-menu")));
+    Assertions.assertFalse(partMenu.getText().contains("Delete"), partMenu.getText());
+    new org.openqa.selenium.interactions.Actions(driver)
+        .sendKeys(org.openqa.selenium.Keys.ESCAPE)
+        .perform();
+
+    // The asset goes as a whole, its part with it; then nothing depends on the domain any more.
+    deleteFromMenu.accept(tableId);
+    await().until(ExpectedConditions.alertIsPresent()).accept();
+    await()
+        .until(
+            d ->
+                d.findElements(
+                        By.cssSelector("#asset-graph .gc-node[data-node-id='" + tableId + "']"))
+                    .isEmpty());
+    Assertions.assertFalse(entityService.exists(tableId));
+    Assertions.assertFalse(entityService.exists(columnId));
+
+    deleteFromMenu.accept(domain.getId());
+    await().until(ExpectedConditions.alertIsPresent()).accept();
+    await()
+        .until(
+            d ->
+                d.findElements(
+                        By.cssSelector(
+                            "#asset-graph .gc-node[data-node-id='" + domain.getId() + "']"))
+                    .isEmpty());
+    Assertions.assertFalse(entityService.exists(domain.getId()));
+  }
+
+  /**
+   * The catalog shows what an asset materialises as: the entities mappings derived from its members
+   * hang below it in the graph, which can leave them out, and are named in the list.
+   */
+  @Test
+  void theCatalogShowsTheEntitiesMappedFromAnAsset() {
+    ensureAssetModel();
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    var mappingService = context.getBean(MappingService.class);
+    var aggregateService =
+        context.getBean(it.davidgreco.metacatalog.service.AggregateService.class);
+    var empty =
+        """
+        { "type": "object", "properties": {} }""";
+    entityTypeService.create(
+        "SmFeedType", List.of("AggregateElement", "SmNamed"), Optional.empty(), empty);
+    entityTypeService.create("SmTopicType", List.of("SmNamed"), Optional.empty(), empty);
+    mappingService.create(
+        "SmFeedType",
+        "SmTopicType",
+        """
+        { "name": "#source.getValue('$.name').asText() + '-topic'" }""",
+        List.of());
+
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-mapped }
+                    parts:
+                      - entityType: SmFeedType
+                        values: { name: sm-feed }
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    // The mapping updater derives the topic a moment after the load.
+    await()
+        .until(
+            d ->
+                aggregateService.assets().stream()
+                    .filter(asset -> asset.entity().getId().equals(tableId))
+                    .anyMatch(asset -> !asset.mapped().isEmpty()));
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var topic =
+        await()
+            .until(
+                d ->
+                    d.findElements(By.cssSelector("#asset-graph .gc-node-mapped")).stream()
+                        .filter(node -> node.getText().contains("sm-feed-topic"))
+                        .findFirst()
+                        .orElse(null));
+    Assertions.assertTrue(topic.getText().contains("from sm-feed"), topic.getText());
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-mapping")).isEmpty(),
+        "a mapped entity must be joined to its asset");
+
+    // Selecting it says where it comes from and leads to the mapping that made it.
+    topic.click();
+    var panel =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("asset-panel-detail")));
+    Assertions.assertTrue(panel.getText().contains("sm-mapped"), panel.getText());
+    Assertions.assertTrue(
+        panel.findElements(By.cssSelector("a")).stream()
+            .anyMatch(
+                link ->
+                    link.getDomAttribute("href")
+                        .endsWith("/ui/admin/mappings/new?source=SmFeedType&target=SmTopicType")));
+
+    driver.findElement(By.id("asset-show-mapped")).click();
+    await().until(d -> d.findElements(By.cssSelector("#asset-graph .gc-node-mapped")).isEmpty());
+
+    driver.findElement(By.cssSelector(".view-switch [data-view='list']")).click();
+    var row = driver.findElement(By.cssSelector("#asset-rows tr[data-asset-id='" + tableId + "']"));
+    Assertions.assertTrue(row.getText().contains("sm-feed-topic"), row.getText());
+  }
+
+  /**
+   * The graph draws an asset's inside: its parts below it, and a dependency between two parts as an
+   * edge of its own kind. The inside is shown, not edited — a part dropped on something is refused
+   * with the place where its dependencies are changed — and can be left out.
+   */
+  @Test
+  void theGraphShowsAnAssetsPartsAndTheDependenciesBetweenThem() {
+    ensureAssetModel();
+    var traitService = context.getBean(it.davidgreco.metacatalog.service.TraitService.class);
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    if (!traitService.exists("SmField")) {
+      // What lets one part depend on another. Its own trait rather than SmNamed, which the asset
+      // types carry too: relating that to itself would let every asset depend on every other.
+      traitService.create("SmField", Optional.empty(), Optional.empty());
+      traitService.link(
+          "SmField", it.davidgreco.metacatalog.entity.RelationType.DEPENDS_ON, "SmField");
+      entityTypeService.create(
+          "SmFieldType",
+          List.of("AggregateElement", "SmNamed", "SmField"),
+          Optional.empty(),
+          """
+          { "type": "object", "properties": {} }""");
+    }
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-structured }
+                    parts:
+                      - ref: key
+                        entityType: SmFieldType
+                        values: { name: sm-key }
+                      - entityType: SmFieldType
+                        values: { name: sm-ref }
+                        dependsOn: [key]
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    java.util.function.Function<String, org.openqa.selenium.WebElement> part =
+        name ->
+            await()
+                .until(
+                    d ->
+                        d.findElements(By.cssSelector("#asset-graph .gc-node-part")).stream()
+                            .filter(node -> node.getText().contains(name))
+                            .findFirst()
+                            .orElse(null));
+    var key = part.apply("sm-key");
+    var ref = part.apply("sm-ref");
+    Assertions.assertTrue(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-part")).size() >= 2,
+        "each part must be joined to what contains it");
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-internal")).isEmpty(),
+        "the dependency between the two parts must be drawn");
+    // With its inside drawn an asset is several rows tall, and all of it stays in view when the
+    // board shrinks: the graph follows the canvas rather than keeping the fit it was given when
+    // it was laid out, which left its lower rows outside a board that had got smaller.
+    var window = driver.manage().window();
+    var size = window.getSize();
+    try {
+      window.setSize(new org.openqa.selenium.Dimension(900, 520));
+      await()
+          .until(
+              d -> {
+                var board = d.findElement(By.id("asset-graph")).getRect();
+                return d.findElements(By.cssSelector("#asset-graph .gc-node")).stream()
+                    .map(org.openqa.selenium.WebElement::getRect)
+                    .allMatch(
+                        node ->
+                            node.getX() >= board.getX()
+                                && node.getY() >= board.getY()
+                                && node.getX() + node.getWidth() <= board.getX() + board.getWidth()
+                                && node.getY() + node.getHeight()
+                                    <= board.getY() + board.getHeight());
+              });
+    } finally {
+      window.setSize(size);
+    }
+
+    // What is depended on goes above, between parts as between assets.
+    Assertions.assertTrue(
+        key.getRect().getY() < ref.getRect().getY(),
+        "sm-key, which sm-ref depends on, must be drawn above it");
+
+    // Selecting a part says what it belongs to and what it depends on.
+    ref.click();
+    var panel =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("asset-panel-detail")));
+    Assertions.assertTrue(panel.getText().contains("sm-structured"), panel.getText());
+    Assertions.assertTrue(panel.getText().contains("sm-key"), panel.getText());
+
+    // A part is not something to drop: its dependencies are the asset's content.
+    dragOnto(ref, graphNode(tableId));
+    await()
+        .until(
+            d ->
+                d.findElements(By.cssSelector("#catalog-notices .error")).stream()
+                    .anyMatch(e -> e.getText().contains("is a part of «sm-structured»")));
+
+    driver.findElement(By.id("asset-show-parts")).click();
+    await().until(d -> d.findElements(By.cssSelector("#asset-graph .gc-node-part")).isEmpty());
+    Assertions.assertTrue(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-internal")).isEmpty());
+  }
+
+  /**
+   * Editing an asset saves it as a whole and changes only what was edited: the member keeps its
+   * identity, a new part is added, and the access policy comes back exactly as it was — a grant
+   * with no {@code resources} must not gain an empty one on the way through the builder.
+   */
+  @Test
+  void assetEditorSavesTheWholeAssetAndLeavesTheRestAlone() throws Exception {
+    ensureAssetModel();
+    var entityService = context.getBean(EntityService.class);
+    var bulkLoader = context.getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper();
+
+    var tableId =
+        bulkLoader
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values:
+                      name: sm-editable
+                      principals: [ { id: analysts, type: GROUP } ]
+                      permissions: [ { name: READ } ]
+                      grants: [ { principals: [analysts], permissions: [READ] } ]
+                    parts:
+                      - entityType: SmColumnType
+                        values: { name: sm-id }
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    var before = entityService.read(tableId).getValues();
+    var columnId =
+        entityService
+            .linked(tableId, it.davidgreco.metacatalog.entity.RelationType.HAS_PART)
+            .getFirst()
+            .getId();
+
+    driver.get(baseUrl + "/ui/assets/" + tableId + "/edit");
+    await()
+        .until(
+            ExpectedConditions.presenceOfElementLocated(
+                By.cssSelector("#aggregate-editor .mv-leaf .mv-input")));
+    var nameInput =
+        driver.findElements(By.cssSelector("#aggregate-editor .mv-leaf-label")).stream()
+            .filter(label -> label.getText().trim().startsWith("name"))
+            .findFirst()
+            .orElseThrow()
+            .findElement(By.cssSelector("input"));
+    Assertions.assertEquals("sm-editable", nameInput.getDomProperty("value"));
+    nameInput.clear();
+    nameInput.sendKeys("sm-edited");
+    // The statuses are a run's to write: shown, but not editable.
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#aggregate-editor .mv-readonly")).isEmpty());
+
+    driver.findElements(By.cssSelector("#aggregate-editor button.btn")).stream()
+        .filter(button -> button.getText().contains("Add SmColumnType"))
+        .findFirst()
+        .orElseThrow()
+        .click();
+    var newPartName =
+        driver.findElements(By.cssSelector("#aggregate-editor .mv-leaf-label")).stream()
+            .filter(label -> label.getText().trim().startsWith("name"))
+            .map(label -> label.findElement(By.cssSelector("input")))
+            .filter(input -> input.getDomProperty("value").isEmpty())
+            .findFirst()
+            .orElseThrow();
+    newPartName.sendKeys("sm-amount");
+
+    driver.findElement(By.cssSelector("#aggregate-form .form-actions button[type=submit]")).click();
+    await()
+        .until(
+            d ->
+                !d.findElements(By.cssSelector(".flash")).isEmpty()
+                    || !d.findElements(By.cssSelector(".error")).isEmpty());
+    var errors = driver.findElements(By.cssSelector(".error"));
+    Assertions.assertTrue(
+        errors.isEmpty(),
+        "saving must succeed, got: " + errors.stream().map(e -> e.getText()).toList());
+    Assertions.assertTrue(driver.getCurrentUrl().endsWith("/ui/assets/" + tableId));
+
+    var expected =
+        (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(before.toString());
+    expected.put("name", "sm-edited");
+    Assertions.assertEquals(
+        expected, entityService.read(tableId).getValues(), "only the edited field may change");
+    var parts =
+        entityService.linked(tableId, it.davidgreco.metacatalog.entity.RelationType.HAS_PART);
+    Assertions.assertEquals(2, parts.size());
+    Assertions.assertTrue(
+        parts.stream().anyMatch(part -> part.getId().equals(columnId)),
+        "the existing part must be kept, not re-created");
+    Assertions.assertTrue(
+        parts.stream().anyMatch(part -> "sm-amount".equals(part.getValues().get("name").asText())));
+  }
+
+  /**
+   * The model graph draws the built-in {@code Asset} trait with both of its parents, and says what
+   * it inherits when it is selected.
+   */
+  @Test
+  void modelGraphShowsWhatTheAssetTraitInherits() {
+    driver.get(baseUrl + "/ui/admin/graph");
+    var asset =
+        await()
+            .until(
+                ExpectedConditions.presenceOfElementLocated(
+                    By.cssSelector("#graph-canvas .gc-node[data-node-id='trait:Asset']")));
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#graph-canvas .gc-edge-mixes-in")).isEmpty(),
+        "the mixed-in trait must be drawn as an edge of its own");
+
+    asset.click();
+    var panel =
+        await()
+            .until(ExpectedConditions.visibilityOfElementLocated(By.id("graph-panel-detail")))
+            .getText();
+    Assertions.assertTrue(panel.contains("Provisionable"), panel);
+    Assertions.assertTrue(panel.contains("Authorizable"), panel);
+    Assertions.assertTrue(panel.toLowerCase().contains("built-in"), panel);
   }
 }

@@ -3,32 +3,22 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Meta Catalog</title>
+    <title>Model — Meta Catalog</title>
     <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
     <script th:src="@{/ui/js/theme.js}"></script>
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
     <script th:src="@{/ui/js/flash.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
-    <h1>Meta Catalog</h1>
+    <h1>Model</h1>
     <nav>
-        <a class="btn" th:href="@{/ui/traits/new}">+ New Trait</a>
-        <a class="btn" th:href="@{/ui/entity-types/new}">+ New Entity Type</a>
-        <a class="btn" th:href="@{/ui/trait-links/new}">+ New Trait Relationship</a>
-        <a class="btn" th:href="@{/ui/mappings/new}">+ New Mapping</a>
-        <a class="btn" th:href="@{/ui/graph}">◕ Graph</a>
-        <a class="btn" th:href="@{/ui/bulk}">↥ Upload YAML</a>
-        <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
-        <a class="btn" th:href="@{/ui/aggregates}">⛁ Aggregates</a>
-        <a class="btn" th:href="@{/ui/aggregates/new}">⛁ New Aggregate</a>
-        <a class="btn" th:href="@{/sparql}">◇ SPARQL</a>
-        <a class="btn" th:href="@{/swagger-ui.html}">⚙ Swagger</a>
+        <a class="btn" th:href="@{/ui/admin/traits/new}">+ New Trait</a>
+        <a class="btn" th:href="@{/ui/admin/entity-types/new}">+ New Entity Type</a>
+        <a class="btn" th:href="@{/ui/admin/trait-links/new}">+ New Trait Relationship</a>
+        <a class="btn" th:href="@{/ui/admin/mappings/new}">+ New Mapping</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
@@ -43,6 +33,7 @@
                 <th>Name</th>
                 <th>Version</th>
                 <th>Father</th>
+                <th>Mixed-in traits</th>
                 <th>Schema</th>
                 <th></th>
             </tr>
@@ -52,15 +43,19 @@
                 <td th:text="${trait.name}">name</td>
                 <td>
                     <a class="tag"
-                       th:href="@{/ui/traits/{name}/versions(name=${trait.name})}"
+                       th:href="@{/ui/admin/traits/{name}/versions(name=${trait.name})}"
                        th:text="'v' + ${trait.version}">v1</a>
                 </td>
                 <td th:text="${trait.father != null ? trait.father : '—'}">father</td>
                 <td>
+                    <span th:if="${trait.traits.isEmpty()}">—</span>
+                    <span class="tag" th:each="t : ${trait.traits}" th:text="${t}">trait</span>
+                </td>
+                <td>
                     <div class="js-schema" th:text="${trait.schema}">{}</div>
                 </td>
                 <td>
-                    <form method="post" th:action="@{/ui/traits/delete}" class="inline-form"
+                    <form method="post" th:action="@{/ui/admin/traits/delete}" class="inline-form"
                           data-confirm="Delete this trait? It must not be in use.">
                         <input type="hidden" name="name" th:value="${trait.name}"/>
                         <button type="submit" class="link-remove" title="Delete trait">×</button>
@@ -75,7 +70,7 @@
     <section>
         <div class="section-head">
             <h2>Trait Relationships</h2>
-            <a class="btn" th:href="@{/ui/trait-links/new}">+ New</a>
+            <a class="btn" th:href="@{/ui/admin/trait-links/new}">+ New</a>
         </div>
         <table th:if="${!traitLinks.isEmpty()}">
             <thead>
@@ -92,7 +87,7 @@
                 <td><span class="tag" th:text="${link.relationType}">DEPENDS_ON</span></td>
                 <td th:text="${link.target}">target</td>
                 <td>
-                    <form method="post" th:action="@{/ui/trait-links/delete}" class="inline-form">
+                    <form method="post" th:action="@{/ui/admin/trait-links/delete}" class="inline-form">
                         <input type="hidden" name="sourceTrait" th:value="${link.source}"/>
                         <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
                         <input type="hidden" name="targetTrait" th:value="${link.target}"/>
@@ -123,7 +118,7 @@
                 <td th:text="${et.name}">name</td>
                 <td>
                     <a class="tag"
-                       th:href="@{/ui/entity-types/{name}/versions(name=${et.name})}"
+                       th:href="@{/ui/admin/entity-types/{name}/versions(name=${et.name})}"
                        th:text="'v' + ${et.version}">v1</a>
                 </td>
                 <td th:text="${et.father != null ? et.father : '—'}">father</td>
@@ -135,7 +130,7 @@
                     <div class="js-schema" th:text="${et.schema}">{}</div>
                 </td>
                 <td>
-                    <form method="post" th:action="@{/ui/entity-types/delete}" class="inline-form"
+                    <form method="post" th:action="@{/ui/admin/entity-types/delete}" class="inline-form"
                           data-confirm="Delete this entity type? It must have no entities or child types.">
                         <input type="hidden" name="name" th:value="${et.name}"/>
                         <button type="submit" class="link-remove" title="Delete entity type">×</button>
@@ -150,7 +145,7 @@
     <section>
         <div class="section-head">
             <h2>Mappings</h2>
-            <a class="btn" th:href="@{/ui/mappings/new}">+ New</a>
+            <a class="btn" th:href="@{/ui/admin/mappings/new}">+ New</a>
         </div>
         <table th:if="${!mappings.isEmpty()}">
             <thead>
@@ -173,7 +168,7 @@
                     <div class="js-pathrefs" th:text="${m.entityPathReferences}">[]</div>
                 </td>
                 <td>
-                    <form method="post" th:action="@{/ui/mappings/delete}" class="inline-form"
+                    <form method="post" th:action="@{/ui/admin/mappings/delete}" class="inline-form"
                           data-confirm="Delete this mapping? It must have no mapped entities.">
                         <input type="hidden" name="id" th:value="${m.id}"/>
                         <button type="submit" class="link-remove" title="Delete mapping">×</button>

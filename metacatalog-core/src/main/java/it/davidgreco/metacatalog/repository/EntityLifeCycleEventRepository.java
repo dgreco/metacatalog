@@ -20,4 +20,15 @@ public interface EntityLifeCycleEventRepository extends JpaRepository<EntityLife
    * @return list of matching lifecycle events
    */
   List<EntityLifeCycleEvent> findByEventTypeAndEventStatus(String eventType, String eventStatus);
+
+  /**
+   * Whether an event of the given type and status is recorded for an entity.
+   *
+   * @param entityId the id of the entity the event is about
+   * @param eventType the type of event
+   * @param eventStatus the status of the event
+   * @return true if at least one such event exists
+   */
+  boolean existsByEntityIdAndEventTypeAndEventStatus(
+      String entityId, String eventType, String eventStatus);
 }

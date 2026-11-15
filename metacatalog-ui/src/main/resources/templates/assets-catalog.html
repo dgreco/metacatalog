@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Asset catalog — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
+    <script th:src="@{/ui/js/flash.js}" defer></script>
+</head>
+<body>
+<header th:replace="~{fragments/shell :: appbar('assets', ${view == 'graph'} ? 'graph' : 'catalog')}"></header>
+<header class="topbar wide">
+    <h1>Asset catalog</h1>
+    <nav>
+        <a class="btn primary" th:href="@{/ui/assets/new}">+ New asset</a>
+        <a class="btn" th:href="@{/ui/assets/upload}">↥ Upload YAML</a>
+    </nav>
+</header>
+
+<main class="wide">
+    <div th:replace="~{fragments/shell :: notices}"></div>
+    <div id="catalog-notices" aria-live="polite"></div>
+
+    <!-- Nothing can be an asset until a type carries the Asset trait: say so, and say where. -->
+    <div class="callout" th:if="${catalog.types.isEmpty()}">
+        <strong>No asset types yet.</strong>
+        An asset is an aggregate whose root type carries the built-in <code>Asset</code> trait.
+        Define such an entity type under
+        <a th:href="@{/ui/admin}">Administration</a> — and at least one part type for it to contain —
+        and it will be offered here.
+    </div>
+
+    <div class="catalog-bar" th:unless="${catalog.types.isEmpty()}">
+        <div class="view-switch" role="group" aria-label="Catalog view">
+            <button type="button" data-view="list" th:classappend="${view == 'list'} ? 'active'">List</button>
+            <button type="button" data-view="graph" th:classappend="${view == 'graph'} ? 'active'">Dependency graph</button>
+        </div>
+        <label class="catalog-filter">
+            <span>Type</span>
+            <select id="catalog-type">
+                <option value="">All asset types</option>
+                <option th:each="t : ${catalog.types}" th:value="${t}" th:text="${t}"
+                        th:selected="${t == selectedType}">type</option>
+            </select>
+        </label>
+        <input type="search" id="catalog-search" class="catalog-search"
+               placeholder="Filter by name…" aria-label="Filter assets by name"/>
+        <span class="catalog-count" id="catalog-count"></span>
+        <div class="catalog-tools" id="catalog-graph-tools" hidden>
+            <label class="graph-toggle" title="Draw each asset's parts and the dependencies between them">
+                <input type="checkbox" id="asset-show-parts" checked/> Parts
+            </label>
+            <label class="graph-toggle" title="Draw the entities mappings derived from each asset's members">
+                <input type="checkbox" id="asset-show-mapped" checked/> Mapped entities
+            </label>
+            <button class="btn-sm" id="asset-zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
+            <button class="btn-sm" id="asset-zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+            <button class="btn-sm" id="asset-fit" type="button" title="Fit the whole graph in view">Fit</button>
+            <button class="btn-sm" id="asset-relayout" type="button" title="Put every asset back where the layout places it">Re-layout</button>
+        </div>
+    </div>
+
+    <p class="hint catalog-hint" th:unless="${catalog.types.isEmpty()}">
+        Drag an asset onto another asset — or, in the graph, onto an aggregate or an entity — to make
+        it <strong>depend on</strong> it. Only the combinations the model allows accept the drop:
+        the two types must carry traits related by <code>DEPENDS_ON</code>. Right-click the graph's
+        board to create a new asset, or a new thing for assets to depend on.
+    </p>
+
+    <section id="catalog-list" th:unless="${catalog.types.isEmpty()}" th:hidden="${view == 'graph'}">
+        <table class="asset-table" id="asset-table">
+            <thead>
+            <tr>
+                <th class="col-grip" aria-hidden="true"></th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Provisioning</th>
+                <th>Authorization</th>
+                <th>Depends on</th>
+                <th>Required by</th>
+                <th>Mapped entities</th>
+                <th></th>
+            </tr>
+            </thead>
+            <tbody id="asset-rows"></tbody>
+        </table>
+        <p class="empty" id="catalog-empty" hidden>No assets yet.</p>
+        <noscript><p class="error">The asset catalog needs JavaScript.</p></noscript>
+    </section>
+
+    <section id="catalog-graph" th:unless="${catalog.types.isEmpty()}" th:hidden="${view != 'graph'}">
+        <div class="graph-stage">
+            <div id="asset-graph" class="graph-canvas"></div>
+            <aside class="graph-panel" id="asset-panel" aria-live="polite">
+                <div id="asset-panel-idle">
+                    <h2>Dependency graph</h2>
+                    <p class="hint">
+                        Every asset is a node, and so is everything an asset depends on or may
+                        depend on: other assets, aggregates and plain entities. An arrow points
+                        from an asset to what it depends on, which is drawn above it. Below an
+                        asset is its inside: its parts, with a dashed arrow from a part to each
+                        part it depends on, and the entities mappings derived from them. Select a
+                        node or an edge to act on it; right-click the board to create a new one.
+                    </p>
+                    <h3>On the board</h3>
+                    <ul class="graph-legend-list" id="asset-type-legend"></ul>
+                    <h3>Allowed dependencies</h3>
+                    <ul class="rule-list" id="asset-rule-list"></ul>
+                </div>
+                <div id="asset-panel-detail" hidden></div>
+            </aside>
+        </div>
+    </section>
+
+    <!-- Carries the CSRF token the dependency requests must forward when security is enabled. -->
+    <form id="dependency-form" method="post" th:action="@{/ui/assets/dependencies}" hidden></form>
+
+    <!-- What a right-click on the board opens, and the dialog its entries lead to. Both are filled
+         by asset-catalog.js from the types the catalog says can be created. -->
+    <div class="board-menu" id="board-menu" role="menu" hidden></div>
+    <dialog class="board-dialog" id="board-dialog" aria-labelledby="board-dialog-title">
+        <form method="dialog" id="board-dialog-form">
+            <h2 id="board-dialog-title">New</h2>
+            <p class="hint" id="board-dialog-hint"></p>
+            <div id="board-dialog-fields"></div>
+            <div class="error" id="board-dialog-error" hidden></div>
+            <div class="actions">
+                <button type="submit" class="btn primary" id="board-dialog-create">Create</button>
+                <button type="button" class="btn" id="board-dialog-cancel">Cancel</button>
+            </div>
+        </form>
+    </dialog>
+</main>
+
+<script type="application/json" id="catalog-data" th:utext="${catalogJson}">{"assets":[],"targets":[],"rules":[],"types":[],"creatable":[],"procedures":[]}</script>
+<script th:src="@{/ui/js/graph-core.js}"></script>
+<script th:src="@{/ui/js/asset-catalog.js}"></script>
+</body>
+</html>

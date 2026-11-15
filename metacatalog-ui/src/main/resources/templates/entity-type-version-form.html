@@ -9,16 +9,13 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Version of <span th:text="${entityTypeVersionForm.name}">name</span></h1>
     <nav>
-        <a class="btn" th:href="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">↑ Versions</a>
-        <a class="btn" th:href="@{/ui}">← Back</a>
+        <a class="btn" th:href="@{/ui/admin/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">↑ Versions</a>
+        <a class="btn" th:href="@{/ui/admin}">← Back</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
@@ -31,7 +28,7 @@
     </p>
 
     <form method="post"
-          th:action="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}"
+          th:action="@{/ui/admin/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}"
           th:object="${entityTypeVersionForm}" id="type-form">
         <label>
             Name
@@ -88,7 +85,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary">Create new version</button>
-            <a class="btn" th:href="@{/ui/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin/entity-types/{name}/versions(name=${entityTypeVersionForm.name})}">Cancel</a>
         </div>
     </form>
 </main>

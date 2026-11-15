@@ -23,6 +23,18 @@
 # The instance probe still uses the root instance's type and name; override with
 # ROOT_ENTITY_TYPE / ROOT_ENTITY_NAME.
 #
+# The instances file may hold more than the aggregate: documents after the first are its
+# companions — the domain the demo's data product depends on. A companion that is already in the
+# catalog is not loaded again: its document is left out and what referred to it by `ref` is pointed
+# at the existing entity by id, which the aggregate endpoint accepts in `dependsOn`. Otherwise
+# re-creating the aggregate after it was deleted from the UI would leave a second domain of the
+# same name behind every time.
+#
+# Once the instances are loaded the aggregate is given its second version, from
+# NEXT_VERSION_FILE: the demo's data product is versionable, and a history with one version in it
+# shows nothing of how versioning works. It is done only right after a load — an aggregate that is
+# already there keeps whatever history it has.
+#
 # Known gap: the Mappings section is not probed — there is no read-by-name for a
 # mapping — so a model changed only there still reads as fully loaded.
 set -eu
@@ -30,6 +42,7 @@ set -eu
 APP_URL="${APP_URL:-http://app:8080}"
 MODEL_FILE="${MODEL_FILE:-/bulk/bulk-model.yaml}"
 INSTANCES_FILE="${INSTANCES_FILE:-/bulk/bulk-instances.yaml}"
+NEXT_VERSION_FILE="${NEXT_VERSION_FILE:-/bulk/bulk-instances-v2.yaml}"
 
 # HTTP Basic credentials matching application-docker.yaml (admin / admin).
 AUTH="${METACATALOG_USER:-admin}:${METACATALOG_PASSWORD:-admin}"
@@ -193,15 +206,113 @@ else
   echo "[bulk-loader] model loaded"
 fi
 
+# Every document after the first, as "<ref> <entity type> <name>" per line. A document's root
+# fields sit at column 0 and its values two spaces in, which is what tells them from a part's.
+declared_companions() {
+  awk '
+    function flush() { if (doc > 1 && ref != "" && type != "" && name != "") print ref, type, name }
+    /^---[[:space:]]*$/ { flush(); doc++; ref = ""; type = ""; name = ""; next }
+    BEGIN { doc = 1 }
+    /^ref:/ { ref = $2; gsub(/"/, "", ref) }
+    /^entityType:/ { type = $2; gsub(/"/, "", type) }
+    /^  name:/ && name == "" { name = $2; gsub(/"/, "", name) }
+    END { flush() }
+  ' "${INSTANCES_FILE}"
+}
+
+# The id of the entity of the given type and name, or nothing.
+entity_id() { # <entity type> <name>
+  curl -fsS -u "${AUTH}" --get \
+    --data-urlencode "entityTypeName=$1" \
+    --data-urlencode "queryPath=\$ ? (@.name == \"$2\")" \
+    "${APP_URL}/metacatalog/v1/entity" 2>/dev/null \
+    | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+
+# Writes the instances to load: the file as it is, minus every companion the catalog already has.
+instances_to_load() { # <output file>
+  cp "${INSTANCES_FILE}" "$1"
+  declared_companions | while read -r ref type name; do
+    id=$(entity_id "${type}" "${name}")
+    [ -n "${id}" ] || continue
+    echo "[bulk-loader] ${type} '${name}' already exists, reusing it" >&2
+    # Drop the companion's own document, then turn the list entries naming its ref into its id.
+    awk -v want="${ref}" '
+      function flush() { if (!skip) printf "%s", buf; buf = ""; skip = 0 }
+      /^---[[:space:]]*$/ { flush() }
+      { buf = buf $0 "\n" }
+      $0 ~ "^ref:[[:space:]]*\"?" want "\"?[[:space:]]*$" { skip = 1 }
+      END { flush() }
+    ' "$1" > "$1.tmp"
+    sed "s/^\([[:space:]]*-[[:space:]]*\)\"${ref}\"[[:space:]]*$/\1\"${id}\"/" "$1.tmp" > "$1"
+    rm -f "$1.tmp"
+  done
+}
+
+# Gives the aggregate just loaded its second version: the parts NEXT_VERSION_FILE lists, appended
+# to the aggregate as the API serves it and sent back as one update.
+#
+# The aggregate's YAML ends with the root's `parts`, a list whose items start at column 0 — which
+# is how the file's own items are written, so appending them extends that list.
+record_next_version() {
+  [ -f "${NEXT_VERSION_FILE}" ] || return 0
+  root=$(entity_id "${ROOT_ENTITY_TYPE}" "${ROOT_ENTITY_NAME}")
+  if [ -z "${root}" ]; then
+    echo "[bulk-loader] aggregate '${ROOT_ENTITY_NAME}' not found, no second version recorded" >&2
+    return 1
+  fi
+  # The resources of the first version are derived a moment after the load. Waiting for them is
+  # not needed for the update to work; it makes the second version record them, so the history
+  # shows what the first version turned into. Read with its derived entities, the aggregate lists
+  # each under the part it was derived from, as that part's own `parts`. Bounded: a model that
+  # derives nothing never has any.
+  tries=0
+  until curl -fsS -u "${AUTH}" "${APP_URL}/metacatalog/v1/aggregate/${root}/yaml?retrieveMappedEntities=true" 2>/dev/null \
+      | grep -q '^  parts:'; do
+    tries=$((tries + 1))
+    [ "${tries}" -ge 10 ] && break
+    sleep 1
+  done
+  curl -fsS -u "${AUTH}" -o /tmp/next-version.yaml \
+    "${APP_URL}/metacatalog/v1/aggregate/${root}/yaml?retrieveMappedEntities=false"
+  cp "${NEXT_VERSION_FILE}" /tmp/next-version-parts.yaml
+  # {{EntityType/name}} is an entity that exists by now; what refers to it needs its id. Comment
+  # lines are left out of the search: the file explains the notation by showing it.
+  grep -v '^[[:space:]]*#' "${NEXT_VERSION_FILE}" | sed -n 's/.*{{\([^}]*\)}}.*/\1/p' | sort -u \
+      | while read -r reference; do
+    id=$(entity_id "${reference%%/*}" "${reference#*/}")
+    if [ -z "${id}" ]; then
+      echo "[bulk-loader] ${NEXT_VERSION_FILE} refers to {{${reference}}}, which does not exist" >&2
+      exit 1
+    fi
+    sed "s|{{${reference}}}|${id}|g" /tmp/next-version-parts.yaml > /tmp/next-version-parts.tmp
+    mv /tmp/next-version-parts.tmp /tmp/next-version-parts.yaml
+  done
+  cat /tmp/next-version-parts.yaml >> /tmp/next-version.yaml
+  http_code=$(curl -s -o /tmp/next-version.out -w "%{http_code}" \
+    -X PUT \
+    -u "${AUTH}" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary "@/tmp/next-version.yaml" \
+    "${APP_URL}/metacatalog/v1/aggregate/${root}/yaml")
+  if [ "${http_code}" != "204" ]; then
+    echo "[bulk-loader] recording the second version failed with HTTP ${http_code}" >&2
+    cat /tmp/next-version.out >&2
+    return 1
+  fi
+  echo "[bulk-loader] second version of '${ROOT_ENTITY_NAME}' recorded from ${NEXT_VERSION_FILE}"
+}
+
 if instances_loaded; then
   echo "[bulk-loader] aggregate '${ROOT_ENTITY_NAME}' (${ROOT_ENTITY_TYPE}) already exists, skipping"
 else
   echo "[bulk-loader] loading aggregate instances from ${INSTANCES_FILE}"
+  instances_to_load /tmp/instances.yaml
   http_code=$(curl -s -o /tmp/instances.out -w "%{http_code}" \
     -X POST \
     -u "${AUTH}" \
     -H "Content-Type: application/octet-stream" \
-    --data-binary "@${INSTANCES_FILE}" \
+    --data-binary "@/tmp/instances.yaml" \
     "${APP_URL}/metacatalog/v1/aggregate/yaml")
   if [ "${http_code}" != "204" ]; then
     echo "[bulk-loader] aggregate instances load failed with HTTP ${http_code}" >&2
@@ -209,5 +320,6 @@ else
     exit 1
   fi
   echo "[bulk-loader] aggregate instances loaded"
+  record_next_version
 fi
 echo "[bulk-loader] done"

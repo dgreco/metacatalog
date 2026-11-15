@@ -178,7 +178,7 @@ public class ImmutableModelInstaller implements ApplicationRunner {
     }
 
     @Override
-    public void trait(String name, String schema, String fatherName) {
+    public void trait(String name, String schema, String fatherName, List<String> traits) {
       if (traitService.exists(name)) {
         var live = traitService.read(name);
         if (live.isImmutable()) {
@@ -189,6 +189,7 @@ public class ImmutableModelInstaller implements ApplicationRunner {
               live.getBaseSchema(),
               fatherName,
               live.getFather() == null ? null : live.getFather().getName());
+          checkMixinsStillDeclaredAs(name, traits, live.getTraits());
         } else {
           warnMutable("Trait", name);
         }
@@ -202,7 +203,8 @@ public class ImmutableModelInstaller implements ApplicationRunner {
       traitWriter.createImmutable(
           name,
           Optional.of(schema == null ? EMPTY_SCHEMA : schema),
-          Optional.ofNullable(fatherName));
+          Optional.ofNullable(fatherName),
+          traits == null ? List.of() : traits);
       created++;
       log.debug("Created immutable trait {}", name);
     }
@@ -319,6 +321,19 @@ public class ImmutableModelInstaller implements ApplicationRunner {
       SortedSet<String> liveNames = new TreeSet<>(live.stream().map(Trait::getName).toList());
       if (!declaredNames.equals(liveNames)) {
         throw drifted("EntityType", name, "trait set", liveNames, declaredNames);
+      }
+    }
+
+    /**
+     * Compared as sequences, unlike an entity type's traits: {@code trait_traits} does carry an
+     * order column, and the order is part of the declaration — it decides which mix-in's version of
+     * a property wins — so a reordering is drift.
+     */
+    private void checkMixinsStillDeclaredAs(String name, List<String> declared, List<Trait> live) {
+      var declaredNames = declared == null ? List.<String>of() : declared;
+      var liveNames = live.stream().map(Trait::getName).toList();
+      if (!declaredNames.equals(liveNames)) {
+        throw drifted("Trait", name, "mixed-in traits", liveNames, declaredNames);
       }
     }
 

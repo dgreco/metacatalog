@@ -16,7 +16,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /** Mapping CRUD: create / delete mapping entity type relationships via the REST API. */
 @Controller
-@RequestMapping("/ui")
+@RequestMapping("/ui/admin")
 public class MappingUiController {
 
   private final MetacatalogApiDelegate api;
@@ -30,10 +30,22 @@ public class MappingUiController {
     this.jsonSerializer = jsonSerializer;
   }
 
+  /**
+   * The mapping form. {@code source} and {@code target} preselect the pair, which is how "Edit
+   * mapping" links elsewhere — the model graph, an asset's page — open the form on a mapping that
+   * exists: a pair that already has one is proposed its values by the page, and submitting replaces
+   * it.
+   */
   @GetMapping("/mappings/new")
-  public String newMapping(Model model) {
+  public String newMapping(
+      @RequestParam(required = false) String source,
+      @RequestParam(required = false) String target,
+      Model model) {
     if (!model.containsAttribute("mappingForm")) {
-      model.addAttribute("mappingForm", new MappingForm());
+      var form = new MappingForm();
+      form.setSourceEntityType(source);
+      form.setTargetEntityType(target);
+      model.addAttribute("mappingForm", form);
     }
     model.addAttribute("entityTypes", api.listEntityTypes().getBody());
     addMappings(model);
@@ -70,7 +82,7 @@ public class MappingUiController {
               + "' to '"
               + form.getTargetEntityType()
               + "' saved (an existing mapping for the pair is replaced).");
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     } catch (RuntimeException e) {
       return renderMappingError(model, e.getMessage());
     }
@@ -104,6 +116,11 @@ public class MappingUiController {
   @PostMapping("/mappings/delete")
   public String deleteMapping(@RequestParam String id, RedirectAttributes redirectAttributes) {
     return UiControllerHelper.flashAndRedirect(
-        () -> api.deleteMapping(id), "Mapping deleted.", "Mapping", id, "/ui", redirectAttributes);
+        () -> api.deleteMapping(id),
+        "Mapping deleted.",
+        "Mapping",
+        id,
+        "/ui/admin",
+        redirectAttributes);
   }
 }

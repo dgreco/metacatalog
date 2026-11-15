@@ -66,14 +66,30 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public Trait create(String name, Optional<String> schema, Optional<String> fatherName) {
-    return doCreate(name, schema, fatherName, false);
+    return doCreate(name, schema, fatherName, List.of(), false);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Trait create(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits) {
+    return doCreate(name, schema, fatherName, traits, false);
   }
 
   /** {@inheritDoc} */
   @Override
   @Transactional(propagation = Propagation.REQUIRED)
   public Trait createImmutable(String name, Optional<String> schema, Optional<String> fatherName) {
-    return doCreate(name, schema, fatherName, true);
+    return doCreate(name, schema, fatherName, List.of(), true);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Trait createImmutable(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits) {
+    return doCreate(name, schema, fatherName, traits, true);
   }
 
   /**
@@ -83,7 +99,11 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
    * clearer when the shared code cannot be mistaken for an entry point at all.
    */
   private Trait doCreate(
-      String name, Optional<String> schema, Optional<String> fatherName, boolean immutable) {
+      String name,
+      Optional<String> schema,
+      Optional<String> fatherName,
+      List<String> traits,
+      boolean immutable) {
     log.info("Creating Trait: {}", name);
     try {
       var baseSchemaNode = parseSchema(schema);
@@ -93,13 +113,11 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
       trait.setVersion(1);
       trait.setImmutable(immutable);
       trait.setVersionGroupId(UUID.randomUUID().toString());
-      if (fatherName.isPresent()) {
-        var father =
-            traitRepository
-                .findByName(fatherName.get())
-                .orElseThrow(() -> new ServiceError(TRAIT + fatherName.get() + " does not exist"));
-        trait.setFather(father);
-      }
+      var father = resolveFather(fatherName);
+      var mixins = resolveMixins(traits);
+      checkParents(name, father, mixins);
+      trait.setFather(father);
+      trait.setTraits(new ArrayList<>(mixins));
       trait.setDerivedSchema(computeDerivedSchema(trait));
       var saved = traitRepository.save(trait);
       log.info("Created Trait: {}", name);
@@ -130,6 +148,20 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
    */
   @Transactional(propagation = Propagation.REQUIRED)
   public Trait createVersion(String name, Optional<String> schema, Optional<String> fatherName) {
+    return doCreateVersion(name, schema, fatherName, List.of());
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  @Transactional(propagation = Propagation.REQUIRED)
+  public Trait createVersion(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits) {
+    return doCreateVersion(name, schema, fatherName, traits);
+  }
+
+  /** The shared body; see {@link #doCreate} on why it is private. */
+  private Trait doCreateVersion(
+      String name, Optional<String> schema, Optional<String> fatherName, List<String> traits) {
     log.info("Creating new version of Trait: {}", name);
     try {
       var live =
@@ -148,6 +180,10 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
       snapshot.setBaseSchema(live.getBaseSchema());
       snapshot.setDerivedSchema(live.getDerivedSchema());
       snapshot.setFatherName(live.getFather() == null ? null : live.getFather().getName());
+      snapshot.setTraits(
+          jsonUtils
+              .jsonMapper()
+              .valueToTree(live.getTraits().stream().map(Trait::getName).toList()));
       snapshot.setCreatedAt(Instant.now());
       var latestSnapshot =
           traitVersionRepository.findFirstByVersionGroupIdOrderByVersionDesc(
@@ -157,15 +193,14 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
 
       var baseSchemaNode = parseSchema(schema);
       live.setBaseSchema(baseSchemaNode);
-      if (fatherName.isPresent()) {
-        var father =
-            traitRepository
-                .findByName(fatherName.get())
-                .orElseThrow(() -> new ServiceError(TRAIT + fatherName.get() + " does not exist"));
-        live.setFather(father);
-      } else {
-        live.setFather(null);
-      }
+      var father = resolveFather(fatherName);
+      var mixins = resolveMixins(traits);
+      // Before the parents are assigned: once they are, a cycle makes every ancestry walk below —
+      // the derived schema, the carriage checks — recurse without end instead of failing.
+      checkParents(name, father, mixins);
+      live.setFather(father);
+      live.getTraits().clear();
+      live.getTraits().addAll(mixins);
       live.setDerivedSchema(computeDerivedSchema(live));
       if (carriedAggregate != ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE)
           || carriedElement != ServiceUtils.carriesTrait(live, BuiltInTraits.AGGREGATE_ELEMENT)) {
@@ -750,12 +785,107 @@ public class TraitServiceImpl implements TraitService, ImmutableTraitWriter {
     return TypeServiceSupport.parseSchema(jsonUtils, schema.orElse(EMPTY_SCHEMA));
   }
 
-  private JsonNode computeDerivedSchema(Trait trait) throws SchemaValidationError {
-    List<JsonNode> schemasToMerge = new ArrayList<>();
-    if (trait.getFather() != null) {
-      schemasToMerge.add(trait.getFather().getSchema());
+  private Trait resolveFather(Optional<String> fatherName) {
+    return fatherName
+        .map(
+            father ->
+                traitRepository
+                    .findByName(father)
+                    .orElseThrow(() -> new ServiceError(TRAIT + father + " does not exist")))
+        .orElse(null);
+  }
+
+  /** Resolves the mixed-in trait names, preserving the declaration order they are given in. */
+  private List<Trait> resolveMixins(List<String> traits) {
+    if (traits == null) return List.of();
+    var seen = new HashSet<String>();
+    var mixins = new ArrayList<Trait>();
+    for (var mixin : traits) {
+      if (!seen.add(mixin)) throw new ServiceError(TRAIT + mixin + " already defined");
+      mixins.add(
+          traitRepository
+              .findByName(mixin)
+              .orElseThrow(() -> new ServiceError(TRAIT + mixin + " does not exist")));
     }
-    schemasToMerge.add(trait.getBaseSchema());
+    return mixins;
+  }
+
+  /**
+   * Refuses a set of parents — the father and the mix-ins together — that is cyclic or says the
+   * same thing twice.
+   *
+   * <p><b>Cyclic:</b> a parent that already inherits from this trait. Only a new version can ask
+   * for that (a trait being created has no descendants yet), and nothing downstream survives it:
+   * every ancestry walk would recurse forever.
+   *
+   * <p><b>Redundant:</b> a parent that another parent already inherits. {@code Asset} inheriting
+   * {@code Provisionable}, {@code Authorizable} <em>and</em> {@code Aggregate} is the case in
+   * point: both capabilities descend from {@code Aggregate}, so naming it adds nothing — the
+   * linearization keeps one occurrence whatever is declared. It is refused rather than tolerated
+   * because the repetition is not harmless to a reader: it suggests the trait is an aggregate in
+   * some way the other two would not make it, and it survives as a stale claim if a capability is
+   * later re-parented. The message names the parent to drop and the one that already brings it.
+   *
+   * @param name the trait being created or versioned
+   * @param father its father, or {@code null}
+   * @param mixins its mixed-in traits, in declaration order
+   */
+  private void checkParents(String name, Trait father, List<Trait> mixins) {
+    var parents = new ArrayList<Trait>();
+    if (father != null) parents.add(father);
+    parents.addAll(mixins);
+
+    for (var parent : parents) {
+      if (ServiceUtils.carriesTrait(parent, name))
+        throw new ServiceError(
+            parent.getName().equals(name)
+                ? TRAIT + name + " cannot inherit from itself"
+                : TRAIT
+                    + name
+                    + " cannot inherit from "
+                    + parent.getName()
+                    + ": "
+                    + parent.getName()
+                    + " already inherits from "
+                    + name);
+    }
+    // By position, not by identity: the same trait named as father and as mix-in is one object
+    // within a persistence context, and comparing references would skip the very pair to refuse.
+    for (int i = 0; i < parents.size(); i++) {
+      var parent = parents.get(i);
+      for (int j = 0; j < parents.size(); j++) {
+        if (i == j) continue;
+        var other = parents.get(j);
+        if (other.getName().equals(parent.getName()))
+          throw new ServiceError(
+              TRAIT + parent.getName() + " is both the father and a mixed-in trait of " + name);
+        if (ServiceUtils.carriesTrait(other, parent.getName()))
+          throw new ServiceError(
+              TRAIT
+                  + parent.getName()
+                  + " is already inherited through "
+                  + other.getName()
+                  + "; declaring it again on "
+                  + name
+                  + " is redundant. Remove it.");
+      }
+    }
+  }
+
+  /**
+   * Merges the base schema of every ancestor, most general first, so a more specific declaration of
+   * a property wins.
+   *
+   * <p>The order is the trait's linearization, not "the father's effective schema, then each
+   * mix-in's". Merging effective schemas is only right without diamonds: where two parents share an
+   * ancestor, the ancestor's declaration would arrive a second time inside the later parent's
+   * effective schema and override what the earlier parent had refined. Linearizing visits each
+   * ancestor once, at its most general position.
+   */
+  private JsonNode computeDerivedSchema(Trait trait) throws SchemaValidationError {
+    var linearization = new ArrayList<>(ServiceUtils.traitAncestry(trait));
+    java.util.Collections.reverse(linearization);
+    var schemasToMerge = linearization.stream().map(Trait::getBaseSchema).toList();
     var mergedSchema = jsonUtils.mergeSchemas(schemasToMerge);
     if (mergedSchema.isLeft()) throw new SchemaValidationError(mergedSchema.getLeft());
     return mergedSchema.get();

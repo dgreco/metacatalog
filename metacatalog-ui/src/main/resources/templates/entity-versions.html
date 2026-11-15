@@ -10,17 +10,14 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'instances')}"></header>
 <header class="topbar">
     <h1>Instance history — <span th:text="${instanceName}">name</span>
         <span class="tag" th:text="${entityType}">type</span></h1>
     <nav>
-        <a class="btn" th:href="@{/ui/instances/{id}(id=${instanceId})}">← Back</a>
-        <a class="btn" th:href="@{/ui/instances}">Instances</a>
+        <a class="btn" th:href="@{/ui/admin/instances/{id}(id=${instanceId})}">← Back</a>
+        <a class="btn" th:href="@{/ui/admin/instances}">Instances</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
@@ -35,7 +32,7 @@
     <div class="section-head">
         <h2>Version history <span class="empty">(oldest first)</span></h2>
         <form method="post" th:if="${versions.size() > 1}"
-              th:action="@{/ui/instances/{id}/versions/delete-all(id=${instanceId})}"
+              th:action="@{/ui/admin/instances/{id}/versions/delete-all(id=${instanceId})}"
               class="inline-form"
               data-confirm="Delete every past version, and its frozen copy? The current version is kept.">
             <button type="submit" class="btn">Delete all versions</button>
@@ -75,11 +72,11 @@
                  on it, run the procedures its type offers. Nothing else can change it. -->
             <td>
                 <th:block th:if="${v.frozenRootId != null}">
-                    <a class="btn-sm" th:href="@{/ui/aggregates/{id}(id=${v.frozenRootId})}"
+                    <a class="btn-sm" th:href="@{/ui/admin/aggregates/{id}(id=${v.frozenRootId})}"
                        title="Open this version as an aggregate">Open</a>
                     <span class="tag muted" th:each="status : ${v.copyStatuses}" th:text="${status}">status</span>
                     <form th:each="action : ${v.actions}" method="post"
-                          th:action="@{/ui/instances/{id}/versions/{n}/procedure/{a}(id=${instanceId}, n=${v.version}, a=${action.path})}"
+                          th:action="@{/ui/admin/instances/{id}/versions/{n}/procedure/{a}(id=${instanceId}, n=${v.version}, a=${action.path})}"
                           class="inline-form"
                           th:attr="data-confirm=|Run ${action.label} on version ${v.version}? Its resources are named by its values: unless those changed, they are the same resources the live aggregate uses.|">
                         <button type="submit" class="btn-sm"
@@ -91,7 +88,7 @@
             </td>
             <td>
                 <form method="post" th:if="${!v.current}"
-                      th:action="@{/ui/instances/{id}/versions/{n}/delete(id=${instanceId}, n=${v.version})}"
+                      th:action="@{/ui/admin/instances/{id}/versions/{n}/delete(id=${instanceId}, n=${v.version})}"
                       class="inline-form"
                       th:attr="data-confirm=|Delete version ${v.version}? This cannot be undone.|">
                     <button type="submit" class="link-remove" title="Delete version">×</button>

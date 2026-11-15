@@ -2,6 +2,9 @@ entityType: "DataProductType"
 values:
   name: "dp1"
 
+dependsOn:
+  - "sales"
+
 parts:
 
 - ref: "op1"
@@ -15,3 +18,9 @@ parts:
     name: "op2"
   dependsOn:
      - "op1"
+
+---
+ref: "sales"
+entityType: "DomainType"
+values:
+  name: "sales"

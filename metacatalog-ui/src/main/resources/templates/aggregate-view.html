@@ -9,10 +9,11 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'aggregates')}"></header>
 <header class="topbar">
     <h1>View Aggregate</h1>
     <nav>
-        <a class="btn" th:href="@{/ui/aggregates}">Back</a>
+        <a class="btn" th:href="@{/ui/admin/aggregates}">Back</a>
     </nav>
 </header>
 

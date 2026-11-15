@@ -96,14 +96,32 @@ public final class ServiceUtils {
   }
 
   /**
-   * Checks if a trait carries another trait: the trait itself or any ancestor of its father chain.
+   * A trait and everything it inherits from: its father chain and the traits it mixes in, followed
+   * transitively, each once.
+   *
+   * <p>The one place that answers "what does this trait carry". Every carriage question — whether a
+   * type is an aggregate root, which capabilities it offers, whether a link is sanctioned — used to
+   * walk the father chain on its own, which was the whole ancestry while a trait had a single
+   * parent. With mix-ins a father-only walk would silently miss what a trait such as {@code Asset}
+   * inherits through them, so they all come here instead.
+   *
+   * @param trait the trait to expand
+   * @return the trait followed by its ancestors, most specific first
+   */
+  public static List<Trait> traitAncestry(Trait trait) {
+    return TypeLinearization.linearize(trait);
+  }
+
+  /**
+   * Checks if a trait carries another trait: the trait itself or any of its ancestors, through its
+   * father chain or its mixed-in traits.
    *
    * @param trait the trait to check
    * @param traitName the name of the trait to look for
    * @return true if the trait is or inherits from the named trait, false otherwise
    */
   public static boolean carriesTrait(Trait trait, String traitName) {
-    return loadInheritanceChain(trait).stream().map(Trait::getName).anyMatch(traitName::equals);
+    return traitAncestry(trait).stream().map(Trait::getName).anyMatch(traitName::equals);
   }
 
   /**
@@ -113,8 +131,9 @@ public final class ServiceUtils {
    * neither stays free — containment outside the aggregate model (a namespace containing tables,
    * say) is not the model's business.
    *
-   * <p>A single trait can never carry both built-ins (single inheritance, both father-less), so
-   * "carries both" only exists at the type level; the entity-level twin below handles it.
+   * <p>A trait carrying both built-ins — possible since traits can mix traits in — is an
+   * intermediate, exactly as a type carrying both is: its {@code Aggregate} role is what grants it
+   * parts, so the first rule applies to it and the second does not.
    *
    * @param whole the containing side of the relationship
    * @param part the contained side of the relationship
@@ -193,10 +212,9 @@ public final class ServiceUtils {
    * @param entityType the entity type to collect the traits of
    * @return the traits, with duplicates preserved (a trait reachable twice appears twice)
    */
-  private static List<Trait> allTraitsOf(EntityType entityType) {
+  public static List<Trait> allTraitsOf(EntityType entityType) {
     return loadInheritanceChain(entityType).stream()
-        .flatMap(
-            et -> et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
+        .flatMap(et -> et.getTraits().stream().flatMap(trait -> traitAncestry(trait).stream()))
         .toList();
   }
 

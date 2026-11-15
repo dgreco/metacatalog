@@ -11,6 +11,7 @@ import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.EntityRelationshipRepository;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import it.davidgreco.metacatalog.repository.MappingEntityRelationshipRepository;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -54,6 +55,34 @@ public class EntityPathResolver {
   @Transactional(propagation = Propagation.REQUIRED)
   public Optional<Entity> retrieveEntityByPath(String startEntityId, String pathString) {
     return retrieveEntityByPath(startEntityId, pathString, null);
+  }
+
+  /**
+   * The entity-relationship rows a path walks from a starting entity, as far as it goes: for a
+   * caller asking whether a path leans on a particular link rather than where it ends.
+   *
+   * <p>Unlike {@link #retrieveEntityByPath(String, String, List)} this never fails on a path that
+   * cannot be resolved — ambiguous, invalid, or starting from an entity that is gone — and returns
+   * what was walked before it stopped. Catching that method's exception instead does not work from
+   * inside a transaction: an exception leaving a transactional method marks the transaction
+   * rollback-only whoever catches it afterwards, and the caller's commit then fails with
+   * "Transaction silently rolled back because it has been marked as rollback-only". Here the
+   * failure is caught before it crosses that boundary.
+   *
+   * @param startEntityId the ID of the starting entity
+   * @param pathString the path string to traverse
+   * @return the rows walked, in order; empty when the path fails at its first step
+   */
+  @Transactional(propagation = Propagation.REQUIRED)
+  public List<EntityRelationship> linksWalkedBy(String startEntityId, String pathString) {
+    var walked = new ArrayList<EntityRelationship>();
+    try {
+      retrieveEntityByPath(startEntityId, pathString, walked);
+    } catch (RuntimeException e) {
+      // an ambiguous or invalid path stops the traversal; whatever it walked first still counts
+      log.debug("Path {} from {} stopped: {}", pathString, startEntityId, e.getMessage());
+    }
+    return walked;
   }
 
   /**

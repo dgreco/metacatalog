@@ -342,4 +342,187 @@ class TraitServiceTests extends CommonServiceTestingSupport {
 
     traitService.delete("VersionedTrait");
   }
+
+  private static Optional<String> schemaWith(String property, String type) {
+    return Optional.of(
+        """
+        { "type": "object", "properties": { "%s": { "type": "%s" } } }
+        """
+            .formatted(property, type));
+  }
+
+  private static Set<String> propertyNames(Trait trait) {
+    var names = new java.util.TreeSet<String>();
+    trait.getSchema().get("properties").fieldNames().forEachRemaining(names::add);
+    return names;
+  }
+
+  /**
+   * A trait may inherit from several traits: a father plus mixed-in traits. Where two of them share
+   * an ancestor, the ancestor contributes once.
+   */
+  @Test
+  void testATraitMixesTraitsInAndInheritsADiamondAncestorOnce() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxBase", schemaWith("base", "string"), Optional.empty());
+    traitService.create("MxLeft", schemaWith("left", "string"), Optional.of("MxBase"));
+    traitService.create("MxRight", schemaWith("right", "string"), Optional.of("MxBase"));
+    var both =
+        traitService.create(
+            "MxBoth", schemaWith("own", "string"), Optional.of("MxLeft"), List.of("MxRight"));
+
+    Assertions.assertEquals(Set.of("base", "left", "right", "own"), propertyNames(both));
+
+    var read = traitService.read("MxBoth");
+    Assertions.assertEquals("MxLeft", read.getFather().getName());
+    Assertions.assertEquals(
+        List.of("MxRight"), read.getTraits().stream().map(Trait::getName).toList());
+  }
+
+  /**
+   * The reason the derived schema is built from the linearization rather than by merging each
+   * parent's effective schema: the shared ancestor's declaration, arriving a second time inside the
+   * mix-in's effective schema, would otherwise overwrite what the father had refined.
+   */
+  @Test
+  void testAFathersRefinementSurvivesAMixinSharingTheAncestor() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxpBase", schemaWith("p", "string"), Optional.empty());
+    traitService.create("MxpLeft", schemaWith("p", "integer"), Optional.of("MxpBase"));
+    traitService.create("MxpRight", Optional.empty(), Optional.of("MxpBase"));
+    var both =
+        traitService.create(
+            "MxpBoth", Optional.empty(), Optional.of("MxpLeft"), List.of("MxpRight"));
+
+    Assertions.assertEquals("integer", both.getSchema().at("/properties/p/type").asText());
+  }
+
+  /**
+   * Naming a parent that another parent already inherits says the same thing twice, and is refused
+   * with a message naming what to drop — the case of declaring a trait as inheriting two
+   * capabilities <em>and</em> the trait both of them already descend from.
+   */
+  @Test
+  void testARedundantParentIsRefused() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxrBase", Optional.empty(), Optional.empty());
+    traitService.create("MxrLeft", Optional.empty(), Optional.of("MxrBase"));
+    traitService.create("MxrRight", Optional.empty(), Optional.of("MxrBase"));
+
+    var asMixin =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () ->
+                traitService.create(
+                    "MxrAll",
+                    Optional.empty(),
+                    Optional.of("MxrLeft"),
+                    List.of("MxrRight", "MxrBase")));
+    Assertions.assertTrue(
+        asMixin.getMessage().contains("MxrBase is already inherited through"),
+        asMixin.getMessage());
+
+    // The father is a parent like any other: it is just as redundant when a mix-in brings it.
+    var asFather =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () ->
+                traitService.create(
+                    "MxrAll", Optional.empty(), Optional.of("MxrBase"), List.of("MxrLeft")));
+    Assertions.assertTrue(
+        asFather.getMessage().contains("MxrBase is already inherited through MxrLeft"),
+        asFather.getMessage());
+
+    Assertions.assertThrows(
+        ServiceError.class,
+        () ->
+            traitService.create(
+                "MxrAll", Optional.empty(), Optional.of("MxrLeft"), List.of("MxrLeft")));
+    Assertions.assertThrows(
+        ServiceError.class,
+        () ->
+            traitService.create(
+                "MxrAll", Optional.empty(), Optional.empty(), List.of("MxrLeft", "MxrLeft")));
+    Assertions.assertThrows(
+        ServiceError.class,
+        () ->
+            traitService.create(
+                "MxrAll", Optional.empty(), Optional.empty(), List.of("MxrMissing")));
+
+    Assertions.assertFalse(traitService.exists("MxrAll"));
+  }
+
+  /**
+   * A new version is the only way to ask for an inheritance cycle, and it must be refused before
+   * the parents are assigned: afterwards every ancestry walk recurses without end.
+   */
+  @Test
+  @org.junit.jupiter.api.Timeout(60)
+  void testAVersionCannotCloseAnInheritanceCycle() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxcA", Optional.empty(), Optional.empty());
+    traitService.create("MxcB", Optional.empty(), Optional.of("MxcA"));
+    traitService.create("MxcC", Optional.empty(), Optional.empty(), List.of("MxcB"));
+
+    Assertions.assertThrows(
+        ServiceError.class,
+        () -> traitService.createVersion("MxcA", Optional.empty(), Optional.of("MxcC")));
+    Assertions.assertThrows(
+        ServiceError.class,
+        () ->
+            traitService.createVersion(
+                "MxcA", Optional.empty(), Optional.empty(), List.of("MxcB")));
+    var self =
+        Assertions.assertThrows(
+            ServiceError.class,
+            () -> traitService.createVersion("MxcA", Optional.empty(), Optional.of("MxcA")));
+    Assertions.assertTrue(
+        self.getMessage().contains("cannot inherit from itself"), self.getMessage());
+
+    Assertions.assertEquals(1, traitService.read("MxcA").getVersion());
+  }
+
+  /** A version restates the whole trait, mix-ins included, and the snapshot keeps the old ones. */
+  @Test
+  void testAVersionRestatesAndSnapshotsTheMixins() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxvA", Optional.empty(), Optional.empty());
+    traitService.create("MxvB", Optional.empty(), Optional.empty());
+    traitService.create("MxvT", Optional.empty(), Optional.empty(), List.of("MxvA"));
+
+    var v2 =
+        traitService.createVersion("MxvT", Optional.empty(), Optional.empty(), List.of("MxvB"));
+    Assertions.assertEquals(List.of("MxvB"), v2.getTraits().stream().map(Trait::getName).toList());
+
+    var snapshotV1 =
+        (TraitVersion) ((VersionResult.Snapshot<?, ?>) traitService.readVersion("MxvT", 1)).value();
+    Assertions.assertEquals("[\"MxvA\"]", snapshotV1.getTraits().toString());
+
+    // The form without mix-ins says "none", as an absent father says "no father".
+    traitService.createVersion("MxvT", Optional.empty(), Optional.empty());
+    Assertions.assertTrue(traitService.read("MxvT").getTraits().isEmpty());
+    var snapshotV2 =
+        (TraitVersion) ((VersionResult.Snapshot<?, ?>) traitService.readVersion("MxvT", 2)).value();
+    Assertions.assertEquals("[\"MxvB\"]", snapshotV2.getTraits().toString());
+  }
+
+  /** Like a father, a mixed-in trait cannot be deleted from under the trait that inherits it. */
+  @Test
+  void testAMixedInTraitCannotBeDeleted() {
+    final TraitService traitService = getApplicationContext().getBean(TraitService.class);
+
+    traitService.create("MxdA", Optional.empty(), Optional.empty());
+    traitService.create("MxdT", Optional.empty(), Optional.empty(), List.of("MxdA"));
+
+    Assertions.assertThrows(RuntimeException.class, () -> traitService.delete("MxdA"));
+    Assertions.assertTrue(traitService.exists("MxdA"));
+
+    traitService.delete("MxdT");
+    traitService.delete("MxdA");
+  }
 }

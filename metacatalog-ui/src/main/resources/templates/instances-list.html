@@ -10,30 +10,23 @@
     <script th:src="@{/ui/js/flash.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'instances')}"></header>
 <header class="topbar">
     <h1>Instances</h1>
     <nav>
-        <a class="btn" th:href="@{/ui}">Back</a>
-        <a class="btn" th:href="@{/ui/instances/new}">+ New</a>
+        <a class="btn" th:href="@{/ui/admin}">Back</a>
+        <a class="btn" th:href="@{/ui/admin/instances/new}">+ New</a>
     </nav>
 </header>
 
 <main>
-    <div class="flash" th:if="${message}" th:text="${message}"></div>
-    <div class="error" th:if="${error}" th:text="${error}"></div>
-    <!-- Seed for an asynchronously launched run — provisioning or authorization, the popup is
-         driven by the flashed label rather than by which procedure ran:
-         procedure-poller.js consumes it into localStorage and shows the floating popup
-         that keeps polling the REST status endpoint across pages and tabs. Visible only
-         as a plain banner when JavaScript is unavailable. -->
-    <div class="procedure-banner" id="procedure-banner"
-         th:if="${procedureScheduleId}"
-         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel},data-entity-id=${procedureEntityId},data-entity-type=${procedureEntityType}"
-         th:text="${procedureLabel} + ' in progress…'"></div>
+    <!-- The flash, the error and the seed of an asynchronously launched run, which
+         procedure-poller.js turns into the floating popup that keeps polling across pages. -->
+    <div th:replace="~{fragments/shell :: notices}"></div>
 
     <!-- Search -->
     <div class="filter-bar">
-        <form method="get" th:action="@{/ui/instances}">
+        <form method="get" th:action="@{/ui/admin/instances}">
             <label for="type">Type:</label>
             <select name="type" id="type" onchange="this.form.submit()">
                 <option value="">All types</option>
@@ -48,7 +41,7 @@
                    th:value="${query}"/>
             <button type="submit" class="btn-sm">Search</button>
             <a class="btn-sm" th:if="${(selectedType != null && !selectedType.isBlank()) || (query != null && !query.isBlank())}"
-               th:href="@{/ui/instances}">Clear</a>
+               th:href="@{/ui/admin/instances}">Clear</a>
         </form>
     </div>
     <!-- Guided condition builder: shown by query-path-builder.js when the selected type's
@@ -86,7 +79,7 @@
         <tbody>
         <tr th:each="inst : ${instances}">
             <td>
-                <a th:href="@{/ui/instances/{id}(id=${inst.id})}"
+                <a th:href="@{/ui/admin/instances/{id}(id=${inst.id})}"
                    th:text="${inst.name}">name</a>
             </td>
             <td>
@@ -97,11 +90,11 @@
                       th:text="${inst.entityTypeVersion != null} ? 'v' + ${inst.entityTypeVersion} : ${inst.entityTypeVersionId}">v1</span>
             </td>
             <td>
-                <a class="btn-sm" th:href="@{/ui/instances/{id}(id=${inst.id})}" title="View">View</a>
-                <a class="btn-sm" th:href="@{/ui/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
-                <a class="btn-sm" th:href="@{/ui/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
+                <a class="btn-sm" th:href="@{/ui/admin/instances/{id}(id=${inst.id})}" title="View">View</a>
+                <a class="btn-sm" th:href="@{/ui/admin/instances/{id}/edit(id=${inst.id})}" title="Edit">Edit</a>
+                <a class="btn-sm" th:href="@{/ui/admin/instances/{id}/links(id=${inst.id})}" title="Link to another instance">Link</a>
                 <a class="btn-sm" th:if="${inst.version != null}"
-                   th:href="@{/ui/instances/{id}/versions(id=${inst.id})}"
+                   th:href="@{/ui/admin/instances/{id}/versions(id=${inst.id})}"
                    th:text="|History (v${inst.version})|" title="Version history">History</a>
                 <!-- The aggregate actions this row's type qualifies for: label, tooltip, confirm
                      text and target are all carried by the AggregateAction, so a new capability
@@ -109,14 +102,14 @@
                      /procedure/, the synchronous ones directly. -->
                 <form th:each="action : ${inst.actions}" method="post"
                       th:action="${action.procedure}
-                                 ? @{/ui/instances/{id}/procedure/{a}(id=${inst.id}, a=${action.path})}
-                                 : @{/ui/instances/{id}/{a}(id=${inst.id}, a=${action.path})}"
+                                 ? @{/ui/admin/instances/{id}/procedure/{a}(id=${inst.id}, a=${action.path})}
+                                 : @{/ui/admin/instances/{id}/{a}(id=${inst.id}, a=${action.path})}"
                       class="inline-form"
                       th:data-confirm="${action.confirm}">
                     <button type="submit" class="btn-sm"
                             th:title="${action.title}" th:text="${action.label}">Action</button>
                 </form>
-                <form method="post" th:action="@{/ui/instances/{id}/delete(id=${inst.id})}"
+                <form method="post" th:action="@{/ui/admin/instances/{id}/delete(id=${inst.id})}"
                       class="inline-form" data-confirm="Delete this instance?">
                     <button type="submit" class="link-remove" title="Delete">×</button>
                 </form>

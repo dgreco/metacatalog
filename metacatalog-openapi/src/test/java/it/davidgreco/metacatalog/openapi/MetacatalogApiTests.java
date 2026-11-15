@@ -377,6 +377,197 @@ class MetacatalogApiTests {
     Assertions.assertEquals(404, gone.getStatusCode().value());
   }
 
+  /**
+   * The asset surface end to end, through the generated client: a trait mixing traits in, the asset
+   * types, the catalog and the dependencies the model allows, then an asset downloaded as YAML,
+   * edited and sent back.
+   */
+  @Test
+  void testAssetCatalogDependencyRulesAndWholeAggregateUpdate() throws IOException {
+    var api = getMetaCatalogManagerApi();
+    var schema = "{ \"type\": \"object\", \"properties\": { \"name\": { \"type\": \"string\" } } }";
+
+    for (var name : List.of("ApiAstDomain", "ApiAstTable")) {
+      var trait = new Trait();
+      trait.setName(name);
+      api.createTrait(trait);
+    }
+    // A trait with two parents: a father and a mixed-in trait.
+    var governed = new Trait();
+    governed.setName("ApiAstGovernedTable");
+    governed.setInheritsFrom("ApiAstTable");
+    governed.setTraits(List.of("Versionable"));
+    api.createTrait(governed);
+    var readGoverned = api.getTrait("ApiAstGovernedTable");
+    Assertions.assertEquals("ApiAstTable", readGoverned.getInheritsFrom());
+    Assertions.assertEquals(List.of("Versionable"), readGoverned.getTraits());
+
+    // Asset is Provisionable + Authorizable; naming Aggregate on top of it repeats what it says.
+    var redundant = new Trait();
+    redundant.setName("ApiAstRedundant");
+    redundant.setInheritsFrom("Asset");
+    redundant.setTraits(List.of("Aggregate"));
+    var refused =
+        Assertions.assertThrows(HttpClientErrorException.class, () -> api.createTrait(redundant));
+    Assertions.assertEquals(400, refused.getStatusCode().value());
+    Assertions.assertTrue(
+        refused.getResponseBodyAsString().contains("Aggregate is already inherited through Asset"),
+        refused.getResponseBodyAsString());
+
+    var asset = api.getTrait("Asset");
+    Assertions.assertEquals("Provisionable", asset.getInheritsFrom());
+    Assertions.assertEquals(List.of("Authorizable"), asset.getTraits());
+
+    var sanction = new LinkTraitRequest();
+    sanction.sourceTrait("ApiAstTable");
+    sanction.relationshipTypeName("DEPENDS_ON");
+    sanction.targetTrait("ApiAstDomain");
+    api.linkTrait(sanction);
+
+    var columnType = new EntityType();
+    columnType.setName("ApiAstColumnType");
+    columnType.setSchema(schema);
+    columnType.setTraits(List.of("AggregateElement"));
+    api.createEntityType(columnType);
+    // A plain type: a domain is not provisioned, it is only something a table belongs to.
+    var domainType = new EntityType();
+    domainType.setName("ApiAstDomainType");
+    domainType.setSchema(schema);
+    domainType.setTraits(List.of("ApiAstDomain"));
+    api.createEntityType(domainType);
+    var tableType = new EntityType();
+    tableType.setName("ApiAstTableType");
+    tableType.setSchema(schema);
+    tableType.setTraits(List.of("Asset", "ApiAstGovernedTable"));
+    api.createEntityType(tableType);
+
+    var assetTypes = api.listAssetTypes().stream().map(EntityType::getName).toList();
+    Assertions.assertTrue(assetTypes.contains("ApiAstTableType"), assetTypes.toString());
+    Assertions.assertFalse(assetTypes.contains("ApiAstDomainType"));
+    Assertions.assertFalse(assetTypes.contains("ApiAstColumnType"));
+    var capabilities = api.getTypeCapabilities();
+    Assertions.assertEquals(assetTypes, capabilities.getAsset());
+    Assertions.assertTrue(capabilities.getProvisionable().containsAll(assetTypes));
+    Assertions.assertTrue(capabilities.getAuthorizable().containsAll(assetTypes));
+
+    var rules =
+        api.listAssetDependencyRules().stream()
+            .filter(rule -> rule.getSourceEntityType().startsWith("ApiAst"))
+            .toList();
+    Assertions.assertEquals(1, rules.size(), rules.toString());
+    Assertions.assertEquals("ApiAstTableType", rules.getFirst().getSourceEntityType());
+    Assertions.assertEquals("ApiAstDomainType", rules.getFirst().getTargetEntityType());
+    Assertions.assertEquals(
+        AssetDependencyRule.TargetKindEnum.ENTITY, rules.getFirst().getTargetKind());
+    Assertions.assertEquals(
+        "ApiAstTable", rules.getFirst().getSanctionedBy().getFirst().getSourceTrait());
+
+    var documents = Files.createTempFile("assets", ".yaml");
+    var domainEntity = new Entity();
+    domainEntity.setEntityType("ApiAstDomainType");
+    domainEntity.setValues("{\"name\": \"sales\"}");
+    var domainId = api.createEntity(domainEntity);
+    Files.writeString(
+        documents,
+        """
+        entityType: "ApiAstTableType"
+        values:
+          name: "orders"
+        parts:
+        - entityType: "ApiAstColumnType"
+          values:
+            name: "id"
+        """);
+    api.createAggregateAsYaml(documents.toFile());
+    var tableId = api.getEntities("ApiAstTableType", null).getFirst().getId();
+
+    // The illegal direction is refused; the legal one is a plain entity link.
+    var backwards = new LinkEntityRequest();
+    backwards.sourceEntityId(domainId);
+    backwards.relationshipTypeName("DEPENDS_ON");
+    backwards.targetEntityId(tableId);
+    Assertions.assertThrows(HttpClientErrorException.class, () -> api.linkEntity(backwards));
+    var dependency = new LinkEntityRequest();
+    dependency.sourceEntityId(tableId);
+    dependency.relationshipTypeName("DEPENDS_ON");
+    dependency.targetEntityId(domainId);
+    api.linkEntity(dependency);
+
+    var catalog = api.listAssets();
+    var table = catalog.stream().filter(a -> a.getId().equals(tableId)).findFirst().orElseThrow();
+    Assertions.assertEquals("ApiAstTableType", table.getEntityType());
+    Assertions.assertEquals(List.of(domainId), table.getDependencies());
+    // Its inside comes with it: the column, under the table's root, depending on nothing.
+    Assertions.assertEquals(1, table.getParts().size(), table.getParts().toString());
+    var column = table.getParts().getFirst();
+    Assertions.assertEquals("ApiAstColumnType", column.getEntityType());
+    Assertions.assertEquals(tableId, column.getParentId());
+    Assertions.assertEquals(List.of(), column.getDependencies());
+    Assertions.assertTrue(column.getValues().contains("\"id\""), column.getValues());
+    // Versionable through the trait its type mixes in: created at 1, and the dependency just
+    // linked is part of what a version of an aggregate records.
+    Assertions.assertEquals(2, table.getVersion());
+    // The domain is what the table depends on, not an asset: it is listed among the targets.
+    Assertions.assertTrue(catalog.stream().noneMatch(a -> a.getId().equals(domainId)));
+    var target =
+        api.listAssetDependencyTargets().stream()
+            .filter(t -> t.getId().equals(domainId))
+            .findFirst()
+            .orElseThrow();
+    Assertions.assertEquals(AssetDependencyTarget.KindEnum.ENTITY, target.getKind());
+    Assertions.assertEquals("ApiAstDomainType", target.getEntityType());
+
+    // Download, edit, upload: rename the table, rename its column and add a second one. The part
+    // is added by appending a list item to the document as it was served — the root's `parts`
+    // come last, their items at column 0. docker/bulk/load-bulk.sh gives the demo its second
+    // version the same way, so a change in how an aggregate is serialized breaks it too.
+    var downloaded = Files.readString(api.getAggregateAsYaml(tableId, Boolean.FALSE).toPath());
+    Assertions.assertTrue(downloaded.contains(tableId), downloaded);
+    var edited =
+        downloaded
+                .replace("\"orders\"", "\"orders_v2\"")
+                .replace("name: \"id\"", "name: \"order_id\"")
+            + """
+            - entityType: "ApiAstColumnType"
+              values:
+                name: "amount"
+            """
+                .stripIndent()
+                .indent(0);
+    var upload = Files.createTempFile("asset-update", ".yaml");
+    Files.writeString(upload, edited);
+    api.updateAggregateAsYaml(tableId, upload.toFile());
+
+    var updated = api.getAggregate(tableId, Boolean.FALSE);
+    Assertions.assertTrue(updated.getValues().contains("orders_v2"), updated.getValues());
+    var columns = updated.getParts().stream().map(Aggregate::getValues).toList();
+    Assertions.assertEquals(2, columns.size(), columns.toString());
+    Assertions.assertTrue(columns.stream().anyMatch(values -> values.contains("order_id")));
+    Assertions.assertTrue(columns.stream().anyMatch(values -> values.contains("amount")));
+    // The document did list the dependency it was downloaded with, so the table still has it.
+    Assertions.assertEquals(List.of(domainId), updated.getDependencies());
+    Assertions.assertEquals(3, api.listEntityVersions(tableId).size(), "one update is one version");
+
+    // An entity that is not an aggregate is refused, and so is one that is not found.
+    var wrong = Files.createTempFile("asset-wrong", ".yaml");
+    Files.writeString(wrong, downloaded);
+    var mismatch =
+        Assertions.assertThrows(
+            HttpClientErrorException.class,
+            () -> api.updateAggregateAsYaml(domainId, wrong.toFile()));
+    Assertions.assertEquals(400, mismatch.getStatusCode().value());
+    var missing =
+        Assertions.assertThrows(
+            HttpClientErrorException.class,
+            () -> api.updateAggregateAsYaml("no-such-aggregate", wrong.toFile()));
+    Assertions.assertEquals(404, missing.getStatusCode().value());
+
+    // Deleting the table takes its dependency on the domain along; the domain is then free to go.
+    api.deleteAggregate(tableId);
+    api.deleteEntity(domainId);
+    Assertions.assertTrue(api.listAssets().stream().noneMatch(a -> a.getId().equals(tableId)));
+  }
+
   @Test
   void testListTraits() {
     var api = getMetaCatalogManagerApi();

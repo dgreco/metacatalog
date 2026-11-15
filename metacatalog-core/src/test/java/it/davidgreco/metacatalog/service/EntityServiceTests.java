@@ -22,6 +22,39 @@ class EntityServiceTests extends CommonServiceTestingSupport {
     super(applicationContext);
   }
 
+  /** Holds the mapping updater's advisory lock while a test has asked for it to be kept out. */
+  private java.sql.Connection updaterKeptOut;
+
+  /**
+   * Keeps the scheduled mapping updater from running until the end of the calling test.
+   *
+   * <p>A test that derives mapped entities by hand and then asserts on exactly which exist races
+   * the updater, which drains the same creation events every second: a tick landing inside the test
+   * derives an entity the test is about to derive (a duplicate key) or one it has just established
+   * is not there. Which test a tick lands in depends on how long the tests before it took, so the
+   * failure comes and goes with unrelated changes.
+   *
+   * <p>The lock is the one a tick must take and skips without. The blocking variant waits for a
+   * tick already under way and cannot queue behind one, since the service only ever tries.
+   */
+  private void keepTheMappingUpdaterOut() throws java.sql.SQLException {
+    updaterKeptOut =
+        java.sql.DriverManager.getConnection(
+            postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    updaterKeptOut.setAutoCommit(false);
+    try (var lock = updaterKeptOut.prepareStatement("SELECT pg_advisory_xact_lock(1)")) {
+      lock.execute();
+    }
+  }
+
+  @org.junit.jupiter.api.AfterEach
+  void letTheMappingUpdaterBackIn() throws java.sql.SQLException {
+    if (updaterKeptOut == null) return;
+    // Closing the connection ends its transaction, and the lock with it.
+    updaterKeptOut.close();
+    updaterKeptOut = null;
+  }
+
   @Test
   void testCreationAndValidationAndUpdate() throws IOException, ServiceError {
     var entityRepository = getApplicationContext().getBean(EntityRepository.class);
@@ -495,6 +528,69 @@ class EntityServiceTests extends CommonServiceTestingSupport {
   }
 
   /**
+   * A second dependency makes a path reference that takes "whatever the source depends on"
+   * ambiguous, and the way out of that is to remove one of the two. The guard on unlink re-resolves
+   * the path to see whether it leans on the link, and the resolution now fails; that failure must
+   * stay the guard's own business. It used to cross a transactional boundary on its way to being
+   * caught, which marked the unlink's transaction rollback-only: the link looked removable, the
+   * commit failed with "Transaction silently rolled back", and neither dependency could be removed.
+   */
+  @Test
+  void testALinkCanBeRemovedOnceAPathThroughItHasBecomeAmbiguous() throws java.sql.SQLException {
+    keepTheMappingUpdaterOut();
+    var traitService = getApplicationContext().getBean(TraitService.class);
+    var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var mappingService = getApplicationContext().getBean(MappingService.class);
+    var mappedEntityService = getApplicationContext().getBean(MappedEntityService.class);
+    var emptySchema =
+        """
+        { "type": "object", "properties": {} }
+        """;
+
+    traitService.create("AmbSrcTrait", Optional.empty(), Optional.empty());
+    traitService.create("AmbDepTrait", Optional.empty(), Optional.empty());
+    traitService.link("AmbSrcTrait", DEPENDS_ON, "AmbDepTrait");
+    entityTypeService.create("AmbSource", List.of("AmbSrcTrait"), Optional.empty(), emptySchema);
+    entityTypeService.create("AmbDep", List.of("AmbDepTrait"), Optional.empty(), emptySchema);
+    entityTypeService.create("AmbMapped", List.of(), Optional.empty(), emptySchema);
+    mappingService.create(
+        "AmbSource",
+        "AmbMapped",
+        "{}",
+        List.of(
+            new it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship.EntityPathReference(
+                "dep", "IS_REQUIRED_BY{$}")));
+
+    var source = entityService.create("AmbSource", "{}");
+    var first = entityService.create("AmbDep", "{}");
+    var second = entityService.create("AmbDep", "{}");
+    entityService.link(source.getId(), DEPENDS_ON, first.getId());
+    mappedEntityService.createMappedEntities(source.getId());
+    // From here "what the source depends on" is two things.
+    entityService.link(source.getId(), DEPENDS_ON, second.getId());
+
+    entityService.unlink(source.getId(), DEPENDS_ON, second.getId());
+    Assertions.assertEquals(
+        List.of(first.getId()),
+        entityService.linked(source.getId(), DEPENDS_ON).stream()
+            .map(it.davidgreco.metacatalog.entity.Entity::getId)
+            .toList());
+    // With one dependency left the path resolves again, and leans on it as before.
+    Assertions.assertThrows(
+        ServiceError.class, () -> entityService.unlink(source.getId(), DEPENDS_ON, first.getId()));
+
+    mappedEntityService.deleteMappedEntities(source.getId());
+    entityService.unlink(source.getId(), DEPENDS_ON, first.getId());
+    mappingService.list().forEach(m -> mappingService.delete(m.getId()));
+    for (var entity : List.of(source, first, second)) entityService.delete(entity.getId());
+    for (var type : List.of("AmbSource", "AmbDep", "AmbMapped")) entityTypeService.delete(type);
+    traitService.unlink("AmbSrcTrait", DEPENDS_ON, "AmbDepTrait");
+    traitService.delete("AmbDepTrait");
+    traitService.delete("AmbSrcTrait");
+  }
+
+  /**
    * Verifies that a DEPENDS_ON link a mapping resolves a path reference through cannot be removed
    * (in either direction of the pair) while a mapped entity is derived through it: removing it
    * would make every later update of that mapped entity fail asynchronously. The check is exact —
@@ -502,7 +598,8 @@ class EntityServiceTests extends CommonServiceTestingSupport {
    * the guarded link becomes removable too.
    */
   @Test
-  void testDependsOnLinkReferredByAMappingCannotBeRemoved() {
+  void testDependsOnLinkReferredByAMappingCannotBeRemoved() throws java.sql.SQLException {
+    keepTheMappingUpdaterOut();
     var traitService = getApplicationContext().getBean(TraitService.class);
     var entityTypeService = getApplicationContext().getBean(EntityTypeService.class);
     var entityService = getApplicationContext().getBean(EntityService.class);

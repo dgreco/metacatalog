@@ -8,7 +8,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import it.davidgreco.metacatalog.common.JsonUtils;
 import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.EntityType;
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.entity.Trait;
+import it.davidgreco.metacatalog.entity.TraitRelationship;
 import it.davidgreco.metacatalog.repository.EntityTypeRepository;
 import it.davidgreco.metacatalog.repository.MappingEntityTypeRelationshipRepository;
 import it.davidgreco.metacatalog.repository.TraitRelationshipRepository;
@@ -152,28 +154,143 @@ public class AggregateSchemaService {
   }
 
   /**
+   * Returns the entity types whose instances are data platform assets, ordered by name.
+   *
+   * <p>An asset type is an aggregate root type that carries the {@code Asset} trait. Both halves
+   * matter: {@code Asset} inherits {@code Aggregate}, but a type that also carries {@code
+   * AggregateElement} is an intermediate node of somebody else's aggregate, and an asset is by
+   * definition the root of its own — so this is the root listing narrowed, not a separate test.
+   *
+   * @return the asset entity types, ordered by name
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public List<EntityType> assetTypes() {
+    return aggregateRootTypes().stream()
+        .filter(type -> ServiceUtils.implementsTrait(type, BuiltInTraits.ASSET))
+        .toList();
+  }
+
+  /**
+   * What an asset may depend on, by the role its type plays in the aggregate model.
+   *
+   * <p>An asset is not limited to depending on other assets: it may belong to a domain that is a
+   * plain entity, or build on an aggregate nobody provisions. The three kinds are the three things
+   * that stand on their own — a part of somebody else's aggregate is not one of them, and neither
+   * is an entity a mapping derives.
+   */
+  public enum DependencyTargetKind {
+    /** An asset: the root of an aggregate whose type carries {@code Asset}. */
+    ASSET,
+    /** The root of an aggregate that is not an asset. */
+    AGGREGATE,
+    /** An entity outside the aggregate model: its type carries no aggregate trait at all. */
+    ENTITY
+  }
+
+  /**
+   * A dependency the model allows an asset of one type to have.
+   *
+   * @param source the type of the asset that depends
+   * @param target the type of what it depends on
+   * @param targetKind what the target is: an asset, an aggregate or a plain entity
+   * @param sanctionedBy the {@code DEPENDS_ON} trait relationships that allow it — at least one,
+   *     and several when the two types carry more than one related pair of traits
+   */
+  public record AssetDependencyRule(
+      EntityType source,
+      EntityType target,
+      DependencyTargetKind targetKind,
+      List<TraitRelationship> sanctionedBy) {}
+
+  /**
+   * Lists the dependencies the model allows assets to have.
+   *
+   * <p>The same projection {@link #aggregateSchema} makes of {@code HAS_PART}, made of {@code
+   * DEPENDS_ON}: a dependency is never declared between entity types but between traits, and an
+   * asset may depend on an entity when its type carries a trait that declares {@code DEPENDS_ON}
+   * towards a trait the entity's type carries. That is the rule {@link ServiceUtils#relIsLegit}
+   * applies when two entities are actually linked, so a client can tell in advance what an asset
+   * may depend on — and why — rather than discover it from a refused link.
+   *
+   * <p>The source is always an asset type. The target is any type whose instances stand on their
+   * own: another asset type, an aggregate root type, or a type outside the aggregate model. Types
+   * that only exist inside an aggregate (carrying {@code AggregateElement}) and types whose
+   * instances a mapping derives are left out, though nothing stops such a link being made through
+   * the entity API where the traits allow it.
+   *
+   * @return one rule per allowed pair, ordered by source then target name; a pair of a type with
+   *     itself is included when it is allowed
+   */
+  @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
+  public List<AssetDependencyRule> assetDependencyRules() {
+    log.info("Computing the asset dependency rules");
+    var assetTypes = assetTypes();
+    var assetTypeNames = assetTypes.stream().map(EntityType::getName).collect(Collectors.toSet());
+    var traitsByType = new LinkedHashMap<String, Set<String>>();
+    var targets = new LinkedHashMap<EntityType, DependencyTargetKind>();
+    for (var type :
+        authorableTypes().stream().sorted(Comparator.comparing(EntityType::getName)).toList()) {
+      var traits = ServiceUtils.traitNamesOf(type);
+      traitsByType.put(type.getName(), traits);
+      if (traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)) continue;
+      targets.put(
+          type,
+          assetTypeNames.contains(type.getName())
+              ? DependencyTargetKind.ASSET
+              : traits.contains(BuiltInTraits.AGGREGATE)
+                  ? DependencyTargetKind.AGGREGATE
+                  : DependencyTargetKind.ENTITY);
+    }
+    var declarations = traitRelationshipRepository.findByRelationType(RelationType.DEPENDS_ON);
+
+    var rules = new ArrayList<AssetDependencyRule>();
+    for (var source : assetTypes) {
+      var sourceTraits = traitsByType.get(source.getName());
+      for (var target : targets.entrySet()) {
+        var targetTraits = traitsByType.get(target.getKey().getName());
+        var sanctions =
+            declarations.stream()
+                .filter(
+                    declaration ->
+                        sourceTraits.contains(declaration.getSource().getName())
+                            && targetTraits.contains(declaration.getTarget().getName()))
+                .toList();
+        if (!sanctions.isEmpty())
+          rules.add(new AssetDependencyRule(source, target.getKey(), target.getValue(), sanctions));
+      }
+    }
+    log.info("Computed {} asset dependency rule(s)", rules.size());
+    return rules;
+  }
+
+  /**
    * Every per-type answer a client needs in order to decide which actions a row of that type
    * offers, worked out in a single pass.
    *
    * @param aggregateRoot the names of the aggregate root types
    * @param provisionable the names of the types that can be provisioned
    * @param authorizable the names of the types that can be authorized
+   * @param asset the names of the asset types — a subset of all three of the above
    */
   public record TypeCapabilities(
-      List<String> aggregateRoot, List<String> provisionable, List<String> authorizable) {}
+      List<String> aggregateRoot,
+      List<String> provisionable,
+      List<String> authorizable,
+      List<String> asset) {}
 
   /**
-   * Answers all three type classifications at once, ordered by name.
+   * Answers all four type classifications at once, ordered by name.
    *
-   * <p>They are the same three questions {@link #aggregateRootTypes()}, {@link
-   * #provisionableTypes()} and {@link #authorizableTypes()} answer, and they stay <em>separate
-   * answers</em> — the capabilities are declared by independent pairs of traits, so none implies
-   * another. What is shared is the work: each of those methods starts from {@link
-   * #authorableTypes()}, which is a {@code findAll} plus a mapping-target query per type, and then
-   * walks every type's and every trait's father chain again. Asking them one at a time made a page
-   * that needs all three pay for that three times over.
+   * <p>They are the same questions {@link #aggregateRootTypes()}, {@link #provisionableTypes()},
+   * {@link #authorizableTypes()} and {@link #assetTypes()} answer. The first three stay
+   * <em>separate answers</em> — the capabilities are declared by independent pairs of traits, so
+   * none implies another; only an asset, which inherits both, is by construction in all of them.
+   * What is shared is the work: each of those methods starts from {@link #authorableTypes()}, which
+   * is a {@code findAll} plus a mapping-target query per type, and then walks every type's and
+   * every trait's father chain again. Asking them one at a time made a page that needs all three
+   * pay for that three times over.
    *
-   * @return the three classifications
+   * @return the four classifications
    */
   @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
   public TypeCapabilities typeCapabilities() {
@@ -185,14 +302,18 @@ public class AggregateSchemaService {
     var roots = new ArrayList<String>();
     var provisionable = new ArrayList<String>();
     var authorizable = new ArrayList<String>();
+    var assets = new ArrayList<String>();
     for (var type : types.stream().sorted(Comparator.comparing(EntityType::getName)).toList()) {
-      // One trait-name set per type, tested four times, rather than four independent walks of the
-      // type's and its traits' father chains.
+      // One trait-name set per type, tested several times, rather than as many independent walks
+      // of the type's and its traits' ancestries.
       var traits = ServiceUtils.traitNamesOf(type);
       if (traits.contains(BuiltInTraits.AGGREGATE)
           && !traits.contains(BuiltInTraits.AGGREGATE_ELEMENT)
           && !graph.getOrDefault(type.getName(), List.of()).isEmpty()) {
         roots.add(type.getName());
+        if (traits.contains(BuiltInTraits.ASSET)) {
+          assets.add(type.getName());
+        }
       }
       if (traits.contains(BuiltInTraits.PROVISIONABLE)) {
         provisionable.add(type.getName());
@@ -202,12 +323,16 @@ public class AggregateSchemaService {
       }
     }
     log.info(
-        "Computed {} root, {} provisionable and {} authorizable type(s)",
+        "Computed {} root, {} provisionable, {} authorizable and {} asset type(s)",
         roots.size(),
         provisionable.size(),
-        authorizable.size());
+        authorizable.size(),
+        assets.size());
     return new TypeCapabilities(
-        List.copyOf(roots), List.copyOf(provisionable), List.copyOf(authorizable));
+        List.copyOf(roots),
+        List.copyOf(provisionable),
+        List.copyOf(authorizable),
+        List.copyOf(assets));
   }
 
   /**
@@ -410,7 +535,7 @@ public class AggregateSchemaService {
     var allTraits = new LinkedHashMap<String, Trait>();
     for (var type : types) {
       var names = new LinkedHashSet<String>();
-      for (var trait : linearizedTraits(type)) {
+      for (var trait : ServiceUtils.allTraitsOf(type)) {
         names.add(trait.getName());
         allTraits.putIfAbsent(trait.getName(), trait);
       }
@@ -446,14 +571,6 @@ public class AggregateSchemaService {
               .toList());
     }
     return graph;
-  }
-
-  /** Every trait carried by a type, following both the type's and the traits' father chains. */
-  private static List<Trait> linearizedTraits(EntityType type) {
-    return loadInheritanceChain(type).stream()
-        .flatMap(
-            et -> et.getTraits().stream().flatMap(trait -> loadInheritanceChain(trait).stream()))
-        .toList();
   }
 
   /** The types reachable from {@code root} through containment, breadth-first, root first. */

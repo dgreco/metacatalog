@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Asset member fragment — Meta Catalog</title>
+</head>
+<body>
+
+<!--
+  One member of an asset, drawn recursively: its values, then its parts, then the entities mappings
+  derived from it. `role` is root, part or derived and only changes how the member is marked.
+
+  In a file of its own because it refers to itself: a fragment nested in the page that uses it
+  would be rendered once more as part of that page.
+-->
+<div th:fragment="member(n, role)" class="member" th:classappend="'member-' + ${role}">
+    <div class="member-head">
+        <span class="member-role" th:text="${role}">part</span>
+        <!-- An entity with no name of its own — a derived resource usually has none — is told
+             apart by its type; its id is shown small rather than as if it were a name. -->
+        <strong th:if="${n.name != n.id}" th:text="${n.name}">name</strong>
+        <span class="tag" th:text="${n.entityType}">type</span>
+        <code class="member-id" th:if="${n.name == n.id}" th:text="${n.id}">id</code>
+        <span class="status" th:if="${n.provisioningStatus}"
+              th:classappend="'status-' + ${n.provisioningStatus}" th:text="${n.provisioningStatus}">status</span>
+        <span class="status" th:if="${n.authorizationStatus}"
+              th:classappend="'status-' + ${n.authorizationStatus}" th:text="${n.authorizationStatus}">status</span>
+        <span class="member-deps" th:if="${!n.dependsOn.isEmpty()}">
+            depends on <span class="tag muted" th:each="d : ${n.dependsOn}" th:text="${d}">name</span>
+        </span>
+    </div>
+    <details class="member-values">
+        <summary>Values</summary>
+        <pre class="schema member-json" th:text="${n.values}">{}</pre>
+    </details>
+    <div class="member-children" th:if="${!n.parts.isEmpty() or !n.derived.isEmpty()}">
+        <th:block th:each="p : ${n.parts}">
+            <div th:replace="~{fragments/asset-member :: member(${p}, 'part')}"></div>
+        </th:block>
+        <th:block th:each="d : ${n.derived}">
+            <div th:replace="~{fragments/asset-member :: member(${d}, 'derived')}"></div>
+        </th:block>
+    </div>
+</div>
+
+</body>
+</html>
