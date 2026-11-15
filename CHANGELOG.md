@@ -11,10 +11,15 @@ renames that section to the new version.
 
 ## [Unreleased]
 
-The catalog becomes a place to manage data platform assets. Everything is additive: the REST API
-only gains endpoints and fields, and the one schema change is a migration that needs no data moved,
-so a 2.0 database runs on this as it is. Pages of the web UI have moved, and their old addresses
-still answer.
+The catalog becomes a place to manage data platform assets. Nothing is taken away, which is what
+makes this a minor release: the REST API gains endpoints and fields and loses none, the
+configuration is unchanged, and the one schema change is a migration that needs no data moved, so
+a 2.0 database runs on this as it is. Two existing operations accept more than they did (see
+*Changed*). Pages of the web UI have moved, and their old addresses still answer.
+
+The REST contract's own version, `info.version` in the OpenAPI document, moves from 1.0.0 to
+1.1.0: it had not changed since 1.0.0, and it gains endpoints and fields here without breaking a
+client of 1.0.0.
 
 ### Added
 
@@ -46,10 +51,11 @@ still answer.
   depend on any of them — accepted only where the model allows it, with the reason shown where it
   does not; a right-click on the graph's board to create a new asset, or a new thing to depend on,
   in place, and on a node to open, edit or delete it — or, on an asset, to provision,
-  unprovision, authorize or reject it without leaving the graph; each asset's mapped entities, named in the list and drawn below it in the graph with
-  the status a run left on them; each asset's inside in the graph — its parts and the
-  dependencies between them; an asset's page with its structure, lifecycle actions, mappings
-  and access; the schema-driven editor on an existing asset; and YAML download and upload.
+  unprovision, authorize or reject it without leaving the graph; each asset's mapped entities,
+  named in the list and drawn below it in the graph with the status a run left on them; each
+  asset's inside in the graph — its parts and the dependencies between them; an asset's page with
+  its structure, lifecycle actions, mappings and access; the schema-driven editor on an existing
+  asset; and YAML download and upload.
 - **A model graph.** Under Administration, every trait and entity type as a card laid out in rows
   — traits above the types assembled from them — with inheritance, mixed-in traits, carried
   traits, relationships and mappings as edges, filters per kind of edge, search, and a panel
@@ -69,7 +75,9 @@ still answer.
 - **A downloaded aggregate uploads as a faithful copy.** `POST /aggregate/yaml` reads a node's
   `id` as a second `ref` and its `dependencies` as more `dependsOn` names, and takes a name no node
   declares as the id of an existing entity. It used to ignore both fields, so a document served by
-  `GET /aggregate/{id}/yaml` created a copy with its dependencies silently gone.
+  `GET /aggregate/{id}/yaml` created a copy with its dependencies silently gone. The other side
+  of the same change: a document whose `dependencies` name something that does not exist is now
+  refused, where it used to load without them.
 - **Adding a dependency derives what could not be derived without it.** A mapping may read
   through a dependency — a resource named after the domain its data product belongs to. An entity
   created before it had that dependency used to stay without its derived entity until it happened
@@ -89,9 +97,8 @@ still answer.
   (`/root/sales/dp1/op1`) and the Athena database `<domain>_<data product>` (`sales_dp1`). `dp1`
   starts with a history: the loader records a second version of it, adding a third output port
   from `docker/bulk/bulk-instances-v2.yaml`, which leaves the first as a past version to open and
-  run. A
-  volume created by an earlier build has to be recreated (`make down ARGS=-v`), as the loader
-  says.
+  run. A volume created by an earlier build has to be recreated (`make down ARGS=-v`), as the
+  loader says.
 
 ### Fixed
 

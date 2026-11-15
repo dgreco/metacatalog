@@ -14,7 +14,7 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-58.4%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![coverage](https://img.shields.io/badge/coverage-58.3%25-brightgreen)](https://dgreco.github.io/metacatalog/)
 [![tests](https://img.shields.io/badge/tests-462-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
@@ -142,10 +142,10 @@ curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT
 
 docker logs metacatalog-app | grep -E '\[(authorizing|rejecting)\]'
 # [authorizing] start  S3FolderType id=0849185c… {"path":"/root/sales/dp1/op1","bucket":"my-bucket"}
-# [authorizing] grants S3FolderType id=0849185c… analysts(GROUP)=READ, dp1-loader(SERVICE)=READ|WRITE
+# [authorizing] grants S3FolderType id=0849185c… analysts(GROUP)=[READ], dp1-loader(SERVICE)=[READ, WRITE]
 # [authorizing] done   S3FolderType id=0849185c…
 # [authorizing] start  AthenaTableType id=693457a7…
-# [authorizing] grants AthenaTableType id=693457a7… analysts(GROUP)=READ
+# [authorizing] grants AthenaTableType id=693457a7… analysts(GROUP)=[READ]
 # [authorizing] done   AthenaTableType id=693457a7…
 # [rejecting]   start  AthenaTableType id=693457a7…        <- reversed, as unprovisioning is
 # [rejecting]   done   AthenaTableType id=693457a7…
@@ -354,7 +354,7 @@ for the Testcontainers PostgreSQL): core 257 · ui 111 · security 23 · openapi
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.4% of instructions, 41.2% of branches, 60.4% of lines**.
+**58.3% of instructions, 41.1% of branches, 60.4% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
