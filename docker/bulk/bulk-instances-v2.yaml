@@ -1,0 +1,20 @@
+# The second version of dp1: what the loader adds to the data product once it is loaded, so that
+# the demo starts with a history to look at instead of a single version.
+#
+# dp1 is Versionable, and an aggregate root is versioned as a whole, once per transaction:
+#
+#   v1  the load of bulk-instances.yaml — dp1 with op1 and op2;
+#   v2  this file — a second table, op3, over the same files as op2.
+#
+# The loader appends these parts to dp1 as GET /aggregate/{id}/yaml serves it and sends the result
+# back with PUT /aggregate/{id}/yaml: one update, one transaction, one new version, whatever the
+# number of parts listed here. Recording v2 freezes v1 into a copy of its own — dp1 as it was, with
+# two output ports — which can still be opened, provisioned and authorized from dp1's History page.
+#
+# A part depends on an existing one by id, which is only known once dp1 is loaded: the loader
+# replaces each {{EntityType/name}} below with the id of the entity of that type and name.
+- entityType: "TableBasedOutputPortType"
+  values:
+    name: "op3"
+  dependsOn:
+    - "{{FileBasedOutputPortType/op1}}"

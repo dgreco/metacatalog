@@ -14,7 +14,7 @@
 <!-- BADGES:START -->
 [![pipeline](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/pipeline.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/pipelines)
 [![coverage](https://gitlab.davidgreco.it/dgreco/metacatalog/badges/main/coverage.svg)](https://gitlab.davidgreco.it/dgreco/metacatalog/-/wikis/Coverage)
-[![tests](https://img.shields.io/badge/tests-460-brightgreen)](#coverage)
+[![tests](https://img.shields.io/badge/tests-462-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -88,7 +88,9 @@ This starts:
   data product `dp1` with two output ports, and the `sales` domain it depends on — which is where
   its resources get their names from, `/root/sales/dp1/op1` and `sales_dp1`. Right-click the board
   of the catalog's dependency graph to create another data product, and drag it onto `sales` to see
-  a dependency being made and the resources appear
+  a dependency being made and the resources appear. `dp1` also starts with a **history**: the
+  loader records a second version of it, adding a third output port, so that there is a past
+  version to look at and to run (see *Versions* below)
 
 Nothing is provisioned by starting the stack. Provisioning is something you ask for, and it runs
 the task registered for every `ProvisionableResource` in dependency order; unprovisioning tears
@@ -114,6 +116,9 @@ docker logs metacatalog-app | grep -E '\[(un)?provisioning\]'
 # [unprovisioning] start S3FolderType id=0849185c…
 # [unprovisioning] done  S3FolderType id=0849185c…
 ```
+
+(`op3`'s table — the output port the loader adds as `dp1`'s second version — is logged like
+`op2`'s, and is left out of the samples here and below.)
 
 Provisioning a freshly seeded aggregate needs its resources to exist first — they are derived
 asynchronously by the mapping updater a second or so after the instances load. Provisioning before
@@ -162,6 +167,45 @@ curl -s -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$ROOT/acce
 returns the declared policy and, per resource, the grants in force. `?async=true` and the schedule
 poll work identically. `GET /metacatalog/v1/aggregate/authorizable-type` lists the types that offer
 the capability, as `.../provisionable-type` does for provisioning.
+
+**Versions.** The data product type is `Versionable`, so `dp1` keeps a history — and the demo
+starts with one. The loader loads `dp1` with two output ports, which is v1, and then adds a third
+from `docker/bulk/bulk-instances-v2.yaml`, which is v2:
+
+```bash
+curl -s -u admin:admin http://localhost:8080/metacatalog/v1/entity/$ROOT/versions \
+  | jq -r '.[] | "v\(.version)  \(.aggregate.parts | length) output ports  copy: \(.frozenRootId // "none, it is the live aggregate")"'
+# v1  2 output ports  copy: d8223e87-…
+# v2  3 output ports  copy: none, it is the live aggregate
+```
+
+That is most of how versioning works:
+
+- **A version is the whole aggregate**, not the root's values alone: v1 records `dp1` with `op1`
+  and `op2`, their dependency and what they were mapped to; v2 the same with `op3`.
+- **One change is one version.** The loader adds `op3` — a new entity, its place in `dp1`, its
+  dependency on `op1` — with one `PUT /aggregate/{id}/yaml`, and the history gains exactly v2.
+- **A run is a change too.** Provisioning or authorizing writes statuses back, and each write is
+  a version: if you ran the commands above, the list is longer than two.
+- **A past version is still there to be used.** Recording v2 froze v1 into a copy of its own —
+  `dp1` as it was, with two output ports, belonging to the `sales` domain as it did — and a copy
+  can be read and run like any aggregate, by the id the version gives:
+
+```bash
+V1=$(curl -s -u admin:admin http://localhost:8080/metacatalog/v1/entity/$ROOT/versions/1 | jq -r .frozenRootId)
+curl -X POST -u admin:admin http://localhost:8080/metacatalog/v1/aggregate/$V1/provision
+
+docker logs metacatalog-app | grep -E '\[provisioning\]' | tail -4
+# [provisioning]   start S3FolderType id=2a4c61e5… {"path":"/root/sales/dp1/op1","bucket":"my-bucket"}
+# [provisioning]   done  S3FolderType id=2a4c61e5…
+# [provisioning]   start AthenaTableType id=a9934f65… {"table":"op2",…}     <- v1 had no op3
+# [provisioning]   done  AthenaTableType id=a9934f65…
+```
+
+In the web UI the same is on `dp1`'s page: the version next to its name leads to **History**,
+which lists every version with the aggregate it recorded and, for each past one, *Open* and the
+run buttons of its copy. Editing `dp1` — renaming a port, adding one — adds a version there as you
+watch. [Entity Versioning](#entity-versioning) has the rules.
 
 Once up, the app is available at:
 - **Web UI**: http://localhost:8080/ui — opens on the asset catalog; the model is under *Administration*
@@ -303,13 +347,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 255 · ui 111 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 18 = **460, 0 failures**.
+for the Testcontainers PostgreSQL): core 257 · ui 111 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 18 = **462, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**58.3% of instructions, 41.0% of branches, 60.3% of lines**.
+**58.4% of instructions, 41.2% of branches, 60.4% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -1041,8 +1085,16 @@ can still run on, and that nothing else can change.
 - **No run results.** Every status, result and grants field (`provisioningStatus`,
   `authorizationResult`, `effectiveGrants`, …) is left behind, so a copy's statuses only ever
   record runs made on the copy. The history JSON still shows what the live aggregate had.
-- **Its own links.** `HAS_PART` and `DEPENDS_ON` are replicated inside the copy. A dependency on an
-  entity outside the aggregate is dropped, so a copy never links to a live entity.
+- **Its own links.** `HAS_PART` and `DEPENDS_ON` are replicated inside the copy, so a copy never
+  links to a live entity.
+- **A stand-in for what it depended on outside.** A dependency on an entity outside the aggregate
+  — a data product's on its domain — becomes a dependency on a frozen stand-in for that entity:
+  its type and values as they are when the copy is made, belonging to the copy, hidden and
+  deleted with it. A mapping that reads through such a dependency (see
+  [What an asset may depend on](#what-an-asset-may-depend-on)) therefore still resolves in a
+  copy, and what later happens to the live entity does not reach it. Only the entity itself is
+  stood in for, not what it contains or derives. A copy made by an earlier release has no
+  stand-in, and its dependency stays dropped.
 - **Its derived entities, derived afresh** from the cloned parts with the **current** mapping
   rules, not cloned from the recorded ones. That is what makes the copy complete and runnable: the
   resources a provisioning run acts on are derived entities.

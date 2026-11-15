@@ -14,6 +14,7 @@ import it.davidgreco.metacatalog.entity.BuiltInTraits;
 import it.davidgreco.metacatalog.entity.Entity;
 import it.davidgreco.metacatalog.entity.EntityVersion;
 import it.davidgreco.metacatalog.entity.MappingEntityTypeRelationship;
+import it.davidgreco.metacatalog.entity.RelationType;
 import it.davidgreco.metacatalog.repository.EntityRepository;
 import java.util.List;
 import java.util.Optional;
@@ -206,6 +207,106 @@ class FrozenVersionTests extends CommonServiceTestingSupport {
     assertEquals(
         List.of(mappedCopy.getId()),
         entityService().linked(plainCopy.getId(), DEPENDS_ON).stream().map(Entity::getId).toList());
+  }
+
+  /**
+   * A mapping may read through a dependency on something outside the aggregate — a resource named
+   * after the group its root belongs to. A copy must still be able to derive that resource, without
+   * linking to the live group: it gets a frozen stand-in for the group, as it was when the copy was
+   * made. Dropping the dependency, as a copy used to, left every such copy without resources and
+   * with nothing to run a function on.
+   */
+  @Test
+  void aCopyKeepsWhatItsMappingsReadThroughADependencyOutsideTheAggregate() {
+    var traits = getApplicationContext().getBean(TraitService.class);
+    traits.create("FvoGroup", Optional.empty(), Optional.empty());
+    traits.create("FvoOwned", Optional.empty(), Optional.empty());
+    traits.link("FvoOwned", DEPENDS_ON, "FvoGroup");
+    traits.create("FvoPartTrait", Optional.empty(), Optional.of(BuiltInTraits.AGGREGATE_ELEMENT));
+    entityTypeService().create("FvoGroupType", List.of("FvoGroup"), Optional.empty(), NAME_SCHEMA);
+    entityTypeService()
+        .create(
+            "FvoRoot",
+            List.of(BuiltInTraits.PROVISIONABLE, BuiltInTraits.VERSIONABLE, "FvoOwned"),
+            Optional.empty(),
+            NAME_SCHEMA);
+    entityTypeService()
+        .create(
+            "FvoPart",
+            List.of(BuiltInTraits.AGGREGATE, "FvoPartTrait"),
+            Optional.empty(),
+            NAME_SCHEMA);
+    entityTypeService()
+        .create(
+            "FvoResource",
+            List.of(BuiltInTraits.PROVISIONABLE_RESOURCE),
+            Optional.empty(),
+            """
+            { "type": "object", "properties": { "label": { "type": "string" } } }""");
+    mappingService()
+        .create(
+            "FvoPart",
+            "FvoResource",
+            "{\"label\": \"#group.getValue('$.name').asText() + '/' +"
+                + " #source.getValue('$.name').asText()\"}",
+            List.of(
+                new MappingEntityTypeRelationship.EntityPathReference(
+                    "group", "HAS_PART{$}/IS_REQUIRED_BY{$}")));
+
+    var group = entityService().create("FvoGroupType", "{\"name\":\"g1\"}");
+    var rootId =
+        getApplicationContext()
+            .getBean(BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: FvoRoot
+                    values: { name: owned }
+                    dependsOn: ["%s"]
+                    parts:
+                      - entityType: FvoPart
+                        values: { name: m }
+                    """
+                        .formatted(group.getId())
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    var resources = "$ ? (@.label == \"g1/m\")";
+    Awaitility.await()
+        .atMost(Durations.TEN_SECONDS)
+        .until(() -> entityService().list("FvoResource", resources).size() == 1);
+
+    // v2 supersedes v1, which is frozen.
+    entityService().update(rootId, "{\"name\":\"owned again\"}");
+    var copyRootId = entityService().listVersions(rootId).getFirst().getFrozenRootId();
+    assertNotNull(copyRootId, "v1 is frozen once v2 is recorded");
+
+    var standIns = entityService().linked(copyRootId, DEPENDS_ON);
+    assertEquals(1, standIns.size(), "the copy keeps its one dependency");
+    var standIn = standIns.getFirst();
+    assertFalse(group.getId().equals(standIn.getId()), "a copy never links to a live entity");
+    assertEquals(rootId, standIn.getFrozenVersionOf());
+    assertEquals(1, standIn.getFrozenVersion());
+    assertEquals("FvoGroupType", standIn.getEntityType().getName());
+    assertEquals(json("{\"name\":\"g1\"}"), standIn.getValues());
+    assertEquals(
+        List.of(rootId),
+        entityService().linked(group.getId(), RelationType.IS_REQUIRED_BY).stream()
+            .map(Entity::getId)
+            .toList(),
+        "the live group is depended on by the live root alone");
+
+    // Which is what lets the copy derive its resource, and so be something to run a function on.
+    assertEquals(
+        "g1/m", copyMember(copyRootId, ofType("FvoResource")).getValues().get("label").asText());
+
+    // The stand-in is the group as it was: what happens to the live one later does not reach it.
+    entityService().update(group.getId(), "{\"name\":\"g2\"}");
+    assertEquals(json("{\"name\":\"g1\"}"), entityService().read(standIn.getId()).getValues());
+
+    // And it belongs to the copy: it goes with it, and the live group stays.
+    aggregateService().delete(rootId);
+    assertFalse(entityService().exists(standIn.getId()));
+    assertTrue(entityService().exists(group.getId()));
   }
 
   @Test

@@ -1,3 +1,5 @@
+# dp1 as it is first loaded: the first version in its history. The loader then adds a third output
+# port to it from bulk-instances-v2.yaml, which is the second.
 entityType: "DataProductType"
 values:
   name: "dp1"

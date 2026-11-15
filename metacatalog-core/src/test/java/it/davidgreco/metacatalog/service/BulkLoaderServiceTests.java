@@ -240,6 +240,81 @@ class BulkLoaderServiceTests extends CommonServiceTestingSupport {
   }
 
   /**
+   * The demo starts with a history: the loader records a second version of the data product from
+   * {@code bulk-instances-v2.yaml}, which adds an output port. That is one update and one new
+   * version, and it leaves the first version as a copy that is still a whole data product — its two
+   * ports and the resources derived from them, named after the domain it belonged to — so that
+   * there is a past version to open and run a function on.
+   */
+  @Test
+  @org.junit.jupiter.api.Timeout(60)
+  void testDockerDemoSecondVersionAddsAPortAndLeavesTheFirstRunnable() throws java.io.IOException {
+    var bulkLoaderService = getApplicationContext().getBean(BulkLoaderService.class);
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+    var entityService = getApplicationContext().getBean(EntityService.class);
+    var yaml =
+        new com.fasterxml.jackson.databind.ObjectMapper(
+            new com.fasterxml.jackson.dataformat.yaml.YAMLFactory());
+    var bulkDir = java.nio.file.Path.of("..", "docker", "bulk");
+    loadDemoModelIfMissing();
+
+    String rootId;
+    try (var instances =
+        java.nio.file.Files.newInputStream(bulkDir.resolve("bulk-instances.yaml"))) {
+      rootId = bulkLoaderService.bulkAggregateCreation(instances).getFirst();
+    }
+    var ports = entityService.linked(rootId, RelationType.HAS_PART);
+    var op1 =
+        ports.stream()
+            .filter(port -> port.getEntityType().getName().equals("FileBasedOutputPortType"))
+            .findFirst()
+            .orElseThrow();
+
+    // What load-bulk.sh does: the file's parts, with the port they refer to named by its id,
+    // added to the data product as it stands. The loader builds the document from the YAML the
+    // API serves; here it is built from the same members.
+    var reference = "{{FileBasedOutputPortType/op1}}";
+    var added = java.nio.file.Files.readString(bulkDir.resolve("bulk-instances-v2.yaml"));
+    assertTrue(added.contains(reference), "the file names the port its new part depends on");
+    var document = yaml.createObjectNode();
+    document.put("entityType", "DataProductType");
+    document.set("values", entityService.read(rootId).getValues());
+    var parts = document.putArray("parts");
+    for (var port : ports) {
+      var node = parts.addObject();
+      node.put("id", port.getId());
+      node.put("entityType", port.getEntityType().getName());
+      node.set("values", port.getValues());
+    }
+    yaml.readTree(added.replace(reference, op1.getId())).forEach(parts::add);
+    aggregateService.update(rootId, document);
+
+    var versions = entityService.listVersions(rootId);
+    assertEquals(2, versions.size(), "one update is one version, whatever it adds");
+    assertEquals(2, versions.getFirst().getAggregate().get("parts").size());
+    assertEquals(3, versions.getLast().getAggregate().get("parts").size());
+
+    // The first version is now a copy of its own, with resources of its own to run on.
+    var copyRootId = versions.getFirst().getFrozenRootId();
+    org.junit.jupiter.api.Assertions.assertNotNull(copyRootId, "v1 is frozen once v2 is recorded");
+    var derived = new java.util.ArrayList<String>();
+    collectDerivedValues(aggregateService.read(copyRootId, true), derived);
+    assertTrue(derived.contains("/root/sales/dp1/op1"), derived.toString());
+    assertTrue(derived.contains("sales_dp1"), derived.toString());
+  }
+
+  /** The folder paths and table databases of the resources in an aggregate read. */
+  private static void collectDerivedValues(
+      AggregateService.AggregatePart part, java.util.List<String> into) {
+    for (var field : java.util.List.of("path", "database")) {
+      var value = part.entity().getValues().get(field);
+      if (value != null) into.add(value.asText());
+    }
+    if (part instanceof AggregateService.Aggregate aggregate)
+      aggregate.elements().forEach(element -> collectDerivedValues(element, into));
+  }
+
+  /**
    * A data product created before it belongs to a domain has nothing to name its folder after, so
    * the folder is not derived — and is, once the product is given its domain. Without that, a
    * product assembled in the UI and dropped onto a domain afterwards would stay without resources

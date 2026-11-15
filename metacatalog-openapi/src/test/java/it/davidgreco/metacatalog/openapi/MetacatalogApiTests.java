@@ -517,7 +517,10 @@ class MetacatalogApiTests {
     Assertions.assertEquals(AssetDependencyTarget.KindEnum.ENTITY, target.getKind());
     Assertions.assertEquals("ApiAstDomainType", target.getEntityType());
 
-    // Download, edit, upload: rename the table, rename its column and add a second one.
+    // Download, edit, upload: rename the table, rename its column and add a second one. The part
+    // is added by appending a list item to the document as it was served — the root's `parts`
+    // come last, their items at column 0. docker/bulk/load-bulk.sh gives the demo its second
+    // version the same way, so a change in how an aggregate is serialized breaks it too.
     var downloaded = Files.readString(api.getAggregateAsYaml(tableId, Boolean.FALSE).toPath());
     Assertions.assertTrue(downloaded.contains(tableId), downloaded);
     var edited =

@@ -44,10 +44,11 @@ import org.springframework.transaction.support.TransactionTemplate;
  * entity in it carries the live root's id and the version in {@link Entity#getFrozenVersionOf()}
  * and {@link Entity#getFrozenVersion()}. Run results — every {@link BuiltInCapability} status,
  * result and grants field — are left behind, so a copy's status only ever reflects runs made on the
- * copy. Containment and dependency links are replicated inside the copy only; a dependency on an
- * entity outside the aggregate is dropped, so a copy never links to a live entity. The derived
- * entities are not cloned but derived afresh from the cloned parts with the current mapping rules,
- * which makes every copy complete and runnable.
+ * copy. Containment and dependency links are replicated inside the copy only, so a copy never links
+ * to a live entity. A dependency on an entity outside the aggregate — a data product's on its
+ * domain — is kept as a dependency on a frozen stand-in for that entity, made with the copy and
+ * belonging to it. The derived entities are not cloned but derived afresh from the cloned parts
+ * with the current mapping rules, which makes every copy complete and runnable.
  *
  * <p>Consecutive versions that differ only in run results would give identical copies, so they
  * share one: a provisioning run records versions as statuses change but makes no new copy. A copy
@@ -208,9 +209,45 @@ public class FrozenVersionService {
     var copyRoot = cloneNode(tree, rootId, version.getVersion(), copies, dependencies);
     for (var dependency : dependencies) {
       var target = copies.get(dependency.getValue());
+      // Not in the tree: what is depended on lies outside the aggregate.
+      if (target == null) {
+        target = standInFor(dependency.getValue(), rootId, version.getVersion());
+        if (target != null) copies.put(dependency.getValue(), target);
+      }
       if (target != null) linkPair(dependency.getKey(), DEPENDS_ON, target);
     }
     return Optional.of(copyRoot);
+  }
+
+  /**
+   * A frozen stand-in for an entity outside the aggregate that a member of it depends on, or {@code
+   * null} when that entity is gone.
+   *
+   * <p>A mapping may read through such a dependency: a resource is named after the domain its data
+   * product belongs to. Dropping the dependency left a copy whose resources could not be derived —
+   * a past version with nothing to run a function on — and linking the copy to the live entity
+   * would let a later change of that entity reach into a copy nothing is supposed to change, and
+   * would make the live entity undeletable for a reason no page shows. So the copy gets an entity
+   * of its own to depend on: the outside entity's type and values as they are now, marked as part
+   * of the copy, hidden and deleted with it like every other entity of the copy.
+   *
+   * <p>"As they are now" is when the copy is made, which is when its version is superseded, not
+   * when it was recorded: a version records which entity was depended on, not what it held. It
+   * stands in for that one entity only — whatever the outside entity contains or derives is not
+   * copied, so a path reference that walks further than its values resolves to nothing in a copy.
+   */
+  private Entity standInFor(String outsideId, String rootId, int version) {
+    var outside = entityRepository.findById(outsideId).orElse(null);
+    if (outside == null || outside.isFrozen()) return null;
+    var standIn = new Entity();
+    standIn.setEntityType(outside.getEntityType());
+    standIn.setEntityTypeVersion(outside.getEntityTypeVersion());
+    JsonNode values = outside.getValues().deepCopy();
+    if (values instanceof ObjectNode object) object.remove(RUN_FIELDS);
+    standIn.setValues(values);
+    standIn.setFrozenVersionOf(rootId);
+    standIn.setFrozenVersion(version);
+    return entityRepository.save(standIn);
   }
 
   /**

@@ -76,11 +76,20 @@ still answer.
   to be edited; linking it now asks the mapping engine for whatever it, and everything it
   contains, should have derived and has not. Entities that already have their derived entity are
   not touched.
+- **A past version keeps what it depended on outside its aggregate.** A frozen copy used to drop
+  a dependency on an entity outside the aggregate. It now depends on a frozen stand-in for that
+  entity — its values as they are when the copy is made, belonging to the copy — so a mapping
+  that reads through the dependency still derives the copy's resources, and the copy stays
+  something a function can run on. A copy still never links to a live entity. Copies made before
+  this release are left as they are.
 - **The demo.** The data product type carries `Asset` instead of mixing the two capability traits
   in itself, and the model gains a plain `DomainType` and the one dependency a data product may
   have, on a domain. The loader seeds a `sales` domain with `dp1` depending on it, and the
   mappings name the resources after it: the S3 folder is `/root/<domain>/<data product>/<port>`
-  (`/root/sales/dp1/op1`) and the Athena database `<domain>_<data product>` (`sales_dp1`). A
+  (`/root/sales/dp1/op1`) and the Athena database `<domain>_<data product>` (`sales_dp1`). `dp1`
+  starts with a history: the loader records a second version of it, adding a third output port
+  from `docker/bulk/bulk-instances-v2.yaml`, which leaves the first as a past version to open and
+  run. A
   volume created by an earlier build has to be recreated (`make down ARGS=-v`), as the loader
   says.
 

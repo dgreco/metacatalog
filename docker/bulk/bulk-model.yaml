@@ -26,10 +26,12 @@
 #     dependency would make the path ambiguous and the derivation fail — which is why the model
 #     lets a data product depend on a domain and on nothing else.
 #
-# The data product is also Versionable, so dp1 keeps a version history: it starts at v1, and every
-# change to its values adds one. That includes the status write-backs each provision / authorize
-# run makes on the root, so the History link on the Instances page grows as you click through the
-# lifecycle.
+# The data product is also Versionable, so dp1 keeps a version history, and the demo starts with
+# one: v1 is the load of bulk-instances.yaml, and v2 is recorded by the loader right after it from
+# bulk-instances-v2.yaml, which adds a third output port. Every later change adds a version too —
+# including the status write-backs each provision / authorize run makes — so the History page,
+# reached from dp1's version on its asset page, grows as you click through the lifecycle. Each
+# past version is there as a frozen copy that can still be opened and run.
 
 Traits:
   - name: WithName
