@@ -76,6 +76,7 @@ public record AssetCatalogView(
    * @param authorizationStatus the status the last authorization run left, or {@code null}
    * @param dependsOn what this asset depends on: assets, aggregates and plain entities
    * @param requiredBy the assets depending on this one
+   * @param mapped the entities mappings derived from the asset's members
    */
   public record Row(
       String id,
@@ -85,11 +86,58 @@ public record AssetCatalogView(
       String provisioningStatus,
       String authorizationStatus,
       List<Ref> dependsOn,
-      List<Ref> requiredBy) {
+      List<Ref> requiredBy,
+      List<Mapped> mapped) {
 
     /** This asset as the other end of a dependency. */
     public Ref ref() {
       return new Ref(id, name, entityType, ASSET, "/ui/assets/" + id);
+    }
+  }
+
+  /**
+   * An entity a mapping derived from a member of an asset — what the asset materialises as.
+   *
+   * @param id the derived entity's id
+   * @param name its display name: its {@code name} value, or its type when it has none, which is
+   *     the usual case — a derived entity is described by its type, not named
+   * @param entityType the name of its type, the mapping's target
+   * @param provisioningStatus the status a provisioning run left on it, or {@code null}
+   * @param authorizationStatus the status an authorization run left on it, or {@code null}
+   * @param sourceName the display name of the member it was derived from
+   * @param sourceEntityType the name of that member's type, the mapping's source
+   * @param href the page showing the derived entity
+   * @param mappingHref the mapping editor, opened on the mapping that derived it
+   */
+  public record Mapped(
+      String id,
+      String name,
+      String entityType,
+      String provisioningStatus,
+      String authorizationStatus,
+      String sourceName,
+      String sourceEntityType,
+      String href,
+      String mappingHref) {
+
+    static Mapped of(it.davidgreco.metacatalog.openapi.model.AssetMappedEntity mapped) {
+      var values = parse(mapped.getValues());
+      var named = displayName(values, null);
+      return new Mapped(
+          mapped.getId(),
+          named == null ? mapped.getEntityType() : named,
+          mapped.getEntityType(),
+          text(values, "provisioningStatus"),
+          text(values, "authorizationStatus"),
+          displayName(parse(mapped.getSourceValues().orElse(null)), mapped.getSourceEntityType()),
+          mapped.getSourceEntityType(),
+          "/ui/admin/instances/" + mapped.getId(),
+          "/ui/admin/mappings/new?source="
+              + java.net.URLEncoder.encode(
+                  mapped.getSourceEntityType(), java.nio.charset.StandardCharsets.UTF_8)
+              + "&target="
+              + java.net.URLEncoder.encode(
+                  mapped.getEntityType(), java.nio.charset.StandardCharsets.UTF_8));
     }
   }
 
@@ -173,7 +221,8 @@ public record AssetCatalogView(
                   .map(refs::get)
                   .filter(java.util.Objects::nonNull)
                   .toList(),
-              requiredBy.getOrDefault(asset.getId(), List.of())));
+              requiredBy.getOrDefault(asset.getId(), List.of()),
+              asset.getMapped().stream().map(Mapped::of).toList()));
     }
     var ruleViews =
         rules.stream()

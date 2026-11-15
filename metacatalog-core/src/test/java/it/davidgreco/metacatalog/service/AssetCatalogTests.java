@@ -62,6 +62,16 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
         EMPTY_SCHEMA);
     entityTypeService.create(
         "AsNoteType", List.of("AsNamed", "AsNote"), Optional.empty(), EMPTY_SCHEMA);
+    // What a column materialises as: derived by a mapping, never authored.
+    entityTypeService.create("AsResourceType", List.of("AsNamed"), Optional.empty(), EMPTY_SCHEMA);
+    getApplicationContext()
+        .getBean(MappingService.class)
+        .create(
+            "AsColumnType",
+            "AsResourceType",
+            """
+            { "name": "#source.getValue('$.name').asText() + '-resource'" }""",
+            List.of());
   }
 
   /**
@@ -144,6 +154,54 @@ class AssetCatalogTests extends CommonServiceTestingSupport {
     // What the rules do not list, linking refuses — the two answers come from the same model.
     Assertions.assertThrows(
         ServiceError.class, () -> entityService.link(domain.getId(), DEPENDS_ON, table.getId()));
+  }
+
+  /**
+   * An asset is listed with the entities mappings derived from its members, each with the member it
+   * came from. A part of another asset, and its derived entity, belong to that other asset.
+   */
+  @Test
+  @org.junit.jupiter.api.Timeout(60)
+  void testCatalogListsTheEntitiesMappedFromAnAssetsMembers() {
+    var aggregateService = getApplicationContext().getBean(AggregateService.class);
+    var bulkLoader = getApplicationContext().getBean(BulkLoaderService.class);
+    var ids =
+        bulkLoader.bulkAggregateCreation(
+            new java.io.ByteArrayInputStream(
+                """
+                entityType: AsTableType
+                values: { name: mapped-orders }
+                parts:
+                  - entityType: AsColumnType
+                    values: { name: amount }
+                ---
+                entityType: AsTableType
+                values: { name: mapped-customers }
+                parts:
+                  - entityType: AsColumnType
+                    values: { name: email }
+                """
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+    // The mapping updater derives the resources a moment after the load.
+    org.awaitility.Awaitility.await()
+        .atMost(org.awaitility.Durations.TEN_SECONDS)
+        .until(
+            () ->
+                aggregateService.assets().stream()
+                    .filter(asset -> ids.contains(asset.entity().getId()))
+                    .allMatch(asset -> asset.mapped().size() == 1));
+
+    var orders =
+        aggregateService.assets().stream()
+            .filter(asset -> asset.entity().getId().equals(ids.getFirst()))
+            .findFirst()
+            .orElseThrow();
+    var mapped = orders.mapped().getFirst();
+    Assertions.assertEquals("AsResourceType", mapped.entity().getEntityType().getName());
+    Assertions.assertEquals("amount-resource", mapped.entity().getValues().get("name").asText());
+    Assertions.assertEquals("AsColumnType", mapped.source().getEntityType().getName());
+    Assertions.assertEquals("amount", mapped.source().getValues().get("name").asText());
   }
 
   private static String named(String name) {

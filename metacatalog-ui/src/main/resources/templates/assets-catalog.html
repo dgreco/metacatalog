@@ -49,6 +49,9 @@
                placeholder="Filter by name…" aria-label="Filter assets by name"/>
         <span class="catalog-count" id="catalog-count"></span>
         <div class="catalog-tools" id="catalog-graph-tools" hidden>
+            <label class="graph-toggle" title="Draw the entities mappings derived from each asset's members">
+                <input type="checkbox" id="asset-show-mapped" checked/> Mapped entities
+            </label>
             <button class="btn-sm" id="asset-zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
             <button class="btn-sm" id="asset-zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
             <button class="btn-sm" id="asset-fit" type="button" title="Fit the whole graph in view">Fit</button>
@@ -74,6 +77,7 @@
                 <th>Authorization</th>
                 <th>Depends on</th>
                 <th>Required by</th>
+                <th>Mapped entities</th>
                 <th></th>
             </tr>
             </thead>
@@ -92,8 +96,9 @@
                     <p class="hint">
                         Every asset is a node, and so is everything an asset depends on or may
                         depend on: other assets, aggregates and plain entities. An arrow points
-                        from an asset to what it depends on, which is drawn above it. Select a node
-                        or a dependency to act on it; right-click the board to create a new one.
+                        from an asset to what it depends on, which is drawn above it; the entities
+                        mappings derived from an asset hang below it. Select a node or an edge to
+                        act on it; right-click the board to create a new one.
                     </p>
                     <h3>On the board</h3>
                     <ul class="graph-legend-list" id="asset-type-legend"></ul>

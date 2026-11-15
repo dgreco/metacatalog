@@ -11,6 +11,10 @@
  * The list is of assets and nothing else. The graph also draws the targets: a dependency has to end
  * somewhere, and to make one its other end has to be there to drop on.
  *
+ * Each asset carries its mapped entities — what mappings derived from its members, which is what
+ * a provisioning or authorization run acts on. The list names them in a column; the graph hangs
+ * them below their asset, and can leave them out.
+ *
  * A dependency is created by dragging an asset onto something: a row onto a row in the list, a node
  * onto a node in the graph (graph-core.js). While an asset is being dragged the nodes it may be
  * dropped on are marked, and whether one may is decided here before the server is asked, from the
@@ -72,7 +76,12 @@
       c.types = c.types || [];
       c.creatable = c.creatable || [];
       // One shape for everything on the board: an asset is its own kind of node.
-      c.assets.forEach(function (a) { a.kind = "asset"; a.href = "/ui/assets/" + encodeURIComponent(a.id); });
+      c.assets.forEach(function (a) {
+        a.kind = "asset";
+        a.href = "/ui/assets/" + encodeURIComponent(a.id);
+        a.mapped = a.mapped || [];
+        a.mapped.forEach(function (m) { m.kind = "mapped"; m.asset = a; m.dependsOn = []; });
+      });
       c.targets.forEach(function (t) { t.dependsOn = []; });
       return c;
     }
@@ -105,6 +114,12 @@
       }
       for (i = 0; i < catalog.targets.length; i++) {
         if (catalog.targets[i].id === id) return catalog.targets[i];
+      }
+      for (i = 0; i < catalog.assets.length; i++) {
+        var mapped = catalog.assets[i].mapped;
+        for (var j = 0; j < mapped.length; j++) {
+          if (mapped[j].id === id) return mapped[j];
+        }
       }
       return null;
     }
@@ -156,9 +171,11 @@
     function refusal(source, target) {
       if (!isAsset(source)) {
         return "Only an asset depends on something: «" + source.name + "» is " +
-          (source.kind === "aggregate" ? "an aggregate" : "an entity");
+          (source.kind === "aggregate" ? "an aggregate" : source.kind === "mapped" ? "a mapped entity" : "an entity");
       }
       if (source.id === target.id) return "An asset cannot depend on itself";
+      // A mapped entity is the consequence of an asset, not a thing of its own to depend on.
+      if (target.kind === "mapped") return "«" + target.name + "» is derived by a mapping; depend on «" + target.asset.name + "» instead";
       if (dependsOn(source, target)) return "«" + source.name + "» already depends on «" + target.name + "»";
       if (!rule(source.entityType, target.entityType)) {
         return "A " + source.entityType + " asset cannot depend on a " + target.entityType + " " + target.kind;
@@ -172,6 +189,8 @@
     // The type filter is about assets; what they depend on stays lit under it, or filtering by a
     // type would hide the very things that type's assets point at.
     function matches(node) {
+      // A mapped entity goes with the asset it was derived from.
+      if (node.kind === "mapped") return matches(node.asset);
       var type = typeSelect ? typeSelect.value : "";
       var text = search ? search.value.trim().toLowerCase() : "";
       if (type && isAsset(node) && node.entityType !== type) return false;
@@ -253,6 +272,19 @@
 
     // --- the list -------------------------------------------------------------------------------
 
+    // How a mapped entity stands: failed if either run failed, up if something is in place.
+    function statusClass(m) {
+      if (m.provisioningStatus === "FAILED" || m.authorizationStatus === "FAILED") return "is-failed";
+      if (m.provisioningStatus === "PROVISIONED" || m.authorizationStatus === "AUTHORIZED") return "is-ok";
+      if (m.provisioningStatus === "UNPROVISIONED" || m.authorizationStatus === "REJECTED") return "is-down";
+      return "";
+    }
+
+    function statusText(m) {
+      var parts = [m.provisioningStatus, m.authorizationStatus].filter(Boolean);
+      return parts.length ? " — " + parts.join(", ").toLowerCase() : "";
+    }
+
     function statusPill(value, labels) {
       var known = value ? labels[value] : null;
       var pill = el("span", "status status-" + (value || "none"), known ? known.text : value || "never run");
@@ -332,6 +364,17 @@
         var req = el("td", "col-refs");
         refChips(req, asset.requiredBy, null);
         tr.appendChild(req);
+
+        var mapped = el("td", "col-refs");
+        if (!asset.mapped.length) mapped.appendChild(el("span", "muted-dash", "—"));
+        asset.mapped.forEach(function (m) {
+          var chip = el("a", "mapped-chip " + statusClass(m), m.name);
+          chip.href = m.href;
+          chip.draggable = false;
+          chip.title = m.entityType + ", derived from " + m.sourceName + statusText(m);
+          mapped.appendChild(chip);
+        });
+        tr.appendChild(mapped);
 
         var actions = el("td", "col-actions");
         [["Open", ""], ["Edit", "/edit"], ["YAML", "/yaml"]].forEach(function (pair) {
@@ -417,9 +460,32 @@
       };
     }
 
+    // An entity a mapping derived from one of an asset's members.
+    function toMappedNode(m) {
+      var badges = [];
+      var p = m.provisioningStatus ? PROVISIONING[m.provisioningStatus] : null;
+      var a = m.authorizationStatus ? AUTHORIZATION[m.authorizationStatus] : null;
+      if (p) badges.push({ text: p.text, tone: p.tone });
+      if (a) badges.push({ text: a.text, tone: a.tone });
+      return { id: m.id, title: m.name, subtitle: "from " + m.sourceName, kind: "mapped", badges: badges, data: m };
+    }
+
+    function showsMapped() {
+      var toggle = document.getElementById("asset-show-mapped");
+      return !toggle || toggle.checked;
+    }
+
     function graphData() {
       var nodes = catalog.assets.map(toNode).concat(catalog.targets.map(toTargetNode));
       var edges = [];
+      if (showsMapped()) {
+        catalog.assets.forEach(function (asset) {
+          asset.mapped.forEach(function (m) {
+            nodes.push(toMappedNode(m));
+            edges.push({ source: asset.id, target: m.id, kind: "mapping", label: "", data: m });
+          });
+        });
+      }
       catalog.assets.forEach(function (asset) {
         asset.dependsOn.forEach(function (d) {
           edges.push({ source: asset.id, target: d.id, kind: "dependency", label: "", data: { source: asset.id, target: d.id } });
@@ -434,6 +500,9 @@
       if (!graph) {
         graph = window.MetacatalogGraphCore.create(canvas, {
           nodes: data.nodes, edges: data.edges, label: "Asset dependency graph",
+          // A dependency points up, at what the asset depends on; a mapping points down, at what
+          // follows from the asset.
+          ranked: function (edge) { return edge.kind === "mapping" ? "reverse" : true; },
           onSelect: onSelect,
           onContextMenu: openMenu,
           drop: {
@@ -536,6 +605,25 @@
         "Drag an asset onto it to add the dependency."));
     }
 
+    function mappedDetail(m) {
+      detail.textContent = "";
+      detail.appendChild(el("div", "graph-panel-kind", "mapped entity"));
+      detail.appendChild(el("h2", null, m.name));
+      panelRow(detail, "type", function (v) { v.textContent = m.entityType; });
+      panelRow(detail, "asset", function (v) { assetLinks(v, [m.asset]); });
+      panelRow(detail, "derived from", function (v) { v.textContent = m.sourceName + " (" + m.sourceEntityType + ")"; });
+      panelRow(detail, "provisioning", function (v) { v.appendChild(statusPill(m.provisioningStatus, PROVISIONING)); });
+      panelRow(detail, "authorization", function (v) { v.appendChild(statusPill(m.authorizationStatus, AUTHORIZATION)); });
+      var actions = el("div", "graph-panel-actions");
+      button(actions, "Open", m.href);
+      button(actions, "Edit mapping", m.mappingHref);
+      detail.appendChild(actions);
+      detail.appendChild(el("p", "hint",
+        "Derived by the mapping " + m.sourceEntityType + " → " + m.entityType +
+        ". Nobody writes it: it follows the asset, and a provisioning or authorization run of «" +
+        m.asset.name + "» records its outcome here."));
+    }
+
     function dependencyDetail(edge) {
       var source = byId(edge.source), target = byId(edge.target);
       if (!source || !target) {
@@ -581,7 +669,10 @@
       detail.hidden = false;
       if (selection.node) {
         if (isAsset(selection.node.data)) assetDetail(selection.node.data);
+        else if (selection.node.data.kind === "mapped") mappedDetail(selection.node.data);
         else targetDetail(selection.node.data);
+      } else if (selection.edge.kind === "mapping") {
+        mappedDetail(selection.edge.data);
       } else {
         dependencyDetail(selection.edge.data);
       }
@@ -608,6 +699,13 @@
           li.appendChild(document.createTextNode(k[2] + " assets may depend on (" + n + ")"));
           legend.appendChild(li);
         });
+        var derived = catalog.assets.reduce(function (sum, a) { return sum + a.mapped.length; }, 0);
+        if (derived) {
+          var item = el("li");
+          item.appendChild(el("span", "lg-card lg-mapped"));
+          item.appendChild(document.createTextNode("Mapped entities (" + derived + ")"));
+          legend.appendChild(item);
+        }
       }
       var rules = document.getElementById("asset-rule-list");
       if (rules) {
@@ -833,6 +931,8 @@
       var b = document.getElementById(id);
       if (b) b.addEventListener("click", function () { if (graph) fn(); });
     }
+    var mappedToggle = document.getElementById("asset-show-mapped");
+    if (mappedToggle) mappedToggle.addEventListener("change", function () { if (graph) renderGraph(); });
     bind("asset-fit", function () { graph.fit(); });
     bind("asset-relayout", function () { graph.relayout(); });
     bind("asset-zoom-in", function () { graph.zoomIn(); });

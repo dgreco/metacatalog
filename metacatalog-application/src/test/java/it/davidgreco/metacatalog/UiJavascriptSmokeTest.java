@@ -645,6 +645,86 @@ class UiJavascriptSmokeTest {
   }
 
   /**
+   * The catalog shows what an asset materialises as: the entities mappings derived from its members
+   * hang below it in the graph, which can leave them out, and are named in the list.
+   */
+  @Test
+  void theCatalogShowsTheEntitiesMappedFromAnAsset() {
+    ensureAssetModel();
+    var entityTypeService = context.getBean(EntityTypeService.class);
+    var mappingService = context.getBean(MappingService.class);
+    var aggregateService =
+        context.getBean(it.davidgreco.metacatalog.service.AggregateService.class);
+    var empty =
+        """
+        { "type": "object", "properties": {} }""";
+    entityTypeService.create(
+        "SmFeedType", List.of("AggregateElement", "SmNamed"), Optional.empty(), empty);
+    entityTypeService.create("SmTopicType", List.of("SmNamed"), Optional.empty(), empty);
+    mappingService.create(
+        "SmFeedType",
+        "SmTopicType",
+        """
+        { "name": "#source.getValue('$.name').asText() + '-topic'" }""",
+        List.of());
+
+    var tableId =
+        context
+            .getBean(it.davidgreco.metacatalog.service.BulkLoaderService.class)
+            .bulkAggregateCreation(
+                new java.io.ByteArrayInputStream(
+                    """
+                    entityType: SmTableType
+                    values: { name: sm-mapped }
+                    parts:
+                      - entityType: SmFeedType
+                        values: { name: sm-feed }
+                    """
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            .getFirst();
+    // The mapping updater derives the topic a moment after the load.
+    await()
+        .until(
+            d ->
+                aggregateService.assets().stream()
+                    .filter(asset -> asset.entity().getId().equals(tableId))
+                    .anyMatch(asset -> !asset.mapped().isEmpty()));
+
+    driver.get(baseUrl + "/ui/assets?view=graph");
+    var topic =
+        await()
+            .until(
+                d ->
+                    d.findElements(By.cssSelector("#asset-graph .gc-node-mapped")).stream()
+                        .filter(node -> node.getText().contains("sm-feed-topic"))
+                        .findFirst()
+                        .orElse(null));
+    Assertions.assertTrue(topic.getText().contains("from sm-feed"), topic.getText());
+    Assertions.assertFalse(
+        driver.findElements(By.cssSelector("#asset-graph .gc-edge-mapping")).isEmpty(),
+        "a mapped entity must be joined to its asset");
+
+    // Selecting it says where it comes from and leads to the mapping that made it.
+    topic.click();
+    var panel =
+        await().until(ExpectedConditions.visibilityOfElementLocated(By.id("asset-panel-detail")));
+    Assertions.assertTrue(panel.getText().contains("sm-mapped"), panel.getText());
+    Assertions.assertTrue(
+        panel.findElements(By.cssSelector("a")).stream()
+            .anyMatch(
+                link ->
+                    link.getDomAttribute("href")
+                        .endsWith("/ui/admin/mappings/new?source=SmFeedType&target=SmTopicType")));
+
+    driver.findElement(By.id("asset-show-mapped")).click();
+    await().until(d -> d.findElements(By.cssSelector("#asset-graph .gc-node-mapped")).isEmpty());
+
+    driver.findElement(By.cssSelector(".view-switch [data-view='list']")).click();
+    var row = driver.findElement(By.cssSelector("#asset-rows tr[data-asset-id='" + tableId + "']"));
+    Assertions.assertTrue(row.getText().contains("sm-feed-topic"), row.getText());
+  }
+
+  /**
    * Editing an asset saves it as a whole and changes only what was edited: the member keeps its
    * identity, a new part is added, and the access policy comes back exactly as it was — a grant
    * with no {@code resources} must not gain an empty one on the way through the builder.

@@ -884,6 +884,8 @@ select[multiple].traits-select {
 .gc-node-entityType .gc-node-accent { fill: var(--kind-type); }
 .gc-node-asset .gc-node-accent { fill: var(--kind-asset); }
 .gc-node-aggregate .gc-node-accent { fill: var(--kind-type); }
+.gc-node-mapped .gc-node-accent { fill: var(--edge-mapping); }
+.gc-node-mapped > .gc-node-card:first-child { stroke-dasharray: 2 3; }
 /* What an asset depends on without being one is drawn lighter than an asset. */
 .gc-node-aggregate > .gc-node-card:first-child,
 .gc-node-entity > .gc-node-card:first-child { stroke-dasharray: 5 3; }
@@ -1143,6 +1145,22 @@ select[multiple].traits-select {
 }
 .lg-card.lg-aggregate { border-left-color: var(--kind-type); border-style: dashed; border-left-style: solid; }
 .lg-card.lg-plain { border-left-color: var(--kind-entity); border-style: dashed; border-left-style: solid; }
+.lg-card.lg-mapped { border-left-color: var(--edge-mapping); border-style: dotted; border-left-style: solid; }
+.mapped-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0.12rem 0.3rem 0.12rem 0;
+    padding: 0.1rem 0.5rem;
+    border: 1px dotted var(--border-strong);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+.mapped-chip::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--muted); }
+.mapped-chip.is-ok::before { background: var(--ok-text); }
+.mapped-chip.is-failed::before { background: var(--error-text); }
+.mapped-chip.is-down::before { background: var(--warn-text); }
 /* the menu a right-click on the board opens, and the dialog its entries lead to */
 .board-menu {
     position: absolute;

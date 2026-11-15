@@ -22,6 +22,7 @@
  *     nodes: [{ id, title, subtitle, kind, color, badges: [{ text, tone }], data }],
  *     edges: [{ source, target, kind, label, data }],
  *     ranked: function (edge) { return true; },   // does this edge place its target above?
+ *                                                 //   "reverse" places it below instead
  *     band: function (node) { return 0; },        // coarse top-to-bottom grouping, optional
  *     onSelect: function (selection) {},          // { node } | { edge } | null
  *     onContextMenu: function (at) {},            // { clientX, clientY, node } on a right-click
@@ -185,8 +186,13 @@
       var up = {};
       nodes.forEach(function (n) { up[n.id] = []; });
       edges.forEach(function (e) {
-        if (e.s === e.t || bandOf[e.s.id] !== bandOf[e.t.id] || !ranked(e.raw)) return;
-        up[e.s.id].push(e.t.id);
+        if (e.s === e.t || bandOf[e.s.id] !== bandOf[e.t.id]) return;
+        var how = ranked(e.raw);
+        if (!how) return;
+        // Most edges point at what is more general, which goes above. One that points at what
+        // follows from its source — an entity derived from an asset — asks for the opposite.
+        if (how === "reverse") up[e.t.id].push(e.s.id);
+        else up[e.s.id].push(e.t.id);
       });
       var rank = {}, visiting = {};
       function rankOf(id) {

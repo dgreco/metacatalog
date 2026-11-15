@@ -109,8 +109,19 @@ public class AggregateService {
    * @param entity the asset's root entity
    * @param dependencies the IDs of the entities its root depends on — other assets, aggregates or
    *     plain entities alike — in no particular order
+   * @param mapped the entities mappings derived from the asset's members
    */
-  public record Asset(Entity entity, List<String> dependencies) {}
+  public record Asset(Entity entity, List<String> dependencies, List<MappedEntity> mapped) {}
+
+  /**
+   * An entity a mapping derived from a member of an asset: what the asset actually turns into — the
+   * resources its provisioning and authorization runs act on.
+   *
+   * @param entity the derived entity
+   * @param source the entity it was derived from: the asset's root, one of its parts, or — in a
+   *     chain of mappings — another derived entity
+   */
+  public record MappedEntity(Entity entity, Entity source) {}
 
   /**
    * Something an asset depends on, or may be made to depend on, that is not itself an asset.
@@ -133,6 +144,11 @@ public class AggregateService {
    * points at. Links between the parts of an asset, or from a part to something outside, are the
    * parts' own and are left out.
    *
+   * <p>Each asset comes with the entities mappings derived from its members. They are not parts and
+   * nobody authors them, but they are what the asset materialises as — the folder, the table — and
+   * where a provisioning or authorization run leaves its outcome, so a catalog that left them out
+   * would show an asset's status without showing what holds it.
+   *
    * @return the assets, grouped by type in type-name order
    */
   @Transactional(propagation = Propagation.REQUIRED, readOnly = true)
@@ -142,20 +158,68 @@ public class AggregateService {
     for (var type : aggregateSchemaService.assetTypes()) {
       entityService.list(type.getName(), "").forEach(root -> roots.put(root.getId(), root));
     }
-    // One read of the links rather than one per asset: a catalog page lists every asset at once.
+    // One read of the links, and one of the mapping instances, rather than a walk per asset: a
+    // catalog page lists every asset at once.
     var dependencies = new LinkedHashMap<String, List<String>>();
+    var parts = new HashMap<String, List<Entity>>();
     for (var link : entityService.listAllRelationships()) {
-      if (link.getRelationType() != DEPENDS_ON) continue;
       var source = link.getSource().getId();
-      if (roots.containsKey(source))
+      if (link.getRelationType() == HAS_PART) {
+        parts.computeIfAbsent(source, id -> new ArrayList<>()).add(link.getTarget());
+      } else if (link.getRelationType() == DEPENDS_ON && roots.containsKey(source)) {
         dependencies.computeIfAbsent(source, id -> new ArrayList<>()).add(link.getTarget().getId());
+      }
+    }
+    var derivations = new HashMap<String, List<MappingEntityRelationship>>();
+    for (var mapping : mappingEntityRelationshipRepository.findAllBetweenLiveEntities()) {
+      if (mapping.getRelationType() == MAPPED_TO)
+        derivations
+            .computeIfAbsent(mapping.getSource().getId(), id -> new ArrayList<>())
+            .add(mapping);
     }
     var assets =
         roots.values().stream()
-            .map(root -> new Asset(root, dependencies.getOrDefault(root.getId(), List.of())))
+            .map(
+                root ->
+                    new Asset(
+                        root,
+                        dependencies.getOrDefault(root.getId(), List.of()),
+                        mappedFrom(root, parts, derivations)))
             .toList();
     log.info("Listed {} asset(s)", assets.size());
     return assets;
+  }
+
+  /**
+   * The entities derived from an asset: from its root, from every part below it, and — a mapping
+   * target can be a mapping source — from those derived entities in turn.
+   *
+   * @param root the asset's root
+   * @param parts for each entity id, the parts it contains
+   * @param derivations for each entity id, the mapping instances deriving something from it
+   */
+  private static List<MappedEntity> mappedFrom(
+      Entity root,
+      Map<String, List<Entity>> parts,
+      Map<String, List<MappingEntityRelationship>> derivations) {
+    var mapped = new ArrayList<MappedEntity>();
+    var seen = new HashSet<String>();
+    var pending = new ArrayDeque<Entity>(List.of(root));
+    while (!pending.isEmpty()) {
+      var current = pending.poll();
+      if (!seen.add(current.getId())) continue;
+      pending.addAll(parts.getOrDefault(current.getId(), List.of()));
+      for (var derivation : derivations.getOrDefault(current.getId(), List.of())) {
+        var target = derivation.getTarget();
+        // Read here, inside the transaction: the caller maps these to DTOs after it has ended,
+        // and both ends of a mapping instance are loaded lazily.
+        target.getEntityType().getName();
+        current.getEntityType().getName();
+        mapped.add(new MappedEntity(target, current));
+        pending.add(target);
+      }
+    }
+    return mapped;
   }
 
   /**

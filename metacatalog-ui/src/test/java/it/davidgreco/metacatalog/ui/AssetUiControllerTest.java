@@ -127,15 +127,25 @@ class AssetUiControllerTest {
     var domainType = entityType("DomainType");
     domainType.setSchema("{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}}}");
 
+    // What the orders table materialises as: derived from its column by a mapping, and unnamed.
+    var derived = new it.davidgreco.metacatalog.openapi.model.AssetMappedEntity();
+    derived.setId("res-1");
+    derived.setEntityType("AthenaTableType");
+    derived.setValues("{\"table\":\"orders\",\"provisioningStatus\":\"PROVISIONED\"}");
+    derived.setSourceEntityId("col-1");
+    derived.setSourceEntityType("ColumnType");
+    derived.setSourceValues(Optional.of("{\"name\":\"id\"}"));
+
     given(api.listAssets())
         .willReturn(
             ResponseEntity.ok(
                 List.of(
                     asset(
-                        "table-1",
-                        "TableType",
-                        "{\"name\":\"orders\",\"provisioningStatus\":\"PROVISIONED\"}",
-                        "domain-1"),
+                            "table-1",
+                            "TableType",
+                            "{\"name\":\"orders\",\"provisioningStatus\":\"PROVISIONED\"}",
+                            "domain-1")
+                        .mapped(List.of(derived)),
                     asset("table-2", "TableType", "{}", "table-1"),
                     asset("view-1", "ViewType", "{\"name\":\"report\"}"))));
     given(api.listAssetDependencyTargets()).willReturn(ResponseEntity.ok(List.of(domain)));
@@ -232,6 +242,23 @@ class AssetUiControllerTest {
             new AssetCatalogView.Ref(
                 "table-2", "table-2", "TableType", "asset", "/ui/assets/table-2")),
         table.requiredBy());
+
+    // The entities mapped from the asset's members come with it: named by their type when they
+    // have no name, with the member they came from and the way into the mapping that made them.
+    Assertions.assertEquals(
+        List.of(
+            new AssetCatalogView.Mapped(
+                "res-1",
+                "AthenaTableType",
+                "AthenaTableType",
+                "PROVISIONED",
+                null,
+                "id",
+                "ColumnType",
+                "/ui/admin/instances/res-1",
+                "/ui/admin/mappings/new?source=ColumnType&target=AthenaTableType")),
+        table.mapped());
+    Assertions.assertTrue(catalog.row("table-2").mapped().isEmpty());
 
     Assertions.assertTrue(catalog.allows("TableType", "DomainType"));
     Assertions.assertTrue(catalog.allows("TableType", "TableType"));

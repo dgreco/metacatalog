@@ -2118,7 +2118,8 @@ paths:
       summary: List the assets
       description: >
         Returns the catalog of data platform assets: every aggregate whose root type is an asset
-        type (see /aggregate/asset-type), with what it depends on. An asset is an aggregate, so
+        type (see /aggregate/asset-type), with what it depends on and the entities mappings
+        derived from its members. An asset is an aggregate, so
         everything else — reading, updating, deleting, provisioning and authorizing it — goes
         through the /aggregate endpoints with the asset's id.
 
@@ -2949,6 +2950,7 @@ components:
         - entityType
         - values
         - dependencies
+        - mapped
       properties:
         id:
           type: string
@@ -2972,6 +2974,45 @@ components:
             this asset's root. A target is another asset, the root of an aggregate that is not an
             asset, or a plain entity; the ones that are not assets are listed by
             /asset/dependency-target.
+        mapped:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetMappedEntity'
+          description: >
+            The entities mappings derived from the asset's members: from its root, from its parts,
+            and from those derived entities in turn. They are what the asset's provisioning and
+            authorization runs act on and record their outcome in.
+    AssetMappedEntity:
+      type: object
+      description: An entity a mapping derived from a member of an asset.
+      required:
+        - id
+        - entityType
+        - values
+        - sourceEntityId
+        - sourceEntityType
+      properties:
+        id:
+          type: string
+          description: Identifier of the derived entity.
+        entityType:
+          type: string
+          description: Name of the derived entity's type, the target type of the mapping.
+        values:
+          type: string
+          description: >
+            JSON string containing the derived entity's values, including the status a run left.
+        sourceEntityId:
+          type: string
+          description: >
+            Identifier of the entity it was derived from: the asset's root, one of its parts, or
+            another derived entity.
+        sourceEntityType:
+          type: string
+          description: Name of that entity's type, the source type of the mapping.
+        sourceValues:
+          type: string
+          description: JSON string containing the values of the entity it was derived from.
     AssetDependencyTarget:
       type: object
       description: >
