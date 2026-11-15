@@ -14,8 +14,8 @@
 -->
 <!-- BADGES:START -->
 [![CI](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dgreco/metacatalog/actions/workflows/ci.yml)
-[![coverage](https://img.shields.io/badge/coverage-56.0%25-brightgreen)](https://dgreco.github.io/metacatalog/)
-[![tests](https://img.shields.io/badge/tests-395-brightgreen)](#coverage)
+[![coverage](https://img.shields.io/badge/coverage-58.6%25-brightgreen)](https://dgreco.github.io/metacatalog/)
+[![tests](https://img.shields.io/badge/tests-447-brightgreen)](#coverage)
 [![license](https://img.shields.io/github/license/dgreco/metacatalog?color=blue)](../LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange)](#technology-stack)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F)](#technology-stack)
@@ -28,7 +28,8 @@ A comprehensive metadata management system built with Spring Boot for managing e
 
 - **Entity Management**: CRUD operations for business entities with JSON-based attributes
 - **Entity Types**: Define and manage entity type hierarchies
-- **Traits**: Reusable characteristics applicable to entities
+- **Traits**: Reusable characteristics applicable to entities. A trait inherits from a father and from any number of mixed-in traits, linearized the way Scala does it, so a shared ancestor contributes once (see [Trait inheritance](#trait-inheritance))
+- **Assets**: A data platform asset is an aggregate whose root type carries the built-in `Asset` trait — a provisionable, authorizable aggregate. Assets are listed in a catalog with the dependencies between them, and the model decides which asset may depend on which (see [Assets](#assets))
 - **Type Versioning**: Immutable version history for entity types and traits — every update creates a new version, old versions stay readable and deletable, and the version chain is shown on the graph
 - **Entity Versioning**: Every instance of a type carrying the built-in `Versionable` trait keeps a read-only history — each change to its values is recorded as a numbered version, readable through the API, the UI, the graph and SPARQL (see [Entity versioning](#entity-versioning)). Each past version of an aggregate root is also a frozen, runnable copy that can still be provisioned or authorized but never changed (see [Running functions on past versions](#running-functions-on-past-versions))
 - **Relationship Management**: Complex relationship mapping between entities
@@ -36,7 +37,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **JSON Schema Validation**: Validate entity attributes against schemas
 - **Graph Operations**: Advanced relationship traversal using JGraphT
 - **Ontology Integration**: Semantic web support via an embedded Ontop 5.5.0 virtual knowledge graph, exposed as a SPARQL 1.1 Protocol endpoint and a Yasgui query UI
-- **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved, and deleted as a whole (see [Aggregates](#aggregates))
+- **Aggregates**: Compose entities into trees of parts, authored as a single document against one generated schema that combines every entity type involved, updated in place from such a document, downloaded and uploaded as YAML, and deleted as a whole (see [Aggregates](#aggregates))
 - **Provisioning**: Run a registered task for every `ProvisionableResource` of an aggregate in dependency order, and tear it down in reverse (see [Aggregates](#aggregates))
 - **Authorization**: The same machinery over a second, independent pair of traits — every `AuthorizableResource` of an `Authorizable` aggregate is granted access in dependency order and has it withdrawn in reverse, recorded separately from provisioning so an aggregate can be provisioned and not yet authorized (see [Aggregates](#aggregates))
 - **Referential Safety**: Deletions that would strand an entity, dangle a link or break a mapping's path resolution are refused, with an exact per-link check rather than a type-level one (see [Deleting entities and links](#deleting-entities-and-links))
@@ -45,7 +46,7 @@ A comprehensive metadata management system built with Spring Boot for managing e
 - **Audit Trail**: Entity lifecycle event tracking
 - **REST API**: Comprehensive OpenAPI-documented REST endpoints
 - **Pluggable Authentication**: `none` / HTTP Basic / OAuth2 (JWT) / LDAP, selectable via config (see [Security](#security))
-- **Web UI**: Server-side rendered pages for creating traits, entity types, mappings, links, instances and aggregates, with interactive JSON Schema and schema-driven value builders, a catalog graph, instance search by type and JSONPath, and provision / unprovision / authorize / reject actions with a site-wide progress popup
+- **Web UI**: Two halves behind one application bar (see [Web UI](#web-ui)). **Assets** manages the data platform assets as a whole: a catalog shown as a list or as a dependency graph, drag and drop to make one asset depend on another, an asset's page with its structure, lifecycle actions, mappings and access, a schema-driven editor, and YAML download and upload. **Administration** defines what assets are assembled from: traits, entity types, their relationships and mappings, a graph of the whole model, and the type-agnostic instance tooling
 
 ## Technology Stack
 
@@ -83,7 +84,10 @@ This starts:
 - **PostgreSQL 18.6** on port 5432
 - **Meta Catalog Application** on port 8080 (built from source, waits for the database to be healthy)
 - **Bulk loader** (one-shot, `curlimages/curl`) — seeds the database with sample
-  traits, entity types and entities from `docker/bulk/` once the app is healthy
+  traits, entity types and entities from `docker/bulk/` once the app is healthy: two asset
+  types (a data product and a domain) and one asset, the data product `dp1` with two output
+  ports. Create a `DomainType` asset from the UI and drag `dp1` onto it in the catalog to see a
+  dependency between assets being made
 
 Nothing is provisioned by starting the stack. Provisioning is something you ask for, and it runs
 the task registered for every `ProvisionableResource` in dependency order; unprovisioning tears
@@ -120,8 +124,8 @@ Add `?async=true` to get a 202 with a schedule id instead, and poll
 `GET /metacatalog/v1/procedure/{scheduleId}` for `RUNNING` / `SUCCEEDED` / `FAILED` — useful when
 a provisioning task is slow enough that holding the HTTP request open is not an option.
 
-The same aggregate is also `Authorizable`, which is a **second lifecycle, not a second name for
-the first**. What it grants is declared on the aggregate root — the subjects it recognises, the
+The same aggregate is also `Authorizable` — its type carries `Asset`, which inherits both
+capabilities — and that is a **second lifecycle, not a second name for the first**. What it grants is declared on the aggregate root — the subjects it recognises, the
 permissions it can grant, and the grants binding the two — and a run resolves that policy per
 resource:
 
@@ -159,7 +163,7 @@ poll work identically. `GET /metacatalog/v1/aggregate/authorizable-type` lists t
 the capability, as `.../provisionable-type` does for provisioning.
 
 Once up, the app is available at:
-- **Web UI**: http://localhost:8080/ui
+- **Web UI**: http://localhost:8080/ui — opens on the asset catalog; the model is under *Administration*
 - **Swagger UI**: http://localhost:8080/swagger-ui.html
 - **SPARQL UI**: http://localhost:8080/sparql
 
@@ -256,7 +260,7 @@ metacatalog/
 ├── metacatalog-functions/      # Procedures that run over entities (e.g. provisioning)
 ├── metacatalog-functions-provisioning-tasks/  # Concrete provisioning tasks + registrars
 ├── metacatalog-openapi/        # OpenAPI spec and generated controllers / client
-├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf) for the whole catalog
+├── metacatalog-ui/             # Server-side rendered UI (Thymeleaf): Assets and Administration
 ├── metacatalog-security/       # Pluggable authentication (none / basic / oauth2 / ldap)
 ├── metacatalog-sparql/         # Embedded Ontop SPARQL 1.1 endpoint + Yasgui query UI
 └── metacatalog-application/    # Spring Boot application (aggregates all modules)
@@ -298,13 +302,13 @@ mvn verify
 ```
 
 Test totals by module (verified on this checkout; every `@SpringBootTest` needs a Docker daemon
-for the Testcontainers PostgreSQL): core 229 · ui 82 · security 23 · openapi 22 · functions 14 · sparql 10 · provisioning-tasks 5 · application 10 = **395, 0 failures**.
+for the Testcontainers PostgreSQL): core 251 · ui 107 · security 23 · openapi 23 · functions 14 · sparql 11 · provisioning-tasks 5 · application 13 = **447, 0 failures**.
 
 ### Coverage
 
 JaCoCo runs in the ordinary build: every module writes its report under `target/site/jacoco`, and
 `./scripts/coverage.sh` prints the one-line total both pipelines publish. On this checkout:
-**56.0% of instructions, 39.3% of branches, 58.3% of lines**.
+**58.6% of instructions, 41.4% of branches, 60.6% of lines**.
 
 The figure is a sum over the per-module reports rather than a JaCoCo aggregate, which needs no
 extra aggregator module. A module's figure counts only its own classes, wherever the test that ran
@@ -562,6 +566,52 @@ startup. `metacatalog-application` excludes `it.unibz.inf.ontop:*` from its
 otherwise package Ontop's unshaded jars, old JGraphT included, next to the
 shaded one.
 
+## Web UI
+
+The UI has two halves, switched from the application bar every page starts with. They answer two
+different questions, for two different people.
+
+**Assets** (`/ui/assets`, where `/ui` lands) is for managing the data platform assets themselves,
+each as a whole:
+
+| Page | What it does |
+| --- | --- |
+| `/ui/assets` | The catalog: every asset with its type, its provisioning and authorization status, and the assets on both sides of its dependencies. Shown as a **list** or as a **dependency graph** — assets as nodes, dependencies as edges, an asset drawn below what it depends on — and filtered by type and name. |
+| `/ui/assets/new` | A new asset: pick an asset type and fill in the tree its combined schema describes. |
+| `/ui/assets/upload` | Assets from a YAML file, one per document. |
+| `/ui/assets/{id}` | One asset: its statuses, its structure (the root, its parts, and the resources mappings derived from them), the assets it depends on and is required by, the mappings that apply to its members, the access it declares and holds, and its YAML. Provision, unprovision, authorize, reject and delete are here. |
+| `/ui/assets/{id}/edit` | The same editor on an existing asset; saving applies the whole document in one step (see [Updating an aggregate](#updating-an-aggregate)). |
+| `/ui/assets/{id}/yaml` | The asset as a YAML file. It can be edited and uploaded back onto the asset from its page, or uploaded as a new asset to copy it. |
+
+**Dependencies are made by drag and drop**, in either view of the catalog: drag an asset onto
+another to make it depend on it. While an asset is being dragged, the ones it may be dropped on are
+marked, and the one under the pointer says what the drop would do or why it is refused. A drop is
+accepted only when
+
+- the model allows it — the two asset types carry traits related by `DEPENDS_ON` (see
+  [Dependencies between assets](#dependencies-between-assets)),
+- the dependency is not already there, and
+- it would not close a cycle.
+
+The same checks are the server's, which is still asked: the page only refuses early, where you are
+looking, what could not succeed. Selecting a dependency in the graph shows the trait relationships
+that allow it, removes it, or leads to the mappings of the asset it starts from; an asset's page
+has a picker and a remove button for the same thing without a pointer.
+
+**Administration** (`/ui/admin`) is for defining what assets are assembled from, and for the
+type-agnostic tooling:
+
+| Page | What it does |
+| --- | --- |
+| `/ui/admin` | The model: traits, trait relationships, entity types and mappings, with the forms that create and version them. A trait's form picks a father and the traits it mixes in. |
+| `/ui/admin/graph` | The **model graph**: every trait and entity type as a card, traits above the types assembled from them, with inheritance, mixed-in traits, carried traits, trait relationships and mappings as edges. Built-in traits and asset types are marked, edge kinds are filtered with a click, a search box dims everything else, and selecting a node or an edge shows what it declares — schema included — with links to its versions, its instances or the mapping editor. |
+| `/ui/admin/instances` | Every entity of any type: search by type and JSONPath, edit, link, history. |
+| `/ui/admin/aggregates` | Aggregates that are not necessarily assets, in the generic editor. |
+| `/ui/admin/bulk` | Loading a model, or aggregates, from YAML. |
+
+Both halves go through the REST API exclusively, and neither does anything the API does not:
+everything on an asset's page is an aggregate endpoint called with the asset's id.
+
 ## API Documentation
 
 When the application is running, access the documentation:
@@ -586,6 +636,62 @@ When the application is running, access the documentation:
 - **Ontop 5.5.0**: Virtual knowledge graph (SPARQL-to-SQL over Postgres)
 - **RDF4J 6.1.0**: SPARQL protocol parsing and result serialisation
 - **Yasgui**: Browser SPARQL query editor (loaded from CDN at the `/sparql` UI)
+
+## Trait Inheritance
+
+A trait inherits from a **father** — its single superclass, as an entity type has — and from any
+number of **mixed-in traits**, in declaration order. Together they are its parents:
+
+```bash
+curl -X POST http://localhost:8080/metacatalog/v1/trait \
+  -H 'Content-Type: application/json' \
+  -d '{ "name": "GovernedTable", "inheritsFrom": "Table", "traits": ["Owned", "Classified"] }'
+```
+
+`traits` is to a trait what it is to an entity type, and the two are resolved the same way: the
+ancestors of a type are **linearized** as Scala linearizes a class — the type itself, then its
+mixed-in traits from the last declared to the first, then its father, each followed by its own
+ancestors, and an ancestor reached more than once kept only at its most general position. The
+derived schema is the merge of every ancestor's base schema in that order, most general first, so
+a more specific declaration of a property wins.
+
+That last rule is what makes a **diamond** harmless. The built-in `Asset` trait is one:
+
+```mermaid
+flowchart BT
+    ASSET["Asset"] -- "inherits from" --> PROV["Provisionable"]
+    ASSET -. "mixes in" .-> AUTH["Authorizable"]
+    PROV -- "inherits from" --> AGG["Aggregate"]
+    AUTH -- "inherits from" --> AGG
+```
+
+`Asset` reaches `Aggregate` twice, and carries it once: its linearization is `Asset`,
+`Authorizable`, `Provisionable`, `Aggregate`, and its schema holds each capability's fields exactly
+once. Merging each parent's *effective* schema instead would have been wrong precisely here — the
+shared ancestor's declaration would arrive a second time inside the later parent and overwrite
+whatever the earlier one had refined.
+
+**A parent that another parent already inherits is refused as redundant.** `Asset` inherits
+`Provisionable` and `Authorizable` and is therefore an `Aggregate`; declaring it as inheriting all
+three would say the same thing twice:
+
+```
+Trait Aggregate is already inherited through Provisionable; declaring it again on Asset is redundant. Remove it.
+```
+
+The linearization would keep one occurrence whatever was declared, so the repetition changes
+nothing — which is the reason to refuse it rather than tolerate it: it reads as if the trait were
+an aggregate in some way its other parents did not make it, and it would survive as a stale claim
+if one of them were re-parented. The same check refuses the father named again as a mix-in, a
+mix-in listed twice, and — on a new version, the only way to ask for one — a parent that already
+inherits from the trait, which would close a cycle.
+
+A new version restates the whole trait: the father and the mix-ins sent replace the live ones, so
+omitting a mix-in removes it. A trait cannot be deleted while another inherits from it or mixes it
+in. Everything that asks what a trait or a type *carries* — whether a type is an aggregate root,
+which capabilities it offers, whether a link between two entities is sanctioned — follows mix-ins
+as it follows fathers. In SPARQL a mixed-in trait is `mt:hasTrait`, as an entity type's traits are,
+and the father stays `mt:inheritsFrom`.
 
 ## Type Versioning
 
@@ -677,7 +783,7 @@ version; to remove the type entirely, use the existing `DELETE /trait/{name}` /
 
 ### Graph view
 
-The interactive graph at `/ui/graph` draws the current version once, as the live type node. Once
+The model graph at `/ui/admin/graph` draws the current version once, as the live type node. Once
 the type has history, that node is labelled with its version, `Name (vN)`. Each older version is a
 node of its own (kind `entityTypeVersion` / `traitVersion`), with a `successor-of` edge to its
 predecessor, so the live node heads the chain and the oldest version is its tail. The current
@@ -722,7 +828,7 @@ with.
   always present on read, and never sent by clients on create (the generator emits
   `requiredMode = REQUIRED` for the docs but no `@NotNull`, so `POST /entity` still accepts
   a body that omits it).
-- In the graph view at `/ui/graph`, an entity's `instance-of` edge targets the version it is
+- In the graph view at `/ui/admin/graph`, an entity's `instance-of` edge targets the version it is
   pinned to: the live type node for the current version, the `Name (vN)` node for an older one.
 
 `entity_type_version_id` is `NOT NULL`: every entity is pinned. `EntityTypeService` creates
@@ -1221,9 +1327,13 @@ docker compose -f docker-compose.lock-test.yml down -v         # cleanup
 An **aggregate** is a tree of entities: a root entity composed of parts, each of which may be
 an aggregate itself. Aggregates are created through `POST /metacatalog/v1/aggregate/yaml`
 (a YAML document), read back with `GET /metacatalog/v1/aggregate/{id}` (or
-`GET /metacatalog/v1/aggregate/{id}/yaml` for the same tree as a YAML file), deleted as a whole
-with `DELETE /metacatalog/v1/aggregate/{id}` (see [Deleting entities and links](#deleting-entities-and-links)),
+`GET /metacatalog/v1/aggregate/{id}/yaml` for the same tree as a YAML file), updated in place with
+`PUT /metacatalog/v1/aggregate/{id}/yaml` (see [Updating an aggregate](#updating-an-aggregate)),
+deleted as a whole with `DELETE /metacatalog/v1/aggregate/{id}` (see
+[Deleting entities and links](#deleting-entities-and-links)),
 and provisioned in dependency order by the provisioning procedure in `metacatalog-functions`.
+An aggregate whose root type carries the built-in `Asset` trait is a data platform **asset** (see
+[Assets](#assets)).
 The same aggregate can also be **authorized** — a second, independent capability with the same
 shape (see [Authorization](#authorization)).
 `GET /metacatalog/v1/aggregate/provisionable-type` and `.../authorizable-type` list the entity
@@ -1265,10 +1375,11 @@ flowchart BT
         RES["ProvisionableResource"] -. inherits .-> ELEM
         AUTH["Authorizable"] -. inherits .-> AGG
         AUTHRES["AuthorizableResource"] -. inherits .-> ELEM
+        ASSET["Asset"] -. inherits .-> PROV
+        ASSET -. mixes in .-> AUTH
     end
     subgraph types["Entity types and their roles"]
-        DPT["DataProductType — root"] --"carries"--> PROV
-        DPT --"carries"--> AUTH
+        DPT["DataProductType — root"] --"carries"--> ASSET
         OPT["OutputPortType — intermediate"] --"carries"--> AGG
         OPT --"carries"--> ELEM
         FBT["FileBasedOutputPortType — intermediate"] -. inherits .-> OPT
@@ -1282,7 +1393,9 @@ flowchart BT
 
 The demo model carries both capability pairs on the same types, which is the easiest place to see
 that they are independent: the roles come from `Aggregate` / `AggregateElement`, and each pair adds
-one lifecycle on top without knowing about the other.
+one lifecycle on top without knowing about the other. The data product gets both by carrying
+`Asset`, the one built-in that combines them (see [Assets](#assets)); its resources still mix the
+two resource traits in separately, because a resource need not take part in both.
 
 At the **instance** level an aggregate is then a tree of real `HAS_PART` links between
 entities, with `DEPENDS_ON` links expressing ordering between parts. The provisioning
@@ -1326,11 +1439,12 @@ that would change carriage and retroactively break an existing containment. Inst
 containment must also stay **acyclic**: closing a `HAS_PART` cycle — self-links included — is
 refused at link creation, so the tree walk of `GET /aggregate/{id}` always terminates.
 
-One consequence worth knowing when modeling recursion (a folder containing folders): a single
-trait can never carry both built-ins (traits have a single father, and both built-ins are
-father-less), so a self-composing *type* carries its container role and its element role
-through **two different traits** — making it an intermediate, with a separate root type above
-it.
+One consequence worth knowing when modeling recursion (a folder containing folders): a
+self-composing type carries both its container role and its element role, which makes it an
+intermediate, with a separate root type above it. It can carry the two through two different
+traits, or through one trait that inherits one built-in and mixes the other in (see
+[Trait inheritance](#trait-inheritance)) — a trait carrying both is an intermediate exactly as a
+type carrying both is.
 
 ### Aggregate root types
 
@@ -1391,25 +1505,154 @@ Notes on the generated schema:
   `POST /metacatalog/v1/aggregate/yaml` unchanged. `dependsOn` lists the `ref` values of other
   nodes and becomes `DEPENDS_ON` relationships.
 
+### Updating an aggregate
+
+`PUT /metacatalog/v1/aggregate/{id}/yaml` updates an aggregate **in place, as a whole**, so that it
+matches a document. Everything happens in one transaction — either the whole update is applied or
+nothing is — and a versionable root gains a single new version however many members changed.
+
+```bash
+curl -s http://localhost:8080/metacatalog/v1/aggregate/$ROOT/yaml?retrieveMappedEntities=false > dp1.yaml
+# ... edit dp1.yaml ...
+curl -X PUT http://localhost:8080/metacatalog/v1/aggregate/$ROOT/yaml \
+  -H 'Content-Type: application/octet-stream' --data-binary @dp1.yaml
+```
+
+The document has the shape `GET /aggregate/{id}/yaml` serves, which is what makes download, edit,
+upload a round trip; it also understands what `POST /aggregate/yaml` consumes, so a new part is
+written the way a new aggregate is:
+
+| In the document | What the update does |
+| --- | --- |
+| A node with an `id` | It is that existing member. Its values are updated when they differ; its type cannot change and it cannot move to another parent. |
+| A node without an `id` | A new part, created under the node that lists it. |
+| A member that is not listed | Removed, with its own parts and the entities derived from them by mappings. |
+| `dependencies` (ids) or `dependsOn` (the `ref` or `id` of another node, or the id of an existing entity) | The node depends on exactly those afterwards. |
+| Neither of the two | The node keeps the dependencies it has. Saying nothing is not saying "none": a document written by something that does not know about a dependency — on another aggregate, say — must not drop it by omission. |
+| A node naming an entity derived by a mapping | Ignored. Such nodes appear when the document was downloaded with the mapped entities included, and say nothing the mapping engine does not already decide. |
+
+Two things the document cannot do. **It cannot write the fields a run writes** — the status and
+result pairs and `effectiveGrants`: an existing member keeps the ones it has, whatever the document
+says. A document is edited from a download, and a provisioning run that completed in between would
+otherwise be undone by the stale status the file still carries. And **it cannot leave anything
+that stays dangling**: an update is refused, with nothing changed, when a remaining entity would
+still depend on a removed part, or when it would remove a link some mapping resolves a path
+reference through.
+
+The same asymmetry makes a downloaded document a faithful source for a **copy**. Posted to
+`POST /aggregate/yaml`, a node's `id` is read as a second `ref` and its `dependencies` as more
+`dependsOn` names, so the dependencies between the copy's nodes point at the copies; a name no node
+of the file declares is taken as the id of an existing entity, so the copy keeps the dependencies
+the original had on entities outside it.
+
 ### Authoring in the UI
 
-`/ui/aggregates/new` (**+ New Aggregate** on the dashboard) turns that schema into a form: pick
-an aggregate root type, and the page renders the tree — typed inputs for each entity's values,
-plus an *Add part* button per allowed part type. Parts are added on demand, so a self-composing
-type does not expand forever. A **Raw JSON** tab allows editing the document directly, a
-read-only **YAML** tab (rendered server-side) shows the exact document the aggregate endpoint
-would receive, and submitting creates the entire aggregate — nesting and dependencies included —
-in one call.
+The same schema-driven editor serves both halves of the [Web UI](#web-ui): `/ui/assets/new` and
+`/ui/assets/{id}/edit` for assets, `/ui/admin/aggregates/new` for any aggregate root type. Pick a
+root type and the page renders the tree — typed inputs for each entity's values, plus an *Add part*
+button per allowed part type. Parts are added on demand, so a self-composing type does not expand
+forever. Fields a run writes are shown read-only. A **Raw JSON** tab allows editing the document
+directly, a read-only **YAML** tab (rendered server-side) shows the exact document the aggregate
+endpoint would receive, and submitting creates the entire aggregate — or, on an existing asset,
+updates it — nesting and dependencies included, in one call.
 
-Existing aggregates are listed at `/ui/aggregates`, with a per-aggregate view page showing the
-whole tree (values as JSON or YAML). Deleting, provisioning, unprovisioning, authorizing and
-rejecting an aggregate are actions on the instances list: a row gets *Delete aggregate* when its
-entity type is one of the `GET /aggregate/root-type` types, *Provision* / *Unprovision* when it is
-one of the `GET /aggregate/provisionable-type` types, and *Authorize* / *Reject* when it is one of
-the `GET /aggregate/authorizable-type` types. The last two lists are asked separately and neither
-implies the other — a type may offer one capability, both or neither. Every one of these runs is
-asynchronous: the action returns immediately with a progress popup, the page polls the run's status
-and reloads when it completes — so even a slow task never holds an HTTP request open.
+Aggregates of every root type are listed at `/ui/admin/aggregates`, with a per-aggregate view page
+showing the whole tree (values as JSON or YAML). On the instances list a row gets *Delete
+aggregate* when its entity type is one of the `GET /aggregate/root-type` types, *Provision* /
+*Unprovision* when it is one of the `GET /aggregate/provisionable-type` types, and *Authorize* /
+*Reject* when it is one of the `GET /aggregate/authorizable-type` types. The last two lists are
+asked separately and neither implies the other — a type may offer one capability, both or neither.
+An asset's page offers all of them, since an asset type is by definition in all three lists. Every
+one of these runs is asynchronous: the action returns immediately with a progress popup, the page
+polls the run's status and reloads when it completes — so even a slow task never holds an HTTP
+request open.
+
+## Assets
+
+A data platform **asset** is an aggregate whose root type carries the built-in **`Asset`** trait.
+That is the whole definition: an asset is not a new kind of entity, and there is nothing that can
+be done to one that is not an aggregate operation with the asset's id.
+
+`Asset` inherits `Provisionable` and mixes in `Authorizable`, and so is an `Aggregate` through both
+(see [Trait inheritance](#trait-inheritance)). It adds no field and no behaviour of its own — it
+names the combination, so that "is this an asset" is one trait test rather than a convention every
+asset type has to remember. An **asset type** is an aggregate root type carrying it:
+
+```yaml
+EntityTypes:
+  - name: TableType
+    schema: { type: object, properties: {} }
+    traits: [Asset, WithName]      # a provisionable, authorizable aggregate root
+```
+
+```bash
+curl http://localhost:8080/metacatalog/v1/aggregate/asset-type        # the asset types
+curl http://localhost:8080/metacatalog/v1/aggregate/type-capabilities # ...and every other classification
+```
+
+A type carrying `Asset` that is *also* an aggregate element is not an asset type: it is a part of
+somebody else's aggregate, and an asset is the root of its own.
+
+### The catalog
+
+```bash
+curl http://localhost:8080/metacatalog/v1/asset
+# [ { "id": "…", "entityType": "DataProductType", "values": "{ \"name\" : \"dp1\", … }",
+#     "version": 3, "dependencies": [ "…the sales domain's id…" ] },
+#   { "id": "…", "entityType": "DomainType", "values": "{ \"name\" : \"sales\" }", "dependencies": [] } ]
+```
+
+lists every asset — the root entity of every aggregate of an asset type — with the assets it
+depends on. Everything else about an asset is read from the aggregate endpoints:
+`GET /aggregate/{id}` for its tree, `PUT /aggregate/{id}/yaml` to update it, `.../provision`,
+`.../authorize`, `.../access` and `DELETE /aggregate/{id}`.
+
+### Dependencies between assets
+
+A dependency between two assets is a `DEPENDS_ON` link between their **roots**, created and removed
+like any other entity link:
+
+```bash
+curl -X POST http://localhost:8080/metacatalog/v1/entity/link \
+  -H 'Content-Type: application/json' \
+  -d '{ "sourceEntityId": "<table>", "relationshipTypeName": "DEPENDS_ON", "targetEntityId": "<domain>" }'
+```
+
+**Whether it is legal is decided by the model, not by the caller.** A dependency is never declared
+between entity types: it is declared between traits, and an asset may depend on another when its
+type carries a trait related by `DEPENDS_ON` to a trait the other's type carries. Declaring that a
+table belongs to a domain is one trait relationship:
+
+```yaml
+Relationships:
+  - sourceTrait: Table
+    relationshipType: DEPENDS_ON
+    targetTrait: Domain
+```
+
+and from then on every asset whose type carries `Table` may depend on every asset whose type
+carries `Domain` — and not the other way round. A link the model does not allow is refused with a
+`400`. So that a client can tell in advance, and say why,
+
+```bash
+curl http://localhost:8080/metacatalog/v1/asset/dependency-rule
+# [ { "sourceEntityType": "TableType", "targetEntityType": "DomainType",
+#     "sanctionedBy": [ { "sourceTrait": "Table", "relationType": "DEPENDS_ON", "targetTrait": "Domain" } ] } ]
+```
+
+lists every ordered pair of asset types that may be linked, with the trait relationships that
+allow it. This is what the catalog's drag and drop reads to mark where an asset may be dropped. A
+pair that is not listed is refused, and removing the last trait relationship behind a pair is
+itself refused while a dependency still relies on it (see
+[Deleting entities and links](#deleting-entities-and-links)).
+
+An asset's dependencies are part of what a version of it records, and an asset is provisioned and
+authorized independently of the assets it depends on — the dependency orders nothing across
+aggregates by itself. What it can do is feed a **mapping**: a mapping's path reference may walk
+`DEPENDS_ON` or `IS_REQUIRED_BY` from the entity it derives from (see [Mappings](#mappings)), so a
+table's resource can be derived from values of the domain the table was made to depend on. The
+asset's page lists the mappings that apply to its members, marks the ones that walk a dependency,
+and opens each in the mapping editor.
 
 ## Authorization
 
@@ -1541,7 +1784,8 @@ dangling link, a stranded entity, or a mapping that can no longer derive its tar
 | Call | Rule |
 | --- | --- |
 | `DELETE /entity/{id}` | Refuses any entity that still has links. It is never a way to dismantle an aggregate piecemeal. An entity's [version history](#entity-versioning), if it has one, is deleted with it. |
-| `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction, with the root's history and the [frozen copies](#running-functions-on-past-versions) of its past versions. Refused when a member is linked to an entity outside the aggregate, or is itself a mapping target, or while an entity of a frozen copy is still `PROVISIONED` or `AUTHORIZED`. |
+| `DELETE /aggregate/{id}` | Removes the root, its whole `HAS_PART` tree and everything derived from those members through `MAPPED_TO`, in one transaction, with the root's history and the [frozen copies](#running-functions-on-past-versions) of its past versions. Refused when an entity outside the aggregate depends on a member or contains one, when a member is itself a mapping target, or while an entity of a frozen copy is still `PROVISIONED` or `AUTHORIZED`. The aggregate's *own* dependencies on outside entities are not an obstacle and go with it — an asset that depends on another can be deleted, one that others depend on cannot. |
+| `PUT /aggregate/{id}/yaml` | Removes the members the document no longer lists, under the same rule: refused when something that stays still depends on a removed part. See [Updating an aggregate](#updating-an-aggregate). |
 | `DELETE /entity/{id}/versions[/{n}]` | Deletes one past version, or all of them, with their frozen copies. The current version stays; see [Deleting versions](#deleting-versions). |
 | `DELETE /entity/link/...` | Refused for a `HAS_PART` / `IS_PART_OF` link whose containing side implements the `Aggregate` trait — containment is what makes a part reachable from its root, so detaching one strands it. Also refused when an existing mapping resolves an entity path reference *through* the link. `DEPENDS_ON` links, and containment between entities that are not aggregates, stay removable. |
 | `DELETE /trait/link/...` | Refused when an existing link between entity instances relies on the trait relationship. A link is only admitted because a trait relationship sanctions it, so removing the last one that does would leave the link with nothing justifying it. |
@@ -1590,6 +1834,8 @@ class GovernanceModel implements ImmutableModelContributor {
         {"type":"object","properties":{"owner":{"type":"string"}}}""");
     registry.trait("Classified");
     registry.link("Owned", RelationType.HAS_PART, "Classified");
+    // A trait with two parents: a father and a mixed-in trait (name, schema, father, mix-ins).
+    registry.trait("Governed", null, "Owned", List.of("Classified"));
     registry.entityType("Dataset", null, List.of("Owned"));
   }
 }
@@ -1610,9 +1856,11 @@ class GovernanceModel implements ImmutableModelContributor {
 
 The built-in traits are installed this way, by `BuiltInModelContributor` (ordered first, so other
 modules can build on them): `Aggregate`, `AggregateElement`, the provisioning pair `Provisionable` /
-`ProvisionableResource`, the authorization pair `Authorizable` / `AuthorizableResource`, the
-`Versionable` marker (see [Entity versioning](#entity-versioning)) and the
-`Aggregate HAS_PART AggregateElement` composition. They are deliberately **not** seeded by
+`ProvisionableResource`, the authorization pair `Authorizable` / `AuthorizableResource`, `Asset`,
+which inherits the first of the two root traits and mixes in the second (see [Assets](#assets)),
+the `Versionable` marker (see [Entity versioning](#entity-versioning)) and the
+`Aggregate HAS_PART AggregateElement` composition. A database created by an earlier release gains
+`Asset` on its first start with this one, like any declaration that is missing. They are deliberately **not** seeded by
 the Flyway baseline, which keeps one source of truth expressed against the services rather than the
 tables — derived schemas, version groups and the inverse `IS_PART_OF` row are computed exactly as
 they are for a user-declared trait.
@@ -1772,13 +2020,15 @@ Notes:
 
 ## Database Migrations
 
-Database schema is created by Flyway from a single baseline script:
+Database schema is created by Flyway from a baseline script and the migrations after it, all
+under `metacatalog-core/src/main/resources/db/migration/`:
 
-```
-metacatalog-core/src/main/resources/db/migration/V1__initial_schema.sql
-```
+| Script | What it does |
+| --- | --- |
+| `V1__initial_schema.sql` | The baseline: the schema 1.0.0 shipped, described below. |
+| `V2__trait_mixins.sql` | Lets a trait mix traits in (see [Trait inheritance](#trait-inheritance)): the ordered `trait_traits` join table, and a `traits` column on `trait_version` for the names each snapshot froze. No data is migrated — every existing trait simply has no mix-ins — so a 2.0 database upgrades in place. |
 
-It runs automatically on application startup and creates everything in one shot:
+They run automatically on application startup. The baseline creates everything in one shot:
 
 | Section | Contents |
 | --- | --- |

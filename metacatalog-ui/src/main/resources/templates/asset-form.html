@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${asset != null} ? 'Edit ' + ${asset.name} + ' — Meta Catalog' : 'New asset — Meta Catalog'">New asset — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
+</head>
+<body>
+<header th:replace="~{fragments/shell :: appbar('assets', ${asset != null} ? 'catalog' : 'new')}"></header>
+<header class="topbar">
+    <h1 th:text="${asset != null} ? 'Edit ' + ${asset.name} : 'New asset'">New asset</h1>
+    <nav th:if="${asset != null}">
+        <a class="btn" th:href="@{/ui/assets/{id}(id=${asset.id})}">← Back to the asset</a>
+    </nav>
+</header>
+
+<main>
+    <div th:replace="~{fragments/shell :: notices}"></div>
+
+    <!--
+      The schema and preview URLs are stated rather than left relative: this form is served from
+      /ui/assets/new and from /ui/assets/{id}/edit, and only one of those is next to them.
+    -->
+    <form method="post" id="aggregate-form" th:object="${aggregateForm}"
+          th:action="${asset != null} ? @{/ui/assets/{id}(id=${asset.id})} : @{/ui/assets}"
+          th:attr="data-schema-url=@{/ui/assets/schema},data-preview-url=@{/ui/assets/yaml-preview}">
+
+        <div class="form-group">
+            <label for="rootType">Asset type</label>
+            <!-- A new asset chooses its type; an existing one cannot change it. -->
+            <select name="rootType" id="rootType" th:if="${asset == null}" th:field="*{rootType}" required>
+                <option value="">— Select an asset type —</option>
+                <option th:each="rt : ${rootTypes}"
+                        th:value="${rt}"
+                        th:text="${rt}"
+                        th:selected="${rt == selectedRootType}">type</option>
+            </select>
+            <th:block th:if="${asset != null}">
+                <select id="rootType" disabled>
+                    <option th:value="${asset.entityType}" th:text="${asset.entityType}" selected>type</option>
+                </select>
+                <input type="hidden" name="rootType" th:value="${asset.entityType}"/>
+            </th:block>
+            <small class="hint" th:if="${asset == null}">
+                An asset type is an aggregate root type carrying the <code>Asset</code> trait. Its
+                combined schema drives the whole tree below.
+            </small>
+            <small class="hint" th:if="${asset != null}">
+                Saving applies the whole document in one step: values are updated, parts added below
+                are created, and parts removed from it are deleted with whatever was derived from
+                them. Statuses are shown read-only — a run sets them, not this form. In an existing
+                asset a part is referred to by its id, so <code>dependsOn</code> lists ids; which
+                other <em>assets</em> this one depends on is easier to change from the catalog.
+            </small>
+            <p class="empty" th:if="${rootTypes.isEmpty()}">
+                No asset types yet — define an entity type carrying the <code>Asset</code> trait
+                under <a th:href="@{/ui/admin}">Administration</a>.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <div class="tabs">
+                <button type="button" class="tab active" data-tab="builder">Builder</button>
+                <button type="button" class="tab" data-tab="raw">Raw JSON</button>
+                <button type="button" class="tab" data-tab="yaml">YAML</button>
+            </div>
+
+            <div class="tab-panel" data-panel="builder">
+                <div id="aggregate-editor" class="iv-editor">
+                    <p class="empty">Select an asset type to start building.</p>
+                </div>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="raw">
+                <textarea id="aggregate-raw" class="raw-schema" rows="20" spellcheck="false"
+                          style="font-family: monospace; font-size: 0.9em; width: 100%;"
+                          placeholder='{"entityType": "...", "values": {}, "parts": []}'></textarea>
+            </div>
+
+            <div class="tab-panel hidden" data-panel="yaml">
+                <p class="hint">
+                    Read-only preview of the document as the YAML that will be sent. Edit in the
+                    Builder or Raw JSON tabs.
+                </p>
+                <pre id="aggregate-yaml" class="schema document-pane"></pre>
+            </div>
+
+            <div id="aggregate-validation" class="validation"></div>
+            <input type="hidden" th:field="*{document}" id="document"/>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn primary"
+                    th:text="${asset != null} ? 'Save asset' : 'Create asset'">Create asset</button>
+            <a class="btn" th:href="${asset != null} ? @{/ui/assets/{id}(id=${asset.id})} : @{/ui/assets}">Cancel</a>
+        </div>
+    </form>
+</main>
+
+<script type="application/json" id="aggregate-schema" th:utext="${aggregateSchema} ?: 'null'">null</script>
+<script th:src="@{/ui/js/aggregate-form.js}"></script>
+</body>
+</html>

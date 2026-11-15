@@ -9,22 +9,19 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'aggregates')}"></header>
 <header class="topbar">
     <h1>New Aggregate</h1>
     <nav>
-        <a class="btn" th:href="@{/ui}">← Back</a>
-        <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
+        <a class="btn" th:href="@{/ui/admin}">← Back</a>
+        <a class="btn" th:href="@{/ui/admin/instances}">◈ Instances</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
     <div class="error" th:if="${error}" th:text="${error}"></div>
 
-    <form method="post" th:action="@{/ui/aggregates}" th:object="${aggregateForm}" id="aggregate-form">
+    <form method="post" th:action="@{/ui/admin/aggregates}" th:object="${aggregateForm}" id="aggregate-form">
 
         <div class="form-group">
             <label for="rootType">Aggregate Root Type</label>
@@ -77,7 +74,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn primary">Create Aggregate</button>
-            <a class="btn" th:href="@{/ui}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin}">Cancel</a>
         </div>
     </form>
 </main>

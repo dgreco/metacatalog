@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Shell fragments — Meta Catalog</title>
+</head>
+<body>
+
+<!--
+  The application bar every page starts with. It is what separates the two halves of the UI:
+
+    assets — managing the data platform assets themselves (the catalog, an asset as a whole, its
+             dependencies, its lifecycle);
+    admin  — defining the model assets are assembled from (traits, entity types, their
+             relationships and mappings) and the generic, type-agnostic entity tooling.
+
+  `area` selects the half and with it the second row of links; `section` marks the current link in
+  that row. Both are plain strings so a page states where it lives in one attribute.
+
+  The theme toggle is injected into .appbar-tools by theme.js.
+-->
+<header th:fragment="appbar(area, section)" class="appbar">
+    <div class="appbar-main">
+        <a class="brand" th:href="@{/ui}" title="Meta Catalog">
+            <span class="brand-mark" aria-hidden="true">◆</span>
+            <span>Meta Catalog</span>
+        </a>
+        <nav class="area-switch" aria-label="Areas">
+            <a th:href="@{/ui/assets}" th:classappend="${area == 'assets'} ? 'active'"
+               th:attr="aria-current=${area == 'assets'} ? 'page'"
+               title="Manage the data platform assets">Assets</a>
+            <a th:href="@{/ui/admin}" th:classappend="${area == 'admin'} ? 'active'"
+               th:attr="aria-current=${area == 'admin'} ? 'page'"
+               title="Define the traits and types assets are assembled from">Administration</a>
+        </nav>
+        <div class="appbar-tools">
+            <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
+                <span class="user" th:text="${username}">user</span>
+                <button type="submit" class="btn">Logout</button>
+            </form>
+        </div>
+    </div>
+
+    <nav class="subnav" aria-label="Assets" th:if="${area == 'assets'}">
+        <a th:href="@{/ui/assets}" th:classappend="${section == 'catalog'} ? 'active'">Catalog</a>
+        <a th:href="@{/ui/assets(view='graph')}" th:classappend="${section == 'graph'} ? 'active'">Dependency graph</a>
+        <a th:href="@{/ui/assets/new}" th:classappend="${section == 'new'} ? 'active'">New asset</a>
+        <a th:href="@{/ui/assets/upload}" th:classappend="${section == 'upload'} ? 'active'">Upload YAML</a>
+    </nav>
+
+    <nav class="subnav" aria-label="Administration" th:if="${area == 'admin'}">
+        <a th:href="@{/ui/admin}" th:classappend="${section == 'model'} ? 'active'">Model</a>
+        <a th:href="@{/ui/admin/graph}" th:classappend="${section == 'graph'} ? 'active'">Model graph</a>
+        <a th:href="@{/ui/admin/instances}" th:classappend="${section == 'instances'} ? 'active'">Instances</a>
+        <a th:href="@{/ui/admin/aggregates}" th:classappend="${section == 'aggregates'} ? 'active'">Aggregates</a>
+        <a th:href="@{/ui/admin/bulk}" th:classappend="${section == 'bulk'} ? 'active'">Bulk upload</a>
+        <span class="subnav-gap"></span>
+        <a th:href="@{/sparql}">SPARQL</a>
+        <a th:href="@{/swagger-ui.html}">REST API</a>
+    </nav>
+</header>
+
+<!--
+  What a page shows before its own content: the success flash, the error, and the seed of an
+  asynchronously launched run. procedure-poller.js consumes the seed into localStorage and shows the
+  floating popup that keeps polling across pages; it is a plain banner only when JavaScript is off.
+-->
+<div th:fragment="notices" class="notices">
+    <div class="flash" th:if="${message}" th:text="${message}"></div>
+    <div class="error" th:if="${error}" th:text="${error}"></div>
+    <div class="procedure-banner" id="procedure-banner"
+         th:if="${procedureScheduleId}"
+         th:attr="data-schedule-id=${procedureScheduleId},data-label=${procedureLabel},data-entity-id=${procedureEntityId},data-entity-type=${procedureEntityType}"
+         th:text="${procedureLabel} + ' in progress…'"></div>
+</div>
+
+</body>
+</html>

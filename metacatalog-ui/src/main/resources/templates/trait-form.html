@@ -9,19 +9,16 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Trait</h1>
-    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
+    <nav><a class="btn" th:href="@{/ui/admin}">← Back</a></nav>
 </header>
 
 <main>
     <div class="error" th:if="${error}" th:text="${error}"></div>
 
-    <form method="post" th:action="@{/ui/traits}" th:object="${traitForm}" id="type-form">
+    <form method="post" th:action="@{/ui/admin/traits}" th:object="${traitForm}" id="type-form">
         <label>
             Name
             <input type="text" th:field="*{name}" required autofocus/>
@@ -35,6 +32,22 @@
                         th:value="${trait.name}"
                         th:text="${trait.name}">trait</option>
             </select>
+        </label>
+
+        <label>
+            Mixed-in traits (optional — Ctrl/Cmd-click to select several)
+            <select th:field="*{traits}" class="traits-select" multiple size="6"
+                    th:disabled="${traits.isEmpty()}">
+                <option th:each="trait : ${traits}"
+                        th:value="${trait.name}"
+                        th:text="${trait.name}">trait</option>
+            </select>
+            <small class="hint">
+                A trait inherits from its father and from every trait mixed in here. One that
+                another of them already inherits is refused as redundant — a trait inheriting
+                <code>Provisionable</code> and <code>Authorizable</code> already is an
+                <code>Aggregate</code>.
+            </small>
         </label>
 
         <fieldset id="schema-builder" th:attr="data-initial-schema=*{schema}">
@@ -66,7 +79,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary">Create trait</button>
-            <a class="btn" th:href="@{/ui}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin}">Cancel</a>
         </div>
     </form>
 </main>

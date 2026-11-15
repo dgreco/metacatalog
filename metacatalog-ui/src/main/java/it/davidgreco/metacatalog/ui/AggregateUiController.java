@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.controller.MetacatalogApiDelegate;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import it.davidgreco.metacatalog.openapi.model.EntityType;
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,13 +32,13 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * /metacatalog/v1/aggregate/yaml} consumes — and hands it back to the API.
  */
 @Controller
-@RequestMapping("/ui/aggregates")
+@RequestMapping("/ui/admin/aggregates")
 public class AggregateUiController {
 
   private final MetacatalogApiDelegate api;
   private final ObjectMapper jsonMapper;
-  private final ObjectMapper yamlMapper;
   private final HtmlSafeJsonSerializer jsonSerializer;
+  private final AggregateDocuments documents;
 
   public AggregateUiController(
       MetacatalogApiDelegate api,
@@ -49,8 +47,8 @@ public class AggregateUiController {
       HtmlSafeJsonSerializer jsonSerializer) {
     this.api = api;
     this.jsonMapper = jsonMapper;
-    this.yamlMapper = yamlMapper;
     this.jsonSerializer = jsonSerializer;
+    this.documents = new AggregateDocuments(jsonMapper, yamlMapper);
   }
 
   /**
@@ -86,24 +84,17 @@ public class AggregateUiController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      var resource =
-          (org.springframework.core.io.Resource) api.getAggregateAsYaml(id, true).getBody();
-      byte[] yamlBytes;
-      try (var in = resource.getInputStream()) {
-        yamlBytes = in.readAllBytes();
-      }
-      var tree = yamlMapper.readTree(yamlBytes);
+      var aggregate =
+          documents.read(
+              (org.springframework.core.io.Resource) api.getAggregateAsYaml(id, true).getBody());
       model.addAttribute("aggregateId", id);
-      model.addAttribute("rootType", tree.path("entityType").asText(null));
-      model.addAttribute(
-          "aggregateJson", jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(tree));
-      var yaml = new String(yamlBytes, StandardCharsets.UTF_8);
-      model.addAttribute(
-          "aggregateYaml", yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
+      model.addAttribute("rootType", aggregate.tree().path("entityType").asText(null));
+      model.addAttribute("aggregateJson", aggregate.json(jsonMapper));
+      model.addAttribute("aggregateYaml", aggregate.yaml());
       return "aggregate-view";
     } catch (RuntimeException | java.io.IOException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui/aggregates";
+      return "redirect:/ui/admin/aggregates";
     }
   }
 
@@ -124,30 +115,15 @@ public class AggregateUiController {
       Model model,
       RedirectAttributes redirectAttributes) {
     try {
-      api.createAggregateAsYaml(new ByteArrayResource(toYaml(form.getDocument())));
+      api.createAggregateAsYaml(new ByteArrayResource(documents.toYaml(form.getDocument())));
       redirectAttributes.addFlashAttribute("message", "Aggregate created.");
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     } catch (RuntimeException | java.io.IOException e) {
       model.addAttribute("aggregateForm", form);
       model.addAttribute("error", e.getMessage());
       populate(model, form.getRootType());
       return "aggregate-form";
     }
-  }
-
-  /**
-   * Converts the JSON document the page submits into the YAML the aggregate endpoint consumes.
-   * Parsing through Jackson also rejects a malformed document up-front, so the user gets a form
-   * error rather than an opaque failure from the loader.
-   */
-  private byte[] toYaml(String document) throws java.io.IOException {
-    if (document == null || document.isBlank()) {
-      throw new IllegalArgumentException("The aggregate document is empty.");
-    }
-    var tree = jsonMapper.readTree(document);
-    var bos = new ByteArrayOutputStream();
-    yamlMapper.writeValue(bos, tree);
-    return bos.toByteArray();
   }
 
   /**
@@ -183,8 +159,7 @@ public class AggregateUiController {
   public ResponseEntity<String> yamlPreview(
       @org.springframework.web.bind.annotation.RequestBody String document) {
     try {
-      var yaml = new String(toYaml(document), StandardCharsets.UTF_8);
-      return ResponseEntity.ok(yaml.startsWith("---") ? yaml.substring(3).stripLeading() : yaml);
+      return ResponseEntity.ok(documents.preview(document));
     } catch (RuntimeException | java.io.IOException e) {
       return ResponseEntity.badRequest().body(e.getMessage());
     }

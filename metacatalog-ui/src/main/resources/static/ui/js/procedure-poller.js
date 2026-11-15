@@ -137,9 +137,14 @@
       activeScheduleId = null;
     }
     remove(RUN_KEY);
-    // On the instances page the rows reflect the run's outcome: reload so they are
-    // fresh, carrying the outcome popup across the reload.
-    if (window.location.pathname.indexOf("/ui/instances") === 0) {
+    // The instances page and the asset pages show the statuses the run just wrote: reload so
+    // they are fresh, carrying the outcome popup across the reload. A page with unsaved input —
+    // an asset being created or edited — is left alone.
+    var path = window.location.pathname;
+    var showsStatuses =
+      path.indexOf("/ui/admin/instances") === 0 ||
+      (path.indexOf("/ui/assets") === 0 && !/\/(new|edit|upload)$/.test(path));
+    if (showsStatuses) {
       write(OUTCOME_KEY, { ok: ok, text: text, at: Date.now() });
       window.location.reload();
       return;

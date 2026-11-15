@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Upload assets — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
+</head>
+<body>
+<header th:replace="~{fragments/shell :: appbar('assets', 'upload')}"></header>
+<header class="topbar">
+    <h1>Upload assets as YAML</h1>
+</header>
+
+<main>
+    <div th:replace="~{fragments/shell :: notices}"></div>
+
+    <form method="post" th:action="@{/ui/assets/upload}" enctype="multipart/form-data" id="asset-upload-form">
+        <p class="hint">
+            Each document of the file (documents are separated by <code>---</code>) creates one
+            asset, with its parts and the dependencies between them. A file downloaded from an
+            asset's page is accepted as it is and creates a copy of that asset; to change an
+            existing asset instead, upload the file from that asset's page.
+        </p>
+
+        <label>
+            YAML file
+            <input type="file" name="file" accept=".yaml,.yml,text/yaml,application/yaml,application/x-yaml"/>
+        </label>
+
+        <label>
+            …or paste YAML
+            <textarea name="yamlText" class="raw-schema" rows="18" spellcheck="false"
+                      th:text="${yamlText}"
+                      placeholder="entityType: TableType&#10;values:&#10;  name: orders&#10;parts:&#10;  - entityType: ColumnType&#10;    values:&#10;      name: id"></textarea>
+        </label>
+
+        <div class="actions">
+            <button type="submit" class="btn primary">Create assets</button>
+            <a class="btn" th:href="@{/ui/assets}">Cancel</a>
+        </div>
+    </form>
+</main>
+</body>
+</html>

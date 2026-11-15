@@ -9,19 +9,16 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Entity Type</h1>
-    <nav><a class="btn" th:href="@{/ui}">← Back</a></nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
+    <nav><a class="btn" th:href="@{/ui/admin}">← Back</a></nav>
 </header>
 
 <main>
     <div class="error" th:if="${error}" th:text="${error}"></div>
 
-    <form method="post" th:action="@{/ui/entity-types}" th:object="${entityTypeForm}" id="type-form">
+    <form method="post" th:action="@{/ui/admin/entity-types}" th:object="${entityTypeForm}" id="type-form">
         <label>
             Name
             <input type="text" th:field="*{name}" required autofocus/>
@@ -77,7 +74,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary">Create entity type</button>
-            <a class="btn" th:href="@{/ui}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin}">Cancel</a>
         </div>
     </form>
 </main>

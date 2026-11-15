@@ -4,7 +4,7 @@
  * Loaded from <head> as a blocking script (no defer) so the chosen theme is
  * applied to <html data-theme> *before* the body paints — this prevents a flash
  * of the wrong (default light) theme for dark-mode users. The toggle button is
- * injected into the topbar and wired up on DOMContentLoaded.
+ * injected into the application bar and wired up on DOMContentLoaded.
  *
  * Resolution order: an explicit user choice in localStorage wins; otherwise the
  * OS preference (prefers-color-scheme) is honoured; otherwise light. localStorage
@@ -47,15 +47,17 @@
   // Run synchronously while <head> is being parsed: set the theme before paint.
   document.documentElement.dataset.theme = storedTheme() || systemTheme();
 
+  // The application bar's tool area when the page has one; the page's own topbar otherwise — the
+  // login and SPARQL pages, served by other modules, have no application bar.
   function ensureToggle() {
-    var nav = document.querySelector(".topbar nav");
+    var nav = document.querySelector(".appbar-tools") || document.querySelector(".topbar nav");
     if (!nav) return null;
     var btn = nav.querySelector(".theme-toggle");
     if (btn) return btn;
     btn = document.createElement("button");
     btn.type = "button";
     btn.className = "btn theme-toggle";
-    nav.appendChild(btn);
+    nav.insertBefore(btn, nav.firstChild);
     return btn;
   }
 

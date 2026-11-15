@@ -333,7 +333,14 @@
     });
 
     // Rebuild on load: after a validation error the form comes back with the target and the
-    // previously entered values, which we restore into the freshly built editor.
-    buildEditor(targetSelect.value, hidden.value);
+    // previously entered values, which we restore into the freshly built editor. With nothing
+    // entered yet, the pair the page was opened on is proposed its existing mapping — that is what
+    // an "Edit mapping" link elsewhere relies on: it preselects source and target, and no change
+    // event ever fires to propose anything.
+    buildEditor(
+      targetSelect.value,
+      hidden.value,
+      hidden.value ? null : findProposal(sourceSelect && sourceSelect.value, targetSelect.value)
+    );
   });
 })();

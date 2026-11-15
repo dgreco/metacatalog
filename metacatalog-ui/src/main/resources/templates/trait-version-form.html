@@ -9,16 +9,13 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'model')}"></header>
 <header class="topbar">
     <h1>New Version of <span th:text="${traitVersionForm.name}">name</span></h1>
     <nav>
-        <a class="btn" th:href="@{/ui/traits/{name}/versions(name=${traitVersionForm.name})}">↑ Versions</a>
-        <a class="btn" th:href="@{/ui}">← Back</a>
+        <a class="btn" th:href="@{/ui/admin/traits/{name}/versions(name=${traitVersionForm.name})}">↑ Versions</a>
+        <a class="btn" th:href="@{/ui/admin}">← Back</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
@@ -27,11 +24,11 @@
     <p class="hint">
         The current version (v<span th:text="${currentVersion}">1</span>) will be snapshotted into the
         history table and a new live version (v<span th:text="${currentVersion + 1}">2</span>) will
-        replace it with the schema and father below.
+        replace it with the schema, father and mixed-in traits below.
     </p>
 
     <form method="post"
-          th:action="@{/ui/traits/{name}/versions(name=${traitVersionForm.name})}"
+          th:action="@{/ui/admin/traits/{name}/versions(name=${traitVersionForm.name})}"
           th:object="${traitVersionForm}" id="type-form">
         <label>
             Name
@@ -46,6 +43,22 @@
                         th:value="${trait.name}"
                         th:text="${trait.name}">trait</option>
             </select>
+        </label>
+
+        <label>
+            Mixed-in traits (optional — Ctrl/Cmd-click to select several)
+            <select th:field="*{traits}" class="traits-select" multiple size="6"
+                    th:disabled="${traits.isEmpty()}">
+                <option th:each="trait : ${traits}"
+                        th:value="${trait.name}"
+                        th:text="${trait.name}">trait</option>
+            </select>
+            <small class="hint">
+                A trait inherits from its father and from every trait mixed in here. One that
+                another of them already inherits is refused as redundant — a trait inheriting
+                <code>Provisionable</code> and <code>Authorizable</code> already is an
+                <code>Aggregate</code>.
+            </small>
         </label>
 
         <fieldset id="schema-builder" th:attr="data-initial-schema=*{schema}">
@@ -77,7 +90,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary">Create new version</button>
-            <a class="btn" th:href="@{/ui/traits/{name}/versions(name=${traitVersionForm.name})}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin/traits/{name}/versions(name=${traitVersionForm.name})}">Cancel</a>
         </div>
     </form>
 </main>

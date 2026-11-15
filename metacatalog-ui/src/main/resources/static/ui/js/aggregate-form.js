@@ -13,8 +13,18 @@
  *
  * On submit the tree is serialized into the hidden `document` field. A "Raw JSON" tab lets the
  * document be edited directly; switching back to the Builder tab re-parses it and rebuilds the
- * tree. A read-only "YAML" tab shows the same document rendered server-side (POST
- * /ui/aggregates/yaml-preview) as the YAML the aggregate endpoint consumes.
+ * tree. A read-only "YAML" tab shows the same document rendered server-side as the YAML the
+ * aggregate endpoint consumes.
+ *
+ * The same editor serves a new aggregate and an existing one, on the generic aggregate page and on
+ * the asset pages. Two things differ and both are read from the page rather than assumed:
+ *
+ *  - where the schema and the YAML preview are served from (data-schema-url / data-preview-url on
+ *    the form), since a page under /ui/assets/{id}/edit cannot reach them by a relative path;
+ *  - whether the document describes entities that already exist. A node loaded with an `id` keeps
+ *    it, which is what tells the update which member it is, and always states its `dependsOn` —
+ *    an update leaves the dependencies of a node that says nothing untouched, so clearing the field
+ *    has to be sent as an empty list to mean "none".
  */
 (function () {
   "use strict";
@@ -33,6 +43,8 @@
     var schema = readEmbeddedSchema();
     var rootNode = null; // the built tree; null while no schema is loaded
     var mode = "builder";
+    var schemaUrl = form.getAttribute("data-schema-url") || "schema";
+    var previewUrl = form.getAttribute("data-preview-url") || "yaml-preview";
 
     function readEmbeddedSchema() {
       var el = document.getElementById("aggregate-schema");
@@ -155,7 +167,10 @@
         input.type = "text";
       }
       input.className = "mv-input";
-      if (isRequired && type !== "boolean") input.required = true;
+      // A read-only field is written by the machinery — a run's status, the grants it applied —
+      // so it is shown but not offered for editing, as on the instance form.
+      if (leafSchema.readOnly === true) input.disabled = true;
+      else if (isRequired && type !== "boolean") input.required = true;
       return { kind: "leaf", input: input, type: type };
     }
 
@@ -179,7 +194,7 @@
           var body = document.createElement("div");
           body.className = "mv-children";
           row.appendChild(body);
-          children.push({ key: key, model: renderValues(childSchema, body) });
+          children.push({ key: key, required: isRequired, model: renderValues(childSchema, body) });
         } else if (childSchema.type === "array") {
           row.className = "mv-group";
           var ahead = document.createElement("div");
@@ -190,17 +205,23 @@
           var abody = document.createElement("div");
           abody.className = "mv-children";
           row.appendChild(abody);
-          children.push({ key: key, model: renderValuesArray(childSchema, abody) });
+          children.push({ key: key, required: isRequired, model: renderValuesArray(childSchema, abody) });
         } else {
           row.className = "mv-leaf";
           var label = document.createElement("label");
           label.className = "mv-leaf-label";
           label.textContent = key;
           if (isRequired) label.appendChild(requiredBadge());
+          if (childSchema.readOnly === true) {
+            var readOnly = document.createElement("span");
+            readOnly.className = "mv-readonly";
+            readOnly.textContent = "read-only";
+            label.appendChild(readOnly);
+          }
           var leafModel = renderLeaf(childSchema, isRequired);
           label.appendChild(leafModel.input);
           row.appendChild(label);
-          children.push({ key: key, model: leafModel });
+          children.push({ key: key, required: isRequired, model: leafModel });
         }
         parentEl.appendChild(row);
       });
@@ -259,6 +280,18 @@
       return { kind: "array", items: itemNodes, addItem: addItem };
     }
 
+    function isEmptyContainer(value) {
+      if (Array.isArray(value)) return value.length === 0;
+      return value !== null && typeof value === "object" && Object.keys(value).length === 0;
+    }
+
+    // Serializes a values model, dropping blank optional leaves — and optional objects and arrays
+    // left empty, as the instance editor does. The builder renders every property the schema
+    // declares, so an absent optional object still has a group on screen; sending it back as {} or
+    // [] would add a value nobody entered. That mattered little while this editor only created
+    // aggregates; editing one makes it a silent change: an access grant without `resources`
+    // (meaning every resource) would be saved as `resources: {entityTypes: []}`. Required ones are
+    // kept, so the server reports them as incomplete.
     function serializeValues(node) {
       if (node.kind === "leaf") return parseLeaf(node.input, node.type);
       if (node.kind === "array") {
@@ -271,7 +304,9 @@
       var obj = {};
       node.children.forEach(function (child) {
         var sv = serializeValues(child.model);
-        if (sv !== undefined) obj[child.key] = sv;
+        if (sv === undefined) return;
+        if (!child.required && isEmptyContainer(sv)) return;
+        obj[child.key] = sv;
       });
       return obj;
     }
@@ -363,7 +398,8 @@
       var dependsInput = document.createElement("input");
       dependsInput.type = "text";
       dependsInput.className = "mv-input";
-      dependsInput.placeholder = "comma-separated refs";
+      dependsInput.placeholder =
+        existing && existing.id ? "comma-separated refs or ids" : "comma-separated refs";
       dependsLabel.appendChild(dependsInput);
       body.appendChild(dependsLabel);
       if (existing && Array.isArray(existing.dependsOn)) {
@@ -446,7 +482,13 @@
 
       parentEl.appendChild(wrapper);
 
+      // An entity that already exists cannot change type; offering the choice would only produce
+      // a document the update refuses.
+      var existingId = existing && existing.id ? existing.id : null;
+      if (existingId) entityTypeSelect.disabled = true;
+
       return {
+        existingId: existingId,
         entityTypeSelect: entityTypeSelect,
         refInput: refInput,
         dependsInput: dependsInput,
@@ -456,10 +498,10 @@
     }
 
     function serializeNode(node) {
-      var doc = {
-        entityType: node.entityTypeSelect.value,
-        values: serializeValues(node.valuesModel)
-      };
+      var doc = {};
+      if (node.existingId) doc.id = node.existingId;
+      doc.entityType = node.entityTypeSelect.value;
+      doc.values = serializeValues(node.valuesModel);
       var ref = node.refInput.value.trim();
       if (ref) doc.ref = ref;
       var depends = node.dependsInput.value
@@ -468,7 +510,7 @@
           return s.trim();
         })
         .filter(Boolean);
-      if (depends.length) doc.dependsOn = depends;
+      if (depends.length || node.existingId) doc.dependsOn = depends;
       if (node.parts.length) doc.parts = node.parts.map(serializeNode);
       return doc;
     }
@@ -532,7 +574,7 @@
         var csrfInput = form.querySelector("input[name='_csrf']");
         var headers = { "Content-Type": "application/json" };
         if (csrfInput) headers["X-CSRF-TOKEN"] = csrfInput.value;
-        fetch("yaml-preview", {
+        fetch(previewUrl, {
           method: "POST",
           headers: headers,
           body: rawTextarea.value,
@@ -574,7 +616,7 @@
         buildTree(null);
         return;
       }
-      fetch("schema?rootType=" + encodeURIComponent(name), { headers: { Accept: "application/json" } })
+      fetch(schemaUrl + "?rootType=" + encodeURIComponent(name), { headers: { Accept: "application/json" } })
         .then(function (res) {
           if (!res.ok) throw new Error("could not load the schema for '" + name + "'");
           return res.json();

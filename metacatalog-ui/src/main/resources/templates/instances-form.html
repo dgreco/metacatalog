@@ -9,13 +9,14 @@
     <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'instances')}"></header>
 <header class="topbar">
     <h1 th:text="${readOnly != null and readOnly} ? 'View Instance' : (${instanceId != null} ? 'Edit Instance' : 'New Instance')">Instance</h1>
     <nav>
-        <a class="btn" th:href="@{/ui/instances}">Back</a>
-        <a class="btn" th:if="${readOnly == true and instanceId != null and frozenVersionOf == null}" th:href="@{/ui/instances/{id}/edit(id=${instanceId})}">Edit</a>
+        <a class="btn" th:href="@{/ui/admin/instances}">Back</a>
+        <a class="btn" th:if="${readOnly == true and instanceId != null and frozenVersionOf == null}" th:href="@{/ui/admin/instances/{id}/edit(id=${instanceId})}">Edit</a>
         <a class="btn" th:if="${readOnly == true and entityVersion != null}"
-           th:href="@{/ui/instances/{id}/versions(id=${instanceId})}"
+           th:href="@{/ui/admin/instances/{id}/versions(id=${instanceId})}"
            th:text="|History (v${entityVersion})|">History</a>
     </nav>
 </header>
@@ -25,13 +26,13 @@
     <!-- An entity of a past version's frozen copy: say so, and lead back to the live history. -->
     <div class="flash" th:if="${frozenVersionOf != null}">
         Part of the frozen copy of
-        <a th:href="@{/ui/instances/{id}/versions(id=${frozenVersionOf})}"
+        <a th:href="@{/ui/admin/instances/{id}/versions(id=${frozenVersionOf})}"
            th:text="|version ${frozenVersion}|">version 1</a>
         of an aggregate. It cannot be changed; functions run on it record their results here.
     </div>
 
     <form method="post"
-          th:action="${instanceId != null} ? @{/ui/instances/{id}(id=${instanceId})} : @{/ui/instances}"
+          th:action="${instanceId != null} ? @{/ui/admin/instances/{id}(id=${instanceId})} : @{/ui/admin/instances}"
           th:object="${instanceForm}"
           id="instance-form">
 
@@ -92,10 +93,10 @@
 
         <div class="form-actions" th:unless="${readOnly}">
             <button type="submit" class="btn">Save</button>
-            <a class="btn" th:href="@{/ui/instances}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin/instances}">Cancel</a>
         </div>
         <div class="form-actions" th:if="${readOnly}">
-            <a class="btn" th:href="@{/ui/instances}">Back</a>
+            <a class="btn" th:href="@{/ui/admin/instances}">Back</a>
         </div>
     </form>
 </main>

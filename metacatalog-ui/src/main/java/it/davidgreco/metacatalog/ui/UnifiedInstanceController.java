@@ -28,12 +28,13 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * delegate ({@link MetacatalogApiDelegate}).
  */
 @Controller
-@RequestMapping("/ui/instances")
+@RequestMapping("/ui/admin/instances")
 class UnifiedInstanceController {
 
   private final MetacatalogApiDelegate api;
   private final ObjectMapper jsonMapper;
   private final ObjectMapper yamlMapper;
+  private final AggregateProcedureLauncher procedures;
 
   UnifiedInstanceController(
       MetacatalogApiDelegate api,
@@ -43,6 +44,7 @@ class UnifiedInstanceController {
     this.api = api;
     this.jsonMapper = jsonMapper;
     this.yamlMapper = yamlMapper;
+    this.procedures = new AggregateProcedureLauncher(api);
   }
 
   @GetMapping
@@ -100,7 +102,7 @@ class UnifiedInstanceController {
       dto.setValues(form.getValues());
       api.createEntity(dto);
       redirectAttributes.addFlashAttribute("message", "Entity created.");
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
       var types = api.listEntityTypes().getBody();
@@ -137,7 +139,7 @@ class UnifiedInstanceController {
       dto.setValues(form.getValues());
       api.updateEntity(id, dto);
       redirectAttributes.addFlashAttribute("message", "Entity updated.");
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     } catch (RuntimeException e) {
       model.addAttribute("instanceForm", form);
       model.addAttribute("instanceId", id);
@@ -161,7 +163,7 @@ class UnifiedInstanceController {
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
-    return "redirect:/ui/instances";
+    return "redirect:/ui/admin/instances";
   }
 
   @PostMapping("/{id}/delete-aggregate")
@@ -172,82 +174,29 @@ class UnifiedInstanceController {
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
-    return "redirect:/ui/instances";
+    return "redirect:/ui/admin/instances";
   }
 
   /**
-   * Runs one of the four aggregate procedures, asynchronously: the API returns a schedule id right
-   * after plan-building (so a missing aggregate or an illegitimate root still surfaces here as a
-   * flash error), and the instances page polls {@code GET /metacatalog/v1/procedure/{id}} until the
-   * run completes, then reloads showing the finished statuses.
+   * Runs one of the four aggregate procedures on the aggregate rooted at this row, and comes back
+   * to the list, which polls the run until it completes and then reloads showing the finished
+   * statuses (see {@link AggregateProcedureLauncher}).
    *
    * <p>One mapping rather than four, keyed by the {@link AggregateAction} whose {@code path} the
    * form posted. The four differ only in which delegate call they make and which label they flash,
    * and both of those are already on the action. An unknown or non-procedure segment is refused
-   * rather than falling through to another handler — the buttons only ever offer the four, but a
-   * hand-crafted POST must not reach past them.
+   * rather than falling through to another handler.
    */
   @PostMapping("/{id}/procedure/{action}")
   public String runProcedure(
       @PathVariable String id, @PathVariable String action, RedirectAttributes redirectAttributes) {
-    var procedure =
-        java.util.Arrays.stream(AggregateAction.values())
-            .filter(a -> a.isProcedure() && a.getPath().equals(action))
-            .findFirst();
+    var procedure = AggregateProcedureLauncher.procedure(action);
     if (procedure.isEmpty()) {
       redirectAttributes.addFlashAttribute("error", "Unknown aggregate procedure: " + action);
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     }
-    launchProcedure(redirectAttributes, procedure.get(), id);
-    return "redirect:/ui/instances";
-  }
-
-  private static final java.util.Optional<Boolean> ASYNC = java.util.Optional.of(Boolean.TRUE);
-
-  private void launchProcedure(
-      RedirectAttributes redirectAttributes, AggregateAction action, String entityId) {
-    var label = action.getProcedureLabel();
-    try {
-      var status = callProcedure(action, entityId).getBody();
-      if (status != null && status.getScheduleId() != null) {
-        redirectAttributes.addFlashAttribute("procedureScheduleId", status.getScheduleId());
-        redirectAttributes.addFlashAttribute("procedureLabel", label);
-        redirectAttributes.addFlashAttribute("procedureEntityId", entityId);
-        redirectAttributes.addFlashAttribute("procedureEntityType", entityTypeOf(entityId));
-      } else {
-        // No schedule id to poll (should not happen): fall back to a plain confirmation.
-        redirectAttributes.addFlashAttribute("message", label + " started.");
-      }
-    } catch (RuntimeException e) {
-      redirectAttributes.addFlashAttribute("error", e.getMessage());
-    }
-  }
-
-  /**
-   * The delegate call each procedure action makes. The generated delegate has one typed method per
-   * operation, so this is where the action becomes a call; everything either side of it is shared.
-   */
-  private org.springframework.http.ResponseEntity<
-          it.davidgreco.metacatalog.openapi.model.ProcedureStatus>
-      callProcedure(AggregateAction action, String entityId) {
-    return switch (action) {
-      case PROVISION -> api.provisionAggregate(entityId, ASYNC);
-      case UNPROVISION -> api.unprovisionAggregate(entityId, ASYNC);
-      case AUTHORIZE -> api.authorizeAggregate(entityId, ASYNC);
-      case REJECT -> api.rejectAggregate(entityId, ASYNC);
-      case DELETE ->
-          throw new IllegalArgumentException("DELETE is not a procedure: " + action.getPath());
-    };
-  }
-
-  /** The aggregate's entity type name, for the progress popup; best-effort, empty if unknown. */
-  private String entityTypeOf(String entityId) {
-    try {
-      var entity = (Entity) api.getEntity(entityId).getBody();
-      return entity != null && entity.getEntityType() != null ? entity.getEntityType() : "";
-    } catch (RuntimeException e) {
-      return "";
-    }
+    procedures.launch(redirectAttributes, procedure.get(), id);
+    return "redirect:/ui/admin/instances";
   }
 
   @GetMapping("/{id}")
@@ -270,7 +219,7 @@ class UnifiedInstanceController {
       return "instances-form";
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     }
   }
 
@@ -408,7 +357,7 @@ class UnifiedInstanceController {
       return "entity-versions";
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui/instances";
+      return "redirect:/ui/admin/instances";
     }
   }
 
@@ -446,10 +395,7 @@ class UnifiedInstanceController {
       @PathVariable int version,
       @PathVariable String action,
       RedirectAttributes redirectAttributes) {
-    var procedure =
-        java.util.Arrays.stream(AggregateAction.values())
-            .filter(a -> a.isProcedure() && a.getPath().equals(action))
-            .findFirst();
+    var procedure = AggregateProcedureLauncher.procedure(action);
     try {
       var copy =
           ((EntityVersion) api.getEntityVersion(id, version).getBody())
@@ -460,7 +406,7 @@ class UnifiedInstanceController {
       else if (copy == null)
         redirectAttributes.addFlashAttribute(
             "error", "Version " + version + " has no frozen copy to run " + action + " on.");
-      else launchProcedure(redirectAttributes, procedure.get(), copy);
+      else procedures.launch(redirectAttributes, procedure.get(), copy);
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
@@ -493,7 +439,7 @@ class UnifiedInstanceController {
   }
 
   private static String historyOf(String id) {
-    return "redirect:/ui/instances/"
+    return "redirect:/ui/admin/instances/"
         + org.springframework.web.util.UriUtils.encodePathSegment(
             id, java.nio.charset.StandardCharsets.UTF_8)
         + "/versions";
@@ -586,7 +532,7 @@ class UnifiedInstanceController {
               + " '"
               + form.getTargetEntityId()
               + "' (inverse created too).");
-      return "redirect:/ui/instances/" + id + "/links";
+      return "redirect:/ui/admin/instances/" + id + "/links";
     } catch (IllegalArgumentException e) {
       return renderLinkError(id, model, "Invalid relationship type.");
     } catch (RuntimeException e) {
@@ -611,7 +557,7 @@ class UnifiedInstanceController {
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
     }
-    return "redirect:/ui/instances/" + id + "/links";
+    return "redirect:/ui/admin/instances/" + id + "/links";
   }
 
   private String renderLinkError(String id, Model model, String message) {

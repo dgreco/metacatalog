@@ -12,6 +12,10 @@ public class TraitVersionForm {
 
   private String name;
   private String father;
+
+  /** The names of the traits mixed in, in the order they were selected. */
+  private java.util.List<String> traits = new java.util.ArrayList<>();
+
   private String schema;
 
   public String getName() {
@@ -28,6 +32,14 @@ public class TraitVersionForm {
 
   public void setFather(String father) {
     this.father = father;
+  }
+
+  public java.util.List<String> getTraits() {
+    return traits;
+  }
+
+  public void setTraits(java.util.List<String> traits) {
+    this.traits = traits;
   }
 
   public String getSchema() {

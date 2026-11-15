@@ -10,12 +10,13 @@
     <script th:src="@{/ui/js/flash.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'aggregates')}"></header>
 <header class="topbar">
     <h1>Aggregates</h1>
     <nav>
-        <a class="btn" th:href="@{/ui}">Back</a>
-        <a class="btn" th:href="@{/ui/aggregates/new}">+ New Aggregate</a>
-        <a class="btn" th:href="@{/ui/instances}">◈ Instances</a>
+        <a class="btn" th:href="@{/ui/admin}">Back</a>
+        <a class="btn" th:href="@{/ui/admin/aggregates/new}">+ New Aggregate</a>
+        <a class="btn" th:href="@{/ui/admin/instances}">◈ Instances</a>
     </nav>
 </header>
 
@@ -34,11 +35,11 @@
         <tbody>
         <tr th:each="a : ${aggregates}">
             <td>
-                <a th:href="@{/ui/aggregates/{id}(id=${a.id})}" th:text="${a.name}">name</a>
+                <a th:href="@{/ui/admin/aggregates/{id}(id=${a.id})}" th:text="${a.name}">name</a>
             </td>
             <td th:text="${a.entityType}">type</td>
             <td>
-                <a class="btn" th:href="@{/ui/aggregates/{id}(id=${a.id})}">View</a>
+                <a class="btn" th:href="@{/ui/admin/aggregates/{id}(id=${a.id})}">View</a>
             </td>
         </tr>
         </tbody>

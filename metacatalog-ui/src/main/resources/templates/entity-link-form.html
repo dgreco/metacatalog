@@ -10,15 +10,12 @@
     <script th:src="@{/ui/js/flash.js}" defer></script>
 </head>
 <body>
+<header th:replace="~{fragments/shell :: appbar('admin', 'instances')}"></header>
 <header class="topbar">
     <h1>Entity Relationships</h1>
     <nav>
-        <a class="btn" th:href="@{/ui/instances}">← Back</a>
+        <a class="btn" th:href="@{/ui/admin/instances}">← Back</a>
     </nav>
-    <form method="post" th:action="@{/logout}" class="logout-form" th:if="${authenticated}">
-        <span class="user" th:text="${username}">user</span>
-        <button type="submit" class="btn">Logout</button>
-    </form>
 </header>
 
 <main>
@@ -29,7 +26,7 @@
         You need at least two entities before you can relate them.
     </p>
 
-    <form method="post" th:action="@{/ui/instances/{id}/links(id=${sourceId})}"
+    <form method="post" th:action="@{/ui/admin/instances/{id}/links(id=${sourceId})}"
           th:object="${entityLinkForm}" id="entity-link-form"
           th:if="${instances.size() >= 2}">
 
@@ -78,7 +75,7 @@
 
         <div class="actions">
             <button type="submit" class="btn primary" id="submit-link">Create relationship</button>
-            <a class="btn" th:href="@{/ui/instances}">Cancel</a>
+            <a class="btn" th:href="@{/ui/admin/instances}">Cancel</a>
         </div>
     </form>
 
@@ -96,7 +93,7 @@
             <tbody>
             <tr th:each="link : ${entityLinks}" th:classappend="${link.role == 'source' ? 'row-source' : 'row-target'}">
                 <td>
-                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.sourceId})}"
+                    <a class="entity-link" th:href="@{/ui/admin/instances/{id}(id=${link.sourceId})}"
                        th:text="${link.sourceName}" th:title="'View ' + ${link.sourceName}">source</a>
                     <span class="role-badge" th:if="${link.role == 'source'}" title="This entity is the source">you</span>
                 </td>
@@ -105,13 +102,13 @@
                     <span class="arrow">→</span>
                 </td>
                 <td>
-                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.targetId})}"
+                    <a class="entity-link" th:href="@{/ui/admin/instances/{id}(id=${link.targetId})}"
                        th:text="${link.targetName}" th:title="'View ' + ${link.targetName}">target</a>
                     <span class="role-badge" th:if="${link.role == 'target'}" title="This entity is the target">you</span>
                 </td>
                 <td>
                     <form th:unless="${link.containment}" method="post"
-                          th:action="@{/ui/instances/{id}/links/delete(id=${sourceId})}"
+                          th:action="@{/ui/admin/instances/{id}/links/delete(id=${sourceId})}"
                           class="inline-form">
                         <input type="hidden" name="sourceEntityId" th:value="${link.sourceId}"/>
                         <input type="hidden" name="relationshipType" th:value="${link.relationType}"/>
@@ -143,7 +140,7 @@
             <tbody>
             <tr th:each="link : ${mappingLinks}" th:classappend="${link.role == 'source' ? 'row-source' : 'row-target'}">
                 <td>
-                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.sourceId})}"
+                    <a class="entity-link" th:href="@{/ui/admin/instances/{id}(id=${link.sourceId})}"
                        th:text="${link.sourceName}" th:title="'View ' + ${link.sourceName}">source</a>
                     <span class="role-badge" th:if="${link.role == 'source'}" title="This entity is the source">you</span>
                 </td>
@@ -152,7 +149,7 @@
                     <span class="arrow">→</span>
                 </td>
                 <td>
-                    <a class="entity-link" th:href="@{/ui/instances/{id}(id=${link.targetId})}"
+                    <a class="entity-link" th:href="@{/ui/admin/instances/{id}(id=${link.targetId})}"
                        th:text="${link.targetName}" th:title="'View ' + ${link.targetName}">target</a>
                     <span class="role-badge" th:if="${link.role == 'target'}" title="This entity is the target">you</span>
                 </td>

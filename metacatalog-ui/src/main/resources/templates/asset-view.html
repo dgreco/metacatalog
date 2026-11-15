@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${detail.asset.name} + ' — Meta Catalog'">Asset — Meta Catalog</title>
+    <link rel="stylesheet" th:href="@{/ui/css/app.css}"/>
+    <script th:src="@{/ui/js/theme.js}"></script>
+    <script th:src="@{/ui/js/procedure-poller.js}" defer></script>
+    <script th:src="@{/ui/js/flash.js}" defer></script>
+</head>
+<body>
+<header th:replace="~{fragments/shell :: appbar('assets', 'catalog')}"></header>
+<header class="topbar wide">
+    <div class="asset-title">
+        <a class="crumb" th:href="@{/ui/assets}">Asset catalog</a>
+        <h1>
+            <span th:text="${detail.asset.name}">name</span>
+            <span class="tag" th:text="${detail.asset.entityType}">type</span>
+        </h1>
+    </div>
+    <nav>
+        <a class="btn primary" th:href="@{/ui/assets/{id}/edit(id=${detail.asset.id})}">Edit</a>
+        <a class="btn" th:href="@{/ui/assets/{id}/yaml(id=${detail.asset.id})}">⬇ Download YAML</a>
+        <!-- The lifecycle actions, each described by its AggregateAction: label, tooltip, confirm
+             text and target. The four procedures post under /procedure/; delete has a route of its
+             own because it is not one. -->
+        <form th:each="action : ${detail.actions}" method="post" class="inline-form"
+              th:action="${action.procedure}
+                         ? @{/ui/assets/{id}/procedure/{a}(id=${detail.asset.id}, a=${action.path})}
+                         : @{/ui/assets/{id}/delete(id=${detail.asset.id})}"
+              th:data-confirm="${action.procedure} ? ${action.confirm} : 'Delete this asset? Every entity it contains, and everything mapped from them, will be removed.'">
+            <button type="submit" class="btn" th:classappend="${!action.procedure} ? 'danger'"
+                    th:title="${action.procedure} ? ${action.title} : 'Delete the whole asset'"
+                    th:text="${action.procedure} ? ${action.label} : 'Delete'">Action</button>
+        </form>
+    </nav>
+</header>
+
+<main class="wide">
+    <div th:replace="~{fragments/shell :: notices}"></div>
+
+    <div class="stat-row">
+        <div class="stat">
+            <span class="stat-k">Provisioning</span>
+            <span class="status" th:classappend="'status-' + ${detail.asset.provisioningStatus ?: 'none'}"
+                  th:text="${detail.asset.provisioningStatus ?: 'never run'}">status</span>
+            <span class="stat-note" th:if="${detail.provisioningResult}" th:text="${detail.provisioningResult}">result</span>
+        </div>
+        <div class="stat">
+            <span class="stat-k">Authorization</span>
+            <span class="status" th:classappend="'status-' + ${detail.asset.authorizationStatus ?: 'none'}"
+                  th:text="${detail.asset.authorizationStatus ?: 'never run'}">status</span>
+            <span class="stat-note" th:if="${detail.authorizationResult}" th:text="${detail.authorizationResult}">result</span>
+        </div>
+        <div class="stat">
+            <span class="stat-k">Members</span>
+            <span class="stat-v" th:text="${detail.root.descendants()}">0</span>
+            <span class="stat-note">parts and derived resources</span>
+        </div>
+        <div class="stat">
+            <span class="stat-k">Version</span>
+            <span class="stat-v" th:text="${detail.asset.version != null} ? 'v' + ${detail.asset.version} : '—'">v1</span>
+            <a class="stat-note" th:if="${detail.asset.version != null}"
+               th:href="@{/ui/admin/instances/{id}/versions(id=${detail.asset.id})}">History</a>
+            <span class="stat-note" th:if="${detail.asset.version == null}">type is not versionable</span>
+        </div>
+        <div class="stat stat-id">
+            <span class="stat-k">Id</span>
+            <code th:text="${detail.asset.id}">id</code>
+        </div>
+    </div>
+
+    <div class="asset-grid">
+        <div class="asset-main">
+            <section class="card">
+                <div class="section-head">
+                    <h2>Structure</h2>
+                    <span class="hint">The asset's root, its parts, and the resources mappings derive from them.</span>
+                </div>
+                <div th:replace="~{fragments/asset-member :: member(${detail.root}, 'root')}"></div>
+            </section>
+
+            <section class="card" id="yaml">
+                <div class="section-head">
+                    <h2>YAML</h2>
+                    <span>
+                        <a class="btn-sm" th:href="@{/ui/assets/{id}/yaml(id=${detail.asset.id})}">⬇ Download</a>
+                        <a class="btn-sm" th:href="@{/ui/assets/{id}/yaml(id=${detail.asset.id}, derived=true)}"
+                           title="Also lists the entities derived by mappings; they are ignored when the file is uploaded">⬇ With derived resources</a>
+                    </span>
+                </div>
+                <pre class="schema document-pane" th:text="${yaml}"></pre>
+                <details class="upload-box">
+                    <summary>Replace this asset from a YAML file</summary>
+                    <form method="post" enctype="multipart/form-data"
+                          th:action="@{/ui/assets/{id}/yaml(id=${detail.asset.id})}"
+                          data-confirm="Replace this asset with the uploaded document? Parts the document no longer lists are deleted.">
+                        <p class="hint">
+                            Download the file, edit it, and upload it here. Members keep their
+                            <code>id</code>; a part without one is added, and a part left out is
+                            removed. Statuses are never taken from the file.
+                        </p>
+                        <label>
+                            YAML file
+                            <input type="file" name="file" accept=".yaml,.yml,text/yaml,application/yaml,application/x-yaml"/>
+                        </label>
+                        <label>
+                            …or paste YAML
+                            <textarea name="yamlText" class="raw-schema" rows="10" spellcheck="false"></textarea>
+                        </label>
+                        <div class="actions">
+                            <button type="submit" class="btn primary">Update asset</button>
+                        </div>
+                    </form>
+                </details>
+            </section>
+        </div>
+
+        <aside class="asset-side">
+            <section class="card" id="dependencies">
+                <h2>Depends on</h2>
+                <ul class="ref-list" th:if="${!detail.asset.dependsOn.isEmpty()}">
+                    <li th:each="d : ${detail.asset.dependsOn}">
+                        <a th:href="@{/ui/assets/{id}(id=${d.id})}" th:text="${d.name}">asset</a>
+                        <span class="tag muted" th:text="${d.entityType}">type</span>
+                        <form method="post" class="inline-form"
+                              th:action="@{/ui/assets/{id}/dependencies/delete(id=${detail.asset.id})}"
+                              data-confirm="Remove this dependency?">
+                            <input type="hidden" name="target" th:value="${d.id}"/>
+                            <button type="submit" class="link-remove" title="Remove dependency">×</button>
+                        </form>
+                    </li>
+                </ul>
+                <p class="empty" th:if="${detail.asset.dependsOn.isEmpty()}">This asset depends on no other asset.</p>
+
+                <form method="post" class="add-dependency" th:if="${!detail.candidates.isEmpty()}"
+                      th:action="@{/ui/assets/{id}/dependencies(id=${detail.asset.id})}">
+                    <select name="target" required aria-label="Asset to depend on">
+                        <option value="">— Add a dependency on… —</option>
+                        <option th:each="c : ${detail.candidates}" th:value="${c.id}"
+                                th:text="${c.name} + ' (' + ${c.entityType} + ')'">asset</option>
+                    </select>
+                    <button type="submit" class="btn-sm">Add</button>
+                </form>
+                <p class="hint" th:if="${detail.candidates.isEmpty()}">
+                    No other asset can be added: the model allows a dependency only between types
+                    whose traits are related by <code>DEPENDS_ON</code>.
+                </p>
+
+                <h2 class="spaced">Required by</h2>
+                <ul class="ref-list" th:if="${!detail.asset.requiredBy.isEmpty()}">
+                    <li th:each="d : ${detail.asset.requiredBy}">
+                        <a th:href="@{/ui/assets/{id}(id=${d.id})}" th:text="${d.name}">asset</a>
+                        <span class="tag muted" th:text="${d.entityType}">type</span>
+                    </li>
+                </ul>
+                <p class="empty" th:if="${detail.asset.requiredBy.isEmpty()}">No asset depends on this one.</p>
+                <p><a class="btn-sm" th:href="@{/ui/assets(view='graph')}">Open the dependency graph</a></p>
+            </section>
+
+            <section class="card" id="mappings">
+                <h2>Mappings</h2>
+                <p class="hint">
+                    The rules deriving resources from this asset's members. A mapping that walks a
+                    dependency reads values from whatever this asset is made to depend on.
+                </p>
+                <ul class="mapping-list" th:if="${!detail.mappings.isEmpty()}">
+                    <li th:each="m : ${detail.mappings}">
+                        <div class="mapping-pair">
+                            <span th:text="${m.source}">source</span>
+                            <span class="arrow">→</span>
+                            <span th:text="${m.target}">target</span>
+                            <span class="tag" th:if="${m.walksDependencies}"
+                                  title="One of its path references traverses DEPENDS_ON or IS_REQUIRED_BY">walks dependencies</span>
+                        </div>
+                        <div class="js-pathrefs" th:text="${m.pathReferences}">[]</div>
+                        <a class="btn-sm"
+                           th:href="@{/ui/admin/mappings/new(source=${m.source}, target=${m.target})}">Edit mapping</a>
+                    </li>
+                </ul>
+                <p class="empty" th:if="${detail.mappings.isEmpty()}">No mapping derives anything from this asset's types.</p>
+                <p><a class="btn-sm" th:href="@{/ui/admin/mappings/new(source=${detail.asset.entityType})}">+ New mapping</a></p>
+            </section>
+
+            <section class="card" id="access" th:if="${detail.access != null}">
+                <h2>Access</h2>
+                <h3>Declared policy</h3>
+                <ul class="plain-list" th:if="${!detail.access.grants.isEmpty()}">
+                    <li th:each="g : ${detail.access.grants}" th:text="${g}">grant</li>
+                </ul>
+                <p class="empty" th:if="${detail.access.grants.isEmpty()}">
+                    No grant is declared. Edit the asset to add principals, permissions and grants.
+                </p>
+                <h3>Granted on resources</h3>
+                <ul class="plain-list" th:if="${!detail.access.resources.isEmpty()}">
+                    <li th:each="r : ${detail.access.resources}">
+                        <strong th:text="${r.name}">resource</strong>
+                        <span class="tag muted" th:text="${r.entityType}">type</span>
+                        <span class="status" th:classappend="'status-' + ${r.status ?: 'none'}"
+                              th:text="${r.status ?: 'never run'}">status</span>
+                        <ul class="plain-list nested" th:if="${!r.grants.isEmpty()}">
+                            <li th:each="g : ${r.grants}" th:text="${g}">grant</li>
+                        </ul>
+                    </li>
+                </ul>
+                <p class="empty" th:if="${detail.access.resources.isEmpty()}">This asset has no authorizable resource yet.</p>
+            </section>
+        </aside>
+    </div>
+</main>
+
+<script>
+    document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (!window.confirm(form.getAttribute('data-confirm'))) {
+                e.preventDefault();
+            }
+        });
+    });
+</script>
+<script th:src="@{/ui/js/schema-view.js}"></script>
+</body>
+</html>

@@ -44,6 +44,7 @@ public class CatalogGraphService {
   private static final String ENTITY_VERSION_PART_PREFIX = "entity-version-part:";
   private static final String SUCCESSOR_OF = "successor-of";
   private static final String EXTENDS = "extends";
+  private static final String MIXES_IN = "mixes-in";
   private static final String MAPPING = "mapping";
 
   private final MetacatalogApiDelegate api;
@@ -182,7 +183,7 @@ public class CatalogGraphService {
               trait.getName(),
               "trait",
               trait.getInheritsFrom().orElse(null),
-              null,
+              trait.getTraits() == null ? List.of() : trait.getTraits(),
               trait.getSchema().orElse(null)));
     }
     for (var type : types) {
@@ -209,6 +210,21 @@ public class CatalogGraphService {
                           EXTENDS,
                           null,
                           null)));
+      // A trait's other parents. Drawn apart from `extends` because the two are not
+      // interchangeable: the father is the trait's single superclass, these are mixed in after
+      // it and take precedence over it.
+      if (trait.getTraits() != null) {
+        for (var mixin : trait.getTraits()) {
+          edges.add(
+              new GraphModel.Edge(
+                  TRAIT_PREFIX + trait.getName(),
+                  TRAIT_PREFIX + mixin,
+                  MIXES_IN,
+                  "mixes in",
+                  null,
+                  null));
+        }
+      }
     }
     for (var type : types) {
       type.getInheritsFrom()

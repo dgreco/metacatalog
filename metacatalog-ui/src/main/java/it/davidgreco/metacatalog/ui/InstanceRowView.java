@@ -1,7 +1,5 @@
 package it.davidgreco.metacatalog.ui;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import it.davidgreco.metacatalog.openapi.model.Entity;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -28,8 +26,6 @@ public record InstanceRowView(
     Integer version,
     String name,
     List<AggregateAction> actions) {
-
-  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   /**
    * Rows for a page that offers no aggregate actions — the entity-link picker and the aggregate
@@ -63,16 +59,7 @@ public record InstanceRowView(
     var views = new ArrayList<InstanceRowView>();
     for (var entity : entities) {
       String id = entity.getId().orElse(null);
-      String name = id;
-      if (entity.getValues() != null) {
-        try {
-          JsonNode values = MAPPER.readTree(entity.getValues());
-          if (values != null && values.has("name") && values.get("name").isTextual()) {
-            name = values.get("name").asText();
-          }
-        } catch (Exception ignored) {
-        }
-      }
+      String name = AssetCatalogView.displayName(AssetCatalogView.parse(entity.getValues()), id);
       views.add(
           new InstanceRowView(
               id,

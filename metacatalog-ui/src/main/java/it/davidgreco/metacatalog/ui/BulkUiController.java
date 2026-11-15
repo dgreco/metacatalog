@@ -21,7 +21,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * API bulk-creation endpoint.
  */
 @Controller
-@RequestMapping("/ui")
+@RequestMapping("/ui/admin")
 public class BulkUiController {
 
   private final MetacatalogApiDelegate api;
@@ -55,7 +55,7 @@ public class BulkUiController {
         api.bulkCreation(resource);
         redirectAttributes.addFlashAttribute("message", "Bulk model uploaded successfully.");
       }
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     } catch (RuntimeException | IOException e) {
       model.addAttribute("error", e.getMessage());
       return "bulk-form";

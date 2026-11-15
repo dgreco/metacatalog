@@ -3,12 +3,12 @@ package it.davidgreco.metacatalog.ui;
 import java.util.List;
 
 /**
- * Serializable model of the whole catalog rendered as a graph on the {@code /ui/graph} page.
+ * Serializable model of the whole catalog rendered as a graph on the {@code /ui/admin/graph} page.
  *
- * <p>Nodes are traits and entity types; edges capture inheritance ({@code extends}), trait
- * membership ({@code has-trait}), trait relationships (the primary relation types) and entity-type
- * mappings ({@code MAPPED_TO}). The model is serialized to JSON and embedded in the page for a
- * client-side force-directed renderer.
+ * <p>Nodes are traits and entity types; edges capture inheritance ({@code extends}, and {@code
+ * mixes-in} for the traits a trait mixes in), trait membership ({@code has-trait}), trait
+ * relationships (the primary relation types) and entity-type mappings ({@code MAPPED_TO}). The
+ * model is serialized to JSON and embedded in the page for the client-side renderer.
  */
 public record GraphModel(List<Node> nodes, List<Edge> edges) {
 
@@ -20,7 +20,7 @@ public record GraphModel(List<Node> nodes, List<Edge> edges) {
    * @param label the display name
    * @param kind {@code trait} or {@code entityType}
    * @param father the parent type/trait name, or {@code null} if none
-   * @param traits the associated trait names (entity types only), or {@code null}
+   * @param traits the trait names an entity type carries or a trait mixes in, or {@code null}
    * @param schema the effective JSON schema as a pretty-printed string, or {@code null}
    */
   public record Node(

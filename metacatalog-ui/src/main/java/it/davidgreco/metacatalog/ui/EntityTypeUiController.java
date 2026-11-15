@@ -19,7 +19,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
  * via the REST API.
  */
 @Controller
-@RequestMapping("/ui")
+@RequestMapping("/ui/admin")
 public class EntityTypeUiController {
 
   private final MetacatalogApiDelegate api;
@@ -55,7 +55,7 @@ public class EntityTypeUiController {
       api.createEntityType(dto);
       redirectAttributes.addFlashAttribute(
           "message", "Entity type '" + form.getName() + "' created.");
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     } catch (RuntimeException e) {
       model.addAttribute("error", e.getMessage());
       model.addAttribute("entityTypes", api.listEntityTypes().getBody());
@@ -71,7 +71,7 @@ public class EntityTypeUiController {
         "Entity type '" + name + "' deleted.",
         "Entity type",
         name,
-        "/ui",
+        "/ui/admin",
         redirectAttributes);
   }
 
@@ -89,7 +89,7 @@ public class EntityTypeUiController {
       return "versions";
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     }
   }
 
@@ -101,7 +101,7 @@ public class EntityTypeUiController {
       live = api.getEntityType(name).getBody();
     } catch (RuntimeException e) {
       redirectAttributes.addFlashAttribute("error", e.getMessage());
-      return "redirect:/ui";
+      return "redirect:/ui/admin";
     }
     if (!model.containsAttribute("entityTypeVersionForm")) {
       var form = new EntityTypeVersionForm();
@@ -132,7 +132,7 @@ public class EntityTypeUiController {
       api.createEntityTypeVersion(name, dto);
       redirectAttributes.addFlashAttribute(
           "message", "New version of entity type '" + name + "' created.");
-      return "redirect:/ui/entity-types/" + name + "/versions";
+      return "redirect:/ui/admin/entity-types/" + name + "/versions";
     } catch (RuntimeException e) {
       model.addAttribute("error", e.getMessage());
       populateEntityTypeVersionModel(name, model);
@@ -157,7 +157,7 @@ public class EntityTypeUiController {
     return UiControllerHelper.flashAndRedirect(
         () -> api.deleteEntityTypeVersion(name, version),
         "Version " + version + " of entity type '" + name + "' deleted.",
-        "/ui/entity-types/" + name + "/versions",
+        "/ui/admin/entity-types/" + name + "/versions",
         redirectAttributes);
   }
 
@@ -171,7 +171,7 @@ public class EntityTypeUiController {
           }
         },
         "All versions of entity type '" + name + "' deleted.",
-        "/ui/entity-types/" + name + "/versions",
+        "/ui/admin/entity-types/" + name + "/versions",
         redirectAttributes);
   }
 
